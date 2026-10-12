@@ -84,7 +84,11 @@ jobs:
           V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
           TAG="v$V-build$B"; APK="Bingr-$V-build$B.apk"
           cp app/build/outputs/apk/release/*.apk "$APK"
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Bingr $V (build $B)" --notes "Bingr voor Android $V, build $B. Installeer de APK op je telefoon, tablet of Android TV." --latest
+          # release-notities uit CHANGELOG.md (sectie van dit buildnummer)
+          awk -v b="## Build $B " 'index($0,b)==1{f=1;next} /^## /{f=0} f' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Bingr voor Android $V, build $B." > notes.md
+          printf '\nInstalleer de APK over de vorige versie heen; je gegevens blijven bewaard. Alle versies: https://bingr.online/changelog/?p=android\n' >> notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then gh release edit "$TAG" --notes-file notes.md; else gh release create "$TAG" --title "Bingr $V (build $B)" --notes-file notes.md --latest; fi
           gh release upload "$TAG" "$APK" --clobber
 
       - name: Log op branch ci-logs zetten

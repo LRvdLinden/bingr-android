@@ -8,6 +8,8 @@ Kotlin · Jetpack Compose · Android 7.0+ · Media3 (ExoPlayer) én VLC · 11 ta
 
 De versie voor iPhone, iPad, Apple TV en Mac staat in [iptv-ios-appletv](https://github.com/LRvdLinden/iptv-ios-appletv), de website in [bingr-website](https://github.com/LRvdLinden/bingr-website) ([bingr.online](https://bingr.online)).
 
+Wat er nieuw is per build: [CHANGELOG.md](CHANGELOG.md) · [bingr.online/changelog](https://bingr.online/changelog/?p=android)
+
 ## Downloaden
 
 **[⬇ Download de nieuwste APK](https://github.com/LRvdLinden/bingr-android/releases/latest)**: tik onder *Assets* op `Bingr-…apk`, open hem en kies **Installeren**. Android vraagt één keer of de app waarmee je opent (Chrome, Bestanden, WhatsApp …) apps mag installeren: zet *Toestaan van deze bron* aan. Een nieuwe versie installeer je gewoon over de oude heen; je profielen en instellingen blijven bewaard.
