@@ -67,8 +67,15 @@ import java.util.Date
 
 // Gekoppelde apparaten (limiet van de server, nu 15), zie docs/ACCOUNT.md in de iOS-repo.
 
+/** Samsung TV-app (Tizen, vanaf build 55) meldt zich met platform `tizen`. */
+fun isTizenPlatform(platform: String): Boolean =
+    platform.equals("tizen", ignoreCase = true) || platform.equals("Samsung TV", ignoreCase = true)
+
+/** Platformnaam onder de apparaatnaam (`tizen` wordt "Samsung TV"). */
+fun devicePlatformLabel(platform: String): String = if (isTizenPlatform(platform)) L("Samsung TV") else platform
+
 /** Icoon per platform. */
-fun deviceIcon(platform: String): ImageVector = when (platform) {
+fun deviceIcon(platform: String): ImageVector = if (isTizenPlatform(platform)) Icons.Default.Tv else when (platform) {
     "iPhone" -> Icons.Default.PhoneIphone
     "iPad", "Android tablet" -> Icons.Default.Tablet
     "Apple TV", "Android TV", "Google TV", "Fire TV" -> Icons.Default.Tv
@@ -120,7 +127,7 @@ private fun DeviceRow(
                         modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Theme.red).padding(horizontal = 6.dp, vertical = 2.dp))
                 }
             }
-            if (d.platform.isNotEmpty()) Text(d.platform, color = Theme.secondary, fontSize = tsp(13), maxLines = 1)
+            if (d.platform.isNotEmpty()) Text(devicePlatformLabel(d.platform), color = Theme.secondary, fontSize = tsp(13), maxLines = 1)
             val parts = listOfNotNull(
                 (d.signedInAt ?: d.createdAt)?.let { L("Signed in since %@", deviceDate(it)) },
                 deviceLastUsed(d.lastSeenAt, d.current)?.let { L("Last used %@", it) },
