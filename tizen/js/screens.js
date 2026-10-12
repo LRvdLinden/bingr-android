@@ -234,12 +234,21 @@
     var p = opts.progress;
     if (p != null) card.appendChild(h('div.card-progress', [h('div', { style: { width: Math.round(B.clamp(p, 0, 1) * 100) + '%' } })]));
     if (opts.label) card.appendChild(h('div.card-label', opts.label));
+    langStrip(card, x, type);
     card.onEnter = function () { openItem(type, x); };
     card.onFocus = opts.onFocus || null;
     card._key = type + ':' + x.id;
     return card;
   }
   S.posterCard = posterCard;
+  /** Kleine doorschijnende strook onder op de poster met de taal van de titel ("NL", "IT", "EN · NL ondertitels", "Multi"). */
+  function langStrip(card, x, type) {
+    if (type !== 'movie' && type !== 'series') return;
+    var txt = B.clang.badge(B.clang.forItem(x, type === 'series'));
+    if (!txt) return;
+    card.appendChild(h('div.card-lang', txt));
+    card.classList.add('has-lang');
+  }
   function pct(p) { return Math.round(B.clamp((Date.now() - p.start) / (p.end - p.start), 0, 1) * 100) + '%'; }
   function channelCard(ch, list) {
     var nn = Lib.nowNext(ch);
@@ -255,6 +264,7 @@
   S.channelCard = channelCard;
   function top10Card(x, type, i) {
     var card = h('div.card.top10.f', [h('div.top10-num', String(i + 1)), U.img(x.poster, 'poster-img', x.title)]);
+    langStrip(card, x, type);
     card.onEnter = function () { openItem(type, x); };
     card._key = type + ':' + x.id;
     return card;
@@ -1087,13 +1097,14 @@
     var listKey = D.key(src, x.id);
     var plot = h('p.dt-plot', x.plot || '');
     var meta = h('div.dt-meta');
+    var langEl = h('div.dt-lang');
     var buttons = h('div.dt-buttons.fm');
     var seasonsEl = h('div.dt-seasons.sx.fm', { 'data-pad': '40' });
     var epsEl = h('div.dt-eps.sx.fm', { 'data-pad': '80' });
     var epsTrack = h('div.row-track');
     epsEl.appendChild(epsTrack);
     var body = vScroller('.dt-body', { 'data-pad': '60' });
-    body.track.appendChild(h('div.dt-info', [h('div.dt-kind', type === 'series' ? L('SERIES') : L('FILM')), h('h1.dt-title', x.title), meta, plot, buttons]));
+    body.track.appendChild(h('div.dt-info', [h('div.dt-kind', type === 'series' ? L('SERIES') : L('FILM')), h('h1.dt-title', x.title), meta, langEl, plot, buttons]));
     if (type === 'series') body.track.appendChild(h('div.dt-episodes', [seasonsEl, epsEl]));
     var el = layer('detail', [h('div.dt-bg', [U.img(x.poster, 'hero-img', null, true)]), h('div.dt-shade'),
       h('div.dt-poster', [U.img(x.poster, 'poster-img', x.title, true)]), body]);
@@ -1112,6 +1123,36 @@
       meta.textContent = parts.join('  ·  ');
     }
     metaText();
+
+    // taal van de titel ("Taal: Italiaans") en andere taalversies (zelfde TMDB-id of titel + jaar)
+    var isShow = type === 'series', versions = [];
+    function drawLang() {
+      var info = B.clang.forItem(x, isShow);
+      langEl.textContent = B.clang.line(info);
+      langEl.style.display = langEl.textContent ? '' : 'none';
+      return info;
+    }
+    function refreshVersions() {
+      var n = versions.length;
+      versions = B.clang.versions(x, type);
+      return versions.length !== n;
+    }
+    drawLang();
+    // versie-index (hele bibliotheek) pas na het tekenen van de pagina
+    setTimeout(function () { if (document.body.contains(el) && refreshVersions()) drawButtonsKeepFocus(); }, 60);
+    // op de achtergrond: TMDB (originele taal als terugval, en het TMDB-id voor de versies); nooit wachten
+    B.ageRatings.originalLanguage(x, isShow).then(function () {
+      if (!document.body.contains(el)) return;
+      drawLang();
+      if (refreshVersions()) drawButtonsKeepFocus();
+    });
+    function chooseVersion() {
+      if (!versions.length) { U.toast(L('No other language version found.')); return; }
+      U.choose(L('Other language'), versions.map(function (v, i) {
+        var y = v.item.year ? ' (' + v.item.year + ')' : '';
+        return { value: i, label: v.label + '  ·  ' + v.item.title + y + (v.item.group ? '  ·  ' + v.item.group : '') };
+      }), null, function (i) { U.push(S.detail(type, versions[i].item)); });
+    }
 
     function listButton() {
       var on = D.inSet('myList', listKey);
@@ -1152,6 +1193,7 @@
         buttons.appendChild(U.button(lbl, function () { if (currentEp) playEpisode(currentEp); }, { primary: true, icon: 'play', autofocus: true }));
         if (stremio && ep) buttons.appendChild(U.button(L('Choose a source'), function () { if (currentEp) chooseStream(B.player.episodeItem(currentEp, x), { episodes: episodes, series: x }); }, { icon: 'layers' }));
       }
+      if (versions.length) buttons.appendChild(U.button(L('Other language'), chooseVersion, { icon: 'globe' }));
       buttons.appendChild(listButton());
     }
     function playEpisode(ep) {
@@ -1324,6 +1366,32 @@
       });
       row(L('Your servers'), String(D.sources.length), function () { U.push(S.servers()); });
       row(L('Refresh now'), null, function () { if (Lib.source) { Lib.select(Lib.source, true); U.toast(L('Updating…')); } });
+
+      // audio en ondertitels (settings.shared: audioLanguage, autoSubtitles, subtitleLanguage; gelijk met iOS en Android)
+      section(L('Audio & subtitles'));
+      var CLg = B.clang;
+      var langOpts = ['nl', 'en', 'de', 'fr', 'es', 'it', 'pt', 'pl', 'tr', 'ar', 'hi'];
+      var aud = String(D.shared('audioLanguage', '') || '');
+      function audLabel(v) { return v === 'original' ? L('Original language') : (v ? CLg.name(v) : L('Same as app') + ' (' + CLg.name(B.lang) + ')'); }
+      row(L('Default audio language'), audLabel(aud), function () {
+        U.choose(L('Default audio language'), [{ value: '', label: audLabel('') }, { value: 'original', label: L('Original language') }]
+          .concat(langOpts.map(function (c) { return { value: c, label: CLg.name(c) }; })), aud, function (v) { D.setShared('audioLanguage', v); render(); });
+      });
+      var autoS = CLg.autoSubtitles();
+      var autoLabels = { off: L('Off'), whenNeeded: L('When needed'), always: L('Always') };
+      row(L('Automatic subtitles'), autoLabels[autoS], function () {
+        U.choose(L('Automatic subtitles'), ['whenNeeded', 'always', 'off'].map(function (v) { return { value: v, label: autoLabels[v] }; }), autoS, function (v) {
+          D.setShared('autoSubtitles', v); render();
+        });
+      });
+      var subRaw = String(D.shared('subtitleLanguage', '') || '');
+      var subCur = subRaw === 'off' ? '' : CLg.norm(subRaw);
+      var subAuto = L('Automatic') + ' (' + CLg.name(CLg.preferredSubtitle(true)) + ')';
+      row(L('Subtitle language'), subCur ? CLg.name(subCur) : subAuto, function () {
+        U.choose(L('Subtitle language'), [{ value: '', label: subAuto }].concat(langOpts.map(function (c) { return { value: c, label: CLg.name(c) }; })), subCur, function (v) {
+          D.setShared('subtitleLanguage', v); render();
+        });
+      });
 
       section('Trakt & OpenSubtitles');
       var T = B.trakt, OS = B.opensubtitles;

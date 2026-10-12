@@ -71,6 +71,8 @@
         var sKey = parsed.title.toLowerCase();
         if (!seriesMap[sKey]) {
           seriesMap[sKey] = { id: 's-' + B.stableHash(group + sKey), title: parsed.title, year: parsed.year, poster: logo, group: group, episodes: [] };
+          var scl = B.clang.parse(e.name);
+          if (scl) seriesMap[sKey].cl = scl;
           seriesEps[sKey] = [];
           seriesOrder.push(sKey);
         }
@@ -80,7 +82,11 @@
           number: parsed.episode || (eps.length + 1), title: e.name, streamURL: urlValue(e.url), still: logo
         });
       } else if (looksMovie) {
-        movies.push({ id: id, title: parsed.title, year: parsed.year, poster: logo, group: group, streamURL: urlValue(e.url) });
+        var mo = { id: id, title: parsed.title, year: parsed.year, poster: logo, group: group, streamURL: urlValue(e.url) };
+        // taal-tag uit de naam bewaren voordat het opschonen hem weghaalt ("Animal (IT)")
+        var mcl = B.clang.parse(e.name);
+        if (mcl) mo.cl = mcl;
+        movies.push(mo);
       } else {
         number++;
         var catchup = parseInt(e.attrs['catchup-days'] || e.attrs.timeshift || '', 10) || 0;
@@ -167,21 +173,27 @@
         var sid = B.str(v.stream_id); if (sid == null) return;
         var pt = B.parseTitle(v.name || '');
         var added = B.num(v.added);
-        movies.push({
+        var mv = {
           id: 'xv' + sid, title: pt.title, year: B.int(v.year) || pt.year, poster: urlValue(v.stream_icon),
           group: vc[B.str(v.category_id) || ''] || other,
           streamURL: base + '/movie/' + u + '/' + p + '/' + sid + '.' + (v.container_extension || 'mp4'),
           rating: B.num(v.rating), addedAt: added ? added * 1000 : null, xtreamVodID: B.int(sid)
-        });
+        };
+        var vcl = B.clang.parse(v.name);
+        if (vcl) mv.cl = vcl;
+        movies.push(mv);
       });
       r[5].forEach(function (s) {
         var sid = B.int(s.series_id); if (sid == null) return;
         var pt = B.parseTitle(s.name || '');
         var y = B.int(s.year) || (s.releaseDate ? B.int(String(s.releaseDate).slice(0, 4)) : null) || pt.year;
-        series.push({
+        var se = {
           id: 'xs' + sid, title: pt.title, year: y, poster: urlValue(s.cover), group: sc[B.str(s.category_id) || ''] || other,
           plot: s.plot || null, rating: B.num(s.rating), xtreamSeriesID: sid, episodes: []
-        });
+        };
+        var scl = B.clang.parse(s.name);
+        if (scl) se.cl = scl;
+        series.push(se);
       });
       return { channels: channels, movies: movies, series: series, epg: {} };
     });
@@ -348,10 +360,10 @@
                 var pt = B.parseTitle(v.name || '');
                 if (B.int(v.is_series) === 1) {
                   lib.series.push({ id: 'sts' + v.id, title: pt.title, year: B.int(v.year) || pt.year, poster: urlValue(v.screenshot_uri),
-                    group: cat.title || L('Series'), plot: v.description || null, rating: B.num(v.rating_imdb), episodes: [] });
+                    group: cat.title || L('Series'), plot: v.description || null, rating: B.num(v.rating_imdb), episodes: [], cl: B.clang.parse(v.name) || undefined });
                 } else {
                   lib.movies.push({ id: 'stv' + v.id, title: pt.title, year: B.int(v.year) || pt.year, poster: urlValue(v.screenshot_uri),
-                    group: cat.title || L('Movies'), rating: B.num(v.rating_imdb), plot: v.description || null, stalkerCmd: v.cmd || null });
+                    group: cat.title || L('Movies'), rating: B.num(v.rating_imdb), plot: v.description || null, stalkerCmd: v.cmd || null, cl: B.clang.parse(v.name) || undefined });
                 }
               });
             }, B.noop);

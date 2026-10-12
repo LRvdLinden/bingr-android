@@ -107,7 +107,8 @@
           else (c.release_dates || []).forEach(function (d) { if (d && d.certification) certs.push([c.iso_3166_1, d.certification]); });
         });
         var age = h.adult === true ? 18 : AR.ageFromCertifications(certs);
-        return { id: h.id, age: age, genres: genres, found: true, checked: now };
+        // originele taal (TMDB original_language) voor de taal van de titel als de naam niets zegt (= ContentLanguage)
+        return { id: h.id, age: age, genres: genres, found: true, checked: now, ol: h.original_language || null };
       });
     }).catch(function () { return null; });
   };
@@ -124,6 +125,22 @@
       return r;
     });
   }
+  /**
+   * Originele taal (TMDB original_language) van een titel, uit de cache; oudere cache-regels (van voor build 59) hebben
+   * hem nog niet: dan één keer /movie/{id} of /tv/{id} ophalen en bewaren. Nooit blokkerend: geeft een Promise.
+   */
+  AR.originalLanguage = function (x, isShow) {
+    return AR.lookup(x, isShow).then(function (r) {
+      if (!r || r.found === false || r.id == null) return null;
+      if (r.ol !== undefined) return r.ol;
+      return tmdb((isShow ? '/tv/' : '/movie/') + r.id).then(function (d) {
+        if (!d) return null;
+        r.ol = d.original_language || null;
+        scheduleSave();
+        return r.ol;
+      });
+    }).catch(function () { return null; });
+  };
   AR.lookup = function (x, isShow) { return AR.preload().then(function () { return fetchOne({ title: x.rawTitle || x.title, year: x.year, isShow: isShow, imdb: x.imdbID || null }); }); };
 
   var bump = B.debounce(function () { B.emit('ageRatings'); }, 2500);

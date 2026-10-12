@@ -39,8 +39,16 @@
           ondrmevent: B.noop
         });
         if (opts.live) { try { av.setTimeoutForBuffering(15); } catch (e) { /* stil */ } }
+        // sneller starten: kleine startbuffer (~2 s) in plaats van de standaard; oudere tv's kennen dit niet
+        try {
+          av.setBufferingParam('PLAYER_BUFFER_FOR_PLAY', 'PLAYER_BUFFER_SIZE_IN_SECOND', 2);
+          av.setBufferingParam('PLAYER_BUFFER_FOR_RESUME', 'PLAYER_BUFFER_SIZE_IN_SECOND', opts.live ? 3 : 2);
+        } catch (e) { /* niet ondersteund */ }
         av.prepareAsync(function () {
           try { self.dur = av.getDuration() / 1000; } catch (e) { self.dur = 0; }
+          if (opts.mark) opts.mark('prepared');
+          // sporen kiezen vóór play(): geen hoorbare wissel van audiotaal
+          if (opts.onReady) { try { opts.onReady(); } catch (e) { B.log('onReady', e); } }
           var go = function () { av.play(); self.playing = true; resolve(); };
           if (opts.start && opts.start > 5 && !opts.live) {
             av.seekTo(Math.floor(opts.start * 1000), go, go);
@@ -110,6 +118,8 @@
       var done = false;
       v.oncanplay = function () {
         if (done) return; done = true;
+        if (opts.mark) opts.mark('prepared');
+        if (opts.onReady) { try { opts.onReady(); } catch (e) { B.log('onReady', e); } }
         if (opts.start && opts.start > 5 && !opts.live) { try { v.currentTime = opts.start; } catch (e) { /* stil */ } }
         var p = v.play();
         if (p && p.then) p.then(resolve, function () { resolve(); }); else resolve();
@@ -140,10 +150,8 @@
 
   B.engines = { AV: AVEngine, HTML: HTMLEngine, hasAVPlay: hasAVPlay };
 
-  var LANGS = { nl: 'Nederlands', nld: 'Nederlands', dut: 'Nederlands', en: 'English', eng: 'English', de: 'Deutsch', deu: 'Deutsch', ger: 'Deutsch',
-    fr: 'Français', fra: 'Français', fre: 'Français', es: 'Español', spa: 'Español', it: 'Italiano', ita: 'Italiano', tr: 'Türkçe', tur: 'Türkçe',
-    ar: 'العربية', ara: 'العربية', pl: 'Polski', pol: 'Polski', pt: 'Português', por: 'Português', und: '' };
-  function langName(code) { if (!code) return ''; var c = String(code).toLowerCase(); return B.has(LANGS, c) ? LANGS[c] : String(code).toUpperCase(); }
+  /** Naam van een taalcode van een spoor (nl, nld, dut, eng, …) in de taal van de app; '' als onbekend. */
+  function langName(code) { return B.clang.name(code); }
 
   // MARK: spelerscherm
 
@@ -165,6 +173,7 @@
     var zapTimer = null, zapIndex = null, digitBuffer = '', digitTimer = null;
     var marker = null;
     var extCues = null, extOffset = 0, extTimer = null, scrobbled = false, stopSent = false;
+    var startGen = 0, limited = false, t0 = 0, marks = {}, audioChosen = false, autoSubsDone = false;
 
     var video = h('div.pl-stage');
     var subtitle = h('div.pl-sub');
@@ -258,7 +267,20 @@
 
     // MARK: afspelen
 
+    /** Tijden van Afspelen tot eerste beeld bijhouden en loggen (B.player.timings voor tests). */
+    function mark(name) {
+      if (marks[name] != null) return;
+      marks[name] = Date.now() - t0;
+      B.log('start ' + name + ' ' + marks[name] + ' ms');
+      B.player.timings = marks;
+    }
+    /**
+     * Afspelen. Alles wat niet nodig is voor het eerste beeld loopt ernaast: stream_start (tegelijk kijken),
+     * Trakt, ondertitels en de taalkeuze wachten niet; de URL gaat meteen naar de speler (prepareAsync).
+     */
     function start(resumeAt) {
+      var gen = ++startGen;
+      t0 = Date.now(); marks = {}; limited = false; audioChosen = false; autoSubsDone = false;
       errorBox.style.display = 'none';
       spinner.style.display = 'flex';
       nextShown = false; nextDismissed = false; nextCard.style.display = 'none';
@@ -269,16 +291,19 @@
       showOverlay(true);
       clearExtSubs();
       scrobbled = false; stopSent = false;
+      // tegelijk kijken: op de achtergrond; bij "te veel schermen" stopt de speler alsnog
       streamStart().then(function (ok) {
-        if (!ok || closed) return;
-        var resolve = isCatchup() ? (item.streamURL ? Promise.resolve(item.streamURL) : Lib.catchupURL(item.channel, item.program).then(function (u) { item.streamURL = u; return u; }))
-          : Lib.resolveURL(item, isLive());
-        return resolve.then(function (url) {
-          if (closed) return;
-          if (!url) throw new Error('no_url');
-          return openURL(url, resumeAt);
-        });
-      }).catch(function (e) { fail(e); });
+        mark('stream_start');
+        if (ok === false && gen === startGen) limited = true;
+      }, B.noop);
+      var resolve = isCatchup() ? (item.streamURL ? Promise.resolve(item.streamURL) : Lib.catchupURL(item.channel, item.program).then(function (u) { item.streamURL = u; return u; }))
+        : Lib.resolveURL(item, isLive());
+      resolve.then(function (url) {
+        if (closed || gen !== startGen || limited) return;
+        if (!url) throw new Error('no_url');
+        mark('url');
+        return openURL(url, resumeAt);
+      }).catch(function (e) { if (gen === startGen) fail(e); });
       if (isLive() && item.channel && Lib.source) {
         D.pushRecentChannel(Lib.source.id, item.channel.id);
         B.store.set('lastChannel.' + String(profile.id).toLowerCase(), { sourceId: Lib.source.id, channelId: item.channel.id });
@@ -294,32 +319,116 @@
       };
       var useAV = hasAVPlay() && !item.forceHTML;
       engine = useAV ? new AVEngine(events) : new HTMLEngine(events);
-      return engine.open(url, { live: isLive(), start: resumeAt || 0 }).then(function () {
-        if (closed) { engine.stop(); return; }
+      var my = engine;
+      return engine.open(url, { live: isLive(), start: resumeAt || 0, mark: mark, onReady: function () { if (engine === my) applyTrackPrefs(); } }).then(function () {
+        if (closed || limited) { my.stop(); return; }
+        if (engine !== my) return;
+        mark('playing');
         attempts = 0;
         spinner.style.display = 'none';
-        applyTrackPrefs();
         renderInfo();
         showOverlay(true);
-        if (!scrobbled) { scrobbled = true; scrobble('start'); }
+        // na het eerste beeld, niets hiervan houdt de start op
+        setTimeout(function () {
+          if (closed || engine !== my) return;
+          if (!audioChosen) applyTrackPrefs();
+          if (!scrobbled) { scrobbled = true; scrobble('start'); }
+          autoSubtitles();
+        }, 1200);
+        // HLS: sommige audiosporen verschijnen pas na een paar segmenten
+        setTimeout(function () { if (!closed && engine === my && !audioChosen) applyTrackPrefs(); }, 5000);
       }, function (e) {
         // AVPlay lukt niet: één keer met HTML5 <video> proberen (vooral MP4/HLS)
         if (useAV && !item.forceHTML) { item.forceHTML = true; return openURL(url, resumeAt); }
         throw e;
       });
     }
+    // MARK: taal (gewenste audiotaal, taal van de titel, automatische ondertitels)
+
+    /** Taal van wat er speelt volgens de naam/categorie/TMDB: film uit de bibliotheek, of de serie. */
+    function contentLang() {
+      if (item.type === 'movie') { var hit = Lib.lib && Lib.lib.byId ? Lib.lib.byId[item.id] : null; return B.clang.forItem(hit ? hit.item : item, false); }
+      if (item.type === 'episode' && ctx.series) return B.clang.forItem(ctx.series, true);
+      return null;
+    }
+    /** Gewenste audiotaal kiezen (settings.shared.audioLanguage, standaard de app-taal; "original" = originele taal). */
     function applyTrackPrefs() {
-      var pref = String(D.shared('audioLanguage', '') || '').toLowerCase();
-      if (!pref || !engine) return;
+      if (!engine || audioChosen) return;
+      var pref = B.clang.preferredAudio();
+      if (pref === 'original') { var cl = contentLang(); pref = cl && cl.a ? cl.a : ''; }
+      if (!pref) return;
       var tr = engine.tracks();
+      if (tr.audio.length < 2) return;
       for (var i = 0; i < tr.audio.length; i++) {
-        var lg = String(tr.audio[i].lang || '').toLowerCase();
-        if (lg && (lg === pref || lg.indexOf(pref) === 0 || langName(lg) === langName(pref))) { engine.selectAudio(tr.audio[i].index); break; }
+        if (B.clang.norm(tr.audio[i].lang) === pref) {
+          if (tr.audio[i].index !== tr.currentAudio) { engine.selectAudio(tr.audio[i].index); B.log('audio → ' + pref); }
+          audioChosen = true;
+          return;
+        }
       }
+    }
+    /** Taal van het audiospoor dat nu speelt; anders de taal van de titel. */
+    function currentAudioLang() {
+      var tr = engine ? engine.tracks() : { audio: [] };
+      var cur = null;
+      tr.audio.forEach(function (t) { if (t.index === tr.currentAudio) cur = t; });
+      if (!cur && tr.audio.length === 1) cur = tr.audio[0];
+      var lg = cur ? B.clang.norm(cur.lang) : '';
+      if (lg) return lg;
+      var cl = contentLang();
+      return cl && !cl.m ? (cl.a || '') : '';
+    }
+    /**
+     * Automatische ondertitels (settings.shared.autoSubtitles: off | whenNeeded | always).
+     * whenNeeded: alleen als de audio niet in de gewenste taal is. Eerst een ingebouwd spoor in die taal, anders
+     * OpenSubtitles op de achtergrond; aanzetten met een melding in beeld. Houdt de start nooit op.
+     */
+    function autoSubtitles() {
+      if (autoSubsDone || !engine || isLive() || isCatchup() || extCues) return;
+      autoSubsDone = true;
+      var mode = B.clang.autoSubtitles();
+      if (mode === 'off') return;
+      var want = B.clang.preferredSubtitle();
+      var audio = currentAudioLang();
+      var cl = contentLang();
+      if (mode === 'whenNeeded' && (!audio || audio === want)) return;
+      // ondertitels in de gewenste taal zitten al in het beeld ("NL SUBS")
+      if (cl && cl.s === want) return;
+      var tr = engine.tracks();
+      if (tr.currentText != null) { var on = null; tr.text.forEach(function (t) { if (t.index === tr.currentText) on = t; }); if (on && B.clang.norm(on.lang) === want) return; }
+      for (var i = 0; i < tr.text.length; i++) {
+        if (B.clang.norm(tr.text[i].lang) === want) {
+          engine.selectText(tr.text[i].index);
+          U.toast(L('Subtitles turned on automatically: %@', langName(want)), 4000);
+          return;
+        }
+      }
+      var OS = B.opensubtitles;
+      if (!OS.ready() || !OS.isLoggedIn()) return;
+      var my = engine, id = item.id;
+      var series = ctx.series || null;
+      var imdb = item.imdbID || (item.type === 'episode' ? B.trakt.imdbFor(series || { title: item.title }, true) : B.trakt.imdbFor({ title: item.title, year: B.int(item.subtitle) }, false));
+      OS.search({ imdb: imdb, title: item.title, year: item.type === 'movie' ? B.int(item.subtitle) : null,
+        season: item.type === 'episode' ? item.season : null, episode: item.type === 'episode' ? item.episode : null }, [want]).then(function (list) {
+        list = list.filter(function (x) { return B.clang.norm(x.language) === want; });
+        if (!list.length || closed || engine !== my || item.id !== id || extCues) return null;
+        return OS.download(list[0]).then(function (cues) {
+          if (!cues.length || closed || engine !== my || item.id !== id || extCues) return;
+          showExtCues(cues);
+          U.toast(L('Subtitles turned on automatically: %@', langName(want)), 4000);
+        });
+      }).catch(function (e) { B.log('auto-ondertitels', e && e.message); });
+    }
+    function showExtCues(cues) {
+      try { engine.selectText(null); } catch (e) { /* stil */ }
+      extCues = cues; extOffset = 0;
+      clearInterval(extTimer);
+      extTimer = setInterval(renderExtSub, 250);
+      renderExtSub();
     }
 
     function fail(e) {
-      if (closed) return;
+      if (closed || limited) return;
       B.log('player error', e && e.message);
       spinner.style.display = 'none';
       // één stille nieuwe poging
@@ -377,11 +486,70 @@
 
     // MARK: sporen
 
+    /** Andere taalversies van wat er speelt (film, of de serie bij een aflevering). */
+    function versions() {
+      if (item.type === 'movie') { var hit = Lib.lib && Lib.lib.byId ? Lib.lib.byId[item.id] : null; return hit ? B.clang.versions(hit.item, 'movie') : []; }
+      if (item.type === 'episode' && ctx.series) return B.clang.versions(ctx.series, 'series');
+      return [];
+    }
+    /**
+     * Audio: meerdere sporen → kiezen (plus andere taalversies). Eén spoor → de taal ervan, "Deze stream heeft één
+     * audiotaal" en de andere taalversies om op dezelfde plek verder te kijken.
+     */
     function chooseAudio() {
       if (!engine) return;
       var tr = engine.tracks();
-      if (!tr.audio.length) { U.toast(L('No other audio tracks')); return; }
-      U.choose(L('Audio'), tr.audio.map(function (t) { return { value: t.index, label: t.label }; }), tr.currentAudio, function (v) { engine.selectAudio(v); });
+      var vs = versions();
+      if (tr.audio.length > 1) {
+        var opts = tr.audio.map(function (t) { return { value: t.index, label: t.label }; });
+        vs.slice(0, 6).forEach(function (v, i) { opts.push({ value: 'v' + i, label: L('Other language') + ': ' + v.label }); });
+        U.choose(L('Audio'), opts, tr.currentAudio, function (v) {
+          if (typeof v === 'string') { switchVersion(vs[B.int(v.slice(1))]); return; }
+          audioChosen = true;
+          engine.selectAudio(v);
+        });
+        return;
+      }
+      var lg = currentAudioLang();
+      var name = lg ? langName(lg) : (tr.audio[0] ? tr.audio[0].label : L('Audio'));
+      var buttons = vs.slice(0, 4).map(function (v) { return { label: v.label, icon: 'globe', fn: function () { switchVersion(v); } }; });
+      buttons.push({ label: L('Close') });
+      U.modal({
+        title: L('Audio') + ': ' + name,
+        text: L('This stream has one audio language') + (vs.length ? '. ' + L('Watch another language version from the same moment:') : '.'),
+        buttons: buttons
+      });
+    }
+    /** Andere taalversie kiezen en op dezelfde plek verder kijken. */
+    function switchVersion(v) {
+      if (!v || !engine) return;
+      var pos = isLive() ? 0 : engine.time();
+      var target = v.item;
+      U.toast(L('Switching to %@…', v.label));
+      if (item.type === 'movie') {
+        saveProgress(true);
+        if (scrobbled) scrobble('stop');
+        stopEngine(false);
+        item = movieItem(target);
+        watchedSeconds = 0; recorded = false; attempts = 0;
+        start(pos);
+        return;
+      }
+      // aflevering: dezelfde aflevering (seizoen + nummer) in de andere serie zoeken
+      var season = item.season, epn = item.episode;
+      Lib.episodes(target).then(function (r) {
+        var eps = (r && r.episodes) || [];
+        var hit = null;
+        eps.forEach(function (e) { if (e.season === season && e.number === epn) hit = e; });
+        if (!hit || closed) { U.toast(L('No other language version found.')); return; }
+        saveProgress(true);
+        if (scrobbled) scrobble('stop');
+        stopEngine(false);
+        ctx.series = target; ctx.episodes = eps;
+        item = episodeItem(hit, target);
+        watchedSeconds = 0; recorded = false; attempts = 0;
+        start(pos);
+      }, function () { U.toast(L('Something went wrong. Please try again.')); });
     }
     function chooseText() {
       if (!engine) return;
@@ -393,6 +561,7 @@
       U.choose(L('Subtitles'), opts, cur, function (v) {
         if (v === -2) { openSubtitles(); return; }
         if (v === -3) { chooseOffset(); return; }
+        autoSubsDone = true;
         clearExtSubs();
         engine.selectText(v < 0 ? null : v);
       });
@@ -422,11 +591,7 @@
           OS.download(list[i]).then(function (cues) {
             if (closed) return;
             if (!cues.length) { U.toast(L('No subtitles found for this title.')); return; }
-            try { engine.selectText(null); } catch (e) { /* stil */ }
-            extCues = cues; extOffset = 0;
-            clearInterval(extTimer);
-            extTimer = setInterval(renderExtSub, 250);
-            renderExtSub();
+            showExtCues(cues);
             U.toast(L('Subtitles: %@', langName(list[i].language) || list[i].language));
           }, function (e) { U.toast(e.message || L('Something went wrong. Please try again.')); });
         });
@@ -619,6 +784,7 @@
       });
     }
     function showLimit(r) {
+      limited = true;
       spinner.style.display = 'none';
       if (engine) engine.stop();
       U.clear(errorBox);

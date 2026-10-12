@@ -103,6 +103,31 @@ def run(page_setup, mode, steps):
         b.close()
 
 
+# nep-AVPlay (alleen de API; beeld is er in headless niet): sporen uit window.__avTracks, aanroepen in window.__av
+AVSTUB = """
+window.__av = [];
+window.__avTracks = window.__avTracks || [{index: 1, type: 'AUDIO', extra_info: '{"language":"eng"}'}, {index: 2, type: 'AUDIO', extra_info: '{"language":"dut"}'},
+  {index: 3, type: 'TEXT', extra_info: '{"track_lang":"eng"}'}];
+(function () {
+  var st = 'NONE', cur = {AUDIO: 1, TEXT: null}, t = 0, timer = null, ls = null;
+  function log(x) { window.__av.push(x); }
+  webapis.avplay = {
+    open: function (u) { log('open'); st = 'IDLE'; t = 0; },
+    setDisplayRect: function () {}, setDisplayMethod: function () {}, setListener: function (l) { ls = l; },
+    setTimeoutForBuffering: function () {}, setBufferingParam: function (a, b, c) { log('buf:' + a + ':' + c); },
+    prepareAsync: function (ok) { log('prepare'); setTimeout(function () { st = 'READY'; ok(); }, 150); },
+    play: function () { log('play'); st = 'PLAYING'; clearInterval(timer); timer = setInterval(function () { t += 250; }, 250); },
+    pause: function () { st = 'PAUSED'; clearInterval(timer); }, stop: function () { st = 'IDLE'; clearInterval(timer); }, close: function () { st = 'NONE'; },
+    getDuration: function () { return 5400000; }, getCurrentTime: function () { return t; },
+    seekTo: function (ms, ok) { log('seek:' + ms); t = ms; if (ok) ok(); },
+    getTotalTrackInfo: function () { return window.__avTracks; },
+    getCurrentStreamInfo: function () { var o = []; if (cur.AUDIO != null) o.push({type: 'AUDIO', index: cur.AUDIO}); if (cur.TEXT != null) o.push({type: 'TEXT', index: cur.TEXT}); return o; },
+    setSelectTrack: function (k, i) { log('select:' + k + ':' + i + ':' + st); cur[k] = i; },
+    setSilentSubtitle: function (b) { log('silent:' + b); }
+  };
+})();
+"""
+
 SIGNED_IN = "localStorage.setItem('bingr.auth', JSON.stringify({access_token:'h.eyJzdWIiOiJ1c2VyLTEifQ.s', refresh_token:'r1', expires_at: Math.floor(Date.now()/1000)+3600, email:'leon@example.com', user_id:'user-1'})); localStorage.setItem('bingr.deviceRegistered','true');"
 
 if __name__ == '__main__':
@@ -285,6 +310,35 @@ if __name__ == '__main__':
             ('eval', 'B.data.deleteSource("D4E5F6A7-0000-4000-8000-000000000004").then(function(){return JSON.stringify(B.data.sources.map(function(s){return s.name}))})', 'na verwijderen'),
         ])
         print([l for l in open(os.path.join(OUT, 'requests.jsonl')).read().splitlines() if 'put_sources' in l][-1][-400:] if os.path.exists(os.path.join(OUT, 'requests.jsonl')) else '')
+    if which in ('all', 'lang'):
+        # build 59: taal van de titel (strook op de poster, "Taal:" op de detailpagina, Andere taal), gewenste audiotaal
+        # via AVPlay, audiopaneel met één audiotaal, automatische ondertitels en een start die nergens op wacht
+        run(SIGNED_IN + AVSTUB, 'normal', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 3000),
+            ('eval', 'JSON.stringify(B.lib.lib.movies.filter(function(m){return +m.id.slice(2) > 100}).map(function(m){return m.title + " = " + B.clang.badge(B.clang.forItem(m, false))}))', 'titels'),
+            ('eval', 'B.ui.top().show("movies", true) || 1'), ('wait', 800), ('key', 'ArrowDown ArrowDown ArrowDown ArrowDown', 250), ('key', 'ArrowRight', 300), ('wait', 800), ('shot', '55-lang-posters'),
+            ('eval', 'B.ui.push(B.screens.detail("movie", B.lib.lib.byId["xv101"].item)) && 1'), ('wait', 1500), ('shot', '56-lang-detail'),
+            ('eval', 'document.querySelector(".dt-lang").textContent + " | " + Array.prototype.map.call(document.querySelectorAll(".dt-buttons .btn"), function(b){return b.textContent}).join("|")', 'detail'),
+            ('eval', 'var b = Array.prototype.filter.call(document.querySelectorAll(".dt-buttons .btn"), function(b){return b.querySelector(".ic") && b.textContent.indexOf("taal") >= 0})[0]; B.ui.focus(b); 1'),
+            ('key', 'Enter', 400), ('shot', '57-lang-versions'), ('key', 'Escape', 300), ('key', 'Escape', 300),
+            ('eval', 'B.opensubtitles.login("leon", "geheim").then(function(){return 1})'), ('wait', 300),
+            # gewenste audiotaal: app-taal nl → spoor 2 (dut) vóór play()
+            ('eval', 'B.player.playVOD(B.player.movieItem(B.lib.lib.byId["xv5"].item), {resume: 0}) || 1'), ('wait', 2500),
+            ('eval', 'JSON.stringify({av: window.__av, t: B.player.timings})', 'avplay + tijden'),
+            ('eval', 'B.player.current.close() || 1'), ('wait', 600),
+            # één audiotaal (Italiaans): automatisch Nederlandse ondertitels (OpenSubtitles) en het audiopaneel
+            ('eval', 'window.__avTracks = [{index: 1, type: "AUDIO", extra_info: "{\\"language\\":\\"ita\\"}"}]; window.__av = []; B.player.playVOD(B.player.movieItem(B.lib.lib.byId["xv101"].item), {resume: 0}) || 1'),
+            ('wait', 3500), ('shot', '58-lang-autosubs'),
+            ('eval', 'document.querySelector(".pl-sub").textContent + " | " + (document.querySelector(".toast") ? document.querySelector(".toast").textContent : "")', 'ondertitel'),
+            ('eval', 'var b = Array.prototype.filter.call(document.querySelectorAll(".pl-buttons .btn"), function(b){return b.textContent === "Audio"})[0]; B.ui.focus(b); 1'),
+            ('key', 'Enter', 400), ('shot', '59-lang-audio-panel'),
+            ('eval', 'document.querySelector(".modal-box").textContent', 'paneel'),
+            ('key', 'Enter', 400), ('wait', 2500),
+            ('eval', 'JSON.stringify({title: document.querySelector(".pl-title").textContent, av: window.__av.slice(-6)})', 'na wisselen'),
+            ('eval', 'B.player.current.close() || 1'), ('wait', 400),
+            ('eval', 'B.ui.top().show("settings", true) || 1'), ('wait', 600),
+            ('eval', 'var r = Array.prototype.filter.call(document.querySelectorAll(".st-row"), function(r){return r.textContent.indexOf("Automatische") === 0})[0]; B.ui.focus(r); 1'), ('wait', 300), ('shot', '60-lang-settings'),
+        ])
     if which in ('all', 'perf'):
         # prestaties met een grote bibliotheek: lange taken (> 50 ms) tijdens snel scrollen tellen
         LT = 'window.__lt = []; try { new PerformanceObserver(function (l) { l.getEntries().forEach(function (e) { window.__lt.push(Math.round(e.duration)); }); }).observe({entryTypes: ["longtask"]}); } catch (e) {} 1'

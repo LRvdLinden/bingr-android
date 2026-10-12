@@ -132,6 +132,7 @@
       return ok;
     }
     var AR = B.ageRatings;
+    var CLs = B.clang ? B.clang.strip : function (t) { return t; };
     function ageOK(x, isShow) {
       if (ageLimit == null) return true;
       return PC.allowedFor(x.rated, x.group, ageLimit, x.genre, ctx.strict, AR ? AR.cached(x.title, x.year, isShow) : null);
@@ -145,11 +146,12 @@
       },
       movie: function (m) {
         if (!visible(m.id, m.group) || !ageOK(m, false)) return null;
-        return B.assign({}, m, { group: group(m.group), title: c.renamed[m.id] || m.title, rawTitle: m.title });
+        // taal-tag ("Animal (IT)", "NL | …") niet in de getoonde titel; rawTitle blijft voor TMDB, Trakt en sleutels
+        return B.assign({}, m, { group: group(m.group), title: c.renamed[m.id] || CLs(m.title), rawTitle: m.title, rawGroup: m.group });
       },
       series: function (x) {
         if (!visible(x.id, x.group) || !ageOK(x, true)) return null;
-        return B.assign({}, x, { group: group(x.group), title: c.renamed[x.id] || x.title, rawTitle: x.title });
+        return B.assign({}, x, { group: group(x.group), title: c.renamed[x.id] || CLs(x.title), rawTitle: x.title, rawGroup: x.group });
       },
       sortChannels: function (channels) {
         if (!((c.groupOrder && c.groupOrder.length) || Object.keys(c.channelOrder || {}).length)) return channels;

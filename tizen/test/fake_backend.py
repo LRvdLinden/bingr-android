@@ -23,7 +23,10 @@ TITLES = ['Midnight Harbor', 'The Last Signal', 'Golden Fields', 'Neon District'
           'Silent Peak', 'Red Horizon', 'Frozen Lake', 'City of Glass', 'Wild Coast', 'Night Shift', 'Echo Park', 'Summer Run',
           'Blue Planet', 'Desert Wind', 'The Archive', 'Northern Lights', 'Hidden Garden', 'Fast Lane', 'The Heist',
           'Dragon Tales', 'Space Kids']
-VOD_GROUPS = {'10': 'Actie', '11': 'Drama', '12': 'Familie', '13': 'Nieuw binnen'}
+VOD_GROUPS = {'10': 'Actie', '11': 'Drama', '12': 'Familie', '13': 'Nieuw binnen', '14': 'VOD | DE'}
+# build 59: titels met een taal-tag zoals IPTV-aanbieders ze leveren (ContentLanguage)
+LANG_MOVIES = [(101, 'Animal (IT)', '2023', '13', 2), (102, 'NL | Animal', '2023', '13', 3), (103, 'Animal Kingdom (NL)', '2021', '11', 4),
+               (104, 'Night Train MULTI', '2022', '10', 5), (105, 'EN: Paper Trail (NL SUBS)', '2020', '11', 6), (106, 'Der Tunnel', '2019', '14', 7)]
 SER_GROUPS = {'20': 'Spanning', '21': 'Kinderseries'}
 
 
@@ -158,6 +161,9 @@ def xtream(action, params):
             g = ['10', '11', '12', '13'][i % 4]
             out.append({'stream_id': i + 1, 'name': '%s (%d)' % (t, 2015 + i % 10), 'stream_icon': 'http://img.test/p%02d.jpg' % i,
                         'category_id': g, 'container_extension': 'mp4', 'rating': str(6 + (i * 7 % 30) / 10), 'added': str(int(time.time()) - i * 86400)})
+        for sid, name, year, g, img in LANG_MOVIES:
+            out.append({'stream_id': sid, 'name': name, 'year': year, 'stream_icon': 'http://img.test/p%02d.jpg' % img, 'category_id': g,
+                        'container_extension': 'mp4', 'rating': '7.1', 'added': str(int(time.time()) - sid * 3600)})
         return out
     if action == 'get_series_categories':
         return [{'category_id': k, 'category_name': v} for k, v in SER_GROUPS.items()]
@@ -341,7 +347,8 @@ def other(url, method, body, img_dir):
             kids = any(w in qs for w in ['dragon', 'space kids', 'golden'])
             if not qs:
                 return j({'results': []})
-            return j({'results': [{'id': 1000 + len(qs), 'genre_ids': [16, 10751] if kids else [53, 18], 'adult': False}]})
+            ol = 'it' if qs == 'animal' else ('de' if 'tunnel' in qs else 'en')
+            return j({'results': [{'id': 1000 + len(qs), 'genre_ids': [16, 10751] if kids else [53, 18], 'adult': False, 'original_language': ol}]})
         if path.startswith('/3/find/'):
             return j({'movie_results': [], 'tv_results': []})
         if path.endswith('/release_dates'):
@@ -350,6 +357,8 @@ def other(url, method, body, img_dir):
             return j({'results': [{'iso_3166_1': 'NL', 'release_dates': [{'certification': cert}]}, {'iso_3166_1': 'US', 'release_dates': [{'certification': 'PG-13'}]}]})
         if path.endswith('/content_ratings'):
             return j({'results': [{'iso_3166_1': 'NL', 'rating': '12'}]})
+        if path.startswith('/3/movie/') or path.startswith('/3/tv/'):
+            return j({'id': int(path.split('/')[3]), 'original_language': 'en'})
         return j({})
     if host in ('api.trakt.tv', 'auth.trakt.tv'):
         if path == '/oauth/device/code':

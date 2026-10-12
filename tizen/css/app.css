@@ -194,6 +194,12 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 .card-progress > div { height: 100%; background: var(--accent); }
 .card-progress.inline { position: relative; left: 0; right: 0; bottom: 0; width: 220px; display: inline-block; margin-right: 16px; vertical-align: middle; }
 .card-label { position: absolute; left: 0; bottom: 0; right: 0; padding: 8px 12px; background: linear-gradient(transparent, rgba(0,0,0,0.85)); font-size: 22px; }
+/* taal van de titel: kleine doorschijnende strook onder op de poster (zoals UHF) */
+.card-lang { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; line-height: 30px; padding: 0 8px; text-align: center;
+  background: rgba(0,0,0,0.62); color: #fff; font-size: 18px; font-weight: 700; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card.top10 .card-lang { left: auto; width: 206px; border-radius: 0 0 8px 8px; }
+.card.has-lang .card-progress { bottom: 38px; }
+.card.has-lang .card-label { bottom: 30px; }
 .card.chan { width: 330px; height: 186px; background: #1d1d1d; display: flex; flex-direction: column; }
 .chan-logo { height: 116px; display: flex; align-items: center; justify-content: center; background: linear-gradient(160deg, #2c2c2c, #191919); }
 .logo-img { width: 72%; height: 80%; background-size: contain; }
@@ -309,6 +315,7 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 .dt-kind { color: var(--accent); font-weight: 800; letter-spacing: 6px; font-size: 24px; margin-bottom: 14px; }
 .dt-title { font-size: 80px; line-height: 1.04; margin-bottom: 20px; }
 .dt-meta { font-size: 28px; color: #ddd; margin-bottom: 22px; }
+.dt-lang { font-size: 26px; color: #bbb; margin: -10px 0 22px; }
 .dt-plot { font-size: 27px; line-height: 1.5; color: #d0d0d0; max-height: 200px; overflow: hidden; margin-bottom: 30px; }
 .dt-buttons { display: flex; align-items: center; margin-bottom: 40px; }
 .dt-progress { display: flex; align-items: center; margin: 0 26px 0 10px; font-size: 24px; white-space: nowrap; }
