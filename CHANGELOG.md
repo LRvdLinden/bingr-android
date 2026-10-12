@@ -2,6 +2,11 @@
 
 Alle versies van Bingr voor Android, Android TV en Fire TV (iPhone, iPad, Apple TV en Mac: [iptv-ios-appletv](https://github.com/LRvdLinden/iptv-ios-appletv/blob/main/CHANGELOG.md)). Per versie het buildnummer en de datum; het buildnummer loopt gelijk over alle platforms.
 
+## Versie 1.0.0 · Build 47
+_2026-10-12_
+
+- Onderaan Mijn Bingr: app-icoon, versie- en buildnummer en copyright
+
 ## Versie 1.0.0 · Build 45
 _2026-10-12_
 

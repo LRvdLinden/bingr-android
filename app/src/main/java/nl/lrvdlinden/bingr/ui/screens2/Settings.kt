@@ -7,6 +7,12 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -71,6 +77,34 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.launch
 import java.io.File
+
+/** Gecentreerde voettekst onderaan Mijn Bingr: app-icoon, versie (build) en copyright. */
+@Composable
+private fun S2AppFooter() {
+    val tv = AppState.isTV
+    var focused by remember { mutableStateOf(false) }
+    val iconSize = if (tv) 84.dp else 56.dp
+    Column(
+        Modifier.fillMaxWidth()
+            .padding(top = if (tv) 32.dp else 24.dp, bottom = if (tv) 48.dp else 16.dp)
+            .then(if (tv) Modifier.onFocusChanged { focused = it.isFocused }.focusable() else Modifier),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Image(
+            painter = painterResource(R.mipmap.ic_launcher),
+            contentDescription = "Bingr",
+            modifier = Modifier.size(iconSize)
+                .clip(RoundedCornerShape(iconSize * 0.22f))
+                .then(if (focused) Modifier.border(2.dp, Color.White, RoundedCornerShape(iconSize * 0.22f)) else Modifier)
+        )
+        Spacer(Modifier.height(tvs(10)))
+        Text(L("Version: %@ (%@)", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toString()),
+            color = if (focused) Color.White else Theme.secondary, fontSize = tsp(13), textAlign = TextAlign.Center)
+        Spacer(Modifier.height(tvs(4)))
+        Text("\u00A9 2026 Bingr \u00B7 L\u00E9on van der Linden",
+            color = Theme.secondary, fontSize = tsp(12), textAlign = TextAlign.Center)
+    }
+}
 
 private enum class S2SettingsSub { CATEGORIES, MANAGE, HISTORY, NAS }
 private enum class S2PinMode { SET, UNLOCK, DISABLE }
@@ -478,6 +512,9 @@ fun SettingsScreen() {
                 }
             }
         }
+
+        // MARK: onderaan: app-icoon, versie en copyright (op TV focusbaar, zodat het in beeld scrolt)
+        item { S2AppFooter() }
     }
 
     // MARK: dialogen
