@@ -115,7 +115,7 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
    Zonder sleutels werkt de app ook: na het inloggen haalt de app de Trakt-, OpenSubtitles-, OMDb- en TMDB-sleutels op bij de Bingr-server. Eigen sleutels kun je nog invullen via *Mijn Bingr → Koppelingen instellen* (onderaan). `SUPABASE_URL` en `SUPABASE_ANON_KEY` (Bingr-account) worden alleen ingebouwd; zonder deze twee toont het inlogscherm "Continue without account".
 3. *Build → Build App Bundle(s) / APK(s) → Build APK(s)*, of druk op ▶ voor een toestel of Android TV-emulator.
 
-Een eigen release-sleutel stel je in met `BINGR_KEYSTORE`, `BINGR_KEYSTORE_PASSWORD`, `BINGR_KEY_ALIAS` en `BINGR_KEY_PASSWORD` in `local.properties` (of als secrets); zonder sleutel wordt met de debug-sleutel getekend.
+**Ondertekening:** de CI tekent elke APK met dezelfde vaste sleutel (secrets `BINGR_KEYSTORE_BASE64` en `BINGR_KEYSTORE_PASSWORD`), zodat je een nieuwe versie gewoon over de oude heen installeert en alles bewaard blijft. Lokaal stel je een sleutel in met `BINGR_KEYSTORE`, `BINGR_KEYSTORE_PASSWORD`, `BINGR_KEY_ALIAS` en `BINGR_KEY_PASSWORD` in `local.properties` (of als secrets); zonder sleutel wordt met de debug-sleutel getekend.
 
 **Automatisch bouwen:** de workflow `Build` bouwt bij elke push naar `main` een APK en zet die bij [Releases](https://github.com/LRvdLinden/bingr-android/releases) (`v1.0.0-build38`). Zet de sleutels (ook `SUPABASE_URL` en `SUPABASE_ANON_KEY`) als repository-secrets bij *Settings → Secrets and variables → Actions*. Het build-log staat op de branch `ci-logs`.
 

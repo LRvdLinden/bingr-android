@@ -30,8 +30,22 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Ondertekensleutel klaarzetten
+        env:
+          KS: ${{ secrets.BINGR_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/bingr-release.jks"
+            echo "BINGR_KEYSTORE=$RUNNER_TEMP/bingr-release.jks" >> "$GITHUB_ENV"
+            echo "::notice::APK wordt ondertekend met de vaste Bingr-sleutel"
+          else
+            echo "::warning::Secret BINGR_KEYSTORE_BASE64 ontbreekt: APK krijgt een tijdelijke sleutel en kan niet over een vorige versie heen worden geïnstalleerd."
+          fi
+
       - name: APK bouwen
         env:
+          BINGR_KEYSTORE_PASSWORD: ${{ secrets.BINGR_KEYSTORE_PASSWORD }}
+          BINGR_KEY_ALIAS: bingr
           TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
           TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
