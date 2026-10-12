@@ -69,6 +69,8 @@
     guide: '<rect x="2.5" y="4" width="19" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2.5 9h19M9 9v11M15 9v11" stroke="currentColor" stroke-width="1.8"/>',
     star: '<path d="M12 3.5l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6L3.3 9.7l6.1-.6z" fill="currentColor"/>',
     replay: '<path d="M5 12a7 7 0 1 0 2.1-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M4 3.5v5h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
+    // gestapelde lagen: wisselen van bron (Andere bron / Kies een bron)
+    layers: '<path d="M12 3.5l9 4.5-9 4.5-9-4.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M3 12l9 4.5 9-4.5M3 16l9 4.5 9-4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
     swap: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
     backspace: '<path d="M8.5 5H21v14H8.5L2.5 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M11.5 9l6 6M17.5 9l-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     space: '<path d="M4 10v4h16v-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -375,7 +377,9 @@
     if (opts.icon) kids.push(U.icon(opts.icon));
     if (label) kids.push(U.h('span.lbl', label));
     var cls = opts.cls ? '.' + String(opts.cls).split(/\s+/).join('.') : '';
-    var el = U.h('div.btn.f' + (opts.primary ? '.primary' : '') + cls + (opts.autofocus ? '.autofocus' : ''), kids);
+    // afspeelknop (primair met play-icoon, of expliciet play): gevuld in de accentkleur van het profiel
+    var play = opts.play || (opts.primary && opts.icon === 'play');
+    var el = U.h('div.btn.f' + (opts.primary || play ? '.primary' : '') + (play ? '.play' : '') + cls + (opts.autofocus ? '.autofocus' : ''), kids);
     el.onEnter = onEnter;
     return el;
   };
@@ -390,7 +394,7 @@
     setTimeout(function () { t.classList.remove('show'); setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 400); }, ms || 3000);
   };
 
-  /** Modal: {title, text, buttons:[{label, fn, primary}], content} — Terug sluit. */
+  /** Modal: {title, text, buttons:[{label, fn, primary, play, icon}], content} — Terug sluit. */
   U.modal = function (o) {
     var box = U.h('div.modal-box', [
       o.title ? U.h('h2', o.title) : null,
@@ -403,7 +407,7 @@
       btns.appendChild(U.button(b.label, function () {
         if (b.keep) { if (b.fn) b.fn(); return; }
         U.pop(); if (b.fn) b.fn();
-      }, { primary: b.primary || i === 0, autofocus: i === 0 }));
+      }, { primary: b.primary || i === 0, play: b.play, icon: b.icon || (b.play ? 'play' : null), autofocus: i === 0 }));
     });
     box.appendChild(btns);
     s.onBack = function () { U.pop(); if (o.onCancel) o.onCancel(); };

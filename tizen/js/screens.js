@@ -918,8 +918,8 @@
     var canCu = Lib.canCatchup(ch, p);
     var src = Lib.source;
     var buttons = [];
-    if (isNow) buttons.push({ label: L('Watch live'), fn: function () { B.player.playChannel(ch, channels); } });
-    if (canCu && !isNow) buttons.push({ label: L('Watch from the start'), fn: function () { B.player.playCatchup(ch, p); } });
+    if (isNow) buttons.push({ label: L('Watch live'), play: true, fn: function () { B.player.playChannel(ch, channels); } });
+    if (canCu && !isNow) buttons.push({ label: L('Watch from the start'), play: !isNow, fn: function () { B.player.playCatchup(ch, p); } });
     if (canCu && isNow) buttons.push({ label: L('From the start'), fn: function () { B.player.playCatchup(ch, p); } });
     if (p.start > now) {
       var on = B.reminders.has(B.reminders.id(ch, p));
@@ -1145,12 +1145,12 @@
           buttons.appendChild(h('div.dt-progress', [h('div.card-progress.inline', [h('div', { style: { width: Math.round(p.fraction * 100) + '%' } })]),
             h('span.dim', L('%d min left', Math.max(1, Math.round((p.position / p.fraction - p.position) / 60))))]));
         }
-        if (stremio && x.stremio) buttons.appendChild(U.button(L('Choose a source'), function () { chooseStream(B.player.movieItem(x), {}); }, { icon: 'swap' }));
+        if (stremio && x.stremio) buttons.appendChild(U.button(L('Choose a source'), function () { chooseStream(B.player.movieItem(x), {}); }, { icon: 'layers' }));
       } else {
         var ep = currentEp;
         var lbl = ep ? (D.progress(ep.id) ? L('Resume') : L('Play')) + '  S' + ep.season + ':E' + ep.number : L('Play');
         buttons.appendChild(U.button(lbl, function () { if (currentEp) playEpisode(currentEp); }, { primary: true, icon: 'play', autofocus: true }));
-        if (stremio && ep) buttons.appendChild(U.button(L('Choose a source'), function () { if (currentEp) chooseStream(B.player.episodeItem(currentEp, x), { episodes: episodes, series: x }); }, { icon: 'swap' }));
+        if (stremio && ep) buttons.appendChild(U.button(L('Choose a source'), function () { if (currentEp) chooseStream(B.player.episodeItem(currentEp, x), { episodes: episodes, series: x }); }, { icon: 'layers' }));
       }
       buttons.appendChild(listButton());
     }

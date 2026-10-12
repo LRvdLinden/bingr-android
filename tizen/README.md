@@ -31,6 +31,7 @@ voortgang, collecties en instellingen er gewoon: alles komt uit je account en sy
 - **Tegelijk kijken** (max. 6, met de lijst van wie er kijkt), kijkgeschiedenis, apparaten beheren, wie kijkt er nu (met profielavatars)
 - **Kinderslot** en leeftijdsfilter met dezelfde regels als Android (kinderprofiel: alleen kinderzenders en -categorieën; volwassenengroepen nooit; vergrendelde groepen en aanpassingen uit het Android-blok van de server)
 - **Instellingen**: taal (11 talen, gedeeld met je account), accentkleur, actieve server, servers, bibliotheek verversen, laatste zender hervatten, zapvertraging, live-voorbeeld, Trakt, OpenSubtitles, herinneringen, kinderslot
+- **Knoppen**: de afspeelknop (*Afspelen*, *Hervatten* / *Verder kijken*, *Volgende aflevering*, *Live kijken*, *Kijken vanaf het begin*) is gevuld in de accentkleur van het profiel (standaard rood #E50914) met witte tekst; met focus wordt hij groter met een witte rand en gloed. *Andere bron* en *Kies een bron* hebben een icoon met gestapelde lagen.
 - **Soepel op oude tv's**: lijsten en collecties één keer per wijziging berekend en onthouden, zwaar werk in stukjes zodat de toetsen nooit blijven hangen, ingedrukt houden afgeremd, virtuele lijsten en rasters (alleen wat in beeld is bestaat, scrollen met `transform`), kleine posters pas laden als ze in beeld komen, nu/straks via een index met binair zoeken, het Live TV-voorbeeld pas na ~1,2 s stilstand met één hergebruikte speler
 
 Beperkingen die blijven:

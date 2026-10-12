@@ -233,7 +233,7 @@
       if (isLive() && item.channel) {
         var nn = Lib.nowNext(item.channel);
         if (nn.now && Lib.canCatchup(item.channel, nn.now)) add(U.button(L('From the start'), function () { B.player.playCatchup(item.channel, nn.now, ctx.channels); }, { icon: 'replay' }), 'cu');
-        add(U.button(L('Other source'), function () { chooseBackup(); }, { icon: 'swap' }), 'backup');
+        add(U.button(L('Other source'), function () { chooseBackup(); }, { icon: 'layers' }), 'backup');
         if ((ctx.channels || []).length > 1) add(U.button(L('Multiview'), function () { var list = ctx.channels, idx = ctx.index || 0; close(); B.multiview.open(list, idx); }, { icon: 'grid' }), 'mv');
       }
       if (keep) { var again = null; Array.prototype.forEach.call(btnRow.children, function (b) { if (b._k === keep) again = b; }); if (again) U.focus(again, true); }
@@ -349,7 +349,7 @@
       errorBox.appendChild(h('p', isLive() ? L('This channel is not available right now.') : L('This title could not be loaded.')));
       var row = h('div.modal-buttons');
       row.appendChild(U.button(L('Try again'), function () { attempts = 0; triedBackup = false; start(engine && !isLive() ? engine.time() : (ctx.resume || 0)); }, { primary: true }));
-      if (isLive()) row.appendChild(U.button(L('Other source'), chooseBackup));
+      if (isLive()) row.appendChild(U.button(L('Other source'), chooseBackup, { icon: 'layers' }));
       row.appendChild(U.button(L('Close'), close));
       errorBox.appendChild(row);
       errorBox.style.display = 'flex';
@@ -836,7 +836,7 @@
         title: item.title,
         text: item.subtitle || '',
         buttons: [
-          { label: L('Resume') + ' (' + B.fmtDur(p.position) + ')', fn: function () { ctx.resume = p.position; B.player.open(item, ctx); } },
+          { label: L('Resume') + ' (' + B.fmtDur(p.position) + ')', play: true, fn: function () { ctx.resume = p.position; B.player.open(item, ctx); } },
           { label: L('Watch from the beginning'), fn: function () { ctx.resume = 0; B.player.open(item, ctx); } }
         ]
       });
