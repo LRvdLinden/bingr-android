@@ -458,8 +458,9 @@ fun ContinueRow(items: List<ContinueItem>, index: HomeIndex) {
     if (items.isEmpty()) return
     var choice by remember { mutableStateOf<ResumeChoice?>(null) }
     var removing by remember { mutableStateOf<ContinueItem?>(null) }
+    val keys = rememberKeys(items) { it.id }
     MediaRow(L("Continue watching")) {
-        items(items) { c ->
+        keyedItems(items, keys) { c ->
             ContinueCard(
                 c.title, c.artwork, c.fraction, c.subtitle,
                 Modifier.focusLift(onLongClick = { removing = c }) { choice = c.choice(index) }
@@ -580,8 +581,9 @@ fun HomeScreen(filter: Filter) {
                     }
                     // favoriete zenders (anders de laatst bekeken zenders)
                     "live" -> if (filter == Filter.ALL && liveChannels.isNotEmpty()) item(key = "favs") {
+                        val keys = rememberKeys(liveChannels) { it.id }
                         MediaRow(if (favChannels.isNotEmpty()) L("Favorite channels") else L("Live TV")) {
-                            items(liveChannels) { c ->
+                            keyedItems(liveChannels, keys) { c ->
                                 val now = lib.nowPlaying(c)
                                 ChannelCard(
                                     c, now, favorite = favChannels.isNotEmpty(),
@@ -677,8 +679,9 @@ fun HomeScreen(filter: Filter) {
 
 @Composable
 private fun MovieRow(title: String, items: List<Movie>, all: List<Movie>?, pid: String?) {
+    val keys = rememberKeys(items) { it.id }
     MediaRow(title, onSeeAll = all?.let { list -> { openCategory(title, list.map { DetailTarget.MovieT(it) }) } }) {
-        items(items) { m -> MoviePoster(m, pid) }
+        keyedItems(items, keys) { m -> MoviePoster(m, pid) }
     }
 }
 
@@ -690,8 +693,9 @@ private fun watchedEpisodeCount(s: Series): Int {
 
 @Composable
 private fun SeriesRow(title: String, items: List<Series>, all: List<Series>?) {
+    val keys = rememberKeys(items) { it.id }
     MediaRow(title, onSeeAll = all?.let { list -> { openCategory(title, list.map { DetailTarget.SeriesT(it) }) } }) {
-        items(items) { s -> SeriesPoster(s) }
+        keyedItems(items, keys) { s -> SeriesPoster(s) }
     }
 }
 
@@ -710,8 +714,9 @@ private fun SeriesPoster(s: Series) {
 /** Films én series in één rij (Mijn lijst op Home). */
 @Composable
 private fun TargetRow(title: String, items: List<DetailTarget>, pid: String?) {
+    val keys = rememberKeys(items) { (if (it.isSeries) "s:" else "m:") + it.id }
     MediaRow(title, onSeeAll = { openCategory(title, items) }) {
-        items(items) { t ->
+        keyedItems(items, keys) { t ->
             when (t) {
                 is DetailTarget.MovieT -> MoviePoster(t.movie, pid)
                 is DetailTarget.SeriesT -> SeriesPoster(t.series)
@@ -755,16 +760,19 @@ private fun MoviePoster(m: Movie, pid: String?) {
 
 @Composable
 private fun ForYouRow(filter: Filter, all: List<DetailTarget>) {
-    val items = all.filter { t ->
-        when (filter) {
-            Filter.MOVIES -> !t.isSeries
-            Filter.SERIES -> t.isSeries
-            Filter.ALL -> true
+    val items = remember(all, filter) {
+        all.filter { t ->
+            when (filter) {
+                Filter.MOVIES -> !t.isSeries
+                Filter.SERIES -> t.isSeries
+                Filter.ALL -> true
+            }
         }
     }
     if (items.isEmpty()) return
+    val keys = rememberKeys(items) { (if (it.isSeries) "s:" else "m:") + it.id }
     MediaRow(L("For you"), onSeeAll = { openCategory(L("For you"), items) }) {
-        items(items) { t ->
+        keyedItems(items, keys) { t ->
             PosterCard(
                 t.title, t.poster,
                 modifier = Modifier.focusLift { openDetail(t) },

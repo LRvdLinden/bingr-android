@@ -186,14 +186,23 @@ data class Library(
     /** key = epgID of channel.id */
     val epg: Map<String, List<EPGProgram>> = emptyMap(),
 ) {
-    val channelGroups: List<String> get() = channels.map { it.group }.distinct()
-    val movieGroups: List<String> get() = movies.map { it.group }.distinct()
-    val seriesGroups: List<String> get() = series.map { it.group }.distinct()
+    // Build 56: één keer uitrekenen per bibliotheek (werd bij elke aanroep, ook tijdens het tekenen, over de hele lijst gedaan)
+    val channelGroups: List<String> by lazy { channels.map { it.group }.distinct() }
+    val movieGroups: List<String> by lazy { movies.map { it.group }.distinct() }
+    val seriesGroups: List<String> by lazy { series.map { it.group }.distinct() }
 
-    fun nowPlaying(c: Channel): EPGProgram? = epg[c.epgID ?: c.id]?.firstOrNull { it.isNow }
+    /** Wat nu speelt: binair zoeken in de (op starttijd gesorteerde) gids van de zender. */
+    fun nowPlaying(c: Channel): EPGProgram? {
+        val list = epg[c.epgID ?: c.id] ?: return null
+        val i = EPGIndex.indexAt(list, System.currentTimeMillis())
+        return if (i >= 0 && list[i].isNow) list[i] else null
+    }
     fun upcoming(c: Channel, count: Int = 6): List<EPGProgram> {
+        val list = epg[c.epgID ?: c.id] ?: return emptyList()
         val now = System.currentTimeMillis()
-        return (epg[c.epgID ?: c.id] ?: emptyList()).filter { it.end > now }.take(count)
+        val i = EPGIndex.firstEndingAfter(list, now)
+        if (i < 0) return emptyList()
+        return list.subList(i, minOf(list.size, i + count)).filter { it.end > now }
     }
     val isEmpty: Boolean get() = channels.isEmpty() && movies.isEmpty() && series.isEmpty()
 }
@@ -328,4 +337,43 @@ data class NASServer(
     val username: String = "",
 ) {
     val passwordKey: String get() = "nas.$id.password"
+}
+
+/**
+ * Snel zoeken in de gids van één zender (build 56). Lijsten zijn normaal op starttijd gesorteerd (XMLTV, Xtream);
+ * is een lijst dat niet, dan valt het terug op lineair zoeken, zodat de uitkomst altijd klopt.
+ */
+object EPGIndex {
+    fun isSorted(list: List<EPGProgram>): Boolean =
+        list.size < 2 || (list.first().start <= list[list.size / 2].start && list[list.size / 2].start <= list.last().start)
+
+    /** Index van het programma dat op [t] loopt, of -1. */
+    fun indexAt(list: List<EPGProgram>, t: Long): Int {
+        if (list.isEmpty()) return -1
+        if (!isSorted(list)) return list.indexOfFirst { it.start <= t && t < it.end }
+        var lo = 0; var hi = list.size - 1; var best = -1
+        while (lo <= hi) {
+            val mid = (lo + hi) ushr 1
+            if (list[mid].start <= t) { best = mid; lo = mid + 1 } else hi = mid - 1
+        }
+        if (best >= 0 && t < list[best].end) return best
+        // overlappende programma's: een paar stappen terugkijken
+        var j = best - 1
+        while (j >= 0 && j >= best - 3) { if (list[j].start <= t && t < list[j].end) return j; j-- }
+        return -1
+    }
+
+    /** Eerste programma dat na [t] eindigt (nu of later), of -1. */
+    fun firstEndingAfter(list: List<EPGProgram>, t: Long): Int {
+        if (list.isEmpty()) return -1
+        if (!isSorted(list)) return list.indexOfFirst { it.end > t }
+        val at = indexAt(list, t)
+        if (at >= 0) return at
+        var lo = 0; var hi = list.size - 1; var best = -1
+        while (lo <= hi) {
+            val mid = (lo + hi) ushr 1
+            if (list[mid].start > t) { best = mid; hi = mid - 1 } else lo = mid + 1
+        }
+        return best
+    }
 }

@@ -93,7 +93,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
 import java.text.DateFormat
 import java.util.Date
 
@@ -243,6 +246,18 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         return true
     }
 
+    /**
+     * Nieuwe titel terwijl er een Chromecast verbonden is: daarheen sturen. Bij films/afleveringen eerst wachten tot de
+     * lokale speler het hervatpunt kent (duur bekend), zodat de Chromecast op dezelfde plek begint.
+     */
+    suspend fun followCast(itm: PlayableItem) {
+        if (itm.type != MediaType.LIVE) {
+            withTimeoutOrNull(8_000) { snapshotFlow { player.duration > 0 || player.errorText != null }.first { it } }
+        }
+        if (player.dismissed || player.item.id != itm.id || !Casting.connected) return
+        Casting.castCurrent()
+    }
+
     suspend fun start(itm: PlayableItem) {
         if (player.dismissed) return
         player.prepareNew()
@@ -285,6 +300,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             player.liveURL = url
             player.start(url)
         }
+        // al verbonden met een Chromecast (bijv. volgende aflevering of andere zender): meteen daar verder
+        if (Casting.connected) scope.launch { followCast(itm) }
         poke()
         if (Prefs.bool("autoSubtitles") && itm.type != MediaType.LIVE) scope.launch { autoLoadSubtitles(itm) }
         findNext(itm)

@@ -126,7 +126,8 @@ object AgeRatings {
     /**
      * Hele bibliotheek op de achtergrond bijwerken (alleen nodig bij een profiel met leeftijdsgrens).
      * Eerst titels uit kindergroepen (die zijn zonder classificatie zichtbaar en moeten zo snel mogelijk gecontroleerd),
-     * daarna de rest, best beoordeelde eerst. Elke 40 nieuwe classificaties → opnieuw filteren.
+     * daarna de rest, best beoordeelde eerst. Opnieuw filteren in batches: de kindergroepen meteen, daarna hooguit
+     * eens per 20 s (build 56; eerst elke 40 titels, wat tijdens het scrollen steeds de hele bibliotheek opnieuw filterde).
      */
     suspend fun warm(raw: Library) {
         if (!Secrets.isSet(Secrets.tmdbAPIKey)) return
@@ -149,16 +150,26 @@ object AgeRatings {
         }
         if (jobs.isEmpty()) return
         var sinceBump = 0
+        var lastBump = android.os.SystemClock.uptimeMillis()
+        val kidsCount = jobs.count { it.kids }
+        var done = 0
         // met 4 tegelijk (TMDB staat ruim 40 verzoeken per seconde toe; elke titel kost 2–3 verzoeken)
         for (chunk in jobs.chunked(4)) {
             coroutineScope {
                 chunk.map { j -> async { fetch(j.title, j.year, j.isShow, j.imdb) } }.awaitAll()
             }
-            sinceBump += chunk.size
-            if (sinceBump >= 40) { sinceBump = 0; withContext(Dispatchers.Main) { version++ } }
+            sinceBump += chunk.size; done += chunk.size
+            val now = android.os.SystemClock.uptimeMillis()
+            val kidsDone = kidsCount in 1..done && done - chunk.size < kidsCount
+            if (sinceBump > 0 && (kidsDone || (sinceBump >= 200 && now - lastBump >= 20_000))) {
+                sinceBump = 0; lastBump = now
+                withContext(Dispatchers.Main) { version++ }
+            }
+            // niet ophalen terwijl er gescrold wordt (netwerk + JSON kosten ook CPU)
+            if (UserActivity.quietFor() < 800) UserActivity.awaitIdle(800)
             delay(60)
         }
-        withContext(Dispatchers.Main) { version++ }
+        if (sinceBump > 0) withContext(Dispatchers.Main) { version++ }
     }
 
     private fun scheduleSave() {

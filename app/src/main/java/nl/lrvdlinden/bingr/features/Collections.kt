@@ -111,7 +111,15 @@ object Collections {
 
     /** Zichtbare collecties van het actieve profiel in hun volgorde. */
     val visible: List<BingrCollection>
-        get() = all.filter { !it.deleted }.sortedWith(compareBy({ it.order }, { it.name.lowercase() }))
+        get() {
+            // build 56: onthouden zolang de lijst (identiteit) gelijk blijft; dit wordt tijdens het tekenen vaak gelezen
+            val src = all
+            visibleCache?.let { (s, v) -> if (s === src) return v }
+            val v = src.filter { !it.deleted }.sortedWith(compareBy({ it.order }, { it.name.lowercase() }))
+            visibleCache = src to v
+            return v
+        }
+    @Volatile private var visibleCache: Pair<List<BingrCollection>, List<BingrCollection>>? = null
 
     private val legacyFile: File get() = File(AppState.appContext.filesDir, "store/collections.json")
     private val file: File get() = File(AppState.appContext.filesDir, "store/collections-profiles.json")
@@ -207,7 +215,9 @@ object Collections {
     fun applySynced(map: Map<String, List<BingrCollection>>, removed: Map<String, Long>) {
         ensureLoaded()
         if (map == byProfile && removed == removedProfiles) return
-        byProfile = map
+        // ongewijzigde profielen: de oude lijst (identiteit) houden, zodat rijen en caches daar niets opnieuw doen
+        val cur = byProfile
+        if (map != cur) byProfile = map.mapValues { (k, v) -> cur[k]?.takeIf { it == v } ?: v }
         removedProfiles = removed
         save()
     }
@@ -245,31 +255,29 @@ object Collections {
     fun resolve(c: BingrCollection, lib: Library, sourceID: String?, limit: Int = 200): List<CollectionEntry> {
         if (c.sourceID != null && sourceID != null && !c.sourceID.equals(sourceID, ignoreCase = true)) return emptyList()
         val group = c.group?.takeIf { it.isNotBlank() }
+        // build 56: id-tabellen en gevouwen namen één keer per lijst ([CollectionIndex]) in plaats van per collectie
+        val ix = CollectionIndex.of(lib)
         if (!c.isSmart) {
-            val ch = HashMap<String, Channel>(); lib.channels.forEach { ch.putIfAbsent(it.id, it) }
-            val mv = HashMap<String, Movie>(); lib.movies.forEach { mv.putIfAbsent(it.id, it) }
-            val se = HashMap<String, Series>(); lib.series.forEach { se.putIfAbsent(it.id, it) }
             return c.items.mapNotNull { r ->
                 when (r.type) {
-                    BingrCollection.CHANNEL -> ch[r.id]?.let { CollectionEntry.C(it) }
-                    BingrCollection.MOVIE -> mv[r.id]?.let { CollectionEntry.M(it) }
-                    BingrCollection.SERIES -> se[r.id]?.let { CollectionEntry.S(it) }
+                    BingrCollection.CHANNEL -> ix.channelByID[r.id]?.let { CollectionEntry.C(it) }
+                    BingrCollection.MOVIE -> ix.movieByID[r.id]?.let { CollectionEntry.M(it) }
+                    BingrCollection.SERIES -> ix.seriesByID[r.id]?.let { CollectionEntry.S(it) }
                     else -> null
                 }
             }.take(limit)
         }
         val words = c.keywords
         if (words.isEmpty()) return emptyList()
-        fun hit(name: String, g: String): Boolean {
+        fun hit(folded: String, g: String): Boolean {
             if (group != null && g != group) return false
-            val f = Net.fold(name)
-            return words.any { f.contains(it) }
+            return words.any { folded.contains(it) }
         }
         val out = ArrayList<CollectionEntry>()
         val types = c.types.ifEmpty { BingrCollection.ALL_TYPES }
-        if (BingrCollection.CHANNEL in types) for (x in lib.channels) { if (out.size >= limit) break; if (hit(x.name, x.group)) out.add(CollectionEntry.C(x)) }
-        if (BingrCollection.MOVIE in types) for (x in lib.movies) { if (out.size >= limit) break; if (hit(x.title, x.group)) out.add(CollectionEntry.M(x)) }
-        if (BingrCollection.SERIES in types) for (x in lib.series) { if (out.size >= limit) break; if (hit(x.title, x.group)) out.add(CollectionEntry.S(x)) }
+        if (BingrCollection.CHANNEL in types) for (i in lib.channels.indices) { if (out.size >= limit) break; val x = lib.channels[i]; if (hit(ix.channelNames[i], x.group)) out.add(CollectionEntry.C(x)) }
+        if (BingrCollection.MOVIE in types) for (i in lib.movies.indices) { if (out.size >= limit) break; val x = lib.movies[i]; if (hit(ix.movieNames[i], x.group)) out.add(CollectionEntry.M(x)) }
+        if (BingrCollection.SERIES in types) for (i in lib.series.indices) { if (out.size >= limit) break; val x = lib.series[i]; if (hit(ix.seriesNames[i], x.group)) out.add(CollectionEntry.S(x)) }
         return out
     }
 

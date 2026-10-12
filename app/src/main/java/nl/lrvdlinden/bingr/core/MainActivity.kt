@@ -5,6 +5,8 @@ import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -24,6 +26,22 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() { if (current === this) current = null; super.onDestroy() }
+
+    // Invoer bijhouden (build 56): zware achtergrondklussen en het zendervoorbeeld wachten tot er niet meer gescrold wordt
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        UserActivity.touch(repeat = event.repeatCount > 0)
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        UserActivity.touch()
+        return super.dispatchTouchEvent(ev)
+    }
+
+    override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
+        UserActivity.touch()
+        return super.dispatchGenericMotionEvent(ev)
+    }
 
     /** Naar het beginscherm terwijl er iets speelt → beeld-in-beeld (telefoon/tablet). */
     override fun onUserLeaveHint() {

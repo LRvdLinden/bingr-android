@@ -39,3 +39,25 @@ object UserActivity {
         }
     }
 }
+
+/**
+ * Unieke, stabiele sleutels voor een Lazy-lijst (build 56): de id, en bij dubbele id's (dezelfde zender of titel in
+ * meerdere groepen) "id#2", "id#3". Zonder sleutels tekent een rij bij elke nieuwe lijst alle kaarten opnieuw en
+ * springt de focus; met dubbele sleutels crasht Compose.
+ */
+fun <T> uniqueKeys(list: List<T>, id: (T) -> String): List<String> {
+    val seen = HashMap<String, Int>(list.size * 2)
+    return list.map { x -> val k = id(x); val n = seen.merge(k, 1, Int::plus)!!; if (n == 1) k else "$k#$n" }
+}
+
+/** [uniqueKeys], onthouden zolang de lijst gelijk blijft. */
+@androidx.compose.runtime.Composable
+fun <T> rememberKeys(list: List<T>, id: (T) -> String): List<String> =
+    androidx.compose.runtime.remember(list) { uniqueKeys(list, id) }
+
+/** items() met sleutels uit [rememberKeys]. */
+inline fun <T> androidx.compose.foundation.lazy.LazyListScope.keyedItems(
+    list: List<T>,
+    keys: List<String>,
+    crossinline content: @androidx.compose.runtime.Composable androidx.compose.foundation.lazy.LazyItemScope.(T) -> Unit,
+) = items(list.size, key = { keys[it] }) { content(list[it]) }

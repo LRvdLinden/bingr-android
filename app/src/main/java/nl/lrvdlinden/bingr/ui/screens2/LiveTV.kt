@@ -40,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -108,15 +109,14 @@ fun LiveTVScreen() {
     var guideFor by remember { mutableStateOf<Channel?>(null) }
     var program by remember { mutableStateOf<Pair<Channel, EPGProgram>?>(null) }
     var menuFor by remember { mutableStateOf<Channel?>(null) }
-    var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) { while (true) { delay(30_000); tick++ } }
 
     // evenementzenders (build 51): eigen groep, gesorteerd op begintijd
     var events by remember(libKey) { mutableStateOf<List<Pair<Channel, EventInfo>>>(emptyList()) }
     LaunchedEffect(libKey) { events = withContext(Dispatchers.Default) { EventParser.sorted(lib.channels) } }
     val eventInfo = remember(events) { events.associate { it.first.id to it.second } }
     // collecties met zenders als groepen
-    val channelCollections = Collections.visible.filter { Collections.mayHaveChannels(it) }
+    val visibleCollections = Collections.visible
+    val channelCollections = remember(visibleCollections) { visibleCollections.filter { Collections.mayHaveChannels(it) } }
     val groups = remember(libKey, events.isNotEmpty(), channelCollections) {
         listOf(S2_ALL_KEY, S2_FAV_KEY, S2_RECENT_KEY) + (if (events.isNotEmpty()) listOf(S2_EVENTS_KEY) else emptyList()) +
             channelCollections.map { S2_COLLECTION_PREFIX + it.id } + lib.channelGroups
@@ -128,7 +128,9 @@ fun LiveTVScreen() {
     LaunchedEffect(current, libKey, channelCollections) {
         val c = if (current.startsWith(S2_COLLECTION_PREFIX)) Collections.byID(current.removePrefix(S2_COLLECTION_PREFIX)) else null
         collectionChannels = if (c == null) null else current to withContext(Dispatchers.Default) {
-            Collections.resolve(c, lib, pid, limit = 1000).filterIsInstance<CollectionEntry.C>().map { it.channel }
+            // via de cache (build 56): terug naar dezelfde collectie = niet opnieuw zoeken
+            CollectionResolver.resolve(CollectionResolver.Input(c, lib, pid, Store.activeProfileID), limit = 1000)
+                .filterIsInstance<CollectionEntry.C>().map { it.channel }
         }
     }
     val channels: List<Channel> = remember(libKey, current, favorites, recents, pid, events, collectionChannels) {
@@ -211,7 +213,7 @@ fun LiveTVScreen() {
                 if (gridMode) {
                     GuideGrid(visible, onPlay = { play(it) }, onProgram = { c, p -> program = c to p })
                 } else {
-                    S2ChannelList(visible, current, pid, tick, searching = searching, query = query, pending = searchPending,
+                    S2ChannelList(visible, current, pid, searching = searching, query = query, pending = searchPending,
                         events = eventInfo, onPlay = { play(it) }, onMenu = { menuFor = it })
                 }
             }
@@ -332,7 +334,6 @@ private fun S2ChannelList(
     channels: List<Channel>,
     group: String,
     pid: String,
-    tick: Int,
     searching: Boolean,
     query: String,
     pending: Boolean,
@@ -342,8 +343,16 @@ private fun S2ChannelList(
 ) {
     val state = rememberLazyListState()
     LaunchedEffect(group, query) { runCatching { state.scrollToItem(0) } }
+    // elke 30 s nu/straks bijwerken: alleen deze lijst, niet het hele Live TV-scherm (build 56)
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { delay(30_000); tick++ } }
     val lib = Playlists.library
     val favorites = Store.favorites
+    // stabiele sleutels (build 56): bij nieuwe gids/lijst blijven rijen en focus staan; dubbele id's krijgen #n
+    val keys = remember(channels) {
+        val seen = HashMap<String, Int>()
+        channels.map { c -> val n = seen.merge(c.id, 1, Int::plus)!!; if (n == 1) c.id else "${c.id}#$n" }
+    }
     LazyColumn(Modifier.fillMaxSize(), state = state,
         contentPadding = PaddingValues(horizontal = tvs(8), vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(tvs(2))) {
@@ -363,7 +372,8 @@ private fun S2ChannelList(
                     modifier = Modifier.fillMaxWidth().padding(top = 40.dp))
             }
         }
-        items(channels) { c ->
+        items(channels.size, key = { keys[it] }, contentType = { "channel" }) { i ->
+            val c = channels[i]
             val refresh = tick   // elke 30 s opnieuw (nu/straks)
             val upcoming = if (refresh >= 0) lib.upcoming(c, 2) else emptyList()
             val now = lib.nowPlaying(c)
@@ -385,6 +395,8 @@ private fun S2ChannelRow(
     onLongClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    // alleen deze rij opnieuw tekenen als het voorbeeld naar/van deze zender gaat (niet alle rijen bij elke wissel)
+    val isPreview by remember(channel.id) { derivedStateOf { ChannelPreview.channel?.id == channel.id } }
     Row(
         Modifier.fillMaxWidth()
             .onKeyEvent { e ->
@@ -405,7 +417,7 @@ private fun S2ChannelRow(
         }
         RemoteImage(channel.logo, Modifier.width(tvs(64)).height(tvs(40)).clip(RoundedCornerShape(4.dp))
             .then(if (!AppState.isTV) Modifier.focusLift(1.06f) { ChannelPreview.focus(channel) } else Modifier)
-            .then(if (ChannelPreview.channel?.id == channel.id) Modifier.border(2.dp, Theme.red, RoundedCornerShape(4.dp)) else Modifier),
+            .then(if (isPreview) Modifier.border(2.dp, Theme.red, RoundedCornerShape(4.dp)) else Modifier),
             placeholder = channel.name.take(3), fit = true)
         Spacer(Modifier.width(tvs(12)))
         Column(Modifier.weight(1f)) {

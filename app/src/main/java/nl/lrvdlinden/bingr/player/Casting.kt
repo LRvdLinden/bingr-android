@@ -2,6 +2,8 @@ package nl.lrvdlinden.bingr
 
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -66,6 +68,12 @@ class CastOptionsProvider : OptionsProvider {
 /**
  * Chromecast via de Google Cast SDK. Zodra een Cast-sessie start (apparaat gekozen in [CastDevicesDialog]),
  * wordt wat er nu speelt ([PlayerController.current]) op de Chromecast gezet en lokaal gepauzeerd.
+ *
+ * Build 56: de standaard-ontvanger (CC1AD845) speelt HLS (ook met TS-segmenten), MP4, WebM en MP3/AAC, maar geen
+ * ruwe MPEG-TS-stream en officieel geen MKV/AVI. Live-zenders van Xtream kwamen als .ts binnen (video/mp2t) en werden
+ * dus altijd geweigerd: "Deze stream kan niet op Chromecast worden afgespeeld". Nu proberen we per stream een rijtje
+ * pogingen ([Attempt]): eerst het formaat dat de ontvanger kan (bijv. .m3u8), dan via het doorgeefluik op de telefoon
+ * ([CastRelay], voor servers zonder CORS), en pas als alles faalt de melding.
  */
 object Casting {
     var connected by mutableStateOf(false); private set
@@ -75,12 +83,21 @@ object Casting {
 
     private var initialized = false
     private var client: RemoteMediaClient? = null
+    private val main = Handler(Looper.getMainLooper())
 
-    // Wat we nu proberen te casten, met de nog te proberen alternatieve adressen (bij een fout de volgende).
+    /** Eén poging: adres + contentType (+ HLS-segmenthint), eventueel via het doorgeefluik. */
+    internal data class Attempt(val url: String, val contentType: String, val relay: Boolean = false, val tsHint: Boolean = true)
+
+    // Wat we nu proberen te casten, met de nog te proberen pogingen (bij een fout de volgende).
     private var pendingItem: PlayableItem? = null
     private var pendingPosMs = 0L
-    private var candidates: List<String> = emptyList()
-    private var currentUrl: String? = null
+    private var attempts: List<Attempt> = emptyList()
+    private var attemptNo = 0
+    private var tried = 0
+    /** Laadverzoek verstuurd, nog geen antwoord: foutstatussen van de vorige poging negeren. */
+    private var awaitingResult = false
+    /** Deze poging speelt (of stond al eens op pauze): niet meer automatisch wisselen. */
+    private var started = false
 
     private val clientCallback = object : RemoteMediaClient.Callback() {
         override fun onStatusUpdated() { updateStatus() }
@@ -97,7 +114,11 @@ object Casting {
         override fun onSessionEnding(session: CastSession) {}
         override fun onSessionEnded(session: CastSession, error: Int) { detach() }
         override fun onSessionResuming(session: CastSession, sessionId: String) {}
-        override fun onSessionResumed(session: CastSession, wasSuspended: Boolean) { attach(session, castCurrent = false) }
+        // hervatte sessie (app terug uit de achtergrond): speelt de ontvanger niets meer, dan het huidige opnieuw casten
+        override fun onSessionResumed(session: CastSession, wasSuspended: Boolean) {
+            val idle = session.remoteMediaClient?.let { it.mediaStatus == null || it.playerState == MediaStatus.PLAYER_STATE_IDLE } ?: true
+            attach(session, castCurrent = idle)
+        }
         override fun onSessionResumeFailed(session: CastSession, error: Int) { detach() }
         override fun onSessionSuspended(session: CastSession, reason: Int) {}
     }
@@ -131,33 +152,37 @@ object Casting {
         client = session.remoteMediaClient
         client?.registerCallback(clientCallback)
         updateStatus()
-        if (castCurrent) {
-            val p = PlayerController.current
-            val u = p?.url
-            if (p != null && u != null && !p.isStopped) {
-                if (cast(p.item, u, (p.currentTime * 1000).toLong())) p.pause()
-            }
-        }
+        if (castCurrent) castCurrent()
+    }
+
+    /** Wat nu in de speler staat op de Chromecast zetten (en lokaal pauzeren). */
+    fun castCurrent(): Boolean {
+        val p = PlayerController.current ?: return false
+        val u = p.url ?: return false
+        if (p.isStopped) return false
+        val ok = cast(p.item, u, (p.currentTime * 1000).toLong())
+        if (ok) p.pause()
+        return ok
     }
 
     private fun detach() {
         client?.unregisterCallback(clientCallback)
         client = null
+        main.removeCallbacksAndMessages(null)
+        attempts = emptyList(); pendingItem = null; awaitingResult = false
+        CastRelay.stop()
         connected = false; deviceName = null; isPlaying = false; status = ""
     }
 
     private fun updateStatus() {
         val c = client ?: return
         isPlaying = c.isPlaying
+        if (c.isPlaying || c.isPaused) started = true
         val failed = c.playerState == MediaStatus.PLAYER_STATE_IDLE && c.idleReason == MediaStatus.IDLE_REASON_ERROR
-        // fout bij het laden: probeer het volgende adres (bijv. .m3u8 ↔ .ts) voordat we opgeven
-        if (failed && candidates.isNotEmpty() && pendingItem != null && (c.mediaInfo?.contentId == null || c.mediaInfo?.contentId == currentUrl)) {
-            val next = candidates.first(); candidates = candidates.drop(1)
-            status = L("Connecting to %@…", deviceName ?: "Chromecast")
-            load(c, pendingItem!!, next, pendingPosMs)
-            return
+        // fout bij het laden: eerst de volgende poging (ander formaat / via de telefoon), pas daarna opgeven
+        if (failed && !awaitingResult && !started && pendingItem != null) {
+            if (next(c)) return
         }
-        if (c.isPlaying) { candidates = emptyList() }
         status = when {
             failed -> L("This stream can't be played on Chromecast.")
             c.isPlaying -> L("Playing on Chromecast")
@@ -167,74 +192,106 @@ object Casting {
         }
     }
 
+    /** Volgende poging starten; false = niets meer te proberen. */
+    private fun next(c: RemoteMediaClient): Boolean {
+        val item = pendingItem ?: return false
+        while (attempts.isNotEmpty()) {
+            val a = attempts.first(); attempts = attempts.drop(1)
+            status = if (tried++ == 0) L("Connecting to %@…", deviceName ?: "Chromecast") else L("Trying another stream format…")
+            if (load(c, item, a, pendingPosMs)) return true
+        }
+        return false
+    }
+
     /**
-     * Adressen om te proberen, beste eerst. De standaard-ontvanger van Chromecast speelt geen ruwe
-     * MPEG-TS-streams (.ts), wel HLS. Xtream-servers leveren elke live-zender ook als .m3u8, dus die
-     * nemen we eerst; het originele adres blijft als terugval.
+     * Pogingen voor dit adres, beste eerst. Xtream-live (/live/u/p/123.ts) → .m3u8 (HLS); Xtream-terugkijken idem;
+     * films/afleveringen met hun eigen container en MIME-type. HLS daarna ook via het doorgeefluik (CORS/user-agent).
      */
-    internal fun castCandidates(url: String, live: Boolean): List<String> {
-        val out = mutableListOf<String>()
+    internal fun castAttempts(url: String, live: Boolean): List<Attempt> {
+        val out = mutableListOf<Attempt>()
         val u = runCatching { Uri.parse(url) }.getOrNull()
         val path = u?.path.orEmpty()
         val segs = path.split('/').filter { it.isNotEmpty() }
         val lower = path.lowercase(Locale.ROOT)
-        if (u != null && !lower.endsWith(".m3u8") && !lower.endsWith(".mpd")) {
-            when {
-                // Xtream: /live/user/pass/123.ts (of zonder extensie)
-                segs.size >= 4 && segs[segs.size - 4].equals("live", true) -> {
-                    val last = segs.last().substringBeforeLast('.')
-                    out += u.buildUpon().path("/" + (segs.dropLast(1) + "$last.m3u8").joinToString("/")).build().toString()
-                }
-                // Xtream kort: /user/pass/123 → /live/user/pass/123.m3u8
-                live && segs.size == 3 && segs[2].substringBeforeLast('.').all { it.isDigit() } -> {
-                    val last = segs[2].substringBeforeLast('.')
-                    out += u.buildUpon().path("/live/${segs[0]}/${segs[1]}/$last.m3u8").build().toString()
-                }
-                // andere live .ts-adressen: vaak werkt dezelfde naam met .m3u8
-                live && lower.endsWith(".ts") -> out += url.replaceFirst(Regex("\\.ts(?=($|\\?))", RegexOption.IGNORE_CASE), ".m3u8")
-            }
+        val ext = lower.substringAfterLast('/').substringAfterLast('.', "")
+        fun withExt(newExt: String): String? {
+            if (u == null || segs.isEmpty()) return null
+            val last = segs.last().substringBeforeLast('.')
+            return u.buildUpon().path("/" + (segs.dropLast(1) + "$last.$newExt").joinToString("/")).build().toString()
         }
-        out += url
+        fun hls(h: String) { out += Attempt(h, HLS); out += Attempt(h, HLS, relay = true) }
+
+        val xtreamLive = segs.size >= 4 && segs[segs.size - 4].equals("live", true)
+        val xtreamShort = live && segs.size == 3 && segs[2].substringBeforeLast('.').all { it.isDigit() }
+        val timeshift = segs.firstOrNull()?.equals("timeshift", true) == true && segs.size >= 6
+        when {
+            ext == "m3u8" || ext == "m3u" -> { hls(url); out += Attempt(url, HLS, tsHint = false) }
+            ext == "mpd" -> { out += Attempt(url, "application/dash+xml"); out += Attempt(url, "application/dash+xml", relay = true) }
+            xtreamLive || timeshift -> {
+                withExt("m3u8")?.let { hls(it); out += Attempt(it, HLS, tsHint = false) }
+                out += Attempt(url, "video/mp2t")
+            }
+            xtreamShort && u != null -> {
+                val id = segs[2].substringBeforeLast('.')
+                hls(u.buildUpon().path("/live/${segs[0]}/${segs[1]}/$id.m3u8").build().toString())
+                out += Attempt(url, "video/mp2t")
+            }
+            // andere live-adressen: .ts of zonder extensie; vaak werkt dezelfde naam met .m3u8
+            live && (ext == "ts" || ext.isEmpty()) -> {
+                if (ext == "ts") url.replaceFirst(Regex("\\.ts(?=($|\\?))", RegexOption.IGNORE_CASE), ".m3u8").let { hls(it) }
+                out += Attempt(url, if (ext.isEmpty()) HLS else "video/mp2t")
+                if (ext.isEmpty()) out += Attempt(url, "video/mp2t")
+            }
+            ext == "mp4" || ext == "m4v" || ext == "mov" -> { out += Attempt(url, "video/mp4"); out += Attempt(url, "video/mp4", relay = true) }
+            ext == "webm" -> { out += Attempt(url, "video/webm"); out += Attempt(url, "video/webm", relay = true) }
+            ext == "mp3" -> out += Attempt(url, "audio/mpeg")
+            ext == "aac" || ext == "m4a" -> out += Attempt(url, "audio/mp4")
+            // MKV: niet officieel, maar met H.264/AAC speelt de ontvanger het vaak wel (ook als video/mp4 aangeboden)
+            ext == "mkv" -> {
+                out += Attempt(url, "video/x-matroska"); out += Attempt(url, "video/mp4"); out += Attempt(url, "video/mp4", relay = true)
+            }
+            // AVI, FLV, TS-films e.d.: proberen, de ontvanger herkent het formaat soms zelf
+            else -> { out += Attempt(url, if (ext == "ts") "video/mp2t" else "video/mp4"); out += Attempt(url, "video/mp4", relay = true) }
+        }
         return out.distinct()
     }
 
-    private fun contentType(url: String): String {
-        val s = url.lowercase(Locale.ROOT)
-        return when {
-            s.contains(".m3u8") -> "application/x-mpegurl"
-            s.contains(".mpd") -> "application/dash+xml"
-            s.contains(".mp4") || s.contains(".m4v") -> "video/mp4"
-            else -> "video/mp2t"
-        }
-    }
+    private const val HLS = "application/x-mpegurl"
 
-    /** Zet [item] op de verbonden Chromecast. false = geen sessie. */
+    /** Zet [item] op de verbonden Chromecast. false = geen sessie of niets te proberen. */
     fun cast(item: PlayableItem, url: String, positionMs: Long): Boolean {
         val c = client ?: castContext(AppState.appContext)?.sessionManager?.currentCastSession?.remoteMediaClient ?: return false
-        val all = castCandidates(url, item.type == MediaType.LIVE)
-        pendingItem = item; pendingPosMs = positionMs; candidates = all.drop(1)
-        return load(c, item, all.first(), positionMs)
+        pendingItem = item; pendingPosMs = positionMs
+        attempts = castAttempts(url, item.type == MediaType.LIVE); tried = 0
+        return next(c)
     }
 
-    private fun load(c: RemoteMediaClient, item: PlayableItem, url: String, positionMs: Long): Boolean {
+    private fun load(c: RemoteMediaClient, item: PlayableItem, a: Attempt, positionMs: Long): Boolean {
+        val url = if (a.relay) CastRelay.url(a.url, if (a.contentType == HLS) "m3u8" else a.url.substringBefore('?').substringAfterLast('.', "ts").take(5)) ?: return false
+                  else a.url
         val type = when (item.type) {
             MediaType.MOVIE -> MediaMetadata.MEDIA_TYPE_MOVIE
             MediaType.EPISODE, MediaType.SERIES -> MediaMetadata.MEDIA_TYPE_TV_SHOW
             else -> MediaMetadata.MEDIA_TYPE_GENERIC
         }
         val md = MediaMetadata(type)
-        md.putString(MediaMetadata.KEY_TITLE, item.title)
-        item.subtitle?.let { md.putString(MediaMetadata.KEY_SUBTITLE, it) }
+        md.putString(MediaMetadata.KEY_TITLE, item.subtitle?.takeIf { type == MediaMetadata.MEDIA_TYPE_TV_SHOW } ?: item.title)
+        if (type == MediaMetadata.MEDIA_TYPE_TV_SHOW) {
+            md.putString(MediaMetadata.KEY_SERIES_TITLE, item.title)
+            item.season?.let { md.putInt(MediaMetadata.KEY_SEASON_NUMBER, it) }
+            item.episode?.let { md.putInt(MediaMetadata.KEY_EPISODE_NUMBER, it) }
+        } else {
+            item.subtitle?.let { md.putString(MediaMetadata.KEY_SUBTITLE, it) }
+        }
         item.artwork?.takeIf { it.startsWith("http") }?.let { md.addImage(WebImage(Uri.parse(it))) }
         val live = item.type == MediaType.LIVE
-        val ct = contentType(url)
         val b = MediaInfo.Builder(url)
             .setContentUrl(url)
             .setStreamType(if (live) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED)
-            .setContentType(ct)
+            .setContentType(a.contentType)
             .setMetadata(md)
-        // IPTV-HLS gebruikt bijna altijd MPEG-TS-segmenten; zonder deze hint verwacht de ontvanger fMP4/AAC
-        if (ct == "application/x-mpegurl") {
+        // IPTV-HLS gebruikt bijna altijd MPEG-TS-segmenten; zonder deze hint verwacht de ontvanger soms fMP4/AAC
+        if (a.contentType == HLS && a.tsHint) {
             b.setHlsSegmentFormat(HlsSegmentFormat.TS)
             b.setHlsVideoSegmentFormat(HlsVideoSegmentFormat.MPEG2_TS)
         }
@@ -243,8 +300,23 @@ object Casting {
             .setAutoplay(true)
             .setCurrentTime(if (live) 0L else positionMs.coerceAtLeast(0))
             .build()
-        currentUrl = url
-        return runCatching { c.load(req); true }.getOrDefault(false)
+        val no = ++attemptNo
+        awaitingResult = true; started = false
+        val pending = runCatching { c.load(req) }.getOrNull() ?: run { awaitingResult = false; return false }
+        pending.setResultCallback { r ->
+            if (no != attemptNo) return@setResultCallback
+            awaitingResult = false
+            // LOAD_FAILED / LOAD_CANCELLED of geen antwoord: volgende poging
+            if (!r.status.isSuccess) { if (!next(c)) status = L("This stream can't be played on Chromecast.") } else updateStatus()
+        }
+        // blijft de ontvanger hangen (geen fout, maar ook geen beeld), dan na 20 s de volgende poging
+        main.postDelayed({
+            if (no == attemptNo && !started && client === c && attempts.isNotEmpty()) {
+                awaitingResult = false
+                next(c)
+            }
+        }, 20_000)
+        return true
     }
 
     fun togglePause() { client?.togglePlayback() }
@@ -299,7 +371,8 @@ fun CastDevicesDialog(onDismiss: () -> Unit) {
         for (r in routes) {
             item(key = r.id) {
                 PlayerSheetRow(r.name, selected = r.isSelected, icon = Icons.Filled.Cast) {
-                    router.selectRoute(r)
+                    // al verbonden met dit apparaat: alleen opnieuw casten wat er nu speelt
+                    if (r.isSelected && Casting.connected) Casting.castCurrent() else router.selectRoute(r)
                     onDismiss()
                 }
             }

@@ -78,7 +78,10 @@ object ChannelPreview {
         pending = c.id
         job?.cancel()
         job = AppScope.launch {
-            delay(1_000)
+            // build 56: pas starten als de focus ~1,2 s stilstaat en er niet (meer) gescrold wordt; een nieuwe
+            // stream starten (netwerk, decoder, nieuwe surface) tijdens het scrollen gaf haperingen
+            delay(1_200)
+            UserActivity.awaitIdle(1_000)
             if (pending != c.id || AppState.playing != null) return@launch
             val url = runCatching { Playlists.resolve(Playables.channel(c, null)) }.getOrNull()
             if (pending != c.id || AppState.playing != null) return@launch
@@ -94,6 +97,11 @@ object ChannelPreview {
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(ctx, http)))
             .build().apply {
                 volume = 0f
+                // klein voorbeeld: laagste kwaliteit (minder netwerk en decoderwerk, sneller beeld)
+                trackSelectionParameters = trackSelectionParameters.buildUpon()
+                    .setMaxVideoSize(854, 480)
+                    .setForceLowestBitrate(true)
+                    .build()
                 setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
                 addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
@@ -103,9 +111,12 @@ object ChannelPreview {
     }
 
     private fun start(c: Channel, url: String) {
+        // één speler hergebruiken: alleen de mediabron wisselen
         val p = player ?: build().also { player = it }
+        if (channel?.id == c.id && p.playbackState != Player.STATE_IDLE) return
         channel = c
         playing = false
+        p.stop()
         val lower = url.lowercase(Locale.ROOT)
         val b = MediaItem.Builder().setUri(url)
         if (lower.contains(".m3u8")) b.setMimeType(MimeTypes.APPLICATION_M3U8)

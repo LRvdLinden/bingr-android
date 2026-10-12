@@ -82,7 +82,24 @@ val S2Grey = Color(0xFF8E8E93)
 /** Maximale breedte van lijsten op TV/tablet (zoals de smalle lijsten op tvOS). */
 val S2MaxWidth: Dp get() = if (AppState.isTV) 900.dp else 720.dp
 
-fun s2Time(ms: Long): String = DateFormat.getTimeInstance(DateFormat.SHORT, Localizer.locale).format(Date(ms))
+/** Tijd (kort). Build 56: één formatter per taal en tijden onthouden (werd per rij, per recompositie aangemaakt). */
+fun s2Time(ms: Long): String = S2TimeCache.format(ms)
+
+private object S2TimeCache {
+    private var locale: java.util.Locale? = null
+    private var fmt: DateFormat? = null
+    private val cache = object : LinkedHashMap<Long, String>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, String>?) = size > 2048
+    }
+
+    @Synchronized
+    fun format(ms: Long): String {
+        val loc = Localizer.locale
+        if (loc != locale || fmt == null) { locale = loc; fmt = DateFormat.getTimeInstance(DateFormat.SHORT, loc); cache.clear() }
+        val minute = ms / 60_000
+        return cache.getOrPut(minute) { fmt!!.format(Date(minute * 60_000)) }
+    }
+}
 fun s2DateTime(ms: Long): String =
     DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Localizer.locale).format(Date(ms))
 fun s2DateShort(ms: Long): String = SimpleDateFormat("EEE d MMM", Localizer.locale).format(Date(ms))

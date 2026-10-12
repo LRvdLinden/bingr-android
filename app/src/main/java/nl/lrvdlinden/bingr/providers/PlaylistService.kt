@@ -100,7 +100,7 @@ object Playlists {
         // nieuwe IMDb- of TMDB-classificaties binnen → leeftijdsfilter opnieuw toepassen
         AppScope.launch {
             snapshotFlow { Metadata.version to AgeRatings.version }.drop(1).debounce(3_000).collect {
-                if (Store.activeProfile?.effectiveAgeLimit != null) applyCustomizations()
+                if (Store.activeProfile?.effectiveAgeLimit != null) applyCustomizations(quiet = true)
             }
         }
         // profiel met leeftijdsgrens: classificaties van de hele (ongefilterde) lijst op de achtergrond bijwerken (build 53)
@@ -282,13 +282,28 @@ object Playlists {
      * Grote lijsten worden op Dispatchers.Default gefilterd; bij een profiel met leeftijdsgrens is [library]
      * intussen leeg en [isFiltering] true.
      */
-    fun applyCustomizations() {
+    fun applyCustomizations(quiet: Boolean = false) {
         val s = source
         if (s == null) { filterJob?.cancel(); isFiltering = false; library = rawLibrary; return }
         val ctx = context(s)
         val raw = rawLibrary
         val gen = ++filterGeneration
         filterJob?.cancel()
+        // Alleen nieuwe classificaties (build 56): niets leegmaken, pas filteren als er niet gescrold wordt, en alleen een
+        // nieuwe bibliotheek doorgeven als de inhoud echt anders is (anders tekende alles opnieuw, elke 40 titels).
+        if (quiet) {
+            filterJob = AppScope.launch {
+                UserActivity.awaitIdle()
+                val cur = library
+                val lib = withContext(Dispatchers.Default) { reuseUnchanged(cur, apply(raw, ctx)) }
+                if (gen != filterGeneration) return@launch
+                UserActivity.awaitIdle()
+                if (gen != filterGeneration) return@launch
+                if (lib !== cur) library = lib
+                isFiltering = false
+            }
+            return
+        }
         // kleine lijsten: meteen; grote lijsten: op de achtergrond
         if (raw.channels.size + raw.movies.size + raw.series.size < 3000) {
             library = apply(raw, ctx)
@@ -304,6 +319,19 @@ object Playlists {
             library = lib
             isFiltering = false
         }
+    }
+
+    /**
+     * Zelfde inhoud als [old]? Dan de oude lijsten (identiteit) houden, zodat collecties, rijen en caches die op
+     * identiteit vergelijken niets opnieuw doen. Geeft [old] terug als alles gelijk is. (Op de achtergrond aanroepen.)
+     */
+    private fun reuseUnchanged(old: Library, new: Library): Library {
+        val ch = if (old.channels == new.channels) old.channels else new.channels
+        val mv = if (old.movies == new.movies) old.movies else new.movies
+        val se = if (old.series == new.series) old.series else new.series
+        val epg = if (old.epg === new.epg || old.epg == new.epg) old.epg else new.epg
+        if (ch === old.channels && mv === old.movies && se === old.series && epg === old.epg) return old
+        return Library(ch, mv, se, epg)
     }
 
     /** Oude aanroep: filteren met de huidige kinderslot-instellingen (op de main thread). */

@@ -117,10 +117,16 @@ fun GuideGrid(channels: List<Channel>, onPlay: (Channel) -> Unit, onProgram: (Ch
                 }
             }
         }
+        val keys = rememberKeys(shown) { it.id }
         LazyColumn(Modifier.fillMaxSize()) {
-            itemsIndexed(shown) { _, c ->
+            keyedItems(shown, keys) { c ->
+                // build 56: alleen het zichtbare venster uit de gesorteerde gids (binair zoeken), niet de hele lijst filteren
                 val progs = remember(epg, c.id, start) {
-                    (epg[c.epgID ?: c.id] ?: emptyList()).filter { it.end > start && it.start < end }
+                    val list = epg[c.epgID ?: c.id] ?: emptyList()
+                    val from = EPGIndex.firstEndingAfter(list, start)
+                    if (!EPGIndex.isSorted(list)) list.filter { it.end > start && it.start < end }
+                    else if (from < 0) emptyList() else list.subList(from, list.size).asSequence()
+                        .takeWhile { it.start < end + 6 * 3_600_000L }.filter { it.end > start && it.start < end }.toList()
                 }
                 Row(Modifier.fillMaxWidth().height(rowHeight)) {
                     S2GuideChannelCell(c, channelWidth, rowHeight) { onPlay(c) }

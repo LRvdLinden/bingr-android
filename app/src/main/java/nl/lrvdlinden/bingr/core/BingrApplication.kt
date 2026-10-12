@@ -5,8 +5,27 @@ import android.app.UiModeManager
 import android.content.Context
 import android.content.res.Configuration
 import android.content.pm.PackageManager
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 
-class BingrApplication : Application() {
+class BingrApplication : Application(), ImageLoaderFactory {
+    /**
+     * Eén Coil-ImageLoader (build 56): posters en zenderlogo's uit de schijfcache, ook als de IPTV-server "no-cache"
+     * stuurt (anders werd elk logo bij het terugscrollen opnieuw gedownload), via de gedeelde OkHttp-client, zonder
+     * crossfade-animatie per kaart. De grootte volgt de kaart (AsyncImage gebruikt de afmetingen van de layout).
+     */
+    override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
+        .okHttpClient { Http.client.newBuilder().addInterceptor { chain ->
+            chain.proceed(chain.request().newBuilder().header("User-Agent", Http.USER_AGENT).build())
+        }.build() }
+        .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.20).build() }
+        .diskCache { DiskCache.Builder().directory(cacheDir.resolve("image_cache")).maxSizeBytes(200L * 1024 * 1024).build() }
+        .respectCacheHeaders(false)
+        .crossfade(false)
+        .build()
+
     override fun onCreate() {
         super.onCreate()
         AppState.appContext = applicationContext

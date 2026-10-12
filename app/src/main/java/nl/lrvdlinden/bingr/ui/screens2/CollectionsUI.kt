@@ -58,6 +58,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import androidx.compose.runtime.SideEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 // MARK: - Afbeelding van een collectie
 
@@ -97,15 +100,21 @@ private fun CollectionTitleCard(c: BingrCollection) {
 
 // MARK: - Inhoud
 
-/** Inhoud van een collectie in de geladen lijst (op de achtergrond uitgerekend). */
+/**
+ * Inhoud van een collectie in de geladen lijst (op de achtergrond uitgerekend).
+ *
+ * Build 56: via [CollectionResolver] (Dispatchers.Default, debounce, cache per profiel/collectie/updatedAt/lijst,
+ * alleen een nieuwe lijst bij andere inhoud). De vorige inhoud blijft staan tot de nieuwe klaar is; eerder werd de
+ * rij bij elke nieuwe bibliotheek eerst leeg (rij weg, alles eronder verspringt) en daarna opnieuw gevuld.
+ */
 @Composable
 fun rememberCollectionEntries(c: BingrCollection, lib: Library, pid: String?): List<CollectionEntry> {
-    val libKey = System.identityHashCode(lib)
-    var list by remember(c, libKey, pid) { mutableStateOf(emptyList<CollectionEntry>()) }
-    LaunchedEffect(c, libKey, pid) {
-        list = withContext(Dispatchers.Default) { Collections.resolve(c, lib, pid) }
-    }
-    return list
+    val input = CollectionResolver.Input(c, lib, pid, Store.activeProfileID)
+    val flow = remember { MutableStateFlow(input) }
+    SideEffect { flow.value = input }
+    val initial = remember { CollectionResolver.peek(input) ?: emptyList() }
+    val entries = remember(flow) { CollectionResolver.entries(flow) }
+    return entries.collectAsStateWithLifecycle(initial).value
 }
 
 /**
@@ -117,15 +126,18 @@ fun CollectionRow(c: BingrCollection, only: String? = null) {
     val lib = Playlists.library
     val pid = Playlists.source?.id
     val all = rememberCollectionEntries(c, lib, pid)
-    val entries = when (only) {
-        BingrCollection.MOVIE -> all.filterIsInstance<CollectionEntry.M>()
-        BingrCollection.SERIES -> all.filterIsInstance<CollectionEntry.S>()
-        BingrCollection.CHANNEL -> all.filterIsInstance<CollectionEntry.C>()
-        else -> all
+    // afgeleide lijsten alleen opnieuw als de inhoud verandert (niet bij elke recompositie)
+    val entries = remember(all, only) {
+        when (only) {
+            BingrCollection.MOVIE -> all.filterIsInstance<CollectionEntry.M>()
+            BingrCollection.SERIES -> all.filterIsInstance<CollectionEntry.S>()
+            BingrCollection.CHANNEL -> all.filterIsInstance<CollectionEntry.C>()
+            else -> all
+        }.distinctBy { it.key }
     }
     if (entries.isEmpty()) return
-    val targets = entries.mapNotNull { it.target }
-    val channels = entries.filterIsInstance<CollectionEntry.C>().map { it.channel }
+    val targets = remember(entries) { entries.mapNotNull { it.target } }
+    val channels = remember(entries) { entries.filterIsInstance<CollectionEntry.C>().map { it.channel } }
     var menuFor by remember { mutableStateOf<CollectionEntry?>(null) }
     Column(Modifier.fillMaxWidth()) {
         Box(Modifier.padding(horizontal = Theme.edge)) { CollectionTitleCard(c) }
@@ -134,7 +146,7 @@ fun CollectionRow(c: BingrCollection, only: String? = null) {
             contentPadding = PaddingValues(horizontal = Theme.edge, vertical = if (AppState.isTV) 14.dp else 0.dp),
             horizontalArrangement = Arrangement.spacedBy(Theme.rowSpacing),
         ) {
-            items(entries) { e ->
+            items(entries, key = { it.key }) { e ->
                 val long: (() -> Unit)? = if (!c.isSmart) ({ menuFor = e }) else null
                 when (e) {
                     is CollectionEntry.C -> {
