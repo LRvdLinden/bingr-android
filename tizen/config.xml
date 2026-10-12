@@ -11,6 +11,7 @@
   <name>Bingr</name>
   <description>Bingr: je eigen IPTV in Netflix-stijl. Live TV, films en series van je eigen servers.</description>
   <author href="https://bingr.online">Bingr</author>
+  <!-- app-icoon voor Smart Hub: 512 × 423 px (Samsung-richtlijn voor tv-apps) -->
   <icon src="icon.png"/>
   <content src="index.html"/>
   <feature name="http://tizen.org/feature/screen.size.all"/>
@@ -19,7 +20,6 @@
   <tizen:content-security-policy>default-src * 'self' data: blob: 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval' file: http: https:; img-src * data: blob: http: https:; media-src * blob: data: http: https:; connect-src * http: https:; style-src 'self' 'unsafe-inline';</tizen:content-security-policy>
   <tizen:privilege name="http://tizen.org/privilege/internet"/>
   <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
-  <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
   <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>
   <tizen:privilege name="http://developer.samsung.com/privilege/productinfo"/>
   <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>

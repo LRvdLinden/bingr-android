@@ -289,30 +289,49 @@
 
   // MARK: voorkeuren (settings.shared, gedeeld met de andere apps)
 
+  /** Kijkvoorkeur van het profiel (profile.<id>.prefs) gaat voor de gedeelde instelling (settings.shared), zoals op Android. */
+  function pref(profileKey, sharedKey) {
+    var v = B.data.profilePref ? B.data.profilePref(profileKey) : null;
+    return v != null ? v : String(B.data.shared(sharedKey, '') || '');
+  }
   /** Gewenste audiotaal: audioLanguage, standaard de taal van de app; "stream" = zoals de stream (niets kiezen → ''). */
   CL.preferredAudio = function () {
-    var v = String(B.data.shared('audioLanguage', '') || '');
+    var v = pref('audioLanguage', 'audioLanguage');
     if (v === 'stream') return '';
     return CL.norm(v) || CL.appLanguage();
   };
   /** Taal van de app als ISO 639-1 ("zh-Hans" → "zh"). */
   CL.appLanguage = function () { return CL.norm(B.lang) || 'en'; };
-  /** Gewenste ondertiteltaal: subtitleLanguage (taalcode), anders de taal van de app (= TrackPreferences op Android). */
+  /** Gewenste ondertiteltaal: subtitleLanguage (in prefs: streamSubtitleLanguage), anders de taal van de app. */
   CL.preferredSubtitle = function () {
-    var raw = String(B.data.shared('subtitleLanguage', '') || '');
+    var raw = pref('streamSubtitleLanguage', 'subtitleLanguage');
     var v = raw === 'off' || raw === 'stream' ? '' : CL.norm(raw);
     return v || CL.appLanguage();
   };
-  /**
-   * Automatische ondertitels: "off" | "whenNeeded" | "always", standaard "whenNeeded".
-   * Oudere apps zetten true/false: aan = "always", uit = de nieuwe standaard (zoals Android).
-   */
-  CL.autoSubtitles = function () {
-    var v = B.data.shared('autoSubtitles', null);
+  /** "off" / "whenNeeded" / "always"; null = onbekend (zelfde waarden als TrackPreferences.normalizedMode). */
+  function mode(v) {
     var s = String(v == null ? '' : v).trim().toLowerCase();
     if (s === 'off' || s === 'none' || s === 'never') return 'off';
+    if (s === 'whenneeded' || s === 'when_needed' || s === 'auto' || s === 'needed') return 'whenNeeded';
     if (s === 'always' || s === 'on' || s === 'true' || s === '1') return 'always';
-    return 'whenNeeded';
+    if (s === 'false' || s === '0') return 'whenNeeded';
+    return null;
+  }
+  CL.autoSubtitleMode = mode;
+  /**
+   * Automatische ondertitels: "off" | "whenNeeded" | "always", standaard "whenNeeded".
+   * Oudere apps zetten true/false: aan = "always", uit = de nieuwe standaard (zoals Android). Het oude
+   * subtitleLanguage "off" betekent "off" als er nog geen stand is (ACCOUNT.md, build 59).
+   */
+  CL.autoSubtitles = function () {
+    // profiel: een oude false telt niet als keuze (zoals Android)
+    var pv = B.data.profilePref ? B.data.profilePref('autoSubtitles') : null;
+    var pm = pv != null && pv !== 'false' && pv !== '0' ? mode(pv) : null;
+    if (pm) return pm;
+    var m = mode(B.data.shared('autoSubtitles', null));
+    if (m) return m;
+    var sl = pref('streamSubtitleLanguage', 'subtitleLanguage');
+    return sl === 'off' ? 'off' : 'whenNeeded';
   };
 
   // MARK: andere taalversies (zelfde TMDB-id, of dezelfde opgeschoonde titel + jaar)

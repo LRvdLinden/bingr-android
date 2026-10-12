@@ -243,7 +243,23 @@ def device_auth(body, mode):
     if a in ('stream_ping', 'stream_stop', 'remove_device'):
         return 200, {'ok': True}
     if a == 'list_devices':
-        return 200, {'limit': 15, 'devices': [{'device_id': 'd1', 'name': 'iPhone van Léon', 'platform': 'iPhone'}]}
+        now = datetime.now(timezone.utc)
+        devs = [{'device_id': 'd1', 'name': SAVED.get('rename', {}).get('d1', 'iPhone van Léon'), 'platform': 'iPhone',
+                 'created_at': iso(now - timedelta(days=30)), 'last_seen_at': iso(now - timedelta(minutes=5))},
+                {'device_id': body.get('device_id'), 'name': SAVED.get('rename', {}).get(body.get('device_id'), 'Samsung TV (QE55Q80B)'),
+                 'platform': 'tizen', 'created_at': iso(now - timedelta(days=2)), 'last_seen_at': iso(now), 'current': True}]
+        return 200, {'limit': 15, 'devices': devs}
+    if a == 'rename_device':
+        SAVED.setdefault('rename', {})[body.get('device_id')] = body.get('name')
+        return 200, {'ok': True}
+    if a == 'list_streams':
+        now = datetime.now(timezone.utc)
+        return 200, {'limit': 6, 'streams': [{'device_id': 'd1', 'device_name': 'iPhone van Léon', 'platform': 'iPhone', 'profile_name': 'Léon',
+                                              'title': 'NPO 1 · Journaal', 'kind': 'live', 'started_at': iso(now - timedelta(minutes=42))}]}
+    if a == 'watch_log':
+        now = datetime.now(timezone.utc)
+        return 200, {'entries': [{'device_name': 'Samsung TV', 'platform': 'tizen', 'profile_name': 'Léon', 'title': 'Red Horizon',
+                                  'kind': 'movie', 'content_id': 'xv9', 'started_at': iso(now - timedelta(hours=3)), 'minutes': 45}]}
     return 400, {'error': 'unknown_action'}
 
 

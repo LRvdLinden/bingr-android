@@ -423,18 +423,6 @@
     "ar": "لا يوجد سجل بعد",
     "zh-Hans": "暂无记录"
   },
-  "No other audio tracks": {
-    "nl": "Geen andere audiosporen",
-    "de": "Keine anderen Tonspuren",
-    "fr": "Aucune autre piste audio",
-    "es": "No hay otras pistas de audio",
-    "it": "Nessun’altra traccia audio",
-    "pt": "Sem outras faixas de áudio",
-    "pl": "Brak innych ścieżek dźwiękowych",
-    "tr": "Başka ses parçası yok",
-    "ar": "لا توجد مسارات صوت أخرى",
-    "zh-Hans": "没有其他音轨"
-  },
   "No other source found for this channel.": {
     "nl": "Geen andere bron gevonden voor deze zender.",
     "de": "Keine andere Quelle für diesen Sender gefunden.",
@@ -943,9 +931,6 @@
     "tr": "Listen boş",
     "ar": "قائمتك فارغة",
     "zh-Hans": "你的片单是空的"
-  },
-  "not supported on Samsung TV": {
-    "nl": "werkt niet op Samsung TV"
   },
   "unchanged": {
     "nl": "ongewijzigd",

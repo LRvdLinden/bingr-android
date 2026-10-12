@@ -20,9 +20,27 @@ window.webapis = { productinfo: { getRealModel: function () { return 'QE55Q80B';
 """
 
 
+RESULTS = []      # (naam, ok, detail) van 'walk' en 'expect'
+PAGEERRORS = []   # fouten in de console (zonder ontbrekende bestanden en 404's van de testserver)
+# focus in orde: element bestaat, is zichtbaar en hoort bij de bovenste laag (of er is in die laag niets te kiezen)
+NAVCHECK = """(function () {
+  var U = B.ui, f = U.focused, t = U.top();
+  if (!t) return 'geen scherm';
+  // speler zonder overlay en de tv-gids regelen de toetsen zelf
+  if (!f) return t.isPlayer || U.focusables(t.el).length === 0 || t.el.classList.contains('guide') ? 'ok' : 'geen focus';
+  if (!document.body.contains(f)) return 'focus los van de pagina';
+  if (!t.el.contains(f)) return 'focus buiten bovenste laag (' + t.el.className + ')';
+  if (!(f.offsetWidth > 0 || f.offsetParent)) return 'focus onzichtbaar';
+  return 'ok';
+})()"""
+
+
 def run(page_setup, mode, steps):
     fb.SAVED.clear()
     fb.MODE['big'] = mode == 'big'
+    # aanvragen per scenario (anders tellen eerdere runs mee)
+    if os.path.exists(os.path.join(OUT, 'requests.jsonl')):
+        os.remove(os.path.join(OUT, 'requests.jsonl'))
     with sync_playwright() as p:
         b = p.chromium.launch(args=['--disable-web-security', '--autoplay-policy=no-user-gesture-required'])
         ctx = b.new_context(viewport={'width': 1920, 'height': 1080})
@@ -37,13 +55,29 @@ def run(page_setup, mode, steps):
             if u.netloc.endswith('supabase.co'):
                 if u.path.endswith('/functions/v1/device-auth'):
                     data = json.loads(req.post_data or '{}')
-                    if data.get('action') in ('put_state', 'stream_start', 'register_device', 'put_sources'):
+                    if data.get('action') in ('put_state', 'stream_start', 'stream_stop', 'register_device', 'put_sources', 'rename_device', 'remove_device'):
                         with open(os.path.join(OUT, 'requests.jsonl'), 'a') as f:
                             f.write(json.dumps(data, ensure_ascii=False) + '\n')
                     code, body = fb.device_auth(data, mode)
                     return route.fulfill(status=code, headers=hdr, body=json.dumps(body))
+                if u.path.startswith('/auth/v1/token') and 'grant_type=password' in u.query:
+                    data = json.loads(req.post_data or '{}')
+                    if data.get('password') != 'geheim123':
+                        return route.fulfill(status=400, headers=hdr, body=json.dumps({'error_code': 'invalid_credentials'}))
+                    return route.fulfill(status=200, headers=hdr, body=json.dumps(fb.session()))
                 if u.path.startswith('/auth/v1/token') or u.path.startswith('/auth/v1/verify'):
                     return route.fulfill(status=200, headers=hdr, body=json.dumps(fb.session()))
+                if u.path.startswith('/auth/v1/signup'):
+                    # nieuw account dat eerst bevestigd moet worden: een user zonder access_token
+                    with open(os.path.join(OUT, 'requests.jsonl'), 'a') as f:
+                        f.write(json.dumps({'auth': 'signup', 'body': json.loads(req.post_data or '{}')}) + '\n')
+                    return route.fulfill(status=200, headers=hdr, body=json.dumps({'id': 'user-2', 'email': 'nieuw@example.com'}))
+                if u.path.startswith('/auth/v1/recover'):
+                    with open(os.path.join(OUT, 'requests.jsonl'), 'a') as f:
+                        f.write(json.dumps({'auth': 'recover', 'query': u.query}) + '\n')
+                    return route.fulfill(status=200, headers=hdr, body='{}')
+                if u.path.startswith('/auth/v1/logout'):
+                    return route.fulfill(status=204, headers=hdr, body='')
                 if u.path.startswith('/rest/v1/account_data'):
                     if req.method == 'GET':
                         return route.fulfill(status=200, headers=hdr, body=json.dumps([{'profiles': fb.profiles(), 'updated_at': 'x'}]))
@@ -91,6 +125,46 @@ def run(page_setup, mode, steps):
                     page.wait_for_timeout(st[2] if len(st) > 2 else 250)
             elif st[0] == 'shot':
                 page.screenshot(path=os.path.join(OUT, st[1] + '.png'))
+            elif st[0] == 'tv':
+                # toets met een tv-code (10009 = Terug, 10252 = Play/Pause, 403 = rood …)
+                for c in str(st[1]).split():
+                    page.evaluate('document.dispatchEvent(new KeyboardEvent("keydown", {keyCode: %d, bubbles: true}))' % int(c))
+                    page.wait_for_timeout(st[2] if len(st) > 2 else 300)
+            elif st[0] == 'walk':
+                # na elke toets: staat de focus op iets zichtbaars in de bovenste laag? (geen doodlopende focus)
+                bad = []
+                for k in st[1].split():
+                    if k.isdigit():
+                        page.evaluate('document.dispatchEvent(new KeyboardEvent("keydown", {keyCode: %d, bubbles: true}))' % int(k))
+                    else:
+                        page.keyboard.press(k)
+                    page.wait_for_timeout(st[3] if len(st) > 3 else 120)
+                    ok = page.evaluate(NAVCHECK)
+                    if ok != 'ok':
+                        bad.append(k + ':' + ok)
+                RESULTS.append((st[2], not bad, ', '.join(bad[:5])))
+                print('WALK', st[2], 'OK' if not bad else 'FOUT ' + ', '.join(bad[:5]))
+            elif st[0] == 'backto':
+                # Terug (10009) tot de voorwaarde klopt, hooguit n keer (pagina's gaan eerst naar boven of naar hun categorieën)
+                n = 0
+                while n < st[2] and page.evaluate(st[1]) is not True:
+                    page.evaluate('document.dispatchEvent(new KeyboardEvent("keydown", {keyCode: 10009, bubbles: true}))')
+                    page.wait_for_timeout(250)
+                    n += 1
+                    chk = page.evaluate(NAVCHECK)
+                    if chk != 'ok':
+                        break
+                ok = page.evaluate(st[1]) is True
+                RESULTS.append((st[3], ok, '' if ok else 'na %d x terug: %s' % (n, page.evaluate(NAVCHECK))))
+                print('BACKTO', st[3], 'OK (%dx)' % n if ok else 'FOUT')
+            elif st[0] == 'expect':
+                try:
+                    r = page.evaluate(st[1])
+                except Exception as e:
+                    r = 'FOUT: ' + str(e).split('\n')[0]
+                ok = r is True or r == 1
+                RESULTS.append((st[2], ok, '' if ok else str(r)))
+                print('EXPECT', st[2], 'OK' if ok else 'FOUT => ' + str(r))
             elif st[0] == 'eval':
                 try:
                     r = page.evaluate(st[1])
@@ -98,8 +172,9 @@ def run(page_setup, mode, steps):
                     r = 'FOUT: ' + str(e).split('\n')[0]
                 print((st[2] if len(st) > 2 else st[1][:90]), '=>', r)
         for l in logs:
-            if 'error' in l.lower() or 'PAGEERROR' in l:
+            if 'PAGEERROR' in l or (l.startswith('error:') and 'Failed to load resource' not in l):
                 print('  console', l)
+                PAGEERRORS.append(l)
         b.close()
 
 
@@ -117,7 +192,8 @@ window.__avTracks = window.__avTracks || [{index: 1, type: 'AUDIO', extra_info: 
     setTimeoutForBuffering: function () {}, setBufferingParam: function (a, b, c) { log('buf:' + a + ':' + c); },
     prepareAsync: function (ok) { log('prepare'); setTimeout(function () { st = 'READY'; ok(); }, 150); },
     play: function () { log('play'); st = 'PLAYING'; clearInterval(timer); timer = setInterval(function () { t += 250; }, 250); },
-    pause: function () { st = 'PAUSED'; clearInterval(timer); }, stop: function () { st = 'IDLE'; clearInterval(timer); }, close: function () { st = 'NONE'; },
+    pause: function () { log('pause'); st = 'PAUSED'; clearInterval(timer); }, stop: function () { log('stop'); st = 'IDLE'; clearInterval(timer); },
+    close: function () { log('close'); st = 'NONE'; }, getState: function () { return st; },
     getDuration: function () { return 5400000; }, getCurrentTime: function () { return t; },
     seekTo: function (ms, ok) { log('seek:' + ms); t = ms; if (ok) ok(); },
     getTotalTrackInfo: function () { return window.__avTracks; },
@@ -359,3 +435,176 @@ if __name__ == '__main__':
             ('eval', 'JSON.stringify({lt: window.__lt, cards: document.querySelectorAll(".vgrid .card").length, all: B.lib.lib.movies.length})', 'lange taken Films'),
         ])
 
+    if which in ('all', 'nav'):
+        # alleen met toetsen: elk menu-item openen, in de inhoud rondlopen en met Terug (10009) terug naar het menu.
+        # Na elke toets moet de focus op iets zichtbaars in de bovenste laag staan.
+        CONTENT = 'ArrowDown ArrowDown ArrowRight ArrowRight ArrowDown ArrowLeft ArrowUp ArrowUp ArrowUp ArrowRight ArrowDown'
+        steps = [('wait', 2500), ('key', 'Enter', 400), ('wait', 2500),
+                 ('walk', 'ArrowDown ArrowDown ArrowRight ArrowRight ArrowRight ArrowDown ArrowDown ArrowDown ArrowDown ArrowUp ArrowUp ArrowLeft', 'home: rondlopen'),
+                 ('walk', 'ArrowLeft ArrowLeft ArrowLeft ArrowLeft ArrowLeft ArrowLeft', 'home: naar het menu'),
+                 ('expect', 'B.ui.focused.classList.contains("nav-item")', 'menu bereikt met links'),
+                 ('walk', 'ArrowUp Enter', 'menu: zoeken'), ('walk', CONTENT, 'zoeken: rondlopen'), ('walk', '10009', 'zoeken: terug'),
+                 ('expect', 'B.ui.focused.classList.contains("nav-item")', 'terug uit zoeken naar het menu')]
+        for name in ('home', 'live', 'movies', 'series', 'mylist', 'settings'):
+            steps += [('walk', 'ArrowDown Enter', 'menu: ' + name), ('wait', 700), ('walk', CONTENT, name + ': rondlopen'),
+                      ('backto', 'B.ui.focused.classList.contains("nav-item")', 3, 'terug uit ' + name + ' naar het menu (max. 3x)')]
+        steps += [('walk', '10009', 'menu: terug naar home'), ('expect', 'B.ui.top().page() && B.ui.top().page().el.classList.contains("home")', 'terug = home'),
+                  ('walk', 'ArrowLeft 10009', 'home-menu: terug (melding)'), ('tv', '10009'), ('expect', 'window.__exited === true', 'twee keer terug sluit de app')]
+        run(SIGNED_IN, 'normal', steps)
+    if which in ('all', 'dialogs'):
+        # elk soort scherm en dialoog: in rondlopen en met Terug (10009) weer weg, zonder doodlopende focus
+        MAINTOP = 'B.ui.top().el.classList.contains("main")'
+        run(SIGNED_IN + AVSTUB, 'normal', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 3000),
+            # detailpagina van een serie
+            ('eval', 'B.ui.push(B.screens.detail("series", B.lib.lib.byId["xs1"].item)) && 1'), ('wait', 1500),
+            ('walk', 'ArrowDown ArrowDown ArrowRight ArrowRight ArrowDown ArrowUp ArrowUp ArrowUp ArrowLeft ArrowLeft', 'detail: rondlopen'),
+            ('walk', '10009', 'detail: terug'), ('expect', MAINTOP, 'detail dicht'),
+            # film met voortgang: hervatten-vraag
+            ('eval', 'B.ui.push(B.screens.detail("movie", B.lib.lib.byId["xv3"].item)) && 1'), ('wait', 1200),
+            ('walk', 'Enter', 'detail film: afspelen'), ('expect', 'B.ui.top().modal === true', 'hervatten-vraag open'),
+            ('walk', 'ArrowRight ArrowLeft ArrowDown', 'hervatten-vraag: rondlopen'), ('walk', '10009', 'hervatten-vraag: terug'),
+            ('expect', '!B.player.current && B.ui.top().el.classList.contains("detail")', 'hervatten-vraag dicht, terug op detail'),
+            ('walk', '10009', 'detail film: terug'),
+            # keuzelijst (taal) in Instellingen
+            ('eval', 'B.ui.top().show("settings", true) || 1'), ('wait', 600),
+            ('eval', 'var r = Array.prototype.filter.call(document.querySelectorAll(".st-row"), function(r){return r.textContent.indexOf("Taal") === 0})[0]; B.ui.focus(r); 1'),
+            ('walk', 'Enter', 'instellingen: taal kiezen'), ('expect', 'B.ui.top().modal === true', 'keuzelijst open'),
+            ('walk', 'ArrowDown ArrowDown ArrowUp', 'keuzelijst: rondlopen'), ('walk', '10009', 'keuzelijst: terug'), ('expect', MAINTOP, 'keuzelijst dicht'),
+            # servers → bewerken → toetsenbord
+            ('eval', 'B.ui.push(B.screens.servers()) && 1'), ('wait', 1000),
+            ('walk', 'ArrowDown ArrowDown ArrowUp', 'servers: rondlopen'),
+            ('eval', 'B.ui.push(B.screens.serverEdit(B.data.sources[0])) && 1'), ('wait', 500),
+            ('walk', 'ArrowDown ArrowDown ArrowUp Enter', 'server bewerken: veld openen'), ('expect', 'B.ui.top().el.classList.contains("edit-text")', 'toetsenbord open'),
+            ('walk', 'ArrowDown ArrowRight ArrowRight ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowLeft ArrowUp', 'toetsenbord: rondlopen'),
+            ('walk', '10009', 'toetsenbord: terug'), ('expect', '!B.ui.top().el.classList.contains("edit-text")', 'toetsenbord dicht'),
+            ('walk', '10009 10009', 'bewerken + servers: terug'), ('expect', MAINTOP, 'terug op het hoofdscherm'),
+            # apparaten: hernoemen en terug
+            ('eval', 'B.ui.push(B.screens.devices()) && 1'), ('wait', 1200),
+            ('expect', 'document.querySelector(".listscreen").textContent.indexOf("Samsung TV") >= 0 && document.querySelector(".listscreen").textContent.indexOf("tizen") < 0', 'platform als Samsung TV'),
+            ('expect', 'document.querySelector(".listscreen").textContent.indexOf("Gekoppeld") >= 0', 'Gekoppeld-datum'),
+            ('walk', 'ArrowDown ArrowUp Enter', 'apparaten: menu'), ('walk', 'Enter', 'apparaten: hernoemen'),
+            ('expect', 'B.ui.top().el.classList.contains("edit-text")', 'naam-toetsenbord open'),
+            ('tv', '65376'), ('wait', 1500),
+            ('walk', 'ArrowDown', 'apparaten na hernoemen'), ('walk', '10009', 'apparaten: terug'), ('expect', MAINTOP, 'apparaten dicht'),
+            ('eval', 'B.ui.push(B.screens.streams()) && 1'), ('wait', 1000), ('walk', 'ArrowDown 10009', 'nu kijken: terug'), ('expect', MAINTOP, 'nu kijken dicht'),
+            ('eval', 'B.ui.push(B.screens.watchLog()) && 1'), ('wait', 1000), ('walk', 'ArrowDown 10009', 'kijkgeschiedenis: terug'), ('expect', MAINTOP, 'kijkgeschiedenis dicht'),
+            ('eval', 'B.ui.push(B.screens.remindersList()) && 1'), ('wait', 500), ('walk', 'ArrowDown 10009', 'herinneringen: terug'), ('expect', MAINTOP, 'herinneringen dicht'),
+            ('eval', 'B.screens.openSubtitlesMenu(function(){}) || 1'), ('wait', 400), ('walk', 'ArrowDown ArrowDown 10009', 'OpenSubtitles: terug'), ('expect', MAINTOP, 'OpenSubtitles dicht'),
+            ('eval', 'B.screens.traktMenu(function(){}) || 1'), ('wait', 600), ('walk', 'ArrowDown 10009', 'Trakt: terug'), ('expect', MAINTOP, 'Trakt dicht'),
+            # gids → programma → terug
+            ('eval', 'B.ui.push(B.screens.guide(B.lib.lib.channels, 1)) && 1'), ('wait', 600),
+            ('walk', 'ArrowRight ArrowDown ArrowLeft ArrowLeft ArrowUp ArrowDown', 'gids: rondlopen'), ('walk', 'Enter', 'gids: programma'),
+            ('walk', 'ArrowDown ArrowUp 10009', 'programma: terug'), ('walk', '10009', 'gids: terug'), ('expect', MAINTOP, 'gids dicht'),
+            # speler: film (overlay, ondertitelkeuze, terug)
+            ('eval', 'B.player.playVOD(B.player.movieItem(B.lib.lib.byId["xv5"].item), {resume: 0}) || 1'), ('wait', 2500),
+            ('walk', 'Enter ArrowRight ArrowRight ArrowRight', 'speler: knoppen'), ('walk', 'Enter', 'speler: ondertitels kiezen'),
+            ('expect', 'B.ui.top().modal === true && !!B.player.current', 'ondertitelkeuze open boven de speler'),
+            ('walk', 'ArrowDown 10009', 'ondertitelkeuze: terug'), ('expect', 'B.ui.top().isPlayer === true', 'terug in de speler'),
+            ('walk', '10009', 'speler: overlay weg'), ('walk', '10009', 'speler: dicht'),
+            ('expect', '!B.player.current && ' + MAINTOP, 'speler dicht met terug'),
+            # speler: live zappen en terug
+            ('eval', 'B.player.playChannel(B.lib.lib.channels[0], B.lib.lib.channels) && 1'), ('wait', 2000),
+            ('walk', '10009 ArrowDown', 'live: zappen'), ('wait', 1500),
+            ('backto', '!B.player.current && ' + MAINTOP, 2, 'live: dicht met terug (overlay, dan speler)'),
+            # multiview
+            ('eval', 'B.multiview.open(B.lib.lib.channels, 0) && 1'), ('wait', 1500),
+            ('walk', 'ArrowRight ArrowDown ArrowLeft ArrowUp ArrowRight', 'multiview: rondlopen'), ('walk', '10009', 'multiview: terug'),
+            ('expect', '!B.multiview.current && ' + MAINTOP, 'multiview dicht'),
+            ('expect', '!document.documentElement.classList.contains("playing") && !document.documentElement.classList.contains("mv-hole")', 'geen speler-klassen meer'),
+            ('eval', 'window.__av.filter(function (x) { return x === "open"; }).length + " open / " + window.__av.filter(function (x) { return x === "close"; }).length + " close"', 'AVPlay open/close'),
+        ])
+        print(open(os.path.join(OUT, 'requests.jsonl')).read().count('rename_device'), 'x rename_device')
+    if which in ('all', 'background'):
+        # app naar de achtergrond (Tizen: AVPlay vrijgeven), en terug: opnieuw openen op dezelfde plek
+        HIDE = 'Object.defineProperty(document, "hidden", {configurable: true, get: function () { return true; }}); document.dispatchEvent(new Event("visibilitychange")); 1'
+        SHOW = 'Object.defineProperty(document, "hidden", {configurable: true, get: function () { return false; }}); document.dispatchEvent(new Event("visibilitychange")); 1'
+        run(SIGNED_IN + AVSTUB, 'normal', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 3000),
+            ('eval', 'B.player.playVOD(B.player.movieItem(B.lib.lib.byId["xv5"].item), {resume: 0}) || 1'), ('wait', 2500),
+            ('eval', 'webapis.avplay.seekTo(600000); window.__av = []; 1'), ('wait', 300),
+            ('eval', HIDE), ('wait', 400),
+            ('expect', 'window.__av.indexOf("close") >= 0 && webapis.avplay.getState() === "NONE"', 'achtergrond: AVPlay gesloten'),
+            ('expect', '!!B.player.current', 'speler blijft open'),
+            ('wait', 1500), ('expect', 'webapis.avplay.getState() === "NONE"', 'achtergrond: blijft dicht'),
+            ('eval', 'window.__av = []; 1'), ('eval', SHOW), ('wait', 2000),
+            ('eval', 'JSON.stringify(window.__av)', 'av na terugkomen'),
+            ('expect', 'window.__av.indexOf("open") >= 0 && window.__av.some(function (x) { return /^seek:60\\d{4}$/.test(x); }) && webapis.avplay.getState() === "PLAYING"', 'voorgrond: opnieuw open op dezelfde plek'),
+            # gepauzeerd naar de achtergrond: na terugkomen weer gepauzeerd
+            ('tv', '10252'), ('wait', 300), ('eval', HIDE), ('wait', 300), ('eval', SHOW), ('wait', 2000),
+            ('expect', 'webapis.avplay.getState() === "PAUSED"', 'gepauzeerd blijft gepauzeerd'),
+            ('eval', 'B.player.current.close() || 1'), ('wait', 400),
+            # live
+            ('eval', 'B.player.playChannel(B.lib.lib.channels[0], B.lib.lib.channels) && 1'), ('wait', 2000),
+            ('eval', HIDE), ('wait', 300), ('expect', 'webapis.avplay.getState() === "NONE"', 'live: achtergrond dicht'),
+            ('eval', SHOW), ('wait', 2000), ('expect', 'webapis.avplay.getState() === "PLAYING"', 'live: weer aan'),
+            ('eval', 'B.player.current.close() || 1'), ('wait', 400),
+            # multiview
+            ('eval', 'B.multiview.open(B.lib.lib.channels, 0) && 1'), ('wait', 2000),
+            ('eval', HIDE), ('wait', 300), ('expect', 'webapis.avplay.getState() === "NONE" && !document.querySelector(".mv-tile.playing")', 'multiview: achtergrond alles dicht'),
+            ('eval', SHOW), ('wait', 2500), ('expect', 'webapis.avplay.getState() === "PLAYING"', 'multiview: weer aan'),
+            ('eval', 'B.multiview.current.close() || 1'), ('wait', 400),
+        ])
+        reqs = open(os.path.join(OUT, 'requests.jsonl')).read() if os.path.exists(os.path.join(OUT, 'requests.jsonl')) else ''
+        RESULTS.append(('stream_stop bij achtergrond', reqs.count('"stream_stop"') >= 4, str(reqs.count('"stream_stop"'))))
+    if which in ('all', 'leak'):
+        # profiel wisselen mag geen luisteraars (en dus oude schermen) laten liggen
+        run(SIGNED_IN, 'normal', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 2500),
+            ('eval', 'window.__l0 = ["epg", "library", "profileData", "profiles", "connections"].map(function (e) { return B.listenerCount(e); }).join(","); window.__l0', 'luisteraars'),
+            ('eval', 'B.app.switchProfile(); 1'), ('wait', 600), ('key', 'Enter', 400), ('wait', 1500),
+            ('eval', 'B.app.switchProfile(); 1'), ('wait', 600), ('key', 'Enter', 400), ('wait', 1500),
+            ('eval', 'B.app.switchProfile(); 1'), ('wait', 600), ('key', 'Enter', 400), ('wait', 1500),
+            ('expect', '["epg", "library", "profileData", "profiles", "connections"].map(function (e) { return B.listenerCount(e); }).join(",") === window.__l0', 'geen extra luisteraars na 3x wisselen'),
+        ])
+    if which in ('all', 'prefs'):
+        # kijkvoorkeuren: oude waarden (bool, subtitleLanguage "off"), voorkeur per profiel, openstaande instellingen
+        run(SIGNED_IN, 'normal', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 3000),
+            ('eval', 'B.data.settings.data.shared.autoSubtitles = true; 1'), ('expect', 'B.clang.autoSubtitles() === "always"', 'oude true = always'),
+            ('eval', 'B.data.settings.data.shared.autoSubtitles = false; 1'), ('expect', 'B.clang.autoSubtitles() === "whenNeeded"', 'oude false = whenNeeded'),
+            ('eval', 'delete B.data.settings.data.shared.autoSubtitles; B.data.settings.data.shared.subtitleLanguage = "off"; 1'),
+            ('expect', 'B.clang.autoSubtitles() === "off"', 'oude subtitleLanguage off = uit'),
+            ('eval', 'B.data.setProfilePref("autoSubtitles", "always"); B.data.setProfilePref("audioLanguage", "de"); 1'), ('wait', 4500),
+            ('expect', 'B.clang.autoSubtitles() === "always" && B.clang.preferredAudio() === "de"', 'voorkeur van het profiel gaat voor'),
+            ('eval', 'B.data.setShared("subtitleSize", "large").then(function () { return 1; })'),
+            ('expect', '!localStorage.getItem("bingr.settingsPending") && B.data.shared("subtitleSize") === "large"', 'instelling verstuurd'),
+            ('eval', 'B.data.syncState().then(function () { return 1; })'),
+            ('expect', 'B.data.profilePref("audioLanguage") === "de" && B.data.shared("subtitleSize") === "large"', 'na sync nog steeds goed'),
+        ])
+        reqs = open(os.path.join(OUT, 'requests.jsonl')).read() if os.path.exists(os.path.join(OUT, 'requests.jsonl')) else ''
+        prof = [json.loads(l) for l in reqs.splitlines() if '"put_state"' in l and '"section": "profile.' in l]
+        RESULTS.append(('prefs in profile.<id>', bool(prof) and (prof[-1]['data'].get('prefs') or {}).get('audioLanguage') == 'de', str((prof[-1]['data'].get('prefs') if prof else None))))
+    if which in ('all', 'email'):
+        # e-mail: account maken (bevestigen), wachtwoord vergeten en terug naar het QR-scherm
+        run('', 'normal', [
+            ('wait', 2500), ('key', 'ArrowRight Enter', 500), ('expect', 'B.ui.top().el.classList.contains("email-login")', 'e-mailscherm open'),
+            ('walk', 'ArrowRight ArrowRight ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowUp ArrowUp', 'e-mail: rondlopen'),
+            ('eval', 'var b = Array.prototype.filter.call(document.querySelectorAll(".email-fields .btn"), function (x) { return x.textContent.indexOf(B.L("Sign up now.")) >= 0; })[0]; B.ui.focus(b); 1'),
+            ('key', 'Enter', 300), ('expect', 'document.querySelector(".email-card h1").textContent === B.L("Create account")', 'wissel naar account maken'),
+            # e-mail typen: a @ b . c d (eerst het e-mailveld kiezen; het toetsenbord typt in het laatst gekozen veld)
+            ('eval', 'B.ui.focus(document.querySelectorAll(".email-fields .input")[0]); B.ui.focus(document.querySelector(".kb .key")); 1'),
+            ('key', 'Enter ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown Enter ArrowUp ArrowUp ArrowUp ArrowUp ArrowUp ArrowUp ArrowRight Enter ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown Enter ArrowUp ArrowUp ArrowUp ArrowUp ArrowUp ArrowUp ArrowRight Enter ArrowRight Enter', 80),
+            ('expect', 'document.querySelector(".email-fields .input").textContent === "a@b.cd"', 'e-mail getypt'),
+            ('eval', 'B.ui.focus(document.querySelectorAll(".email-fields .input")[1]); 1'), ('wait', 100),
+            ('eval', 'B.ui.focus(document.querySelector(".kb .key")); 1'), ('key', 'Enter Enter Enter Enter Enter Enter', 80),
+            ('eval', 'B.ui.focus(document.querySelector(".email-fields > .btn.primary")); 1'), ('key', 'Enter', 1200), ('shot', '61-signup'),
+            ('expect', 'document.querySelector(".email-login .login-error").textContent === B.L("Check your inbox to confirm your email address, then sign in.")', 'account gemaakt: bevestig je e-mail'),
+            ('eval', 'var b = Array.prototype.filter.call(document.querySelectorAll(".email-links .btn"), function (x) { return x.textContent === B.L("Forgot password?"); })[0]; B.ui.focus(b); 1'),
+            ('key', 'Enter', 1000), ('expect', 'document.querySelector(".email-login .login-error").textContent === B.L("If an account exists, you\'ll receive an email to reset your password.")', 'wachtwoord vergeten verstuurd'),
+            ('walk', '10009', 'e-mail: terug'), ('expect', 'B.ui.top().el.classList.contains("login")', 'terug op het QR-scherm'),
+        ])
+        reqs = open(os.path.join(OUT, 'requests.jsonl')).read() if os.path.exists(os.path.join(OUT, 'requests.jsonl')) else ''
+        RESULTS.append(('signup met taal + recover met redirect', '"lang": "en"' in reqs and 'redirect_to=https%3A%2F%2Fbingr.online%2Freset' in reqs, reqs[-300:]))
+    if which in ('all', 'limitback'):
+        # te veel apparaten: Terug = annuleren = uitloggen
+        run(SIGNED_IN.replace("'true'", "'false'"), 'limit', [('wait', 2500), ('walk', 'ArrowDown ArrowUp', 'limiet: rondlopen'), ('tv', '10009', 1500),
+                                                              ('expect', 'B.ui.top().el.classList.contains("login") && !B.account.isSignedIn()', 'terug = uitgelogd')])
+
+    if RESULTS or PAGEERRORS:
+        print('\n== Samenvatting ==')
+        for name, ok, detail in RESULTS:
+            print(('OK   ' if ok else 'FOUT ') + name + ('' if ok else '  (' + detail + ')'))
+        print('%d controles, %d fout, %d consolefouten' % (len(RESULTS), len([r for r in RESULTS if not r[1]]), len(PAGEERRORS)))
+        if any(not r[1] for r in RESULTS) or PAGEERRORS:
+            sys.exit(1)

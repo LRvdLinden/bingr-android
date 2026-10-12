@@ -9,6 +9,7 @@
   'use strict';
   var B = window.B;
   var A = B.account;
+  var L = function () { return B.L.apply(null, arguments); };
   var D = B.data = {};
 
   var SET_FIELDS = ['myList', 'favorites', 'watched', 'recentChannels'];
@@ -23,6 +24,8 @@
   D.settings = B.store.get('settings', null);            // {data, updatedAt} zoals de server het gaf
   D.collections = B.store.get('collections', null);      // ruwe section-data
   D.pins = B.store.get('pins', {}) || {};                // kleine letters profiel-id → pincode
+  // instellingen die op deze tv gewijzigd zijn maar nog niet geüpload (offline): {shared: {sleutel: waarde}, intro: {sleutel: markering}}
+  var pendingSettings = B.store.get('settingsPending', null);
 
   function save() {
     B.store.set('profiles', D.profiles);
@@ -43,10 +46,11 @@
   };
   D.wipe = function () {
     D.profiles = []; D.sources = []; D.mainSourceID = null; D.settings = null; D.collections = null; D.pins = {};
+    pendingSettings = null; B.store.del('settingsPending');
     save();
     B.store.keys('pstate.').forEach(function (k) { B.store.del(k); });
     B.store.keys('lastChannel.').forEach(function (k) { B.store.del(k); });
-    B.store.del('lastProfile'); B.store.del('activeSource');
+    B.store.del('lastProfile'); B.store.del('activeSource'); B.store.del('accentMigrated');
     B.idb.clear();
     // Trakt, OpenSubtitles en herinneringen van het vorige account
     B.emit('wipe');
@@ -58,24 +62,69 @@
     var s = D.settings && D.settings.data && D.settings.data.shared;
     return s && B.has(s, key) && s[key] != null ? s[key] : def;
   };
-  /** Gedeelde instelling wijzigen: nieuwste serverversie lezen, alleen dit veld aanpassen, het geheel uploaden. */
-  D.setShared = function (key, value) {
-    var local = D.settings ? B.copy(D.settings) : { data: {} };
-    local.data.shared = local.data.shared || {};
-    local.data.shared[key] = value;
-    local.data.updatedAt = B.iso();
-    D.settings = local; save();
-    B.emit('settings');
-    return A.getState(['settings']).then(function (all) {
-      var cur = all && all.settings && all.settings.data;
-      var data = cur && typeof cur === 'object' ? B.copy(cur) : {};
-      data.shared = data.shared || {};
-      data.shared[key] = value;
+  /** Wijzigingen van deze tv op een settings-object toepassen (gedeelde sleutels en intro-markeringen). */
+  function applyPending(data, pend) {
+    data.shared = data.shared || {};
+    Object.keys(pend.shared || {}).forEach(function (k) { data.shared[k] = pend.shared[k]; });
+    var intro = pend.intro || {};
+    var keys = Object.keys(intro);
+    if (keys.length) {
+      var out = B.assign({}, data.shared.introMarkers || {});
+      keys.forEach(function (key) {
+        // bestaande sleutel met andere hoofdletters hergebruiken (sleutels zijn hoofdletterongevoelig)
+        var use = key;
+        Object.keys(out).forEach(function (k) { if (lower(k) === lower(key)) use = k; });
+        out[use] = intro[key];
+      });
+      data.shared.introMarkers = out;
+    }
+    return data;
+  }
+  /**
+   * Openstaande wijzigingen uploaden: nieuwste settings van de server lezen, alleen onze sleutels aanpassen, het geheel
+   * terugzetten (het geheel met de nieuwste updatedAt wint). Lukt het niet, dan blijven ze staan voor de volgende sync.
+   */
+  var settingsBusy = null;
+  function uploadSettings(serverSection) {
+    if (!pendingSettings) return Promise.resolve();
+    if (settingsBusy) return settingsBusy;
+    var pend = pendingSettings;
+    var read = serverSection !== undefined ? Promise.resolve({ settings: serverSection }) : A.getState(['settings']);
+    settingsBusy = read.then(function (all) {
+      if (!all) return;
+      var cur = all.settings && all.settings.data;
+      var data = applyPending(cur && typeof cur === 'object' ? B.copy(cur) : {}, pend);
       data.updatedAt = B.iso();
       return A.putState('settings', data).then(function (at) {
-        if (at != null) { D.settings = { data: data, updatedAt: at || data.updatedAt }; save(); }
+        if (at == null) return;
+        D.settings = { data: data, updatedAt: at || data.updatedAt };
+        // alleen wissen wat we net verstuurd hebben (er kan intussen iets bij zijn gekomen)
+        if (pendingSettings === pend) { pendingSettings = null; B.store.del('settingsPending'); }
+        save();
       });
-    }).catch(B.noop);
+    }).catch(B.noop).then(function () {
+      settingsBusy = null;
+      // tijdens het versturen nog iets gewijzigd: dat ook versturen
+      if (pendingSettings && pendingSettings !== pend) return uploadSettings();
+    });
+    return settingsBusy;
+  }
+  function addPending(kind, key, value) {
+    var p = pendingSettings ? B.copy(pendingSettings) : { shared: {}, intro: {} };
+    p[kind] = p[kind] || {};
+    p[kind][key] = value;
+    pendingSettings = p;
+    B.store.set('settingsPending', p);
+    var local = D.settings ? B.copy(D.settings) : { data: {} };
+    local.data = applyPending(local.data || {}, p);
+    local.data.updatedAt = B.iso();
+    D.settings = local; save();
+  }
+  /** Gedeelde instelling wijzigen: lokaal meteen, daarna alleen dit veld in de nieuwste serverversie (uploadSettings). */
+  D.setShared = function (key, value) {
+    addPending('shared', key, value);
+    B.emit('settings');
+    return uploadSettings();
   };
   /** Lokale instellingen van deze tv (niet gesynchroniseerd). */
   D.local = function (key, def) { var v = B.store.get('local.' + key, null); return v == null ? def : v; };
@@ -167,6 +216,25 @@
         if (o && lower(o.id) === lower(profileId) && o.deleted !== true) { o.accentColor = key; o.updatedAt = B.iso(); changed = true; }
       });
       if (changed) return A.writeProfiles(list).then(function () { applyProfiles(list); });
+    }).catch(B.noop);
+  };
+
+  /**
+   * Eenmalige migratie (build 54): oude settings.shared.accentColor naar alle profielen zonder eigen kleur.
+   * Pas na het toepassen van de profielen van de server; daarna wordt settings.shared.accentColor niet meer gebruikt.
+   */
+  D.migrateAccent = function () {
+    if (B.store.get('accentMigrated', false)) return Promise.resolve();
+    var old = lower(D.shared('accentColor', ''));
+    if (!ACCENTS[old]) { if (D.settings) B.store.set('accentMigrated', true); return Promise.resolve(); }
+    return A.readProfiles().then(function (list) {
+      if (!list) return;
+      var changed = false, now = B.iso();
+      list.forEach(function (o) {
+        if (o && o.id && o.deleted !== true && !ACCENTS[lower(o.accentColor)]) { o.accentColor = old; o.updatedAt = now; changed = true; }
+      });
+      if (!changed) { B.store.set('accentMigrated', true); return; }
+      return A.writeProfiles(list).then(function (ok) { if (ok) { B.store.set('accentMigrated', true); applyProfiles(list); } });
     }).catch(B.noop);
   };
 
@@ -507,8 +575,11 @@
     if (syncing) return syncing;
     syncing = A.getState().then(function (all) {
       if (!all) return false;
-      // instellingen: geheel, nieuwste wint (deze tv wijzigt alleen via setShared)
-      if (all.settings) D.settings = { data: all.settings.data || {}, updatedAt: all.settings.updatedAt };
+      // instellingen: het geheel van de server; wijzigingen van deze tv die nog niet geüpload zijn gaan erover en worden verstuurd
+      if (all.settings) {
+        D.settings = { data: all.settings.data || {}, updatedAt: all.settings.updatedAt };
+        if (pendingSettings) { D.settings.data = applyPending(B.copy(D.settings.data), pendingSettings); uploadSettings(all.settings); }
+      } else if (pendingSettings) uploadSettings(null);
       if (all.collections) D.collections = all.collections.data || null;
       D.pins = readPins(all);
       save();
@@ -532,13 +603,21 @@
       var s = parseState(d);
       server = server ? mergeState(server, s) : s;
     });
-    if (base) P.base = base;
+    // kijkvoorkeuren (prefs): het geheel met de nieuwste updatedAt wint; een nieuwere lokale versie blijft en gaat mee
+    var prefsNewer = false, localPrefs = P.base && P.base.prefs;
+    if (base) {
+      var sp = base.prefs;
+      var lAt = localPrefs ? time(localPrefs.updatedAt) || 0 : 0;
+      var sAt = sp && typeof sp === 'object' ? time(sp.updatedAt) || time(base.prefsUpdatedAt) || 0 : 0;
+      if (localPrefs && lAt > sAt) { base = B.copy(base); base.prefs = localPrefs; prefsNewer = true; }
+      P.base = base;
+    } else if (localPrefs) prefsNewer = true;
     if (names.length) P.names = names;
     var srv = server ? normalize(server) : null;
     var merged = normalize(srv ? mergeState(P.st, srv) : P.st);
     var changed = stateKey(merged) !== stateKey(P.st);
     P.st = merged;
-    var needUpload = !srv ? hasAny(merged) : stateKey(merged) !== stateKey(srv);
+    var needUpload = prefsNewer || (!srv ? hasAny(merged) : stateKey(merged) !== stateKey(srv));
     P.dirty = false;
     persistP();
     if (changed) B.emit('profileData');
@@ -626,6 +705,25 @@
     changed(false);
   };
   D.setWatched = function (k, on) { D.toggleSet('watched', k, on); };
+
+  /**
+   * Kijkvoorkeuren van het actieve profiel (profile.<id>.prefs, zoals Android): autoSubtitles, audioLanguage,
+   * streamSubtitleLanguage (taal van ondertitels in de stream) en subtitleLanguage (OpenSubtitles). null = niet ingesteld.
+   */
+  D.profilePref = function (key) {
+    var pr = P.base && P.base.prefs;
+    if (!pr || typeof pr !== 'object' || !B.has(pr, key) || pr[key] == null) return null;
+    return String(pr[key]);
+  };
+  D.setProfilePref = function (key, value) {
+    if (!P.id) return;
+    P.base = P.base ? B.copy(P.base) : {};
+    var pr = B.assign({}, (P.base.prefs && typeof P.base.prefs === 'object') ? P.base.prefs : {});
+    pr[key] = value;
+    pr.updatedAt = B.iso();
+    P.base.prefs = pr;
+    changed(false);
+  };
   D.addHistory = function (e) {
     if (!P.st) return;
     var id = historyId(e);
@@ -676,31 +774,9 @@
    * Zoals setShared: nieuwste settings van de server, alleen deze serie aanpassen, het geheel uploaden.
    */
   D.setIntroMarker = function (sourceId, seriesId, marker) {
-    var key = sourceId + ':' + seriesId;
     function r1(v) { return v == null ? null : Math.round(v * 10) / 10; }
-    var val = { introStart: r1(marker.introStart), introEnd: r1(marker.introEnd), creditsStart: r1(marker.creditsStart) };
-    function put(map) {
-      var out = B.assign({}, map || {});
-      Object.keys(out).forEach(function (k) { if (lower(k) === lower(key) && k !== key) { key = k; } });
-      out[key] = val;
-      return out;
-    }
-    var local = D.settings ? B.copy(D.settings) : { data: {} };
-    local.data = local.data || {};
-    local.data.shared = local.data.shared || {};
-    local.data.shared.introMarkers = put(local.data.shared.introMarkers);
-    local.data.updatedAt = B.iso();
-    D.settings = local; save();
-    return A.getState(['settings']).then(function (all) {
-      var cur = all && all.settings && all.settings.data;
-      var data = cur && typeof cur === 'object' ? B.copy(cur) : B.copy(local.data);
-      data.shared = data.shared || {};
-      data.shared.introMarkers = put(data.shared.introMarkers);
-      data.updatedAt = B.iso();
-      return A.putState('settings', data).then(function (at) {
-        if (at != null) { D.settings = { data: data, updatedAt: at || data.updatedAt }; save(); }
-      });
-    }).catch(B.noop);
+    addPending('intro', sourceId + ':' + seriesId, { introStart: r1(marker.introStart), introEnd: r1(marker.introEnd), creditsStart: r1(marker.creditsStart) });
+    return uploadSettings();
   };
 
   /** Startscherm-indeling van het actieve profiel (homeLayout in profile.<id>), of null. */

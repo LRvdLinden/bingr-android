@@ -54,7 +54,7 @@
     } else if (locAt > srvAt) upload();
   }
   B.on('state', function (all) { if (all && B.has(all, 'connections')) merge(all.connections); else if (all && local) merge(null); });
-  B.on('wipe', function () { local = null; B.store.del('connections'); B.store.del('trakt.cache'); Trakt.reset(); });
+  B.on('wipe', function () { local = null; B.store.del('connections'); B.store.del('trakt.cache'); B.idb.del('trakt.cache.v1'); Trakt.reset(); });
   C.sync = function () { return A.getState(['connections']).then(function (all) { if (all) merge(all.connections || null); }); };
 
   // MARK: SHA-256 (PKCE voor Trakt; crypto.subtle bestaat niet altijd op de tv)
@@ -109,7 +109,20 @@
   var OAUTH_HOSTS = ['https://api.trakt.tv', 'https://auth.trakt.tv'];
   var REDIRECTS = ['https://github.com/LRvdLinden/iptv-ios-appletv', 'urn:ietf:wg:oauth:2.0:oob'];
   var Trakt = B.trakt = {};
-  var cacheT = B.store.get('trakt.cache', null) || { movies: [], shows: {}, index: {}, activity: null };
+  // bekeken-lijst van Trakt kan groot worden: in IndexedDB (sleutel trakt.cache.v1). Oudere builds hadden hem in
+  // localStorage ('trakt.cache'); die wordt één keer overgezet en daar gewist (anders loopt de opslag vol).
+  var legacyT = B.store.get('trakt.cache', null);
+  var cacheT = legacyT || { movies: [], shows: {}, index: {}, activity: null };
+  var cacheGen = 0;
+  if (legacyT) { B.idb.set('trakt.cache.v1', legacyT).then(function () { B.store.del('trakt.cache'); }); }
+  else {
+    B.idb.get('trakt.cache.v1').then(function (c) {
+      // alleen als er intussen niets nieuws is opgehaald of gewist
+      if (!c || typeof c !== 'object' || cacheGen) return;
+      cacheT = { movies: c.movies || [], shows: c.shows || {}, index: c.index || {}, activity: c.activity || null };
+      loadCache();
+    });
+  }
   var watchedMovies = {}, watchedShows = {};
   function loadCache() {
     watchedMovies = {}; watchedShows = {};
@@ -117,8 +130,13 @@
     Object.keys(cacheT.shows || {}).forEach(function (k) { var set = {}; (cacheT.shows[k] || []).forEach(function (e) { set[e] = true; }); watchedShows[k] = set; });
   }
   loadCache();
-  function saveCache() { B.store.set('trakt.cache', cacheT); }
-  Trakt.reset = function () { cacheT = { movies: [], shows: {}, index: {}, activity: null }; loadCache(); };
+  var cacheTimer = null;
+  function saveCache() {
+    cacheGen++;
+    clearTimeout(cacheTimer);
+    cacheTimer = setTimeout(function () { B.idb.set('trakt.cache.v1', cacheT); }, 1500);
+  }
+  Trakt.reset = function () { cacheGen++; cacheT = { movies: [], shows: {}, index: {}, activity: null }; loadCache(); };
 
   Trakt.clientID = function () { return A.serverKey('traktClientID') || ''; };
   Trakt.ready = function () { return !!Trakt.clientID(); };
@@ -395,6 +413,8 @@
   /** Standaardtaal: settings.shared.openSubtitlesLanguage, anders de ondertiteltaal, anders de app-taal. */
   OS.defaultLanguage = function () {
     var D = B.data;
+    var pv = D.profilePref ? D.profilePref('subtitleLanguage') : null;
+    if (pv != null && pv !== 'off') return pv;
     var v = D.shared('openSubtitlesLanguage', null);
     if (v != null) return String(v);
     var t = String(D.shared('subtitleLanguage', '') || '');

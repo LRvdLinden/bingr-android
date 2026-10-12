@@ -140,9 +140,9 @@
   HTMLEngine.prototype.tracks = function () {
     var out = { audio: [], text: [] };
     var at = this.v.audioTracks;
-    if (at) for (var i = 0; i < at.length; i++) { out.audio.push({ index: i, lang: at[i].language, label: langName(at[i].language) || at[i].label || ('Audio ' + (i + 1)) }); if (at[i].enabled) out.currentAudio = i; }
+    if (at) for (var i = 0; i < at.length; i++) { out.audio.push({ index: i, lang: at[i].language, label: langName(at[i].language) || at[i].label || (L('Audio') + ' ' + (i + 1)) }); if (at[i].enabled) out.currentAudio = i; }
     var tt = this.v.textTracks;
-    if (tt) for (var j = 0; j < tt.length; j++) { out.text.push({ index: j, lang: tt[j].language, label: langName(tt[j].language) || tt[j].label || ('Sub ' + (j + 1)) }); if (tt[j].mode === 'showing') out.currentText = j; }
+    if (tt) for (var j = 0; j < tt.length; j++) { out.text.push({ index: j, lang: tt[j].language, label: langName(tt[j].language) || tt[j].label || (L('Subtitles') + ' ' + (j + 1)) }); if (tt[j].mode === 'showing') out.currentText = j; }
     return out;
   };
   HTMLEngine.prototype.selectAudio = function (i) { var at = this.v.audioTracks; if (at) for (var k = 0; k < at.length; k++) at[k].enabled = k === i; };
@@ -174,6 +174,8 @@
     var marker = null;
     var extCues = null, extOffset = 0, extTimer = null, scrobbled = false, stopSent = false;
     var startGen = 0, limited = false, t0 = 0, marks = {}, audioChosen = false, autoSubsDone = false;
+    // app naar de achtergrond: AVPlay is vrijgegeven; bij terugkomen opnieuw openen op deze plek
+    var suspended = false, bgPos = 0, bgPaused = false, pauseAfterOpen = false;
 
     var video = h('div.pl-stage');
     var subtitle = h('div.pl-sub');
@@ -321,11 +323,12 @@
       engine = useAV ? new AVEngine(events) : new HTMLEngine(events);
       var my = engine;
       return engine.open(url, { live: isLive(), start: resumeAt || 0, mark: mark, onReady: function () { if (engine === my) applyTrackPrefs(); } }).then(function () {
-        if (closed || limited) { my.stop(); return; }
+        if (closed || limited || suspended) { my.stop(); return; }
         if (engine !== my) return;
         mark('playing');
         attempts = 0;
         spinner.style.display = 'none';
+        if (pauseAfterOpen) { pauseAfterOpen = false; my.pause(); }
         renderInfo();
         showOverlay(true);
         // na het eerste beeld, niets hiervan houdt de start op
@@ -339,6 +342,7 @@
         setTimeout(function () { if (!closed && engine === my && !audioChosen) applyTrackPrefs(); }, 5000);
       }, function (e) {
         // AVPlay lukt niet: één keer met HTML5 <video> proberen (vooral MP4/HLS)
+        if (closed || suspended || engine !== my) return;
         if (useAV && !item.forceHTML) { item.forceHTML = true; return openURL(url, resumeAt); }
         throw e;
       });
@@ -427,14 +431,20 @@
     }
 
     function fail(e) {
-      if (closed || limited) return;
+      if (closed || limited || suspended) return;
       B.log('player error', e && e.message);
       spinner.style.display = 'none';
       // één stille nieuwe poging
       if (attempts < 1) {
         attempts++;
         var at = engine && !isLive() ? engine.time() : 0;
-        setTimeout(function () { if (!closed) Lib.resolveURL(item, isLive()).then(function (u) { return openURL(u, at); }).catch(fail); }, 1500);
+        var g = startGen;
+        setTimeout(function () {
+          if (closed || suspended || g !== startGen) return;
+          // terugkijken heeft al een eigen URL; resolveURL kent alleen live, films en afleveringen
+          var again = isCatchup() && item.streamURL ? Promise.resolve(item.streamURL) : Lib.resolveURL(item, isLive());
+          again.then(function (u) { if (!closed && !suspended && g === startGen) return openURL(u, at); }).catch(fail);
+        }, 1500);
         return;
       }
       // live: één keer automatisch een reservebron
@@ -772,17 +782,21 @@
     }
     function streamStart() {
       return A.streamStart(profile.id, profile.name, streamTitle(), isCatchup() ? 'live' : item.type, item.id).then(function (r) {
+        // speler intussen dicht of naar de achtergrond: geen ping-timer starten (die zou blijven lopen)
+        if (closed || suspended) return true;
         if (r.limit) { showLimit(r); return false; }
         clearInterval(pingTimer);
         pingTimer = setInterval(function () {
+          if (closed || suspended) { clearInterval(pingTimer); return; }
           A.streamPing(streamTitle()).then(function (alive) {
-            if (alive === false && !closed) A.streamStart(profile.id, profile.name, streamTitle(), isCatchup() ? 'live' : item.type, item.id).then(function (r2) { if (r2.limit) { stopEngine(false); showLimit(r2); } });
+            if (alive === false && !closed && !suspended) A.streamStart(profile.id, profile.name, streamTitle(), isCatchup() ? 'live' : item.type, item.id).then(function (r2) { if (r2.limit && !closed) { stopEngine(false); showLimit(r2); } });
           });
         }, 30000);
         return true;
       });
     }
     function showLimit(r) {
+      if (closed) return;
       limited = true;
       spinner.style.display = 'none';
       if (engine) engine.stop();
@@ -917,35 +931,65 @@
     }
 
     function stopEngine(sendStop) {
-      saveProgress(true);
+      if (!suspended) saveProgress(true);
       if (engine) engine.stop();
       if (sendStop) { clearInterval(pingTimer); A.streamStop(); }
+    }
+    function clearTimers() {
+      clearInterval(tickTimer); clearInterval(pingTimer); clearInterval(countdownTimer);
+      clearTimeout(overlayTimer); clearTimeout(zapTimer); clearTimeout(digitTimer);
+      clearInterval(extTimer);
     }
     function close() {
       if (closed) return;
       closed = true;
-      clearInterval(tickTimer); clearInterval(pingTimer); clearInterval(countdownTimer);
-      clearTimeout(overlayTimer); clearTimeout(zapTimer); clearTimeout(digitTimer);
-      clearInterval(extTimer);
+      clearTimers();
       if (scrobbled && !stopSent) scrobble('stop');
       stopEngine(true);
       document.documentElement.classList.remove('playing');
       D.flush();
       if (U.top() === screen) U.pop();
-      B.player.current = null;
+      if (B.player.current === screen) B.player.current = null;
       if (ctx.onClose) ctx.onClose();
     }
     screen.close = close;
+    /**
+     * App naar de achtergrond (Home-toets, andere app, bron wisselen): Tizen verwacht dat AVPlay dan wordt vrijgegeven.
+     * Voortgang bewaren, stream_stop, de speler sluiten en onthouden waar we waren.
+     */
     screen.pauseForBackground = function () {
+      if (closed || suspended) return;
       saveProgress(true);
-      if (engine && engine.playing) { engine.pause(); scrobble('pause'); }
-      clearInterval(pingTimer);
+      if (scrobbled && engine && engine.playing && !isLive()) scrobble('pause');
+      suspended = true;
+      bgPos = engine && !isLive() ? engine.time() : 0;
+      bgPaused = !!(engine && !engine.playing);
+      startGen++; // lopende start (URL ophalen, prepare) negeren
+      clearInterval(pingTimer); clearInterval(countdownTimer); clearTimeout(zapTimer); clearTimeout(digitTimer);
+      zapIndex = null; digitBuffer = ''; zapBanner.style.display = 'none';
+      if (nextShown && nextCard.style.display !== 'none') { nextShown = false; nextCard.style.display = 'none'; }
+      if (engine) { engine.stop(); engine = null; }
       A.streamStop();
-      renderInfo();
-      showOverlay(true);
     };
-    screen.resumeFromBackground = function () { if (!closed) streamStart(); };
-    screen.destroy = function () { if (!closed) { closed = true; stopEngine(true); document.documentElement.classList.remove('playing'); } };
+    /** Terug op de voorgrond: opnieuw openen (live: nu; film/aflevering: dezelfde plek, gepauzeerd als hij gepauzeerd was). */
+    screen.resumeFromBackground = function () {
+      if (closed || !suspended) return;
+      suspended = false;
+      if (limited || errorBox.style.display !== 'none') { renderInfo(); return; }
+      pauseAfterOpen = bgPaused && !isLive();
+      attempts = 0;
+      start(isLive() ? 0 : bgPos);
+    };
+    // weggehaald door een schermwissel (uitloggen, profiel wisselen): alles opruimen zoals bij sluiten
+    screen.destroy = function () {
+      if (closed) return;
+      closed = true;
+      clearTimers();
+      if (scrobbled && !stopSent) scrobble('stop');
+      stopEngine(true);
+      document.documentElement.classList.remove('playing');
+      if (B.player.current === screen) B.player.current = null;
+    };
 
     document.documentElement.classList.add('playing');
     B.player.current = screen;

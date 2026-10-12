@@ -102,6 +102,9 @@
     U.root.appendChild(s.el);
     if (s.onShow) s.onShow();
     if (!s.el.contains(U.focused)) U.focusFirst(s.el);
+    // niets te kiezen in het nieuwe scherm (lege lijst, nog aan het laden): de oude focus loslaten,
+    // anders zou OK iets in het scherm eronder openen
+    if (U.focused && !s.el.contains(U.focused)) U.blur();
     return s;
   };
   U.pop = function () {
@@ -116,6 +119,8 @@
       if (t.onShow) t.onShow(true);
       if (t.lastFocus && t.el.contains(t.lastFocus) && visible(t.lastFocus)) U.focus(t.lastFocus);
       else U.focusFirst(t.el);
+      // focus nog in het gesloten scherm (scherm eronder heeft niets te kiezen, zoals de tv-gids): loslaten
+      if (U.focused && !t.el.contains(U.focused)) U.blur();
     }
   };
   U.popTo = function (s) { while (U.stack.length && U.top() !== s) U.pop(); };
@@ -127,6 +132,13 @@
   // MARK: focus
 
   U.focused = null;
+  U.blur = function () {
+    var prev = U.focused;
+    if (!prev) return;
+    prev.classList.remove('focused');
+    U.focused = null;
+    if (prev.onBlur) prev.onBlur();
+  };
   U.focus = function (el, silent) {
     if (!el) return;
     var prev = U.focused;
@@ -358,6 +370,8 @@
     if (e.target && e.target.tagName === 'INPUT' && name === 'back' && e.keyCode === 8) return;
     var top = U.top();
     var handled = false;
+    // focus in een laag onder het bovenste scherm telt niet (geen toetsen naar een verborgen scherm)
+    if (U.focused && top && !top.el.contains(U.focused)) U.blur();
     if (U.focused && U.focused.onKey) handled = U.focused.onKey(name, e) === true;
     if (!handled && top && top.onKey) handled = top.onKey(name, e) === true;
     if (!handled) {

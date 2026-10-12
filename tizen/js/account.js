@@ -78,6 +78,8 @@
     if (!session || !session.refresh_token) return Promise.resolve('invalid');
     var token = session.refresh_token;
     refreshing = post('/auth/v1/token?grant_type=refresh_token', { refresh_token: token }).then(function (r) {
+      // intussen uitgelogd of met een ander account ingelogd: dit antwoord hoort bij een oude sessie
+      if (!session || session.refresh_token !== token) return session ? 'ok' : 'invalid';
       if (r.ok && storeSession(r.json)) return 'ok';
       if (r.status === 400 || r.status === 401) { clear(); return 'invalid'; }
       return 'offline';
@@ -243,6 +245,14 @@
       return { limit: r.json.limit || 15, devices: parseDevices(r.json.devices) };
     });
   };
+  /** Apparaat hernoemen (build 45): max. 60 tekens; register_device overschrijft de naam daarna niet meer. */
+  A.renameDevice = function (id, name) {
+    name = String(name || '').trim().slice(0, 60);
+    if (!name) return Promise.reject(generic());
+    return deviceCall('rename_device', id, { name: name }).then(function (r) { if (!r || !r.ok) throw generic(); });
+  };
+  /** Platformnaam voor mensen: "tizen" heet "Samsung TV" (ACCOUNT.md, build 45/55). */
+  A.platformLabel = function (p) { return String(p || '').toLowerCase() === 'tizen' ? L('Samsung TV') : String(p || ''); };
   A.removeDevice = function (id) {
     return deviceCall('remove_device', id).then(function (r) { if (!r || !r.ok) throw generic(); });
   };

@@ -113,6 +113,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # oude Samsung-tv's (Tizen 4.0 = Chromium M56): geen nieuwere JS-syntax, API's of CSS in de app
+      - name: Compatibiliteit met oude tv's controleren
+        run: |
+          mkdir -p "$RUNNER_TEMP/tlogs" "$RUNNER_TEMP/compat"
+          if (cd "$RUNNER_TEMP/compat" && npm init -y >/dev/null && npm i --no-save --no-audit --no-fund acorn@8.14.0 acorn-walk@8.3.4 >/dev/null 2>&1); then
+            NODE_PATH="$RUNNER_TEMP/compat/node_modules" node tizen/tools/check_compat.js 2>&1 | tee "$RUNNER_TEMP/tlogs/compat.log"
+          else
+            echo "::warning::acorn niet te installeren; compatibiliteitscontrole overgeslagen" | tee "$RUNNER_TEMP/tlogs/compat.log"
+          fi
+
       - name: Tizen Studio CLI uit de cache
         id: cache
         uses: actions/cache@v4
@@ -135,7 +145,9 @@ jobs:
           test -s "$RUNNER_TEMP/web-cli.bin"
           chmod +x "$RUNNER_TEMP/web-cli.bin"
           mkdir -p "$RUNNER_TEMP/tlogs"
-          "$RUNNER_TEMP/web-cli.bin" --accept-license "$HOME/tizen-studio" > "$RUNNER_TEMP/tlogs/install.log" 2>&1 || { tail -40 "$RUNNER_TEMP/tlogs/install.log"; exit 1; }
+          # half geïnstalleerd niet laten staan: anders bewaart de cache een kapotte map en wordt er nooit opnieuw geïnstalleerd
+          "$RUNNER_TEMP/web-cli.bin" --accept-license "$HOME/tizen-studio" > "$RUNNER_TEMP/tlogs/install.log" 2>&1 || { tail -40 "$RUNNER_TEMP/tlogs/install.log"; rm -rf "$HOME/tizen-studio"; exit 1; }
+          test -x "$HOME/tizen-studio/tools/ide/bin/tizen" || { echo "tizen-CLI ontbreekt na installatie"; rm -rf "$HOME/tizen-studio"; exit 1; }
           tail -5 "$RUNNER_TEMP/tlogs/install.log"
 
       - name: Ondertekenprofiel klaarzetten

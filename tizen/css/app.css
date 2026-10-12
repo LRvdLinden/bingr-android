@@ -123,6 +123,9 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 .email-card h1 { margin-bottom: 50px; }
 .email-cols { display: flex; }
 .email-fields { margin-left: 80px; flex: 1; }
+.email-links { display: flex; margin: 6px 0 22px; }
+.email-links .btn { margin-right: 22px; height: 60px; font-size: 26px; padding: 0 28px; }
+.email-fields > .btn { margin-top: 4px; }
 .input { height: 88px; border-radius: 8px; background: #333; margin-bottom: 26px; padding: 0 30px; display: flex; align-items: center; font-size: 32px; border: 3px solid transparent; }
 .input.placeholder { color: #8c8c8c; }
 .input.active { border-color: #fff; }

@@ -24,7 +24,7 @@
     var second = null;
     for (var i = 1; i < channels.length && !second; i++) { var c = channels[((index || 0) + i) % channels.length]; if (c.id !== first.id) second = c; }
     var tiles = [];          // {ch, el, video, engine, main}
-    var mainIndex = 0, closed = false, pingTimer = null;
+    var mainIndex = 0, closed = false, pingTimer = null, suspended = false;
     var grid = h('div.mv-grid');
     var hint = h('div.mv-hint.dim', L('OK: sound on this tile  ·  Yellow: remove  ·  Play: full screen'));
     var el = h('div.layer.multiview', [grid, hint]);
@@ -92,7 +92,8 @@
       t.failed = false;
       t.el.classList.remove('failed');
       Lib.resolveURL(B.player.channelItem(t.ch), true).then(function (url) {
-        if (closed || !url) { if (!url) failTile(t); return; }
+        if (closed || suspended || tiles.indexOf(t) < 0) return;
+        if (!url) { failTile(t); return; }
         var events = { buffering: B.noop, ended: B.noop, subtitle: B.noop, error: function () { failTile(t); } };
         if (t.main && B.engines.hasAVPlay()) {
           t.engine = new B.engines.AV(events);
@@ -109,10 +110,14 @@
         if (t.video.parentNode !== t.el) t.el.insertBefore(t.video, t.el.firstChild);
         t.engine = new B.engines.HTML(events, t.video);
         return t.engine.open(url, { live: true });
-      }).then(function () { if (!closed) t.el.classList.add('playing'); }, function () { failTile(t); });
+      }).then(function () {
+        // intussen dicht, naar de achtergrond of tegel weg: de speler meteen weer vrijgeven
+        if (closed || suspended || tiles.indexOf(t) < 0) { stopTile(t); return; }
+        t.el.classList.add('playing');
+      }, function () { failTile(t); });
     }
     function failTile(t) {
-      if (closed) return;
+      if (closed || suspended) return;
       stopTile(t);
       t.failed = true;
       if (t.el) { t.el.classList.add('failed'); t.el.classList.remove('playing'); }
@@ -175,19 +180,40 @@
       document.documentElement.classList.remove('playing');
       A.streamStop();
       if (U.top() === screen) U.pop();
-      MV.current = null;
+      if (MV.current === screen) MV.current = null;
     }
     screen.close = close;
     screen.onBack = function () { close(); return true; };
-    screen.destroy = function () { if (!closed) { closed = true; tiles.forEach(stopTile); clearInterval(pingTimer); A.streamStop(); MV.current = null; document.documentElement.classList.remove('playing'); } };
-    screen.pauseForBackground = function () { tiles.forEach(stopTile); clearInterval(pingTimer); A.streamStop(); };
-    screen.resumeFromBackground = function () { if (!closed) { tiles.forEach(play); start(); } };
+    screen.destroy = function () {
+      if (closed) return;
+      closed = true;
+      tiles.forEach(stopTile); clearInterval(pingTimer); A.streamStop();
+      if (MV.current === screen) MV.current = null;
+      document.documentElement.classList.remove('playing');
+      document.documentElement.classList.remove('mv-hole');
+    };
+    // naar de achtergrond: AVPlay en de video's vrijgeven (Tizen), bij terugkomen alles opnieuw starten
+    screen.pauseForBackground = function () {
+      if (closed || suspended) return;
+      suspended = true;
+      tiles.forEach(stopTile); clearInterval(pingTimer); A.streamStop();
+    };
+    screen.resumeFromBackground = function () {
+      if (closed || !suspended) return;
+      suspended = false;
+      tiles.forEach(play); start();
+    };
 
     function start() {
       A.streamStart(profile.id, profile.name, 'Multiview · ' + tiles.map(function (t) { return t.ch.name; }).join(', '), 'live', tiles[0].ch.id).then(function (r) {
+        if (closed || suspended) return;
         if (r.limit) { U.toast(L('Too many people are watching')); close(); return; }
         clearInterval(pingTimer);
-        pingTimer = setInterval(function () { A.streamPing('Multiview'); }, 30000);
+        pingTimer = setInterval(function () {
+          if (closed || suspended) { clearInterval(pingTimer); return; }
+          // stopped: de stream telt niet meer (lange pauze), opnieuw aanmelden
+          A.streamPing('Multiview').then(function (alive) { if (alive === false && !closed && !suspended) start(); });
+        }, 30000);
       });
     }
     tiles.push({ ch: first, main: true });

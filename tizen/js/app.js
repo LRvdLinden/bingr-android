@@ -14,6 +14,9 @@
   }
 
   app.exit = function () {
+    // speler netjes sluiten (AVPlay vrijgeven, stream_stop, voortgang) en openstaande wijzigingen versturen
+    try { if (B.player.current) B.player.current.close(); if (B.multiview.current) B.multiview.current.close(); B.preview.stop(); } catch (e) { /* stil */ }
+    D.flush();
     try { tizen.application.getCurrentApplication().exit(); } catch (e) { B.log('exit'); }
   };
   var exitArmed = 0;
@@ -89,7 +92,7 @@
       if (r && r.limit) { showLimit(r); return; }
       A.fetchConfig().then(function (ok) { if (ok) B.emit('config'); });
       var haveCache = D.profiles.length > 0;
-      var sync = Promise.all([D.syncProfiles(), D.syncSources(), D.syncState()]);
+      var sync = Promise.all([D.syncProfiles(), D.syncSources(), D.syncState()]).then(function (r) { D.migrateAccent(); return r; });
       // met cache meteen door; zonder cache maximaal 8 seconden wachten
       return withTimeout(sync, haveCache ? 50 : 8000).then(showProfiles);
     });

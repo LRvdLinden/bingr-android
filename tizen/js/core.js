@@ -160,14 +160,20 @@
   B.store = {
     get: function (k, def) {
       var raw = null;
-      try { raw = window.localStorage.getItem(PREFIX + k); } catch (e) { raw = B.has(memory, k) ? memory[k] : null; }
+      // niet opgeslagen (opslag vol of geblokkeerd): de waarde van deze sessie gaat voor
+      if (B.has(memory, k)) raw = memory[k];
+      else { try { raw = window.localStorage.getItem(PREFIX + k); } catch (e) { raw = null; } }
       if (raw == null) return def === undefined ? null : def;
       try { return JSON.parse(raw); } catch (e) { return def === undefined ? null : def; }
     },
     set: function (k, v) {
       var raw = JSON.stringify(v);
-      memory[k] = raw;
-      try { window.localStorage.setItem(PREFIX + k, raw); return true; } catch (e) { return false; }
+      try { window.localStorage.setItem(PREFIX + k, raw); delete memory[k]; return true; } catch (e) {
+        memory[k] = raw;
+        // vol (QuotaExceededError): de waarde blijft in het geheugen voor deze sessie; grote caches horen in IndexedDB
+        B.log('opslag vol', k, raw.length);
+        return false;
+      }
     },
     del: function (k) {
       delete memory[k];
@@ -237,7 +243,9 @@
             t.objectStore('cache').put(v, k);
             t.oncomplete = function () { resolve(); };
             t.onerror = function () { resolve(); };
-          } catch (e) { resolve(); }
+            // vol (QuotaExceededError) breekt de transactie af: de gegevens staan dan alleen in het geheugen
+            t.onabort = function () { B.log('idb vol of afgebroken', k, t.error && t.error.name); memDB[k] = v; resolve(); };
+          } catch (e) { memDB[k] = v; resolve(); }
         });
       });
     },
@@ -423,12 +431,8 @@
     var all = window.BINGR_STRINGS || {};
     var pick = code;
     if (!pick) {
+      // systeemtaal van de tv (navigator.language volgt de menutaal)
       var sys = (navigator.language || 'en').toLowerCase();
-      try {
-        if (window.tizen && tizen.systeminfo && tizen.systeminfo.getCapability) {
-          // tv-taal staat soms alleen in de locale; navigator.language is meestal genoeg
-        }
-      } catch (e) { /* stil */ }
       pick = sys.indexOf('zh') === 0 ? 'zh-Hans' : sys.split(/[-_]/)[0];
     }
     B.lang = (pick === 'en' || B.has(all, pick)) ? pick : 'en';
@@ -443,9 +447,22 @@
   // MARK: kleine event-bus
 
   var listeners = {};
-  B.on = function (ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); };
+  /** Luisteren; geeft een functie terug om weer te stoppen (schermen die verdwijnen moeten dat doen, anders blijven ze in het geheugen). */
+  B.on = function (ev, fn) {
+    (listeners[ev] = listeners[ev] || []).push(fn);
+    return function () { B.off(ev, fn); };
+  };
+  /** Aantal luisteraars (voor de tests: na profiel wisselen mag dit niet groeien). */
+  B.listenerCount = function (ev) { return (listeners[ev] || []).length; };
+  B.off = function (ev, fn) {
+    var l = listeners[ev];
+    if (!l) return;
+    var i = l.indexOf(fn);
+    if (i >= 0) l.splice(i, 1);
+  };
   B.emit = function (ev, data) {
-    var l = listeners[ev] || [];
+    // kopie: een luisteraar mag zichzelf tijdens het uitsturen afmelden
+    var l = (listeners[ev] || []).slice();
     for (var i = 0; i < l.length; i++) { try { l[i](data); } catch (e) { B.log('event ' + ev, e); } }
   };
   B.log = function () {

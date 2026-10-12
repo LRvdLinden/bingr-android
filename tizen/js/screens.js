@@ -78,33 +78,44 @@
     return s;
   };
 
-  /** E-mail en wachtwoord met het schermtoetsenbord. */
+  /** E-mail en wachtwoord met het schermtoetsenbord: inloggen, account maken en wachtwoord vergeten (ACCOUNT.md). */
   S.emailLogin = function (onDone) {
-    var email = '', pw = '', field = 'email';
+    var email = '', pw = '', field = 'email', signup = false, showPw = false;
     var emailBox = h('div.input.f.autofocus'), pwBox = h('div.input.f');
     var err = h('div.login-error');
+    var title = h('h1');
     var kb = U.keyboard({ layout: 'email', onChange: function (v) { if (field === 'email') email = v; else pw = v; draw(); } });
     function draw() {
+      title.textContent = signup ? L('Create account') : L('Sign In');
       emailBox.textContent = email || L('Email');
       emailBox.classList.toggle('placeholder', !email);
-      pwBox.textContent = pw ? new Array(pw.length + 1).join('•') : L('Password');
+      pwBox.textContent = pw ? (showPw ? pw : new Array(pw.length + 1).join('•')) : L('Password');
       pwBox.classList.toggle('placeholder', !pw);
       emailBox.classList.toggle('active', field === 'email');
       pwBox.classList.toggle('active', field === 'pw');
+      mainBtn.querySelector('.lbl').textContent = signup ? L('Create account') : L('Sign In');
+      showBtn.querySelector('.lbl').textContent = showPw ? L('Hide') : L('Show');
+      switchBtn.querySelector('.lbl').textContent = signup ? L('Already have an account?') + ' ' + L('Sign in.') : L('New to Bingr?') + ' ' + L('Sign up now.');
     }
     emailBox.onFocus = function () { field = 'email'; kb.setValue(email); draw(); };
     pwBox.onFocus = function () { field = 'pw'; kb.setValue(pw); draw(); };
     emailBox.onEnter = function () { U.focus(kb.querySelector('.key')); };
     pwBox.onEnter = emailBox.onEnter;
     var busy = false;
-    var signIn = U.button(L('Sign In'), function () {
+    function validEmail() { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()); }
+    function auth(path, body) {
+      return B.http(B.config.supabaseUrl + path, {
+        method: 'POST', headers: { 'apikey': B.config.supabaseKey, 'Content-Type': 'application/json' }, body: body, timeout: 20000
+      });
+    }
+    function submit() {
       if (busy) return;
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { err.textContent = L('Enter a valid email address.'); return; }
+      if (!validEmail()) { err.textContent = L('Enter a valid email address.'); return; }
       if (pw.length < 6) { err.textContent = L('Password must be at least 6 characters.'); return; }
       busy = true; err.textContent = '';
-      B.http(B.config.supabaseUrl + '/auth/v1/token?grant_type=password', {
-        method: 'POST', headers: { 'apikey': B.config.supabaseKey, 'Content-Type': 'application/json' }, body: { email: email.trim(), password: pw }
-      }).then(function (r) {
+      var req = signup ? auth('/auth/v1/signup', { email: email.trim(), password: pw, data: { lang: B.lang } })
+        : auth('/auth/v1/token?grant_type=password', { email: email.trim(), password: pw });
+      req.then(function (r) {
         busy = false;
         var j = r.json || {};
         if (r.status >= 200 && r.status < 300 && j.access_token) {
@@ -113,13 +124,32 @@
           onDone();
           return;
         }
-        var codeErr = j.error_code || j.error;
-        err.textContent = codeErr === 'email_not_confirmed' ? L('Confirm your email address first. Check your inbox.') : L('Incorrect email or password.');
+        var codeErr = j.error_code || j.code || j.error;
+        if (signup && r.status >= 200 && r.status < 300) {
+          // account gemaakt, maar het e-mailadres moet eerst bevestigd worden
+          err.textContent = L('Check your inbox to confirm your email address, then sign in.');
+          signup = false; pw = ''; draw();
+          return;
+        }
+        if (codeErr === 'user_already_exists' || codeErr === 'email_exists') err.textContent = L('An account with this email already exists.');
+        else if (codeErr === 'email_not_confirmed') err.textContent = L('Confirm your email address first. Check your inbox.');
+        else if (codeErr === 'invalid_credentials' || (!signup && r.status === 400)) err.textContent = L('Incorrect email or password.');
+        else err.textContent = L('Something went wrong. Please try again.');
       }, function () { busy = false; err.textContent = L('No internet connection.'); });
-    }, { primary: true });
+    }
+    var mainBtn = U.button(L('Sign In'), submit, { primary: true });
+    var showBtn = U.button(L('Show'), function () { showPw = !showPw; draw(); });
+    var forgotBtn = U.button(L('Forgot password?'), function () {
+      if (!validEmail()) { err.textContent = L('Enter a valid email address.'); U.focus(emailBox); return; }
+      err.textContent = '';
+      auth('/auth/v1/recover?redirect_to=' + encodeURIComponent('https://bingr.online/reset'), { email: email.trim() }).then(function () {
+        err.textContent = L("If an account exists, you'll receive an email to reset your password.");
+      }, function () { err.textContent = L('No internet connection.'); });
+    });
+    var switchBtn = U.button(' ', function () { signup = !signup; err.textContent = ''; draw(); });
     var el = layer('email-login', [h('div.email-card', [
-      h('h1', L('Sign In')),
-      h('div.email-cols', [kb, h('div.email-fields', [emailBox, pwBox, signIn, err])])
+      title,
+      h('div.email-cols', [kb, h('div.email-fields', [emailBox, pwBox, mainBtn, err, h('div.email-links', [showBtn, forgotBtn]), switchBtn])])
     ])]);
     draw();
     U.push({ el: el, onBack: function () { U.pop(); return true; } });
@@ -221,8 +251,8 @@
     draw();
     var el = layer('profiles', [h('div.prof-top', [U.logo()]), h('h1.prof-title', L("Who's watching?")), row]);
     var off = function () { var f = U.focused; draw(); if (!row.contains(f)) U.focusFirst(row); };
-    B.on('profiles', function () { if (el.parentNode && !el.classList.contains('hidden')) off(); });
-    return { el: el, onBack: function () { B.app.exit(); return true; } };
+    var unsub = B.on('profiles', function () { if (el.parentNode && !el.classList.contains('hidden')) off(); });
+    return { el: el, onBack: function () { B.app.exit(); return true; }, destroy: unsub };
   };
 
   // MARK: kaarten
@@ -384,11 +414,12 @@
     };
     // nieuwe bibliotheek: pas tekenen als de afstandsbediening even stil is (scrollen gaat voor)
     var libPending = false;
-    B.on('library', function () {
+    var offs = [];
+    offs.push(B.on('library', function () {
       if (!el.parentNode || libPending) return;
       libPending = true;
       B.whenQuiet(function () { libPending = false; if (el.parentNode) screen.refresh(); }, 300);
-    });
+    }));
     /** Huidige pagina opnieuw tekenen en de focus terugzetten op dezelfde titel (in dezelfde rij). */
     var dataStale = false;
     function rerender() {
@@ -410,7 +441,7 @@
     }
     // voortgang, lijsten en favorieten: alleen de rijen die erover gaan, en pas als het stil is
     var dataPending = false;
-    B.on('profileData', function () {
+    offs.push(B.on('profileData', function () {
       Object.keys(pages).forEach(function (k) { if (pages[k].onData && k !== current) pages[k].stale = true; });
       if (!pages[current] || !pages[current].onData) return;
       if (U.top() !== screen) { dataStale = true; return; }
@@ -421,8 +452,15 @@
         if (U.top() !== screen) { dataStale = true; return; }
         rerender();
       }, 600);
-    });
-    B.on('epg', function () { var pg = pages[current]; if (pg && pg.onEpg) B.whenQuiet(function () { pg.onEpg(); }, 400); });
+    }));
+    offs.push(B.on('epg', function () { var pg = pages[current]; if (pg && pg.onEpg) B.whenQuiet(function () { if (el.parentNode) pg.onEpg(); }, 400); }));
+    // scherm weg (profiel wisselen, uitloggen, taal): luisteraars en pagina's opruimen, anders blijft alles in het geheugen
+    screen.destroy = function () {
+      offs.forEach(function (f) { f(); });
+      offs = [];
+      Object.keys(pages).forEach(function (k) { if (pages[k].destroy) { try { pages[k].destroy(); } catch (e) { B.log('destroy', e); } } });
+      pages = {};
+    };
     return screen;
   };
 
@@ -1371,25 +1409,27 @@
       section(L('Audio & subtitles'));
       var CLg = B.clang;
       var langOpts = ['nl', 'en', 'de', 'fr', 'es', 'it', 'pt', 'pl', 'tr', 'ar', 'hi'];
-      var aud = String(D.shared('audioLanguage', '') || '');
+      // kijkvoorkeuren: de keuze geldt voor het account (settings.shared) én dit profiel (prefs), zoals op Android
+      function pv(key, sharedKey) { var v = D.profilePref(key); return v != null ? v : String(D.shared(sharedKey, '') || ''); }
+      var aud = pv('audioLanguage', 'audioLanguage');
       function audLabel(v) { return v === 'stream' ? L('As in the stream') : (v ? CLg.name(v) : L('Same as app') + ' (' + CLg.name(B.lang) + ')'); }
       row(L('Default audio language'), audLabel(aud), function () {
         U.choose(L('Default audio language'), [{ value: '', label: audLabel('') }, { value: 'stream', label: L('As in the stream') }]
-          .concat(langOpts.map(function (c) { return { value: c, label: CLg.name(c) }; })), aud, function (v) { D.setShared('audioLanguage', v); render(); });
+          .concat(langOpts.map(function (c) { return { value: c, label: CLg.name(c) }; })), aud, function (v) { D.setShared('audioLanguage', v); D.setProfilePref('audioLanguage', v); render(); });
       });
       var autoS = CLg.autoSubtitles();
       var autoLabels = { off: L('Off'), whenNeeded: L('When needed'), always: L('Always') };
       row(L('Automatic subtitles'), autoLabels[autoS], function () {
         U.choose(L('Automatic subtitles'), ['whenNeeded', 'always', 'off'].map(function (v) { return { value: v, label: autoLabels[v] }; }), autoS, function (v) {
-          D.setShared('autoSubtitles', v); render();
+          D.setShared('autoSubtitles', v); D.setProfilePref('autoSubtitles', v); render();
         });
       });
-      var subRaw = String(D.shared('subtitleLanguage', '') || '');
+      var subRaw = pv('streamSubtitleLanguage', 'subtitleLanguage');
       var subCur = subRaw === 'off' ? '' : CLg.norm(subRaw);
       var subAuto = L('Same as app') + ' (' + CLg.name(CLg.appLanguage()) + ')';
       row(L('Subtitle language'), subCur ? CLg.name(subCur) : subAuto, function () {
         U.choose(L('Subtitle language'), [{ value: '', label: subAuto }].concat(langOpts.map(function (c) { return { value: c, label: CLg.name(c) }; })), subCur, function (v) {
-          D.setShared('subtitleLanguage', v); render();
+          D.setShared('subtitleLanguage', v); D.setProfilePref('streamSubtitleLanguage', v); render();
         });
       });
 
@@ -1404,7 +1444,7 @@
       OS.languages.forEach(function (l) { if (l[0].slice(0, 2) === osl.slice(0, 2)) oslabel = l[1]; });
       row(L('Default subtitle language'), oslabel || L('All'), function () {
         U.choose(L('Default subtitle language'), [{ value: '', label: L('All') }].concat(OS.languages.map(function (l) { return { value: l[0], label: l[1] }; })), osl, function (v) {
-          D.setShared('openSubtitlesLanguage', v); render();
+          D.setShared('openSubtitlesLanguage', v); D.setProfilePref('subtitleLanguage', v); render();
         });
       });
 
@@ -1457,7 +1497,7 @@
     }
     pg.refresh = render;
     pg.onShow = function () { render(); };
-    B.on('connections', function () { if (el.parentNode && el.style.display !== 'none' && U.top() && U.top().el.contains(el)) render(); });
+    pg.destroy = B.on('connections', function () { if (el.parentNode && el.style.display !== 'none' && U.top() && U.top().el.contains(el)) render(); });
     render();
     return pg;
   };
@@ -1467,10 +1507,17 @@
     var list = vScroller('.st-list.fm', { 'data-pad': '120' });
     var head = h('div.ls-head', [h('h1', title)]);
     var el = layer('listscreen', [head, list]);
-    function refresh() {
-      U.clear(list.track);
-      U.scrollTo(list, 0);
-      list.track.appendChild(h('div.state', [U.spinner()]));
+    /** quiet: op de achtergrond verversen (geen spinner, focus blijft op dezelfde regel). */
+    function refresh(quiet) {
+      var keepIdx = -1;
+      if (quiet === true) {
+        var rows = list.track.querySelectorAll('.f');
+        for (var i = 0; i < rows.length; i++) if (rows[i] === U.focused) keepIdx = i;
+      } else {
+        U.clear(list.track);
+        U.scrollTo(list, 0);
+        list.track.appendChild(h('div.state', [U.spinner()]));
+      }
       load().then(function (r) {
         U.clear(list.track);
         var sub = head.querySelector('.ls-sub');
@@ -1479,8 +1526,16 @@
         if (extra) extra(list.track, refresh);
         if (!r.items.length && empty) list.track.appendChild(h('div.state.dim', empty));
         r.items.forEach(function (it) { list.track.appendChild(drawRow(it, refresh)); });
-        U.focusFirst(list);
-      }, function (e) { U.clear(list.track); list.track.appendChild(h('div.state.dim', e.message || L('Something went wrong. Please try again.'))); });
+        // alleen de focus zetten als dit scherm nog bovenaan staat (anders belandt de focus in een verborgen laag)
+        if (U.top() !== s) return;
+        var all = list.track.querySelectorAll('.f');
+        if (keepIdx >= 0 && all.length) U.focus(all[Math.min(keepIdx, all.length - 1)], true);
+        else U.focusFirst(list);
+        if (!U.focused || !el.contains(U.focused)) U.focusFirst(el);
+      }, function (e) {
+        if (quiet === true) return;
+        U.clear(list.track); list.track.appendChild(h('div.state.dim', e.message || L('Something went wrong. Please try again.')));
+      });
     }
     var s = { el: el, refresh: refresh, onShow: function (back) { if (!back) refresh(); }, onBack: function () { U.pop(); return true; } };
     return s;
@@ -1499,25 +1554,42 @@
     return listScreen(L('Devices'), function () {
       return A.listDevices().then(function (r) { return { items: r.devices, header: L('%d of %d devices', r.devices.length, r.limit) }; });
     }, function (d, refresh) {
+      var sub = [A.platformLabel(d.platform)];
+      if (d.createdAt) sub.push(L('Linked %@', new Date(d.createdAt).toLocaleDateString(B.lang, { day: 'numeric', month: 'short', year: 'numeric' })));
+      sub.push(L('Last used %@', d.current ? L('Now') : relTime(d.lastSeenAt)));
       var r = h('div.st-row.f.dev', [U.icon(platformIcon(d.platform)), h('div.st-label', [h('div', d.name + (d.current ? '  ·  ' + L('This device') : '')),
-        h('div.dim', d.platform + '  ·  ' + L('Last used %@', d.current ? L('Now') : relTime(d.lastSeenAt)))])]);
+        h('div.dim', sub.join('  ·  '))])]);
       r.onEnter = function () {
-        U.modal({ title: d.name, text: L('Remove %@? It will be signed out.', d.name), buttons: [
+        U.modal({ title: d.name, buttons: [
+          { label: L('Rename'), icon: 'flag', fn: function () {
+            U.editText({ title: L('Device name'), value: d.name, layout: 'text' }, function (v) {
+              if (!String(v || '').trim()) return;
+              A.renameDevice(d.id, v).then(refresh, function (e) { U.toast(e.message); });
+            });
+          } },
           { label: L('Remove'), fn: function () {
-            if (d.current) { B.app.signOut(); return; }
-            A.removeDevice(d.id).then(refresh, function (e) { U.toast(e.message); });
-          } }, { label: L('Cancel') }] });
+            U.modal({ title: d.name, text: L('Remove %@? It will be signed out.', d.name), buttons: [
+              { label: L('Remove'), fn: function () {
+                if (d.current) { B.app.signOut(); return; }
+                A.removeDevice(d.id).then(refresh, function (e) { U.toast(e.message); });
+              } }, { label: L('Cancel') }] });
+          } },
+          { label: L('Cancel') }] });
       };
       return r;
     }, '');
   };
   S.streams = function () {
-    return listScreen(L('Watching now'), function () {
+    var scr = listScreen(L('Watching now'), function () {
       return A.listStreams().then(function (r) { return { items: r.streams, header: L('%d of %d watching now', r.streams.length, r.limit) }; });
     }, function (s) {
       var mins = s.startedAt ? Math.round((Date.now() - s.startedAt) / 60000) : 0;
       return h('div.st-row.f', [U.icon(platformIcon(s.platform)), S.rowAvatar(s.profileId, s.profileName), h('div.st-label', [h('div', s.title), h('div.dim', s.deviceName + '  ·  ' + s.profileName + '  ·  ' + mins + ' min')])]);
     }, L('Nobody is watching right now.'));
+    // ververst elke 30 s zolang het scherm bovenaan staat (ACCOUNT.md, build 51)
+    var timer = setInterval(function () { if (U.top() === scr) scr.refresh(true); }, 30000);
+    scr.destroy = function () { clearInterval(timer); };
+    return scr;
   };
   S.watchLog = function () {
     return listScreen(L('Watch history (7 days)'), function () {
