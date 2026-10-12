@@ -87,6 +87,8 @@ object TMDB {
         val id: Int, val imdb: String?, val overview: String?, val poster: String?, val backdrop: String?, val logo: String?,
         val trailer: String?, val cast: List<TitleDetails.CastMember> = emptyList(),
         val recommendations: List<TitleDetails.Recommendation> = emptyList(),
+        /** original_language (build 59) */
+        val originalLanguage: String? = null,
     )
 
     private val language: String
@@ -188,6 +190,7 @@ object TMDB {
                     year = yearOf(r.jS("release_date") ?: r.jS("first_air_date")),
                     poster = img(r.jS("poster_path"), "w342"), imdbID = null, isShow = isShow)
             },
+            originalLanguage = f.jS("original_language"),
         )
     }
 

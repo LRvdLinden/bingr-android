@@ -355,7 +355,8 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
                                 m.title, m.poster,
                                 modifier = Modifier.focusLift { ScreensNav.detail(DetailTarget.MovieT(m)) },
                                 watched = Playables.isWatched(m, Trakt.imdb(m)),
-                                accent = accent
+                                accent = accent,
+                                language = languageLabel(m)
                             )
                         }
                     }
@@ -369,7 +370,8 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
                             PosterCard(
                                 s.title, s.poster,
                                 modifier = Modifier.focusLift { ScreensNav.detail(DetailTarget.SeriesT(s)) },
-                                accent = accent
+                                accent = accent,
+                                language = languageLabel(s)
                             )
                         }
                     }

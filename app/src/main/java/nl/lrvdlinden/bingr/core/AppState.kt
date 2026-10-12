@@ -127,9 +127,21 @@ object AppState {
     fun switchPlaylist() { stage = Stage.PICKER }
 
     fun play(item: PlayableItem, zap: List<Channel> = emptyList()) {
+        StartTiming.begin(item.title)
         liveZapList = zap
+        // leeftijdscontrole die nog loopt (build 59): hoort bij deze titel, de speler wacht er bij het eerste beeld op
+        playingAgeCheck = pendingAgeCheck
+        pendingAgeCheck = null
         playing = item
     }
+
+    /**
+     * Kinderprofiel (build 59): de detailpagina zet hier de leeftijdscontrole (TMDB) neer als die nog niet in de
+     * cache staat; [play] geeft hem door aan de speler, die hem tegelijk met het voorbereiden uitvoert.
+     */
+    var pendingAgeCheck: (suspend () -> Boolean)? = null
+    /** Leeftijdscontrole voor wat er nu gaat spelen (eenmalig opgehaald door het spelerscherm). */
+    var playingAgeCheck: (suspend () -> Boolean)? = null
 
     fun openMultiview(start: List<Channel>, candidates: List<Channel>) {
         multiviewStart = start

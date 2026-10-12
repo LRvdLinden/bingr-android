@@ -46,7 +46,7 @@ object StateSync {
     /** Instellingen (Prefs-sleutels) die met het account meegaan. */
     val settingKeys = setOf(
         "app.language", "player.engine", "subtitle.size", "player.audioLanguage", "player.subtitleLanguage",
-        "autoSubtitles", "os.language", "os.languages", "ui.startTab", "ui.showLive", "ui.showMovies", "ui.showSeries",
+        "autoSubtitles", TrackPreferences.autoSubtitlesKey, "os.language", "os.languages", "ui.startTab", "ui.showLive", "ui.showMovies", "ui.showSeries",
         "playlist.refresh", "category.sort", "trakt.scrobble", "trakt.askRating",
         // build 51
         "player.zapDelay", "player.channelPreview", "player.matchFrameRate", "player.externalDisplay",
@@ -545,7 +545,8 @@ object StateSync {
             "subtitleSize" to JsonPrimitive(sizeNames.getOrElse(Prefs.int("subtitle.size", 0)) { "small" }),
             "audioLanguage" to JsonPrimitive(TrackPreferences.audio),
             "subtitleLanguage" to JsonPrimitive(TrackPreferences.subtitle),
-            "autoSubtitles" to JsonPrimitive(Prefs.bool("autoSubtitles", false)),
+            // build 59: tekst ("off" / "whenNeeded" / "always") in plaats van aan/uit
+            "autoSubtitles" to JsonPrimitive(TrackPreferences.autoSubtitles),
             "openSubtitlesLanguage" to JsonPrimitive(OpenSubtitles.defaultLanguage),
             "openSubtitlesLanguages" to JsonArray(OpenSubtitles.preferredLanguages.map { JsonPrimitive(it) }),
             "startScreen" to JsonPrimitive(tabNames.getOrElse(Prefs.int("ui.startTab", 0)) { "home" }),
@@ -604,7 +605,7 @@ object StateSync {
             }
             str("audioLanguage")?.let { values["player.audioLanguage"] = it }
             str("subtitleLanguage")?.let { values["player.subtitleLanguage"] = it }
-            bool("autoSubtitles")?.let { values["autoSubtitles"] = it }
+            TrackPreferences.normalizedMode(str("autoSubtitles"))?.let { values[TrackPreferences.autoSubtitlesKey] = it }
             str("openSubtitlesLanguage")?.let { values["os.language"] = it }
             (s["openSubtitlesLanguages"] as? JsonArray)?.let { a ->
                 values["os.languages"] = Http.json.encodeToString(ListSerializer(String.serializer()), a.mapNotNull { it.jFlex })
@@ -642,6 +643,7 @@ object StateSync {
         // kijkvoorkeuren die het actieve profiel zelf heeft ingesteld gaan voor
         val prof = Store.activeProfile
         if (prof?.autoSubtitles != null) values.remove("autoSubtitles")
+        if (prof?.subtitleMode != null) values.remove(TrackPreferences.autoSubtitlesKey)
         if (prof?.audioLanguage != null) values.remove("player.audioLanguage")
         if (prof?.streamSubtitleLanguage != null) values.remove("player.subtitleLanguage")
         if (prof?.subtitleLanguage != null) values.remove("os.language")
@@ -653,6 +655,7 @@ object StateSync {
                     "subtitle.size" -> SubtitleSize.current = SubtitleSize.from(v as Int)
                     "player.audioLanguage" -> TrackPreferences.audio = v as String
                     "player.subtitleLanguage" -> TrackPreferences.subtitle = v as String
+                    TrackPreferences.autoSubtitlesKey -> TrackPreferences.autoSubtitles = v as String
                     "os.language" -> OpenSubtitles.defaultLanguage = v as String
                     "os.languages" -> runCatching {
                         OpenSubtitles.preferredLanguages = Http.json.decodeFromString(ListSerializer(String.serializer()), v as String)
@@ -932,7 +935,8 @@ object StateSync {
     private data class Item<T>(val at: Long, val value: T?)
 
     private data class KijkPrefs(
-        val autoSubtitles: Boolean?, val subtitleLanguage: String?, val audioLanguage: String?, val streamSubtitleLanguage: String?,
+        /** build 59: "off" / "whenNeeded" / "always" (oudere apps: true/false) */
+        val autoSubtitles: String?, val subtitleLanguage: String?, val audioLanguage: String?, val streamSubtitleLanguage: String?,
     )
 
     private data class PState(
@@ -980,7 +984,7 @@ object StateSync {
     }
 
     private fun prefsOf(p: ViewerProfile?): KijkPrefs? = p?.let {
-        KijkPrefs(it.autoSubtitles, it.subtitleLanguage, it.audioLanguage, it.streamSubtitleLanguage)
+        KijkPrefs(it.subtitleMode, it.subtitleLanguage, it.audioLanguage, it.streamSubtitleLanguage)
     }
 
     private fun localState(id: String, m: Meta): PState {
@@ -1115,7 +1119,7 @@ object StateSync {
         val prefs = (o["prefs"] as? JsonObject)?.let { p ->
             fun s(k: String) = (p[k] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
             Item(time(p["updatedAt"]) ?: time(o["prefsUpdatedAt"]) ?: 0L, KijkPrefs(
-                s("autoSubtitles")?.let { it.equals("true", true) || it == "1" }, s("subtitleLanguage"),
+                s("autoSubtitles")?.let { v -> TrackPreferences.normalizedMode(v).takeIf { v != "false" && v != "0" } }, s("subtitleLanguage"),
                 s("audioLanguage"), s("streamSubtitleLanguage"),
             ))
         }
@@ -1208,7 +1212,7 @@ object StateSync {
             val v = p.value ?: KijkPrefs(null, null, null, null)
             fun j(x: String?) = x?.let { JsonPrimitive(it) } ?: JsonNull
             out["prefs"] = JsonObject(mapOf(
-                "autoSubtitles" to (v.autoSubtitles?.let { JsonPrimitive(it) } ?: JsonNull),
+                "autoSubtitles" to j(v.autoSubtitles),
                 "subtitleLanguage" to j(v.subtitleLanguage),
                 "audioLanguage" to j(v.audioLanguage),
                 "streamSubtitleLanguage" to j(v.streamSubtitleLanguage),

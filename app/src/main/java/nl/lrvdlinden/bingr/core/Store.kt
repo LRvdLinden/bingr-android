@@ -229,6 +229,9 @@ object Store {
         val fresh = !isMain(p)
         val auto = p.autoSubtitles
         if (auto != null) Prefs.put("autoSubtitles", auto) else if (fresh) Prefs.put("autoSubtitles", false)
+        // build 59: ondertitelstand (off/whenNeeded/always) van dit profiel, anders de standaard
+        val mode = p.subtitleMode
+        if (mode != null) TrackPreferences.autoSubtitles = mode else if (fresh) TrackPreferences.autoSubtitles = TrackPreferences.AUTO_WHEN_NEEDED
         val audio = p.audioLanguage
         if (audio != null) TrackPreferences.audio = audio else if (fresh) TrackPreferences.audio = ""
         val sub = p.streamSubtitleLanguage
@@ -246,15 +249,16 @@ object Store {
         if (n != p) {
             upsertProfile(n)
             // kijkvoorkeuren gaan per profiel naar het account (build 44)
-            if (n.autoSubtitles != p.autoSubtitles || n.subtitleLanguage != p.subtitleLanguage ||
+            if (n.autoSubtitles != p.autoSubtitles || n.autoSubtitleMode != p.autoSubtitleMode || n.subtitleLanguage != p.subtitleLanguage ||
                 n.audioLanguage != p.audioLanguage || n.streamSubtitleLanguage != p.streamSubtitleLanguage) StateSync.prefsChanged(n.id)
         }
     }
 
     /** Kijkvoorkeuren uit het account (build 44): profiel bijwerken en, als het actief is, meteen toepassen. */
-    fun applySyncedPrefs(id: String, autoSubtitles: Boolean?, subtitleLanguage: String?, audioLanguage: String?, streamSubtitleLanguage: String?) {
+    fun applySyncedPrefs(id: String, autoSubtitles: String?, subtitleLanguage: String?, audioLanguage: String?, streamSubtitleLanguage: String?) {
         val p = profiles.firstOrNull { it.id == id } ?: return
-        val n = p.copy(autoSubtitles = autoSubtitles, subtitleLanguage = subtitleLanguage,
+        // build 59: ondertitelstand als tekst; de oude aan/uit-waarde vervalt daarmee
+        val n = p.copy(autoSubtitles = null, autoSubtitleMode = autoSubtitles, subtitleLanguage = subtitleLanguage,
             audioLanguage = audioLanguage, streamSubtitleLanguage = streamSubtitleLanguage)
         if (n == p) return
         profiles = profiles.map { if (it.id == id) n else it }

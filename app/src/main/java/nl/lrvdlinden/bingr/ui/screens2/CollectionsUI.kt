@@ -158,9 +158,10 @@ fun CollectionRow(c: BingrCollection, only: String? = null) {
                     }
                     is CollectionEntry.M -> PosterCard(e.movie.title, e.movie.poster,
                         modifier = Modifier.focusLift(onLongClick = long) { ScreensNav.detail(DetailTarget.MovieT(e.movie)) },
-                        watched = Playables.isWatched(e.movie, Trakt.imdb(e.movie)))
+                        watched = Playables.isWatched(e.movie, Trakt.imdb(e.movie)), language = languageLabel(e.movie))
                     is CollectionEntry.S -> PosterCard(e.series.title, e.series.poster,
-                        modifier = Modifier.focusLift(onLongClick = long) { ScreensNav.detail(DetailTarget.SeriesT(e.series)) })
+                        modifier = Modifier.focusLift(onLongClick = long) { ScreensNav.detail(DetailTarget.SeriesT(e.series)) },
+                        language = languageLabel(e.series))
                 }
             }
             if (targets.size > 6) item {

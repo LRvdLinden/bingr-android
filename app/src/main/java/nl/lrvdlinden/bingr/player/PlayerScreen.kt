@@ -91,6 +91,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ProcessLifecycleOwner
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
@@ -147,6 +148,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     /** Aftiteling: volgende-aflevering-kaart weggeklikt voor deze aflevering */
     var creditsDismissedFor by remember { mutableStateOf<String?>(null) }
     var countdown by remember { mutableIntStateOf(10) }
+    /** Andere taalversies van wat er speelt (build 59), voor het audiomenu */
+    var langVersions by remember { mutableStateOf(listOf<ContentLanguage.Version>()) }
     val skipFocus = remember { FocusRequester() }
 
     fun flash(text: String) { toast = text; toastID++ }
@@ -168,33 +171,6 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             }
             Unit
         }
-    }
-
-    /** Standaard ondertitels: eerst een spoor in de stream in je standaardtaal, anders de beste van OpenSubtitles. */
-    suspend fun autoLoadSubtitles(itm: PlayableItem) {
-        val lang = OpenSubtitles.defaultLanguage
-        if (lang.isEmpty()) return
-        for (i in 0 until 40) { if (player.isPlaying) break; delay(500) }
-        delay(2500)   // sporen laten binnenkomen
-        if (player.item.id != itm.id || player.hasExternalSubtitle || player.isStopped || player.dismissed) return
-        val t = player.subtitleTracks.firstOrNull { tr -> TrackPreferences.matches(tr, lang) }
-        if (t != null) {
-            player.selectSubtitle(t)
-            flash(L("Subtitles: %@", TrackPreferences.label(lang)))
-            return
-        }
-        if (!OpenSubtitles.isLoggedIn) return
-        try {
-            val found = OpenSubtitles.search(
-                imdbID = itm.imdbID, title = itm.title, year = itm.subtitle?.toIntOrNull(),
-                season = itm.season, episode = itm.episode, languages = listOf(lang)
-            )
-            val best = found.firstOrNull() ?: return
-            if (player.item.id != itm.id || player.isStopped) return
-            val file = OpenSubtitles.download(best)
-            player.addSubtitle(file, "${TrackPreferences.flag(best.language)} ${best.release}", best.language)
-            flash(L("Subtitles: %@", "${TrackPreferences.label(lang)} · OpenSubtitles"))
-        } catch (e: Exception) {}
     }
 
     /** Zoekt de aflevering na deze (ook over seizoenen heen). */
@@ -259,6 +235,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
 
     suspend fun start(itm: PlayableItem) {
         if (player.dismissed) return
+        StartTiming.ensure(itm.title)
+        StartTiming.mark("player screen")
         player.prepareNew()
         player.item = itm
         PlayerController.current = player
@@ -289,21 +267,53 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             if (player.dismissed || player.item.id != itm.id) return
             stremioChoices = found
             val first = found.firstOrNull()
-            if (first == null) { player.fail(L("No playable streams found for this title.")); return }
+            StartTiming.mark("stremio streams (${found.size})")
+            if (first == null) { player.fail(L("No playable streams found for this title.")); StartTiming.end("no stream"); return }
             player.start(first.url)
         } else {
             stremioChoices = emptyList()
             val url = runCatching { Playlists.resolve(itm) }.getOrNull()
             if (player.dismissed || player.item.id != itm.id) return
-            if (url == null) { player.fail(L("No stream address available.")); return }
+            StartTiming.mark("url resolved")
+            if (url == null) { player.fail(L("No stream address available.")); StartTiming.end("no stream"); return }
             player.liveURL = url
             player.start(url)
         }
+        // Chromecast pas na het starten koppelen (build 59): de eerste keer kost CastContext een paar honderd ms
+        // op de main thread, en dat zat vóór het laden van de stream
+        Casting.init(ctx)
         // al verbonden met een Chromecast (bijv. volgende aflevering of andere zender): meteen daar verder
         if (Casting.connected) scope.launch { followCast(itm) }
         poke()
-        if (Prefs.bool("autoSubtitles") && itm.type != MediaType.LIVE) scope.launch { autoLoadSubtitles(itm) }
-        findNext(itm)
+        // automatische ondertitels regelt PlayerController zelf zodra de sporen bekend zijn (build 59)
+        scope.launch { findNext(itm) }
+    }
+
+    /**
+     * Andere taalversie van wat er speelt (build 59), op dezelfde plek. Elke versie houdt zijn eigen voortgang
+     * (eigen item-id). Bij series dezelfde aflevering in de andere versie.
+     */
+    fun switchVersion(v: ContentLanguage.Version) {
+        val cur = player.item
+        val at = player.currentTime
+        val frac = player.position
+        scope.launch {
+            val next: PlayableItem? = when (val t = v.target) {
+                is DetailTarget.MovieT -> Playables.movie(t.movie, Trakt.imdb(t.movie) ?: cur.imdbID)
+                is DetailTarget.SeriesT -> {
+                    val eps = runCatching { Playlists.episodes(t.series) }.getOrDefault(emptyList())
+                    eps.firstOrNull { it.season == cur.season && it.number == cur.episode }
+                        ?.let { e -> Playables.episode(e, t.series, cur.imdbID).copy(seriesID = t.series.id) }
+                }
+            }
+            if (next == null) { flash(L("This episode isn't available in that language.")); return@launch }
+            if (player.dismissed) return@launch
+            StartTiming.begin(next.title)
+            player.stop()
+            player.pendingStartSeconds = at.takeIf { it > 5 }
+            flash(L("Switched to %@", v.info?.longName ?: ContentLanguage.displayTitle(next.title)))
+            start(next.copy(resumeAt = if (frac in 0.01..0.97) frac else next.resumeAt))
+        }
     }
 
     fun playNext(n: PlayableItem) {
@@ -357,7 +367,11 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
 
     LaunchedEffect(player) {
         ChannelPreview.stop()
-        Casting.init(ctx)
+        // leeftijdscontrole van de detailpagina (kinderprofiel, build 59) loopt tegelijk met het voorbereiden
+        AppState.playingAgeCheck?.let { check ->
+            AppState.playingAgeCheck = null
+            player.ageGate = scope.async { try { check() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { false } }
+        }
         start(item)
     }
     DisposableEffect(player) {
@@ -391,6 +405,18 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     }
     LaunchedEffect(player.notice) {
         player.notice?.let { flash(it); player.notice = null }
+    }
+    // andere taalversies van deze titel (build 59): de film zelf of de serie van deze aflevering
+    LaunchedEffect(player.item.id, player.item.seriesID) {
+        val itm = player.item
+        val lib = Playlists.library
+        val t: DetailTarget? = when (itm.type) {
+            MediaType.MOVIE -> lib.movies.firstOrNull { it.id == itm.id }?.let { DetailTarget.MovieT(it) }
+            MediaType.EPISODE -> (itm.seriesID?.let { id -> lib.series.firstOrNull { it.id == id } }
+                ?: lib.series.firstOrNull { it.title == itm.title })?.let { DetailTarget.SeriesT(it) }
+            else -> null
+        }
+        langVersions = t?.let { runCatching { ContentLanguage.versions(it) }.getOrNull() } ?: emptyList()
     }
     // intro en aftiteling (build 52)
     val markerKey = IntroMarkers.keyFor(player.item)
@@ -502,6 +528,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                 Text(externalTarget.name ?: "", color = Theme.secondary, fontSize = tsp(12))
             }
         } else EngineView(player, Modifier.fillMaxSize())
+        // kinderprofiel (build 59): geen beeld zolang de leeftijdscontrole nog loopt (ExoPlayer buffert al)
+        if (player.holdingForAge) Box(Modifier.fillMaxSize().background(Color.Black))
 
         if (!inPiP && !isTV) {
             // vegen omhoog/omlaag = zappen binnen de groep (live)
@@ -685,7 +713,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     // MARK: panelen
 
     when (panel) {
-        PlayerPanel.AUDIO_SUBS -> TracksPanel(player) { panel = null }
+        PlayerPanel.AUDIO_SUBS -> TracksPanel(player, langVersions, onVersion = { v -> panel = null; switchVersion(v) }) { panel = null }
         PlayerPanel.OPENSUBS -> OpenSubtitlesPanel(player) { panel = null }
         PlayerPanel.OPTIONS -> OptionsPanel(player) { panel = null }
         PlayerPanel.CAST -> CastDevicesDialog { panel = null }
@@ -750,7 +778,9 @@ private fun PlayerControls(
             ) {
                 if (!isTV) PlayerRoundIcon(Icons.Filled.Close, L("Close"), 24) { onClose() }
                 Column(Modifier.weight(1f).padding(top = if (isTV) 0.dp else 8.dp)) {
-                    Text(player.item.title, color = Color.White, fontSize = tsp(17), fontWeight = FontWeight.Bold,
+                    // films/series zonder taallabel in de titel (build 59); zendernamen blijven zoals ze zijn
+                    Text(if (player.isLive) player.item.title else ContentLanguage.displayTitle(player.item.title),
+                        color = Color.White, fontSize = tsp(17), fontWeight = FontWeight.Bold,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                     player.item.subtitle?.let {
                         Text(it, color = Theme.secondary, fontSize = tsp(13), maxLines = 1, overflow = TextOverflow.Ellipsis)

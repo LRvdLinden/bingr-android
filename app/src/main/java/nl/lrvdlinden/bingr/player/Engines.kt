@@ -19,6 +19,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -59,7 +60,11 @@ interface PlaybackEngine {
     var muted: Boolean
     val supportsExternalSubtitles: Boolean
 
-    fun load(url: String, live: Boolean, startFraction: Double?)
+    /**
+     * [startSeconds] (build 59): exacte hervatplek in seconden. Dan begint de engine meteen op die plek (geen
+     * buffer vanaf het begin die bij het spoelen weer weggegooid wordt); anders [startFraction] zodra de lengte bekend is.
+     */
+    fun load(url: String, live: Boolean, startFraction: Double?, startSeconds: Double? = null)
     fun play()
     fun pause()
     fun stop()
@@ -101,12 +106,28 @@ class ExoEngine(ctx: Context) : PlaybackEngine {
             if (v != null) { v.resizeMode = resizeMode; applySubtitleSize(v, SubtitleSize.current) }
         }
 
+    /** Eerste beeld getoond (voor de starttijd-log, build 59). */
+    var onFirstFrame: (() -> Unit)? = null
+    /** Kinderprofiel (build 59): wel laden en bufferen, maar pas spelen na de leeftijdscontrole. */
+    var holdStart = false
+
     init {
-        val client = Http.client.newBuilder().readTimeout(30, TimeUnit.SECONDS).build()
+        // sneller starten (build 59): kortere time-outs (een dode server valt sneller af en de terugval begint eerder)
+        val client = Http.client.newBuilder()
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .build()
         val http = OkHttpDataSource.Factory(client).setUserAgent(Http.USER_AGENT)
         val dataSource = DefaultDataSource.Factory(ctx, http)
+        // Standaard wacht ExoPlayer op 2,5 s buffer voor het eerste beeld (en 5 s na haperen); 1 s / 2 s is genoeg
+        // voor IPTV en scheelt merkbaar bij elke start.
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(15_000, 50_000, 1_000, 2_000)
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
         player = ExoPlayer.Builder(ctx)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource))
+            .setLoadControl(loadControl)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
             .setHandleAudioBecomingNoisy(true)
             .build()
@@ -119,7 +140,7 @@ class ExoEngine(ctx: Context) : PlaybackEngine {
         }
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) { failed = true }
-            override fun onRenderedFirstFrame() { matchFrameRate() }
+            override fun onRenderedFirstFrame() { matchFrameRate(); onFirstFrame?.invoke(); onFirstFrame = null }
             override fun onTracksChanged(tracks: androidx.media3.common.Tracks) { matchFrameRate() }
         })
     }
@@ -172,7 +193,7 @@ class ExoEngine(ctx: Context) : PlaybackEngine {
     val behindLive: Double
         get() { val w = liveWindow; return if (w > 0) (w - time).coerceAtLeast(0.0) else 0.0 }
 
-    override fun load(url: String, live: Boolean, startFraction: Double?) {
+    override fun load(url: String, live: Boolean, startFraction: Double?, startSeconds: Double?) {
         if (released) return
         failed = false; loaded = true; this.live = live
         val lower = url.lowercase(Locale.ROOT)
@@ -181,12 +202,18 @@ class ExoEngine(ctx: Context) : PlaybackEngine {
             lower.contains(".m3u8") -> b.setMimeType(MimeTypes.APPLICATION_M3U8)
             lower.contains(".mpd") -> b.setMimeType(MimeTypes.APPLICATION_MPD)
         }
-        player.setMediaItem(b.build())
+        // voorkeurs-audiotaal (build 59) al vóór het laden: ExoPlayer kiest dan meteen het goede spoor
+        val audioPref = if (live) null else TrackPreferences.preferredAudio
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setPreferredAudioLanguage(audioPref)
+            .build()
+        val startMs = startSeconds?.takeIf { !live && it > 1 }?.let { (it * 1000).toLong() }
+        if (startMs != null) player.setMediaItem(b.build(), startMs) else player.setMediaItem(b.build())
         player.setPlaybackSpeed(rate)
         player.volume = if (muted) 0f else 1f
         player.prepare()
-        player.playWhenReady = true
-        if (startFraction != null && startFraction > 0.01) {
+        player.playWhenReady = !holdStart
+        if (startMs == null && startFraction != null && startFraction > 0.01) {
             scope.launch {
                 repeat(40) {   // wachten tot de lengte bekend is
                     delay(250)
@@ -196,7 +223,7 @@ class ExoEngine(ctx: Context) : PlaybackEngine {
         }
     }
 
-    override fun play() { if (!released) { if (player.playbackState == Player.STATE_ENDED) player.seekToDefaultPosition(); player.play() } }
+    override fun play() { if (!released) { holdStart = false; if (player.playbackState == Player.STATE_ENDED) player.seekToDefaultPosition(); player.play() } }
     override fun pause() { if (!released) player.pause() }
     override fun stop() { if (!released) player.stop() }
     override fun release() {
@@ -314,6 +341,8 @@ class VlcEngine(ctx: Context) : PlaybackEngine {
     private var aspect = PlayerController.Aspect.FIT
     private var lastURL: String? = null
     private var lastLive = false
+    /** Eerste beeld (Vout) voor de starttijd-log (build 59). */
+    var onFirstFrame: (() -> Unit)? = null
     /** Ingeladen ondertitelbestanden (opnieuw toevoegen als de stream herladen wordt voor een andere grootte) */
     private val slaves = mutableListOf<File>()
 
@@ -330,7 +359,10 @@ class VlcEngine(ctx: Context) : PlaybackEngine {
                 MediaPlayer.Event.Stopped -> if (vstate != EngineState.ENDED && vstate != EngineState.ERROR) vstate = EngineState.IDLE
                 MediaPlayer.Event.EndReached -> vstate = EngineState.ENDED
                 MediaPlayer.Event.EncounteredError -> vstate = EngineState.ERROR
-                MediaPlayer.Event.Vout -> if (aspect != PlayerController.Aspect.FIT) setAspect(aspect)
+                MediaPlayer.Event.Vout -> {
+                    onFirstFrame?.invoke(); onFirstFrame = null
+                    if (aspect != PlayerController.Aspect.FIT) setAspect(aspect)
+                }
                 else -> {}
             }
         })
@@ -362,7 +394,7 @@ class VlcEngine(ctx: Context) : PlaybackEngine {
         layout = null
     }
 
-    override fun load(url: String, live: Boolean, startFraction: Double?) {
+    override fun load(url: String, live: Boolean, startFraction: Double?, startSeconds: Double?) {
         if (released) return
         if (url != lastURL) slaves.clear()
         lastURL = url; lastLive = live
@@ -371,7 +403,16 @@ class VlcEngine(ctx: Context) : PlaybackEngine {
         val size = SubtitleSize.current
         media.addOption(":sub-text-scale=${size.vlcScale}")
         media.addOption(":freetype-rel-fontsize=${size.vlcRelFontSize}")
-        media.addOption(":network-caching=${if (live) 1500 else 3000}")
+        // sneller starten (build 59): was 3000 ms (films) / 1500 ms (live); VLC wacht zo lang vóór het eerste beeld
+        media.addOption(":network-caching=${if (live) 1000 else 1500}")
+        // meteen op de hervatplek beginnen in plaats van eerst vanaf 0 te bufferen en dan te spoelen
+        val startAt = startSeconds?.takeIf { !live && it > 1 }
+        if (startAt != null) media.addOption(":start-time=${String.format(Locale.ROOT, "%.1f", startAt)}")
+        // voorkeurs-audiotaal (build 59): VLC kiest dan zelf het spoor in die taal (ISO 639-1 en -2)
+        if (!live) TrackPreferences.preferredAudio?.let { a ->
+            val alts = TrackPreferences.languages.firstOrNull { it.first == a }?.second?.filter { it.length == 3 } ?: emptyList()
+            media.addOption(":audio-language=${(listOf(a) + alts).joinToString(",")}")
+        }
         media.addOption(":http-user-agent=${Http.USER_AGENT}")
         media.addOption(":http-reconnect")
         // deinterlacen (build 52): Uit = 0, Automatisch = -1 (alleen bij geïnterlinieerd beeld), Aan = 1
@@ -387,7 +428,7 @@ class VlcEngine(ctx: Context) : PlaybackEngine {
         if (layout != null) player.play() else pendingPlay = true
         player.setVolume(if (muted) 0 else 100)
         for (f in slaves) runCatching { player.addSlave(SLAVE_SUBTITLE, Uri.fromFile(f), true) }
-        if (startFraction != null && startFraction > 0.01) {
+        if (startAt == null && startFraction != null && startFraction > 0.01) {
             scope.launch {
                 repeat(40) {   // wachten tot de lengte bekend is
                     delay(250)

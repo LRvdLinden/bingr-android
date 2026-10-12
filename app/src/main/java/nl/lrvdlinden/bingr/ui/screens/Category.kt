@@ -152,7 +152,9 @@ private fun CategoryCell(t: DetailTarget, modifier: Modifier) {
     val rating = categoryRating(t)
     Column(modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(tvs(6)))) {
-            RemoteImage(categoryPoster(t), Modifier.matchParentSize(), placeholder = t.title)
+            RemoteImage(categoryPoster(t), Modifier.matchParentSize(), placeholder = ContentLanguage.displayTitle(t.title))
+            // taalstrook (build 59)
+            languageLabel(t)?.let { LanguageStrip(it, Modifier.align(Alignment.BottomCenter)) }
             if (watched) {
                 Box(
                     Modifier.align(Alignment.TopStart).padding(6.dp).size(tvs(20)).clip(CircleShape).background(Theme.red),
@@ -173,7 +175,7 @@ private fun CategoryCell(t: DetailTarget, modifier: Modifier) {
         }
         Spacer(Modifier.height(tvs(6)))
         Text(
-            t.title, color = Color.White, fontSize = tsp(13), fontWeight = FontWeight.SemiBold,
+            ContentLanguage.displayTitle(t.title), color = Color.White, fontSize = tsp(13), fontWeight = FontWeight.SemiBold,
             maxLines = 2, overflow = TextOverflow.Ellipsis
         )
     }

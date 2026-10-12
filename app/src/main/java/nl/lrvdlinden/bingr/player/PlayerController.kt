@@ -8,8 +8,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -138,6 +140,12 @@ class PlayerController(item: PlayableItem) {
     private fun makeEngine(exo: Boolean) {
         engine.release()
         engine = if (exo) ExoEngine(ctx).also { it.frameRateMatching = !isPreview } else VlcEngine(ctx)
+        // starttijd-log (build 59)
+        when (val e = engine) {
+            is ExoEngine -> e.onFirstFrame = { StartTiming.end("first frame (ExoPlayer)") }
+            is VlcEngine -> e.onFirstFrame = { StartTiming.end("first frame (VLC)") }
+            else -> {}
+        }
         usingExo = exo
         vlcFrameRateDone = false
         engine.rate = rate
@@ -150,6 +158,10 @@ class PlayerController(item: PlayableItem) {
     /** Nieuwe titel/zender: niets meenemen van de vorige (timeshift, pauze, herverbind-pogingen, fout). */
     fun prepareNew() {
         timeshiftStart = null; behindLive = 0.0; pausedAt = null
+        // niets van de vorige titel gebruiken voor de hervatplek (build 59)
+        duration = 0.0; currentTime = 0.0; position = 0.0
+        autoSubsFor = null; osJob?.cancel(); osJob = null
+        contentInfo = null
         attempts = 0; triedOtherEngine = false; reconnecting = false; errorText = null; isBuffering = true
         stallSince = null
         retryPending = false; everPlayed = false; lastGoodPosition = 0.0; triedBackup = false; backupPending = false
@@ -178,9 +190,31 @@ class PlayerController(item: PlayableItem) {
         stopped = false
         // nieuwe titel of zender (ook zappen en de volgende aflevering): stream_start; herverbinden niet
         if (!isPreview && streamItemID != item.id) beginStream()
+        if (contentInfo == null && !isPreview) contentInfo = ContentLanguage.of(item)
         val exo = forceExo ?: prefersExo(url, live = isLive)
         if (exo != usingExo || timer == null) makeEngine(exo)
-        engine.load(url, live = isLive && timeshiftStart == null, startFraction = startFraction())
+        val live = isLive && timeshiftStart == null
+        val fraction = startFraction()
+        val secs = startSeconds(fraction)
+        StartTiming.mark("engine load (${if (usingExo) "ExoPlayer" else "VLC"}${secs?.let { ", resume ${it.toInt()} s" } ?: ""})")
+        val gate = ageGate?.takeIf { !it.isCompleted || !gateResult(it) }
+        if (gate == null) {
+            engine.load(url, live = live, startFraction = fraction, startSeconds = secs)
+        } else {
+            // kinderprofiel (build 59): de leeftijdscontrole loopt tegelijk met het voorbereiden van de speler;
+            // alleen het eerste beeld wacht erop. ExoPlayer laadt en buffert alvast; VLC begint pas na de controle.
+            val e = engine
+            holdingForAge = true
+            if (e is ExoEngine) { e.holdStart = true; e.load(url, live = live, startFraction = fraction, startSeconds = secs) }
+            scope.launch {
+                val ok = runCatching { gate.await() }.getOrDefault(false)
+                StartTiming.mark("age check ${if (ok) "ok" else "blocked"}")
+                holdingForAge = false
+                if (stopped || dismissed || engine !== e || this@PlayerController.url != url) return@launch
+                if (!ok) { blockedByAge(); return@launch }
+                if (e is ExoEngine) e.play() else e.load(url, live = live, startFraction = fraction, startSeconds = secs)
+            }
+        }
         timer?.cancel()
         timer = scope.launch {
             while (isActive) {
@@ -197,6 +231,42 @@ class PlayerController(item: PlayableItem) {
         if (isLive) return null
         val r = item.resumeAt
         return if (r > 0.01 && r < 0.97) r else null
+    }
+
+    /**
+     * Exacte hervatplek in seconden (build 59), zodat de engine meteen daar begint in plaats van eerst vanaf 0 te
+     * bufferen en dan te spoelen (dat kostte bij hervatten een tweede buffermoment). Bron: een expliciete plek
+     * ([pendingStartSeconds], bijv. bij wisselen van taalversie), de lengte van deze stream (andere speler,
+     * herverbinden), of de bewaarde voortgang van dit profiel.
+     */
+    private fun startSeconds(fraction: Double?): Double? {
+        if (isLive) return null
+        pendingStartSeconds?.let { pendingStartSeconds = null; return it.takeIf { s -> s > 5 } }
+        val f = fraction ?: return null
+        if (duration > 60) return f * duration
+        Store.progress[item.id]?.let { p -> if (kotlin.math.abs(p.fraction - f) < 0.01 && p.position > 5) return p.position }
+        return null
+    }
+
+    /** Volgende start op precies deze plek (seconden), bijv. bij wisselen naar een andere taalversie. */
+    var pendingStartSeconds: Double? = null
+
+    /**
+     * Leeftijdscontrole die nog loopt (build 59, kinderprofielen): afspelen wordt al voorbereid, het eerste beeld
+     * wacht op de uitkomst. Gezet door het spelerscherm.
+     */
+    var ageGate: Deferred<Boolean>? = null
+    /** Beeld afdekken: de leeftijdscontrole loopt nog. */
+    var holdingForAge by mutableStateOf(false); private set
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private fun gateResult(d: Deferred<Boolean>): Boolean = runCatching { d.getCompleted() }.getOrDefault(false)
+
+    private fun blockedByAge() {
+        runCatching { engine.stop() }
+        timer?.cancel(); timer = null
+        isPlaying = false
+        fail(L("Not available on this profile (age limit)."))
     }
 
     /** Wisselt naar ExoPlayer op dezelfde positie. */
@@ -248,7 +318,8 @@ class PlayerController(item: PlayableItem) {
             scrobble(Trakt.Scrobble.START, position, announce = true)
         }
         if (st == EngineState.PLAYING) watchedSeconds += 0.5
-        if (!tracksApplied && st == EngineState.PLAYING) {
+        // ook als er meteen naar een Chromecast gecast wordt (lokaal gepauzeerd, lengte wel bekend)
+        if (!tracksApplied && (st == EngineState.PLAYING || (Casting.connected && duration > 0))) {
             playingTicks += 1
             // sporen zijn er meestal na een paar tellen; daarna niet meer ingrijpen (jouw eigen keuze blijft staan)
             if (engine.audioTracks.isNotEmpty() || playingTicks > 12) applyTrackPreferences()
@@ -309,11 +380,12 @@ class PlayerController(item: PlayableItem) {
         }
         retryPending = true
         stallSince = System.currentTimeMillis() + 4_000L
+        val resumeSecs = resume?.let { if (duration > 60) it * duration else null }
         scope.launch {
             delay(1_500)
             retryPending = false
             if (stopped || dismissed) return@launch
-            engine.load(u, live = isLive && timeshiftStart == null, startFraction = resume)
+            engine.load(u, live = isLive && timeshiftStart == null, startFraction = resume, startSeconds = resumeSecs)
         }
     }
 
@@ -570,23 +642,116 @@ class PlayerController(item: PlayableItem) {
 
     // MARK: sporen & ondertitels
 
-    /** Standaard audio-/ondertiteltaal uit de instellingen toepassen. */
+    /**
+     * Voorkeurstalen toepassen zodra de sporen bekend zijn (beide engines):
+     * - audio (build 59): de ingestelde taal, standaard de taal van de app, als de stream meerdere audiosporen heeft;
+     * - ondertitels: zie [applySubtitlePreferences].
+     */
     private fun applyTrackPreferences() {
         tracksApplied = true
         if (isPreview) return
-        val audio = TrackPreferences.audio
-        val sub = TrackPreferences.subtitle
-        if (audio.isNotEmpty()) {
-            val t = engine.audioTracks.filter { it.id != "-1" }.firstOrNull { TrackPreferences.matches(it, audio) }
+        val pref = TrackPreferences.preferredAudio
+        val audios = engine.audioTracks.filter { it.id != "-1" }
+        if (pref != null && audios.size > 1) {
+            val t = audios.firstOrNull { TrackPreferences.matches(it, pref) }
             if (t != null && t.id != engine.currentAudio) engine.selectAudio(t)
         }
-        if (sub == "off") {
-            if (externalCues.isEmpty()) engine.selectSubtitle(null)
-        } else if (sub.isNotEmpty() && externalCues.isEmpty()) {
-            engine.subtitleTracks.firstOrNull { TrackPreferences.matches(it, sub) }?.let { engine.selectSubtitle(it) }
-        }
+        applySubtitlePreferences()
         tracksVersion++
+        StartTiming.mark("tracks applied (${audios.size} audio, ${engine.subtitleTracks.size} subtitles)")
     }
+
+    // MARK: automatische ondertitels (build 59)
+
+    /** Taal van deze titel volgens de titel/categorie/TMDB (voor als het audiospoor geen taal heeft). */
+    private var contentInfo: ContentLanguage.Info? = null
+    /** Voor welke titel de automatische ondertitels al geregeld zijn. */
+    private var autoSubsFor: String? = null
+    private var osJob: Job? = null
+
+    /** Taal van het audiospoor dat nu speelt; zonder taal in de stream die van de titel (bijv. "(IT)"). */
+    val currentAudioLanguage: String?
+        get() {
+            tracksVersion
+            val id = engine.currentAudio
+            val all = engine.audioTracks.filter { it.id != "-1" }
+            val t = all.firstOrNull { it.id == id } ?: all.singleOrNull()
+            return t?.let { TrackPreferences.codeOf(it) } ?: contentInfo?.code?.takeIf { all.size <= 1 }
+        }
+
+    /**
+     * - "Uit": zoals ingesteld bij "Standaard ondertiteltaal" (spoor in de stream, of uit).
+     * - "Als nodig": spreekt de audio een andere taal dan je ondertiteltaal en zit er geen ondertitel in die taal in
+     *   beeld (ingebakken "NL SUBS"), dan het spoor in de stream in jouw taal, anders op de achtergrond de beste
+     *   van OpenSubtitles.
+     * - "Altijd": altijd ondertitels in jouw taal (eerst uit de stream, anders OpenSubtitles).
+     * Het afspelen wacht hier nooit op.
+     */
+    private fun applySubtitlePreferences() {
+        if (externalCues.isNotEmpty() || externalSubtitleName != null) return
+        val mode = TrackPreferences.autoSubtitles
+        val want = TrackPreferences.preferredSubtitle
+        val burnedIn = contentInfo?.subs == want
+        val audioLang = currentAudioLanguage
+        val needed = when (mode) {
+            TrackPreferences.AUTO_ALWAYS -> !burnedIn
+            TrackPreferences.AUTO_WHEN_NEEDED -> audioLang != null && audioLang != want && !burnedIn
+            else -> false
+        }
+        if (needed && autoSubsFor != item.id) {
+            autoSubsFor = item.id
+            val embedded = engine.subtitleTracks.firstOrNull { TrackPreferences.matches(it, want) }
+            if (embedded != null) {
+                if (embedded.id != engine.currentSubtitle) engine.selectSubtitle(embedded)
+                notice = L("Subtitles: %@", TrackPreferences.name(want))
+                Casting.subtitlesChanged(this)
+            } else if (!isLive && OpenSubtitles.isLoggedIn) {
+                fetchOpenSubtitles(want)
+            }
+            return
+        }
+        if (needed) return
+        // geen automatische ondertitels nodig: de gewone standaard voor sporen in de stream
+        when (val sub = TrackPreferences.subtitle) {
+            "off" -> engine.selectSubtitle(null)
+            "" -> {}
+            else -> engine.subtitleTracks.firstOrNull { TrackPreferences.matches(it, sub) }?.let { engine.selectSubtitle(it) }
+        }
+    }
+
+    /** Beste ondertitel van OpenSubtitles in [lang] op de achtergrond zoeken en inladen (ook naar de Chromecast). */
+    private fun fetchOpenSubtitles(lang: String) {
+        if (osJob?.isActive == true) return
+        val itm = item
+        val u = url
+        osJob = scope.launch {
+            try {
+                val t0 = System.currentTimeMillis()
+                val year = if (itm.type == MediaType.MOVIE) itm.subtitle?.toIntOrNull() else null
+                val tmdb = Details.cachedTMDB(if (itm.type == MediaType.EPISODE) itm.seriesID else itm.id)
+                val hash = u?.let { OpenSubtitles.movieHash(it) }
+                val found = OpenSubtitles.search(
+                    imdbID = itm.imdbID, title = ContentLanguage.displayTitle(itm.title), year = year,
+                    season = itm.season, episode = itm.episode, languages = listOf(lang), tmdbID = tmdb, movieHash = hash,
+                )
+                val best = found.firstOrNull() ?: return@launch
+                if (stopped || item.id != itm.id || externalSubtitleName != null) return@launch
+                val file = OpenSubtitles.download(best)
+                if (stopped || item.id != itm.id || externalSubtitleName != null) return@launch
+                addSubtitle(file, "${TrackPreferences.flag(best.language)} ${best.release}", best.language)
+                notice = L("Subtitles: %@ (OpenSubtitles)", TrackPreferences.name(lang))
+                android.util.Log.i("BingrStart", "[${itm.title.take(40)}] OpenSubtitles loaded in ${System.currentTimeMillis() - t0} ms")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    // MARK: andere taalversie (build 59)
+
+    /** Eén audiospoor (of geen keuze): het audiomenu toont dan de taal en de andere taalversies. */
+    val hasSingleAudio: Boolean get() { tracksVersion; return engine.audioTracks.count { it.id != "-1" } <= 1 }
 
     val audioTracks: List<MediaTrack> get() { tracksVersion; return engine.audioTracks }
     val subtitleTracks: List<MediaTrack> get() { tracksVersion; return engine.subtitleTracks }
@@ -698,7 +863,7 @@ private class IdleEngine : PlaybackEngine {
     override var rate: Float = 1f
     override var muted: Boolean = false
     override val supportsExternalSubtitles: Boolean get() = false
-    override fun load(url: String, live: Boolean, startFraction: Double?) {}
+    override fun load(url: String, live: Boolean, startFraction: Double?, startSeconds: Double?) {}
     override fun play() {}
     override fun pause() {}
     override fun stop() {}

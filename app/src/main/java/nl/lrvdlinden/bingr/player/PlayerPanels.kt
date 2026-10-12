@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.RemoveCircle
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -172,19 +173,44 @@ fun flaggedTrackName(t: MediaTrack): String {
     return if (code != null) "${TrackPreferences.flag(code)} ${t.name}" else t.name
 }
 
-/** Audio- en ondertitelsporen die in de stream zitten. */
+/**
+ * Audio- en ondertitelsporen die in de stream zitten. Build 59: heeft de stream maar één audiotaal, dan staat die
+ * taal erbij met de uitleg, en daaronder de andere taalversies van deze titel ([versions]) om op dezelfde plek
+ * verder te kijken.
+ */
 @Composable
-fun TracksPanel(player: PlayerController, onDismiss: () -> Unit) {
+fun TracksPanel(
+    player: PlayerController,
+    versions: List<ContentLanguage.Version> = emptyList(),
+    onVersion: (ContentLanguage.Version) -> Unit = {},
+    onDismiss: () -> Unit,
+) {
     val audio = player.audioTracks
     val subs = player.subtitleTracks
     val curAudio = player.currentAudio
     val curSub = player.currentSubtitle
     val ext = player.externalSubtitleName
     val offset = player.subtitleDelay
+    val single = player.hasSingleAudio
     PlayerSheet(L("Audio & subtitles"), onDismiss) {
         item { PlayerSheetHeader(L("Audio")) }
-        if (audio.isEmpty()) item { PlayerSheetNote(L("No alternative audio tracks")) }
-        for (t in audio) item { PlayerSheetRow(flaggedTrackName(t), selected = t.id == curAudio) { player.selectAudio(t) } }
+        if (single) {
+            val lang = player.currentAudioLanguage
+            item { PlayerSheetRow(lang?.let { TrackPreferences.label(it) } ?: audio.firstOrNull()?.let { flaggedTrackName(it) } ?: L("Audio"), selected = true) {} }
+            item { PlayerSheetNote(L("This stream has one audio language")) }
+        } else {
+            for (t in audio) item { PlayerSheetRow(flaggedTrackName(t), selected = t.id == curAudio) { player.selectAudio(t) } }
+        }
+        if (versions.isNotEmpty()) {
+            item { PlayerSheetHeader(L("Other language")) }
+            for (v in versions) item {
+                PlayerSheetRow(
+                    listOfNotNull(v.info?.longName ?: "?", ContentLanguage.displayTitle(v.target.title)).joinToString(" · "),
+                    icon = Icons.Filled.Translate
+                ) { onVersion(v) }
+            }
+            item { PlayerSheetNote(L("Continues at the same point in the other version.")) }
+        }
 
         item { PlayerSheetHeader(L("Subtitles")) }
         item { PlayerSheetRow(L("Off"), selected = curSub == null) { player.selectSubtitle(null) } }

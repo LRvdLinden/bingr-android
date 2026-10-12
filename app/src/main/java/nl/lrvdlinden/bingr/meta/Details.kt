@@ -31,6 +31,8 @@ data class TitleDetails(
     var episodeInfo: Map<String, EpisodeInfo> = emptyMap(),
     var seasonCount: Int? = null,
     var tmdbID: Int? = null,
+    /** Originele taal volgens TMDB (ISO 639-1, build 59) */
+    var originalLanguage: String? = null,
 ) {
     data class Rating(val source: String, val value: String) { val id: String get() = source }
     /** [tmdbID] = TMDB-persoon (voor de personenpagina); zonder id zoekt die pagina op naam. */
@@ -122,7 +124,10 @@ object Details {
             d.trailerYouTubeID = d.trailerYouTubeID ?: tm.trailer
             d.imdbID = d.imdbID ?: tm.imdb
             d.tmdbID = tm.id
+            d.originalLanguage = tm.originalLanguage
         }
+        // taal op posters als de titel/categorie hem niet noemt (build 59)
+        ContentLanguage.rememberOriginal(t.title, t.year, isShow, d.originalLanguage)
         synchronized(cache) { cache[t.id] = d.copy() }
         return d
     }
@@ -131,6 +136,9 @@ object Details {
     suspend fun season(tmdbTvID: Int, season: Int): Map<String, TitleDetails.EpisodeInfo> = TMDB.season(tmdbTvID, season)
 
     fun clearCache() = synchronized(cache) { cache.clear() }
+
+    /** TMDB-id uit eerder geladen details (film-/serie-id), bijv. voor OpenSubtitles (build 59). */
+    fun cachedTMDB(id: String?): Int? = id?.let { synchronized(cache) { cache[it]?.tmdbID } }
 
     private fun splitList(s: String): List<String> =
         s.split(',', '/').map { it.trim() }.filter { it.isNotEmpty() }

@@ -50,9 +50,11 @@ fun PosterCard(
     rating: Double? = null,
     /** Kleur van de bron (build 51), als er meerdere bronnen door elkaar staan */
     accent: Color? = null,
+    /** Taal van deze versie (build 59), bijv. "NL", "EN · NL ondertitels" of "Multi" — zie [ContentLanguage] */
+    language: String? = null,
 ) {
     Box(modifier.width(width).height(width * 1.5f).clip(RoundedCornerShape(4.dp))) {
-        RemoteImage(poster, Modifier.matchParentSize(), placeholder = title)
+        RemoteImage(poster, Modifier.matchParentSize(), placeholder = ContentLanguage.displayTitle(title))
         if (accent != null) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(tvs(4)).background(accent))
         if (watched) {
             Box(Modifier.align(Alignment.TopEnd).padding(6.dp).size(tvs(20)).clip(CircleShape).background(Theme.red),
@@ -65,18 +67,44 @@ fun PosterCard(
                 Text(String.format("%.1f", rating), color = Color.Black, fontSize = tsp(10), fontWeight = FontWeight.Bold)
             }
         }
+        if (language != null) LanguageStrip(language, Modifier.align(Alignment.BottomCenter))
         if (badge != null) {
             Text(badge, color = Color.White, fontSize = tsp(9), fontWeight = FontWeight.Black,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = if (progress == null) 6.dp else 10.dp)
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .padding(bottom = (if (progress == null) 6.dp else 10.dp) + (if (language != null) tvs(16) else 0.dp))
                     .clip(RoundedCornerShape(2.dp)).background(Theme.red).padding(horizontal = 5.dp, vertical = 2.dp))
         }
         if (progress != null && progress > 0) ProgressBar(progress, Modifier.align(Alignment.BottomCenter))
     }
 }
 
+/**
+ * Taalstrook onderaan een poster (build 59, idee uit UHF): doorschijnend donker, witte kleine kapitalen
+ * ("NL", "IT", "EN · NL ondertitels", "Multi").
+ */
+@Composable
+fun LanguageStrip(text: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier.fillMaxWidth().height(tvs(16)).background(Color.Black.copy(alpha = 0.6f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text, color = Color.White, fontSize = tsp(9), fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
+            style = TextStyle(fontFeatureSettings = "smcp, c2sc"), maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+    }
+}
+
+/** Taallabel van een film of serie voor [PosterCard] (titel, categorie, anders TMDB). */
+fun languageLabel(t: DetailTarget): String? = ContentLanguage.of(t)?.label
+fun languageLabel(m: Movie): String? = ContentLanguage.of(m)?.label
+fun languageLabel(s: Series): String? = ContentLanguage.of(s)?.label
+
 /** Netflix-Top 10: groot zwart cijfer met grijze rand, poster schuift er half overheen. */
 @Composable
-fun Top10Card(rank: Int, title: String, poster: String?, watched: Boolean = false, badge: String? = null) {
+fun Top10Card(rank: Int, title: String, poster: String?, watched: Boolean = false, badge: String? = null, language: String? = null) {
     val w = Theme.posterWidth * 1.08f
     val h = w * 1.5f
     val measurer = rememberTextMeasurer()
@@ -92,7 +120,7 @@ fun Top10Card(rank: Int, title: String, poster: String?, watched: Boolean = fals
                 drawStyle = Stroke(width = (h.value / 45f).coerceAtLeast(3f)))
         })
         Box(Modifier.offset(x = -(h * 0.16f))) {
-            PosterCard(title, poster, width = w, watched = watched, badge = badge)
+            PosterCard(title, poster, width = w, watched = watched, badge = badge, language = language)
             Column(Modifier.padding(5.dp).clip(RoundedCornerShape(2.dp)).background(Theme.red).padding(horizontal = 3.dp, vertical = 1.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("TOP", color = Color.White, fontSize = tsp(6), fontWeight = FontWeight.Black, lineHeight = tsp(7))

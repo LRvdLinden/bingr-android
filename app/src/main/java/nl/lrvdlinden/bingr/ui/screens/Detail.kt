@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Theaters
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -126,11 +127,17 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
     var ageInfo by remember(target.id) { mutableStateOf<AgeRating?>(null) }
     /** TV: na het kiezen van een seizoen de focus op de huidige aflevering zetten. */
     var focusEpisode by remember(target.id) { mutableStateOf(false) }
+    /** Andere taalversies van deze titel in de bibliotheek (build 59) en de gekozen versie (menu). */
+    var versions by remember(target.id) { mutableStateOf(emptyList<ContentLanguage.Version>()) }
+    var versionMenu by remember(target.id) { mutableStateOf<ContentLanguage.Version?>(null) }
 
     val pid = Playlists.source?.id
     val lib = Playlists.library
     val details = d
-    val title = details?.title?.takeIf { it.isNotBlank() } ?: target.title
+    val rawTitle = details?.title?.takeIf { it.isNotBlank() } ?: target.title
+    // taallabel uit de titel weg (build 59): "Animal (IT)" → "Animal"; de taal staat in de metadata-regel
+    val title = remember(rawTitle) { ContentLanguage.displayTitle(rawTitle) }
+    val language = ContentLanguage.of(target)
     val imdb: String? = when (target) {
         is DetailTarget.MovieT -> Trakt.imdb(target.movie)
         is DetailTarget.SeriesT -> Trakt.imdb(target.series)
@@ -210,6 +217,9 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
         val key = screensSafe { TMDB.seasonTrailer(tmdb, s) }
         seasonTrailers = seasonTrailers + (s to key)
     }
+    LaunchedEffect(target.id, System.identityHashCode(lib)) {
+        versions = screensSafe { ContentLanguage.versions(target) } ?: emptyList()
+    }
     LaunchedEffect(target.id) {
         if (Store.activeProfile?.effectiveAgeLimit == null) return@LaunchedEffect
         ageInfo = AgeRatings.cached(target) ?: screensSafe { AgeRatings.lookup(target) }
@@ -253,7 +263,19 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
         val genre = cached?.genre ?: details?.genres?.takeIf { it.isNotEmpty() }?.joinToString(",")
         // TMDB-classificatie (Kijkwijzer eerst) gaat vóór de OMDb/Trakt-classificatie (build 53)
         val info = ageInfo ?: AgeRatings.cached(target)
-        if (ParentalControl.allowed(rated, target.group, limit, genre, prof?.strictAgeFilter ?: false, info)) { action(); return }
+        val strict = prof?.strictAgeFilter ?: false
+        if (ParentalControl.allowed(rated, target.group, limit, genre, strict, info)) { action(); return }
+        // kinderprofiel zonder TMDB-classificatie in de cache (build 59): niet eerst wachten op TMDB, maar de
+        // controle tegelijk met het voorbereiden van de speler laten lopen; alleen het eerste beeld wacht erop
+        if (info == null && strict && !ParentalControl.isAdultGroup(target.group)) {
+            AppState.pendingAgeCheck = {
+                val i = AgeRatings.lookup(target)
+                withContext(Dispatchers.Main) { ParentalControl.allowed(rated, target.group, limit, genre, strict, i) }
+            }
+            action()
+            AppState.pendingAgeCheck = null   // geen afspelen (bijv. "Andere bronnen"): niet laten liggen
+            return
+        }
         if (ParentalControl.hasPIN) { afterPIN = action; ageGate = true }
         else flash(L("Not available on this profile (age limit)."))
     }
@@ -263,7 +285,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
         sourcesLoading = true
         scope.launch {
             val year = screensInt(details?.year) ?: target.year
-            sources = screensSafe { Playlists.otherSources(title, year, target.isSeries, target.id) } ?: emptyList()
+            sources = screensSafe { Playlists.otherSources(rawTitle, year, target.isSeries, target.id) } ?: emptyList()
             sourcesLoading = false
             showSources = true
         }
@@ -488,6 +510,31 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         genres?.let { CreditLine(L("Genres"), it) }
                         director?.let { CreditLine(L("Director"), it) }
+                    }
+                }
+                // taal van deze versie (build 59): uit de titel/categorie, anders de originele taal (TMDB)
+                language?.longName?.let { CreditLine(L("Language"), it) }
+            }
+
+            // MARK: andere taal (build 59)
+            if (versions.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(tvs(10))) {
+                    Row(Modifier.padding(horizontal = Theme.edge), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Translate, null, tint = Theme.secondary, modifier = Modifier.size(tvs(16)))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            L("Other language").uppercase(), color = Theme.secondary, fontSize = tsp(14),
+                            fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp
+                        )
+                    }
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = Theme.edge, vertical = if (tv) 8.dp else 0.dp),
+                        horizontalArrangement = Arrangement.spacedBy(tvs(10))
+                    ) {
+                        items(versions, key = { it.id }) { v ->
+                            // film: kiezen tussen afspelen en openen; serie: meteen de pagina van die versie
+                            LanguageVersionChip(v) { if (v.target is DetailTarget.SeriesT) ScreensNav.detail(v.target) else versionMenu = v }
+                        }
                     }
                 }
             }
@@ -778,6 +825,16 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
             )
         }
 
+        // andere taalversie (build 59): afspelen (eigen hervatplek per versie) of de pagina openen
+        versionMenu?.let { v ->
+            val vt = v.target
+            S2ActionDialog(listOfNotNull(v.info?.longName, ContentLanguage.displayTitle(vt.title)).joinToString(" · "), listOf(
+                S2Action(if ((Store.progress[vt.id]?.fraction ?: 0.0) > 0.02) L("Resume") else L("Play"), Icons.Default.PlayArrow, primary = true) {
+                    (vt as? DetailTarget.MovieT)?.let { m -> ageChecked { AppState.play(Playables.movie(m.movie, Trakt.imdb(m.movie) ?: imdb)) } }
+                },
+                S2Action(L("Open"), Icons.Default.Translate) { ScreensNav.detail(vt) },
+            ), onDismiss = { versionMenu = null })
+        }
         if (addToCollection) {
             AddToCollectionDialog(Collections.ref(target), target.title, target.poster) { addToCollection = false }
         }
@@ -1066,5 +1123,28 @@ private fun SourcesPanel(
                 }
             }
         }
+    }
+}
+
+/** Andere taalversie (build 59): taallabel en titel; op TV wit bij focus. */
+@Composable
+private fun LanguageVersionChip(v: ContentLanguage.Version, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val lit = AppState.isTV && focused
+    Row(
+        Modifier.onFocusChanged { focused = it.isFocused }
+            .focusLift(1.05f, onClick = onClick)
+            .clip(RoundedCornerShape(50))
+            .background(if (lit) Color.White else Color.White.copy(alpha = 0.12f))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(50))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        val fg = if (lit) Color.Black else Color.White
+        Icon(Icons.Default.Translate, null, tint = fg, modifier = Modifier.size(tvs(16)))
+        Text(v.info?.label ?: "?", color = fg, fontSize = tsp(14), fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(ContentLanguage.displayTitle(v.target.title), color = fg.copy(alpha = 0.75f), fontSize = tsp(13), maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = tvs(220)))
     }
 }

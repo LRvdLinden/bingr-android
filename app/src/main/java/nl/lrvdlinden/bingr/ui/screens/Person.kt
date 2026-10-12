@@ -173,7 +173,8 @@ fun PersonScreen(ref: PersonRef, onClose: () -> Unit) {
                                 modifier = Modifier
                                     .then(if (i == 0 && bio == null) Modifier.focusRequester(firstFocus) else Modifier)
                                     .focusLift { ScreensNav.detail(t) },
-                                watched = (t as? DetailTarget.MovieT)?.let { Playables.isWatched(it.movie, Trakt.imdb(it.movie)) } ?: false
+                                watched = (t as? DetailTarget.MovieT)?.let { Playables.isWatched(it.movie, Trakt.imdb(it.movie)) } ?: false,
+                                language = languageLabel(t)
                             )
                         }
                     }

@@ -163,7 +163,7 @@ fun SettingsScreen() {
     var showSeries by remember { mutableStateOf(Prefs.bool("ui.showSeries", true)) }
     val profileKey = Store.activeProfileID
     // kijkvoorkeuren horen bij het profiel: opnieuw lezen na wisselen van profiel
-    var autoSubtitles by remember(profileKey) { mutableStateOf(Prefs.bool("autoSubtitles", false)) }
+    var autoSubtitles by remember(profileKey) { mutableStateOf(TrackPreferences.autoSubtitles) }
     var engine by remember { mutableStateOf(Prefs.string("player.engine") ?: "auto") }
     var refreshPolicy by remember { mutableStateOf(RefreshPolicy.current) }
     var zapDelay by remember { mutableIntStateOf(PlayerSettings.zapDelay) }
@@ -404,6 +404,7 @@ fun SettingsScreen() {
         // MARK: OpenSubtitles
         item {
             S2Section("OpenSubtitles", L("While playing, choose OpenSubtitles to pick another subtitle or language. Automatically uses a subtitle track in the stream first; otherwise the best match from OpenSubtitles is loaded (requires sign-in).") +
+                " " + L("Automatic subtitles “When needed”: if the audio isn't in your subtitle language, subtitles in that language are turned on by themselves.") +
                 " " + L("These choices apply to this profile only.")) {
                 if (OpenSubtitles.isLoggedIn) {
                     S2Row(L("Signed in as"), value = OpenSubtitles.username ?: "")
@@ -424,9 +425,14 @@ fun SettingsScreen() {
                     OpenSubtitles.defaultLanguage = v
                     Store.updateActivePreferences { it.copy(subtitleLanguage = v) }
                 }
-                S2Toggle(L("Load subtitles automatically when playing"), autoSubtitles) { v ->
-                    autoSubtitles = v; Prefs.put("autoSubtitles", v)
-                    Store.updateActivePreferences { it.copy(autoSubtitles = v) }
+                // build 59: uit / alleen als nodig (andere audiotaal) / altijd
+                S2Dropdown(L("Automatic subtitles"), listOf(
+                    TrackPreferences.AUTO_OFF to L("Off"),
+                    TrackPreferences.AUTO_WHEN_NEEDED to L("When needed"),
+                    TrackPreferences.AUTO_ALWAYS to L("Always"),
+                ), autoSubtitles) { v ->
+                    autoSubtitles = v; TrackPreferences.autoSubtitles = v
+                    Store.updateActivePreferences { it.copy(autoSubtitles = null, autoSubtitleMode = v) }
                 }
             }
         }
@@ -441,8 +447,10 @@ fun SettingsScreen() {
                 S2Dropdown(L("Subtitle size"), SubtitleSize.entries.map { it to it.title }, SubtitleSize.current) {
                     SubtitleSize.current = it
                 }
+                // build 59: standaard de taal van de app; "Zoals de stream" kiest niets automatisch
                 S2Dropdown(L("Default audio language"),
-                    listOf("" to L("As in the stream")) + TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },
+                    listOf("" to L("App language"), TrackPreferences.STREAM to L("As in the stream")) +
+                        TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },
                     TrackPreferences.audio) { v ->
                     TrackPreferences.audio = v
                     Store.updateActivePreferences { it.copy(audioLanguage = v) }

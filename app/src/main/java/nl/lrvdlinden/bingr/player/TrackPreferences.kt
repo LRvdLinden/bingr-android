@@ -28,6 +28,63 @@ object TrackPreferences {
         get() { version; return Prefs.string(subtitleKey) ?: "" }
         set(v) { Prefs.put(subtitleKey, v); version++ }
 
+    // MARK: build 59: voorkeurstalen en automatische ondertitels
+
+    /** Prefs-sleutel van de ondertitelstand (gesynchroniseerd als `settings.shared.autoSubtitles`). */
+    const val autoSubtitlesKey = "player.autoSubtitles"
+    const val AUTO_OFF = "off"
+    const val AUTO_WHEN_NEEDED = "whenNeeded"
+    const val AUTO_ALWAYS = "always"
+    /** Audio "zoals de stream": niets automatisch kiezen. */
+    const val STREAM = "stream"
+
+    /** Taal van de app als ISO 639-1 ("zh-Hans" → "zh"). */
+    val appLanguage: String get() = Localizer.language.take(2).lowercase()
+
+    /**
+     * Automatische ondertitels: "off", "whenNeeded" (standaard) of "always". Oude waarde (bool "autoSubtitles"
+     * van vóór build 59): aan = "always", uit = de nieuwe standaard.
+     */
+    var autoSubtitles: String
+        get() {
+            version
+            Prefs.string(autoSubtitlesKey)?.let { normalizedMode(it)?.let { m -> return m } }
+            return if (Prefs.bool("autoSubtitles", false)) AUTO_ALWAYS else AUTO_WHEN_NEEDED
+        }
+        set(v) { Prefs.put(autoSubtitlesKey, normalizedMode(v) ?: AUTO_WHEN_NEEDED); version++ }
+
+    /** Stand uit de sync (string, of bool van een oudere app) → "off" / "whenNeeded" / "always"; null = onbekend. */
+    fun normalizedMode(v: String?): String? = when (v?.trim()?.lowercase()) {
+        "off", "none", "never" -> AUTO_OFF
+        "whenneeded", "when_needed", "auto", "needed" -> AUTO_WHEN_NEEDED
+        "always", "on" -> AUTO_ALWAYS
+        "true", "1" -> AUTO_ALWAYS
+        "false", "0" -> AUTO_WHEN_NEEDED
+        else -> null
+    }
+
+    /** Voorkeurs-audiotaal: ingesteld, anders de taal van de app; null = "zoals de stream". */
+    val preferredAudio: String?
+        get() = when (val a = audio) {
+            STREAM -> null
+            "" -> appLanguage
+            else -> a
+        }
+
+    /** Voorkeurs-ondertiteltaal: ingestelde taal, anders de taal van de app. */
+    val preferredSubtitle: String
+        get() = subtitle.takeIf { it.length in 2..3 && it != "off" } ?: appLanguage
+
+    /** ISO 639-1 van een spoor (taalcode van de stream, anders herkend aan de naam); null = onbekend. */
+    fun codeOf(t: MediaTrack): String? {
+        val l = t.lang?.lowercase()?.split('-', '_')?.firstOrNull()?.takeIf { it.isNotEmpty() && it != "und" }
+        if (l != null) {
+            if (l.length == 2) return l
+            languages.firstOrNull { l in it.second }?.let { return it.first }
+        }
+        return languages.map { it.first }.firstOrNull { matches(t, it) }
+    }
+
     /** Talen die je kunt kiezen (ISO 639-1) met hun ISO 639-2-varianten (zoals streams ze vaak noemen). */
     val languages: List<Pair<String, List<String>>> = listOf(
         "nl" to listOf("nld", "dut", "vlaams", "flemish"), "en" to listOf("eng"), "de" to listOf("deu", "ger"),

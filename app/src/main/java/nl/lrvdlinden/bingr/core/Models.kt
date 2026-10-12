@@ -67,7 +67,11 @@ data class ViewerProfile(
     val isKids: Boolean? = null,
     /** Accentkleur van dit profiel (build 54): "red", "blue", "green", "purple", "orange" of "pink"; null = rood */
     val accentColor: String? = null,
+    /** Automatische ondertitels (build 59): "off", "whenNeeded" of "always"; null = niet ingesteld */
+    val autoSubtitleMode: String? = null,
 ) {
+    /** Ondertitelstand van dit profiel; een oude aan/uit-keuze (vóór build 59) telt als "always". */
+    val subtitleMode: String? get() = autoSubtitleMode ?: if (autoSubtitles == true) TrackPreferences.AUTO_ALWAYS else null
     val kids: Boolean get() = isKids ?: false
     /** Leeftijdsgrens die echt geldt (kinderprofiel zonder grens = t/m 12) */
     val effectiveAgeLimit: Int? get() = ageLimit ?: if (kids) 12 else null

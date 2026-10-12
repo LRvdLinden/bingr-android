@@ -706,7 +706,8 @@ private fun SeriesPoster(s: Series) {
     PosterCard(
         s.title, s.poster,
         modifier = Modifier.focusLift(onLongClick = { collect = true }) { openDetail(DetailTarget.SeriesT(s)) },
-        badge = if (count > 0) L("%d WATCHED", count) else null
+        badge = if (count > 0) L("%d WATCHED", count) else null,
+        language = languageLabel(s)
     )
     if (collect) AddToCollectionDialog(Collections.ref(DetailTarget.SeriesT(s)), s.title, s.poster) { collect = false }
 }
@@ -736,7 +737,8 @@ private fun MoviePoster(m: Movie, pid: String?) {
         m.title, m.poster,
         modifier = Modifier.focusLift(onLongClick = { menu = true }) { openDetail(DetailTarget.MovieT(m)) },
         watched = watched,
-        progress = Store.progress[m.id]?.fraction
+        progress = Store.progress[m.id]?.fraction,
+        language = languageLabel(m)
     )
     if (menu) {
         val actions = buildList {
@@ -776,7 +778,8 @@ private fun ForYouRow(filter: Filter, all: List<DetailTarget>) {
             PosterCard(
                 t.title, t.poster,
                 modifier = Modifier.focusLift { openDetail(t) },
-                badge = if (t.isSeries) L("SERIES") else L("MOVIE")
+                badge = if (t.isSeries) L("SERIES") else L("MOVIE"),
+                language = languageLabel(t)
             )
         }
     }
@@ -791,7 +794,8 @@ private fun Top10MoviesRow(title: String, all: List<Movie>) {
                 Top10Card(
                     i + 1, m.title, m.poster,
                     watched = Playables.isWatched(m, Trakt.imdb(m)),
-                    badge = if ((m.addedAt ?: 0L) > recentSince) L("Recently added") else null
+                    badge = if ((m.addedAt ?: 0L) > recentSince) L("Recently added") else null,
+                    language = languageLabel(m)
                 )
             }
         }
@@ -803,7 +807,7 @@ private fun Top10SeriesRow(title: String, all: List<Series>) {
     MediaRow(title, onSeeAll = { openCategory(title, all.map { DetailTarget.SeriesT(it) }) }) {
         itemsIndexed(all.take(10)) { i, s ->
             Box(Modifier.focusLift { openDetail(DetailTarget.SeriesT(s)) }) {
-                Top10Card(i + 1, s.title, s.poster)
+                Top10Card(i + 1, s.title, s.poster, language = languageLabel(s))
             }
         }
     }
@@ -847,7 +851,7 @@ fun HeroBanner(target: DetailTarget, onPlay: () -> Unit, onInfo: () -> Unit, pla
                 Modifier.align(Alignment.BottomStart).padding(start = Theme.edge, bottom = 28.dp).widthIn(max = 540.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(target.title, color = Color.White, fontSize = 38.sp, fontWeight = FontWeight.Black, maxLines = 2,
+                Text(ContentLanguage.displayTitle(target.title), color = Color.White, fontSize = 38.sp, fontWeight = FontWeight.Black, maxLines = 2,
                     overflow = TextOverflow.Ellipsis, lineHeight = 42.sp)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     info?.imdbRating?.takeIf { it != "N/A" }?.let { ImdbBadge(it) }

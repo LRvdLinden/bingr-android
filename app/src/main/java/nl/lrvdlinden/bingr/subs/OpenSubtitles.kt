@@ -22,7 +22,7 @@ object OpenSubtitles {
     private data class Session(val token: String, val baseURL: String, val username: String)
 
     data class Subtitle(val id: Int, val language: String, val release: String, val downloads: Int,
-                        val hearingImpaired: Boolean, val fromTrusted: Boolean)
+                        val hearingImpaired: Boolean, val fromTrusted: Boolean, val hashMatch: Boolean = false)
 
     var username by mutableStateOf<String?>(null); private set
     var remainingDownloads by mutableStateOf<Int?>(null); private set
@@ -148,16 +148,27 @@ object OpenSubtitles {
     /** Terug naar ISO 639-1 ("pt-PT" → "pt"). */
     fun baseCode(c: String): String = c.lowercase().take(2)
 
-    /** Zoeken op IMDb-ID, of (als die er niet is) op titel. [languages] leeg = alle talen. */
+    /**
+     * Zoeken op IMDb-ID, anders TMDB-ID (build 59), anders op titel. [languages] leeg = alle talen.
+     * [movieHash] (OpenSubtitles-hash van het bestand, build 59): treffers die precies bij dit bestand passen eerst.
+     */
     suspend fun search(
         imdbID: String?, title: String? = null, year: Int? = null, season: Int? = null, episode: Int? = null,
-        languages: List<String>,
+        languages: List<String>, tmdbID: Int? = null, movieHash: String? = null,
     ): List<Subtitle> {
         val q = HashMap<String, String>()
         val langs = languages.flatMap { apiCodes(it) }.toSet().sorted()
         if (langs.isNotEmpty()) q["languages"] = langs.joinToString(",")
+        movieHash?.let { q["moviehash"] = it }
         val numeric = (imdbID ?: "").replace("tt", "").toIntOrNull()
-        if (numeric != null && numeric > 0) {
+        if ((numeric == null || numeric <= 0) && tmdbID != null && tmdbID > 0) {
+            if (season != null && episode != null) {
+                q["parent_tmdb_id"] = tmdbID.toString()
+                q["season_number"] = season.toString(); q["episode_number"] = episode.toString()
+            } else {
+                q["tmdb_id"] = tmdbID.toString()
+            }
+        } else if (numeric != null && numeric > 0) {
             if (season != null && episode != null) {
                 q["parent_imdb_id"] = numeric.toString()
                 q["season_number"] = season.toString(); q["episode_number"] = episode.toString()
@@ -185,12 +196,13 @@ object OpenSubtitles {
                 release = a.jS("release") ?: f.jS("file_name") ?: "Subtitle",
                 downloads = a.jI("download_count") ?: 0,
                 hearingImpaired = a.jB("hearing_impaired") ?: false,
-                fromTrusted = a.jB("from_trusted") ?: false)
+                fromTrusted = a.jB("from_trusted") ?: false,
+                hashMatch = a.jB("moviehash_match") ?: false)
         }
-        // eerst gevraagde taal, dan betrouwbaar, dan populariteit
+        // eerst gevraagde taal, dan precies dit bestand (hash), dan betrouwbaar, dan populariteit
         val order = languages.map { it.lowercase() }
         fun rank(s: Subtitle) = order.indexOf(baseCode(s.language)).let { if (it < 0) 99 else it }
-        return subs.sortedWith(compareBy<Subtitle>({ rank(it) }, { if (it.fromTrusted) 0 else 1 }, { -it.downloads }))
+        return subs.sortedWith(compareBy<Subtitle>({ rank(it) }, { if (it.hashMatch) 0 else 1 }, { if (it.fromTrusted) 0 else 1 }, { -it.downloads }))
     }
 
     /** Zoeken in de standaardtaal. */
@@ -213,6 +225,33 @@ object OpenSubtitles {
             file.writeText(SRT.decode(data), Charsets.UTF_8)
             file
         }
+    }
+
+    /**
+     * OpenSubtitles-hash (bestandsgrootte + som van de eerste en laatste 64 KB als 64-bits woorden), build 59.
+     * Alleen voor lokale bestanden (downloads): bij IPTV-servers zou een extra verbinding naast de stream de
+     * stream kunnen laten afbreken (veel abonnementen staan maar één verbinding toe).
+     */
+    suspend fun movieHash(url: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val u = android.net.Uri.parse(url)
+            if (u.scheme != "file") return@runCatching null
+            val f = File(u.path ?: return@runCatching null)
+            val size = f.length()
+            val chunk = 65536L
+            if (size < chunk * 2) return@runCatching null
+            java.io.RandomAccessFile(f, "r").use { raf ->
+                fun sum(offset: Long): Long {
+                    val buf = ByteArray(chunk.toInt())
+                    raf.seek(offset); raf.readFully(buf)
+                    val bb = java.nio.ByteBuffer.wrap(buf).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                    var s = 0L
+                    while (bb.remaining() >= 8) s += bb.long
+                    return s
+                }
+                String.format(java.util.Locale.ROOT, "%016x", size + sum(0) + sum(size - chunk))
+            }
+        }.getOrNull()
     }
 
     /** Talen voor de keuzelijst. */
