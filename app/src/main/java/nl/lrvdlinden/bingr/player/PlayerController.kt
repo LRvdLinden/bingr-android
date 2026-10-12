@@ -329,7 +329,7 @@ class PlayerController(item: PlayableItem) {
         recordHistory()
         timer?.cancel(); timer = null
         saveProgress()
-        if (!isPreview) scrobble(Trakt.Scrobble.STOP, position)
+        if (!isPreview) { scrobble(Trakt.Scrobble.STOP, position); StateSync.flush() }
         engine.release()
         isPlaying = false
         if (current === this) current = null
@@ -340,7 +340,7 @@ class PlayerController(item: PlayableItem) {
         timer?.cancel(); timer = null
         position = 1.0
         saveProgress()
-        if (!isPreview) scrobble(Trakt.Scrobble.STOP, 1.0)
+        if (!isPreview) { scrobble(Trakt.Scrobble.STOP, 1.0); StateSync.flush() }
         onFinished?.invoke()
     }
 

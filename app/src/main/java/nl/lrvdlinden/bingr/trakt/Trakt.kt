@@ -248,6 +248,32 @@ object Trakt {
         tokens?.let { t ->
             AppScope.launch { runCatching { oauthPost("/oauth/revoke", oauthBody(mapOf("token" to t.accessToken))) } }
         }
+        clearLocal()
+    }
+
+    /** Huidige tokens (voor de account-sync, build 44). */
+    internal val currentTokens: Tokens? get() = tokens
+
+    /**
+     * Tokens uit het Bingr-account (build 44): opslaan en Trakt meteen als gekoppeld tonen; null = elders
+     * ontkoppeld (lokaal uitloggen zonder revoke, dat deed het andere apparaat al).
+     */
+    fun applySyncedTokens(t: Tokens?) {
+        val cur = tokens
+        if (cur == t) return
+        if (t == null) { clearLocal(); return }
+        saveTokens(t)
+        if (!profileAllowed) return
+        val fresh = !isLoggedIn || cur?.username != t.username
+        isLoggedIn = true; username = t.username
+        if (fresh) {
+            loadCache()
+            AppScope.launch { runCatching { refresh(force = true) }; runCatching { loadProfile() } }
+        }
+    }
+
+    /** Alleen lokaal uitloggen (geen revoke): bij een ander account op dit apparaat of als het account Trakt ontkoppelde. */
+    fun clearLocal() {
         saveTokens(null)
         isLoggedIn = false; username = null; displayName = null; avatar = null
         watchedMovies = emptySet(); watchedEpisodes = emptyMap(); watchlist = emptySet(); playback = emptyList()
@@ -278,6 +304,12 @@ object Trakt {
     private suspend fun validToken(): String = tokenLock.withLock {
         var t = tokens ?: throw NotLoggedIn()
         if (t.expiresAt - System.currentTimeMillis() < 24 * 3_600_000L) {
+            // refresh-tokens zijn eenmalig (build 44): eerst kijken of een ander apparaat al ververst heeft
+            if (StateSync.adoptNewerServerConnections()) {
+                t = tokens ?: run { withContext(Dispatchers.Main) { isLoggedIn = false }; throw NotLoggedIn() }
+            }
+        }
+        if (t.expiresAt - System.currentTimeMillis() < 24 * 3_600_000L) {
             var refreshed = false
             var unauthorized = 0
             for (redirect in redirectURIs) {
@@ -288,6 +320,8 @@ object Trakt {
                     t = n.copy(username = t.username)
                     saveTokens(t)
                     refreshed = true
+                    // meteen naar het account, zodat andere apparaten het nieuwe paar gebruiken
+                    StateSync.traktRefreshed()
                     break
                 }
                 if (r.code == 401 || r.code == 400) unauthorized++

@@ -103,6 +103,26 @@ object OpenSubtitles {
         remainingDownloads = u.jI("remaining_downloads") ?: u.jI("allowed_downloads")
     }
 
+    /** Huidige sessie voor de account-sync (build 44): token, gebruikersnaam en baseURL. */
+    internal val currentSession: Triple<String, String, String>?
+        get() = session?.let { Triple(it.token, it.username, it.baseURL) }
+
+    /** Sessie uit het Bingr-account (build 44); null = elders uitgelogd (lokaal wissen, geen /logout). */
+    fun applySyncedSession(token: String?, username: String?, baseURL: String?) {
+        if (token.isNullOrEmpty()) { clearLocal(); return }
+        val n = Session(token, baseURL?.takeIf { it.isNotBlank() } ?: DEFAULT_HOST, username ?: session?.username ?: "")
+        if (n == session) return
+        session = n
+        remainingDownloads = null
+    }
+
+    /** Alleen lokaal uitloggen (ander account op dit apparaat, of elders uitgelogd). */
+    fun clearLocal() {
+        if (session == null) return
+        session = null
+        remainingDownloads = null
+    }
+
     suspend fun logout() {
         runCatching { request("/logout", "DELETE") }
         session = null

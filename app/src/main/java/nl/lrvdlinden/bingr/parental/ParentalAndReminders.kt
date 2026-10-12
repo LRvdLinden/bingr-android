@@ -84,6 +84,16 @@ object ParentalControl {
     fun setPIN(pin: String?, profile: ViewerProfile) = setPIN(pin, profile.id)
     fun setPIN(pin: String?, profileID: String) { Store.setSecret(pinKey(profileID), pin); pinVersion++ }
 
+    /** Pincode van dit profiel zoals hij lokaal bewaard is (voor de account-sync, build 44). */
+    fun storedPIN(profileID: String): String? = Store.secret(pinKey(profileID))
+
+    /** Pincode uit het Bingr-account (build 44); null = geen pincode. */
+    fun applySyncedPIN(pin: String?, profileID: String) {
+        if (Store.secret(pinKey(profileID)) == pin) return
+        StateSync.applyingChanges { Store.setSecret(pinKey(profileID), pin) }
+        pinVersion++
+    }
+
     /** Juiste pincode voor dit profiel? (Bij het hoofdaccount ook meteen 30 min ontgrendelen.) */
     fun verify(pin: String, profile: ViewerProfile): Boolean = verify(pin, profile.id)
     fun verify(pin: String, profileID: String): Boolean {
@@ -231,6 +241,28 @@ object Reminders {
         }
         return PendingIntent.getBroadcast(ctx, r.id.hashCode(), i,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    /**
+     * Herinneringen uit het Bingr-account (build 44): lijst vervangen, alarmen van verdwenen herinneringen
+     * annuleren en nieuwe (toekomstige) plannen.
+     */
+    fun applySynced(list: List<ProgramReminder>) {
+        val ctx = AppState.appContext
+        val old = Store.reminders
+        val now = System.currentTimeMillis()
+        val keep = list.filter { it.start > now - 3_600_000 }
+        Store.applySyncedReminders(keep)
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        old.filter { o -> keep.none { it.id == o.id } }.forEach { runCatching { am.cancel(pending(ctx, it)) } }
+        keep.filter { it.start > now && it !in old }.forEach { runCatching { schedule(ctx, it) } }
+    }
+
+    /** Alle alarmen annuleren (ander account op dit apparaat). */
+    fun cancelAll() {
+        val ctx = AppState.appContext
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        Store.reminders.forEach { runCatching { am.cancel(pending(ctx, it)) } }
     }
 
     private fun schedule(ctx: Context, r: ProgramReminder) {

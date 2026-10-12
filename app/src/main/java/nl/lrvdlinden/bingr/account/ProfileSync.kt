@@ -169,6 +169,9 @@ object ProfileSync {
     /** Synchroniseren en wachten tot het klaar is (na inloggen, vóór "Wie kijkt er?"). */
     suspend fun syncNow() { launchSync()?.join() }
 
+    /** Wachten op een lopende synchronisatie (start er geen nieuwe). */
+    suspend fun awaitRunning() { syncJob?.takeIf { it.isActive }?.join() }
+
     private suspend fun quietly(block: suspend () -> Unit) {
         try { block() } catch (e: CancellationException) { throw e } catch (_: Exception) { }
     }

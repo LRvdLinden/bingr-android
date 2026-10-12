@@ -91,6 +91,7 @@ object Account {
         isSignedIn = false
         ProfileSync.reset()
         SourceSync.reset()
+        StateSync.reset()
     }
 
     /** user.id uit de sessie (of het `sub` van het access_token). */
@@ -429,7 +430,7 @@ object Account {
                 // vernieuwen mislukt met 400/401 tijdens de aanroep → sessie is al gewist
                 if (!isSignedIn) AppState.signedOut()
                 // account_data opnieuw lezen (o.a. nieuwe profielfoto's van andere apparaten)
-                else { ProfileSync.refreshFromServer(); SourceSync.refreshFromServer() }
+                else { ProfileSync.refreshFromServer(); SourceSync.refreshFromServer(); StateSync.refreshFromServer() }
             } finally {
                 checking = false
             }
@@ -450,7 +451,11 @@ object Account {
                                 while (true) { delay(5 * 60_000L); deviceCheck() }
                             }
                         }
-                        androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> { heartbeatJob?.cancel(); heartbeatJob = null }
+                        androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> {
+                            heartbeatJob?.cancel(); heartbeatJob = null
+                            // wachtende wijzigingen (instellingen, voortgang, lijsten) meteen naar het account
+                            StateSync.flush()
+                        }
                         else -> {}
                     }
                 }
@@ -659,6 +664,8 @@ object Account {
             // servers en afspeellijsten van het account (build 43)
             SourceSync.rememberOwner()
             SourceSync.launchSync()
+            // alle overige gegevens: Trakt, OpenSubtitles, instellingen, per profiel, herinneringen (build 44)
+            StateSync.launchSync()
         }
     }
 
@@ -694,6 +701,48 @@ object Account {
             mainSourceID = j.jS("mainSourceID")?.takeIf { it.isNotBlank() },
             updatedAt = j.jS("updatedAt")?.takeIf { it.isNotBlank() },
         )
+    }
+
+    // MARK: alle overige gegevens via het account (build 44)
+
+    /** Eén onderdeel van get_state: de (ontsleutelde) gegevens en wanneer de server ze kreeg. */
+    data class StateSection(val data: JsonElement?, val updatedAt: String?)
+
+    /**
+     * get_state: de gevraagde onderdelen (leeg/null = alles). Ontbrekende onderdelen staan niet in het antwoord.
+     * null = mislukt (netwerk, geen sessie).
+     */
+    suspend fun getState(sections: List<String>? = null): Map<String, StateSection>? {
+        val body = buildJsonObject {
+            put("action", "get_state")
+            if (!sections.isNullOrEmpty()) put("sections", JsonArray(sections.map { JsonPrimitive(it) }))
+        }
+        val r = authedDeviceAuth(body) ?: return null
+        if (!r.ok) return null
+        val j = r.json.jObj ?: return null
+        val obj = j["sections"] as? JsonObject ?: return if (j["sections"] == null || j["sections"] is JsonNull) emptyMap() else null
+        return obj.mapNotNull { (name, v) ->
+            val o = v as? JsonObject ?: return@mapNotNull null
+            name to StateSection(o["data"]?.takeIf { it !is JsonNull }, o.jS("updatedAt")?.takeIf { it.isNotBlank() })
+        }.toMap()
+    }
+
+    /** put_state: één onderdeel opslaan (max. 1 MB). Geeft `updatedAt` van de server terug, of null als het mislukt. */
+    suspend fun putState(section: String, data: JsonElement): String? {
+        val body = JsonObject(mapOf(
+            "action" to JsonPrimitive("put_state"),
+            "section" to JsonPrimitive(section),
+            "data" to data,
+        ))
+        val r = authedDeviceAuth(body) ?: return null
+        if (!r.ok || r.json.jB("ok") == false) return null
+        return r.json.jS("updatedAt")?.takeIf { it.isNotBlank() } ?: ""
+    }
+
+    /** delete_state: onderdeel verwijderen (bijv. `profile.<id>` na het verwijderen van een profiel). */
+    suspend fun deleteState(section: String): Boolean {
+        val r = authedDeviceAuth(buildJsonObject { put("action", "delete_state"); put("section", section) }) ?: return false
+        return r.ok && r.json.jB("ok") != false
     }
 
     /** put_sources: altijd de hele lijst (met tombstones). true = opgeslagen. */

@@ -221,7 +221,7 @@ object Store {
     }
 
     /** Kijkvoorkeuren van dit profiel actief maken (automatische ondertitels, talen). */
-    private fun applyPreferences(p: ViewerProfile) {
+    private fun applyPreferences(p: ViewerProfile): Unit = StateSync.withoutSettingsChange {
         // nieuw/ander profiel zonder eigen keuze → standaardwaarden, niet die van een ander profiel
         val fresh = !isMain(p)
         val auto = p.autoSubtitles
@@ -233,13 +233,30 @@ object Store {
         val os = p.subtitleLanguage
         if (os != null) OpenSubtitles.defaultLanguage = os
         else if (fresh) OpenSubtitles.defaultLanguage = Localizer.language.take(2)
+        Unit
     }
 
     /** Kijkvoorkeur van het actieve profiel opslaan, bijv. `Store.updateActivePreferences { it.copy(autoSubtitles = true) }`. */
     fun updateActivePreferences(change: (ViewerProfile) -> ViewerProfile) {
         val p = activeProfile ?: return
         val n = change(p)
-        if (n != p) upsertProfile(n)
+        if (n != p) {
+            upsertProfile(n)
+            // kijkvoorkeuren gaan per profiel naar het account (build 44)
+            if (n.autoSubtitles != p.autoSubtitles || n.subtitleLanguage != p.subtitleLanguage ||
+                n.audioLanguage != p.audioLanguage || n.streamSubtitleLanguage != p.streamSubtitleLanguage) StateSync.prefsChanged(n.id)
+        }
+    }
+
+    /** Kijkvoorkeuren uit het account (build 44): profiel bijwerken en, als het actief is, meteen toepassen. */
+    fun applySyncedPrefs(id: String, autoSubtitles: Boolean?, subtitleLanguage: String?, audioLanguage: String?, streamSubtitleLanguage: String?) {
+        val p = profiles.firstOrNull { it.id == id } ?: return
+        val n = p.copy(autoSubtitles = autoSubtitles, subtitleLanguage = subtitleLanguage,
+            audioLanguage = audioLanguage, streamSubtitleLanguage = streamSubtitleLanguage)
+        if (n == p) return
+        profiles = profiles.map { if (it.id == id) n else it }
+        write("profiles", profiles)
+        if (id == activeProfileID) applyPreferences(n)
     }
 
     fun upsertProfile(p: ViewerProfile) {
@@ -328,6 +345,8 @@ object Store {
         if (isMain(p)) return
         // tombstone (build 41): andere apparaten verwijderen het ook; ook de foto gaat uit Storage
         ProfileSync.profileDeleted(p.id)
+        // en de overige gegevens van dit profiel uit het account (build 44): delete_state profile.<id>
+        StateSync.profileDeleted(p.id)
         profiles = profiles.filterNot { it.id == p.id }
         write("profiles", profiles)
         ProfileSync.profilesChanged()
@@ -362,6 +381,8 @@ object Store {
         secrets.edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
         // wachtwoord of token van een server gewijzigd → ook naar het account (build 43)
         if (old != value && key.startsWith("playlist.")) SourceSync.secretChanged(key)
+        // Trakt, OpenSubtitles en pincodes → ook naar het account (build 44)
+        if (old != value) StateSync.secretChanged(key)
     }
 
     /** Alle geheimen met dit voorvoegsel (bijv. "playlist.<id>."), sleutel → waarde. */
@@ -499,6 +520,7 @@ object Store {
         val k = key(playlist, item)
         favorites = if (k in favorites) favorites - k else favorites + k
         pwrite("favorites", favorites)
+        StateSync.profileDataChanged(activeProfileID)
     }
     fun isFavorite(playlist: String, item: String) = key(playlist, item) in favorites
 
@@ -506,6 +528,7 @@ object Store {
         val k = key(playlist, item)
         myList = if (k in myList) myList - k else myList + k
         pwrite("mylist", myList)
+        StateSync.profileDataChanged(activeProfileID)
     }
     fun inMyList(playlist: String, item: String) = key(playlist, item) in myList
     fun setMyList(playlist: String, item: String, on: Boolean) {
@@ -520,12 +543,21 @@ object Store {
         if (p.size > 300) p = p.entries.sortedByDescending { it.value.updated }.take(250).associate { it.key to it.value }
         progress = p
         pwrite("progress", progress)
+        // tijdens het afspelen hooguit eens per 30 seconden naar het account
+        StateSync.progressChanged(activeProfileID)
     }
-    fun clearProgress(itemKey: String) { progress = progress - itemKey; pwrite("progress", progress) }
+    fun clearProgress(itemKey: String) {
+        if (itemKey !in progress) return
+        progress = progress - itemKey; pwrite("progress", progress)
+        StateSync.profileDataChanged(activeProfileID)
+    }
 
     fun setLocalWatched(itemKey: String, watched: Boolean) {
-        localWatched = if (watched) localWatched + itemKey else localWatched - itemKey
+        val n = if (watched) localWatched + itemKey else localWatched - itemKey
+        if (n == localWatched) return
+        localWatched = n
         pwrite("watched", localWatched)
+        StateSync.profileDataChanged(activeProfileID)
     }
 
     /**
@@ -538,6 +570,7 @@ object Store {
         val k = episodeKey(e.seriesID, e.season, e.number)
         localWatched = if (watched) localWatched + e.id + k else localWatched - e.id - k
         pwrite("watched", localWatched)
+        StateSync.profileDataChanged(activeProfileID)
     }
 
     /** Is deze aflevering lokaal (zonder Trakt) als bekeken gemarkeerd? */
@@ -554,6 +587,7 @@ object Store {
         val k = key(playlist, channelID)
         recentChannels = (listOf(k) + recentChannels.filterNot { it == k }).take(20)
         pwrite("recent", recentChannels)
+        StateSync.profileDataChanged(activeProfileID)
     }
 
     // MARK: aanpassingen (hernoemen / verbergen / volgorde / samenvoegen) — gedeeld
@@ -571,30 +605,57 @@ object Store {
 
     fun updateParental(change: (ParentalSettings) -> ParentalSettings) {
         val old = parental.lockedGroups
+        val before = parental
         parental = change(parental); write("parental", parental)
+        // kinderslot aan/uit en 18+ automatisch vergrendelen horen bij de instellingen van het account (build 44)
+        if (before.enabled != parental.enabled || before.autoLockAdult != parental.autoLockAdult) StateSync.settingsChanged()
         // vergrendelde groepen horen bij een server (android-blok, build 43)
         val diff = (old - parental.lockedGroups) + (parental.lockedGroups - old)
         val ids = diff.map { it.substringBefore('|') }.toSet().filter { id -> playlists.any { it.id == id } }
         if (ids.isNotEmpty()) { ids.forEach { SourceSync.sourceEdited(it) }; SourceSync.sourcesChanged() }
     }
 
+    /** Kinderslot-instellingen die niet per server zijn, uit het account (build 44); roept geen sync-hooks aan. */
+    fun applySyncedParental(enabled: Boolean, autoLockAdult: Boolean) {
+        val n = parental.copy(enabled = enabled, autoLockAdult = autoLockAdult)
+        if (n != parental) { parental = n; write("parental", parental) }
+    }
+
     // MARK: herinneringen
 
     fun addReminder(r: ProgramReminder) {
         reminders = reminders.filterNot { it.id == r.id } + r; write("reminders", reminders)
+        StateSync.remindersChanged()
     }
-    fun removeReminder(id: String) { reminders = reminders.filterNot { it.id == id }; write("reminders", reminders) }
+    fun removeReminder(id: String) {
+        if (reminders.none { it.id == id }) return
+        reminders = reminders.filterNot { it.id == id }; write("reminders", reminders)
+        StateSync.remindersChanged()
+    }
+
+    /** Herinneringen uit het account (build 44); roept geen sync-hooks aan. */
+    fun applySyncedReminders(list: List<ProgramReminder>) {
+        if (list == reminders) return
+        reminders = list; write("reminders", reminders)
+    }
     fun hasReminder(id: String) = reminders.any { it.id == id }
 
     // MARK: kijkgeschiedenis (per profiel)
 
     fun addHistory(e: HistoryEntry) {
         val n = if (e.profileID == null && activeProfileID != null) e.copy(profileID = activeProfileID) else e
-        history = (listOf(n) + history.filterNot { it.itemID == n.itemID && it.playlistID == n.playlistID }).take(200)
+        history = (listOf(n) + history.filterNot { it.itemID == n.itemID && it.playlistID == n.playlistID }).take(500)
         pwrite("history", history)
+        StateSync.profileDataChanged(activeProfileID)
     }
-    fun removeHistory(e: HistoryEntry) { history = history.filterNot { it.id == e.id }; pwrite("history", history) }
-    fun clearHistory(playlist: String?) { history = history.filterNot { it.playlistID == playlist }; pwrite("history", history) }
+    fun removeHistory(e: HistoryEntry) {
+        history = history.filterNot { it.id == e.id }; pwrite("history", history)
+        StateSync.profileDataChanged(activeProfileID)
+    }
+    fun clearHistory(playlist: String?) {
+        history = history.filterNot { it.playlistID == playlist }; pwrite("history", history)
+        StateSync.profileDataChanged(activeProfileID)
+    }
     /** Kijkgeschiedenis van het actieve profiel op deze server. */
     fun history(playlist: String?) = history.filter { it.playlistID == playlist && belongsToActive(it.profileID) }
 
@@ -621,6 +682,19 @@ object Store {
         val mainSourceID: String? = null,
         val mainProfileID: String? = null,
     )
+
+    /** Gegevens van een profiel (actief: uit het geheugen, anders uit de bestanden). */
+    fun profileData(id: String): ProfileData = readProfileData(id)
+
+    /** Gegevens van een profiel uit het account (build 44) vervangen; roept geen sync-hooks aan. */
+    fun applySyncedProfileData(id: String, data: ProfileData) {
+        if (data == readProfileData(id)) return
+        val d = profileDir(id)
+        writeIn(d, "favorites", data.favorites); writeIn(d, "mylist", data.myList)
+        writeIn(d, "progress", data.progress); writeIn(d, "watched", data.watched)
+        writeIn(d, "recent", data.recent); writeIn(d, "history", data.history)
+        if (id == activeProfileID) loadProfileData()
+    }
 
     private fun readProfileData(id: String): ProfileData {
         if (id == activeProfileID) return ProfileData(favorites, myList, progress, localWatched, recentChannels, history)

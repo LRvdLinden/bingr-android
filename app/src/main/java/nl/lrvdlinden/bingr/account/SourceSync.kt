@@ -174,12 +174,19 @@ object SourceSync {
         syncJob?.cancel(); uploadJob?.cancel(); refreshJob?.cancel()
         Store.playlists.forEach { Playlists.clearCache(it) }
         Playlists.unload()
-        Store.wipeAccountData()
+        StateSync.applyingChanges {
+            Reminders.cancelAll()
+            Store.wipeAccountData()
+            // Trakt en OpenSubtitles horen sinds build 44 bij het account: alleen lokaal wissen (geen revoke,
+            // andere apparaten van het vorige account blijven gekoppeld)
+            Trakt.clearLocal()
+            OpenSubtitles.clearLocal()
+        }
         ProfileSync.reset()
         reset()
+        // instellingen, pincodes en de sync-stand van het vorige account (build 44)
+        StateSync.wipeLocal()
         AppState.lastPlaylistID = null
-        if (Trakt.isLoggedIn) Trakt.logout()
-        if (OpenSubtitles.isLoggedIn) AppScope.launch { quietly { OpenSubtitles.logout() } }
     }
 
     // MARK: synchroniseren

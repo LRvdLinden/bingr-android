@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/LRvdLinden/bingr-android?label=APK)](https://github.com/LRvdLinden/bingr-android/releases/latest)
 
 Native IPTV- en mediaspeler voor **Android-telefoon, tablet en Android TV / Google TV / Fire TV** met de look & feel van Netflix.
-Kotlin · Jetpack Compose · Android 7.0+ · Media3 (ExoPlayer) én VLC · 11 talen · versie 1.0.0 (build 43).
+Kotlin · Jetpack Compose · Android 7.0+ · Media3 (ExoPlayer) én VLC · 11 talen · versie 1.0.0 (build 44).
 
 De versie voor iPhone, iPad, Apple TV en Mac staat in [iptv-ios-appletv](https://github.com/LRvdLinden/iptv-ios-appletv), de website in [bingr-website](https://github.com/LRvdLinden/bingr-website) ([bingr.online](https://bingr.online)).
 
@@ -53,11 +53,12 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
 - Inloggen met e-mail en wachtwoord, **wachtwoord vergeten** via bingr.online/reset
 - **Android TV / Fire TV**: inloggen met je telefoon via **QR-code** of een code op **bingr.online/tv**, of met e-mail
 - **Tv koppelen** vanaf je telefoon of tablet (*Mijn Bingr → Account → Link a TV*), **uitloggen** en **account verwijderen**
-- **Profielen in je account**: bij de eerste login worden je bestaande profielen aan je account gekoppeld en gedeeld met iPhone, iPad, Apple TV en Mac (naam, avatar, kinderprofiel; zonder pincodes). Eigen profielfoto's worden via je Bingr-account gedeeld met al je apparaten (ook iPhone/iPad/Apple TV/Mac)
+- **Profielen in je account**: bij de eerste login worden je bestaande profielen aan je account gekoppeld en gedeeld met iPhone, iPad, Apple TV en Mac (naam, avatar, kinderprofiel). Eigen profielfoto's worden via je Bingr-account gedeeld met al je apparaten (ook iPhone/iPad/Apple TV/Mac)
 - **Profielen (toevoegen, wijzigen, verwijderen) synchroniseren met al je apparaten**
 - **Servers en afspeellijsten worden versleuteld bij je account bewaard**, dus na updaten of opnieuw installeren staat alles weer klaar
 - **Trakt en OpenSubtitles: gewoon inloggen**, de sleutels komen veilig van de Bingr-server
-- De sessie staat alleen op dit apparaat; voortgang, lijsten en pincodes blijven lokaal. Logt een ander account in, dan worden de servers, profielen en gegevens van het vorige account eerst van het apparaat gewist
+- **Alles (Trakt, OpenSubtitles, instellingen, Mijn lijst, voortgang, bekeken, pincodes, herinneringen) gaat versleuteld mee met je account**: na opnieuw installeren of op een nieuw apparaat staat alles na het inloggen weer klaar
+- De sessie staat alleen op dit apparaat. Logt een ander account in, dan worden de servers, profielen en gegevens van het vorige account eerst van het apparaat gewist
 - **Max. 10 apparaten** per account: zit je aan de limiet, dan verwijder je bij het inloggen eerst een apparaat (*Too many devices*). Beheer al je apparaten via *Mijn Bingr → Account → Devices* (ook op tv); een verwijderd apparaat wordt **automatisch uitgelogd**
 
 **Bronnen**

@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -65,7 +66,11 @@ object AppState {
             // even wachten op de profielen en servers van het account (max. 8 seconden; fouten zijn stil)
             withTimeoutOrNull(8_000) {
                 ProfileSync.syncNow()
-                SourceSync.syncNow()
+                // servers en alle overige gegevens (Trakt, OpenSubtitles, instellingen, per profiel; build 44) tegelijk
+                coroutineScope {
+                    launch { SourceSync.syncNow() }
+                    launch { StateSync.syncNow() }
+                }
             }
             if (stage == Stage.AUTH && Account.isSignedIn) stage = Stage.PICKER
         }
