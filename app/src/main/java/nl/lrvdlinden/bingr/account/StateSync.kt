@@ -818,12 +818,13 @@ object StateSync {
     }
 
     /**
-     * Build 54: collecties per profiel. Section `collections` =
-     * `{byProfile: {"<profielID>": {items:[…], updatedAt}}, migrated: true, updatedAt}`; elk item heeft het
-     * formaat van build 51. Onbekende velden (ook een oude `items`-lijst van vóór build 54) blijven bewaard.
+     * Build 54 ("Collecties per profiel" in docs/ACCOUNT.md van de iOS-repo). Section `collections` =
+     * `{version: 2, profiles: {"<profielID>": {items:[…], updatedAt}}, items:[oud], migratedAt, updatedAt}`; elk
+     * item heeft het formaat van build 51. Onbekende velden en de oude `items`-lijst (build 51–53) blijven onaangeroerd.
      *
-     * - Migratie: is `migrated` nog niet true en staat er een oude `items`-lijst (voor het hele account), dan krijgt
-     *   elk bestaand profiel die collecties (zelfde id's; wat het profiel al had blijft staan). Daarna `migrated: true`.
+     * - Migratie: is `version` < 2, dan krijgt elk bestaand profiel de oude collecties uit `items` (zelfde id, order en
+     *   updatedAt; wat het profiel al had blijft staan). Daarna `version: 2` en `migratedAt`.
+     *   (Een eerste versie van build 54 schreef `byProfile` en `migrated: true`; dat wordt ook gelezen en omgezet.)
      * - Per profiel en per collectie wint de nieuwste `updatedAt` (ook tombstones); tombstones ouder dan 90 dagen vervallen.
      * - Profielen die hier verwijderd zijn, gaan ook van de server. Profielen die alleen op de server staan, blijven daar.
      * Lokaal toepassen en uploaden als het resultaat afwijkt van de server. true = gelukt.
@@ -836,12 +837,17 @@ object StateSync {
             .mapNotNull { it as? JsonObject }.filter { !it.jS("id").isNullOrBlank() }
 
         // server: per profiel (kleine letters → oorspronkelijke sleutel, object, collecties)
-        val serverBy = (data?.get("byProfile") as? JsonObject) ?: JsonObject(emptyMap())
+        val earlyBy = (data?.get("byProfile") as? JsonObject) ?: JsonObject(emptyMap())
+        val serverBy = (data?.get("profiles") as? JsonObject) ?: JsonObject(emptyMap())
+        // vroege build-54-vorm (`byProfile`): per profiel de collecties die nog niet in `profiles` staan erbij
+        val earlyLists = earlyBy.mapNotNull { (k, v) ->
+            (v as? JsonObject)?.let { k.lowercase() to parseList(it["items"]).mapNotNull { o -> collectionFrom(o) } }
+        }.toMap()
         val serverKeys = serverBy.keys.associateBy { it.lowercase() }
         val serverEntries = serverBy.mapNotNull { (k, v) -> (v as? JsonObject)?.let { k.lowercase() to it } }.toMap()
         val serverLists = serverEntries.mapValues { (_, e) -> parseList(e["items"]).mapNotNull { collectionFrom(it) } }
         serverCollectionItems = serverEntries.mapValues { (_, e) -> parseList(e["items"]).associateBy { it.jS("id")!!.lowercase() } }
-        val migrated = data?.jB("migrated") == true
+        val migrated = (data?.jI("version") ?: 0) >= 2 || data?.jB("migrated") == true
         val legacy = parseList(data?.get("items")).mapNotNull { collectionFrom(it) }
 
         val (local, profiles) = withContext(Dispatchers.Main) {
@@ -855,6 +861,7 @@ object StateSync {
         // samenvoegen per profiel (sleutel = kleine letters; de naam komt van het lokale profiel of de server)
         val names = LinkedHashMap<String, String>()
         serverKeys.forEach { (k, orig) -> names[k] = orig }
+        earlyBy.keys.forEach { names.putIfAbsent(it.lowercase(), it) }
         local.byProfile.keys.forEach { names.putIfAbsent(it.lowercase(), it) }
         profiles.forEach { names[it.lowercase()] = it }
         val merged = LinkedHashMap<String, List<BingrCollection>>()
@@ -862,7 +869,7 @@ object StateSync {
             if (k in removedKeys) continue
             val out = LinkedHashMap<String, BingrCollection>()
             local.byProfile.entries.firstOrNull { it.key.lowercase() == k }?.value?.forEach { out[it.id.lowercase()] = it }
-            for (c in serverLists[k] ?: emptyList()) {
+            for (c in (serverLists[k] ?: emptyList()) + (earlyLists[k] ?: emptyList())) {
                 val l = out[c.id.lowercase()]
                 if (l == null || c.updatedAt > l.updatedAt) out[c.id.lowercase()] = c
             }
@@ -886,7 +893,7 @@ object StateSync {
         val canMigrate = profiles.isNotEmpty()
         val anything = merged.values.any { it.isNotEmpty() } || legacy.isNotEmpty()
         if (!present && !anything) return true
-        var same = (migrated || !canMigrate) && serverKeys.keys.none { it in removedKeys }
+        var same = ((data?.jI("version") ?: 0) >= 2 || !canMigrate) && earlyBy.isEmpty() && serverKeys.keys.none { it in removedKeys }
         if (same) for ((k, list) in merged) {
             val srv = (serverLists[k] ?: emptyList()).filter { alive(it) }.associateBy { it.id.lowercase() }
             if (k !in serverKeys && list.isEmpty()) continue
@@ -904,12 +911,16 @@ object StateSync {
                 "updatedAt" to JsonPrimitive(iso(list.maxOfOrNull { it.updatedAt } ?: 0L)),
             ))
         }
+        val now = iso(System.currentTimeMillis())
         val fields = mutableMapOf<String, JsonElement>(
-            "byProfile" to JsonObject(by),
-            "updatedAt" to JsonPrimitive(iso(System.currentTimeMillis())),
+            "profiles" to JsonObject(by),
+            "updatedAt" to JsonPrimitive(now),
         )
-        if (migrated || canMigrate) fields["migrated"] = JsonPrimitive(true)
-        val json = JsonObject((data ?: JsonObject(emptyMap())) + fields)
+        if (migrated || canMigrate) {
+            fields["version"] = JsonPrimitive(2)
+            fields["migratedAt"] = data?.get("migratedAt")?.takeIf { it is JsonPrimitive && it !is JsonNull } ?: JsonPrimitive(now)
+        }
+        val json = JsonObject((data ?: JsonObject(emptyMap())) - setOf("byProfile", "migrated") + fields)
         val ok = Account.putState(COLLECTIONS, json) != null
         if (ok) serverCollectionItems = merged.mapValues { (k, list) -> list.associate { it.id.lowercase() to collectionJson(k, it) } }
         return ok

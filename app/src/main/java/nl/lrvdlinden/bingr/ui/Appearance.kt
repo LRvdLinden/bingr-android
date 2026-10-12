@@ -46,14 +46,14 @@ object Accent {
     }
 
     /**
-     * Eenmalige migratie (build 54): bestaat er een accentkleur van vóór build 54 ([shared] uit
-     * `settings.shared.accentColor`, anders de lokale instelling) en heeft nog geen enkel profiel een eigen kleur,
-     * dan krijgen alle bestaande profielen die kleur. Daarna wordt de gedeelde sleutel genegeerd.
+     * Eenmalige migratie per apparaat (build 54): bestaat er een accentkleur van vóór build 54 ([shared] uit
+     * `settings.shared.accentColor`, anders de lokale instelling), dan krijgen alle bestaande profielen zonder eigen
+     * kleur die kleur. Profielen die al een kleur hebben (bijv. van een ander apparaat) houden die. Daarna wordt
+     * de gedeelde sleutel genegeerd.
      */
     fun migrate(shared: String?) {
         if (Prefs.bool(MIGRATED, false)) return
         if (Store.profiles.isEmpty()) return
-        if (Store.profiles.any { it.accentColor != null }) { Prefs.put(MIGRATED, true); return }
         val old = valid(shared) ?: valid(Prefs.string(PREF))
         if (old != null) Store.copyAccentToProfiles(old)
         Prefs.put(MIGRATED, true)

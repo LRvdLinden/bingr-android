@@ -282,7 +282,9 @@ object ProfileSync {
                         setLocalUpdatedAt(key, su)
                     } else {
                         if (newerStrict(lu, su)) needUpload = true
-                        merged += p to i
+                        // build 54: lokaal nog geen accentkleur en de server wel → overnemen (ook als de server niet nieuwer is)
+                        val accent = Accent.valid(o.jS("accentColor"))
+                        merged += (if (p.accentColor == null && accent != null) p.copy(accentColor = accent) else p) to i
                     }
                 }
             }
