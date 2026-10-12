@@ -154,7 +154,7 @@ object Store {
 
     private fun saveMeta() = write("profilemeta", ProfileMeta(mainSourceID, mainProfileIDStored))
 
-    /** Gegevens van vóór de profielen (store/*.json) naar de map van dit profiel verplaatsen (alleen het hoofdaccount). */
+    /** Gegevens van vóór de profielen (store/<naam>.json) naar de map van dit profiel verplaatsen (alleen het hoofdaccount). */
     private fun adoptLegacyData(profileID: String) {
         val target = profileDir(profileID)
         for (name in profileFiles) {
