@@ -4,6 +4,21 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 57
+_12 oktober 2026_
+
+### Alle apps en de website
+
+**Nieuw**
+
+- Bij Nu aan het kijken en in de kijkgeschiedenis staat de profielfoto van elk profiel voor de regel (alleen voor het hoofdaccount, met alle profielen)
+
+### iOS, iPadOS, macOS en Android
+
+**Nieuw**
+
+- Ondertitels gaan mee naar de Chromecast: gedownloade ondertitels (OpenSubtitles) en ondertitelsporen uit HLS-streams, ook als je tijdens het casten wisselt
+
 ## Versie 1.0.0 · Build 56
 _12 oktober 2026_
 
