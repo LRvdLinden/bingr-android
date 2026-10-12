@@ -41,6 +41,8 @@ object ProfileSync {
 
     /** account_data is gelezen en verwerkt in deze sessie. */
     private var synced = false
+    /** Profielen zijn in deze sessie met het account samengevoegd (voor de accent-migratie van build 54). */
+    val isSynced: Boolean get() = synced
     /** Profielobjecten zoals de server ze kent (kleine letters id → object), voor extra velden. */
     private var serverObjects = mapOf<String, JsonObject>()
     private var lastUploaded: String? = null
@@ -446,15 +448,17 @@ object ProfileSync {
 
     /**
      * Serverprofiel → lokaal profiel (zelfde id, zonder pincode of foto). Met [existing]: alleen naam, avatar,
-     * kids en ageLimit overnemen; de kijkvoorkeuren van dit apparaat blijven.
+     * kids, ageLimit en accentColor overnemen; de kijkvoorkeuren van dit apparaat blijven.
      */
     private fun toProfile(o: JsonObject, existing: ViewerProfile? = null): ViewerProfile {
         val kids = o.jB("kids") ?: false
         val name = o.jS("name")?.takeIf { it.isNotBlank() } ?: existing?.name ?: L("Profile")
         val av = avatar(o["avatar"], kids, existing?.avatar)
         val age = if (o.containsKey("ageLimit")) o.jI("ageLimit") else existing?.ageLimit
-        if (existing != null) return existing.copy(name = name, avatar = av, ageLimit = age, isKids = if (kids) true else null)
-        return ViewerProfile(id = o.jS("id")!!, name = name, avatar = av, ageLimit = age, isKids = if (kids) true else null)
+        // build 54: accentkleur per profiel; ontbreekt het veld (oudere app), dan blijft de lokale kleur
+        val accent = Accent.valid(o.jS("accentColor")) ?: existing?.accentColor
+        if (existing != null) return existing.copy(name = name, avatar = av, ageLimit = age, isKids = if (kids) true else null, accentColor = accent)
+        return ViewerProfile(id = o.jS("id")!!, name = name, avatar = av, ageLimit = age, isKids = if (kids) true else null, accentColor = accent)
     }
 
     internal fun avatar(e: JsonElement?, kids: Boolean, current: PlaylistAvatar? = null): PlaylistAvatar {
@@ -507,6 +511,9 @@ object ProfileSync {
                 "isMain" to JsonPrimitive(p.id == mainID),
                 "order" to JsonPrimitive(i),
                 "photo" to photoField(p.id, base),
+            ) + listOfNotNull(
+                // build 54: alleen als het profiel een eigen kleur heeft; zo blijft "ontbreekt" herkenbaar voor de migratie
+                p.accentColor?.let { "accentColor" to JsonPrimitive(it) },
             ))
         }
         val activeKeys = Store.profiles.map { idKey(it.id) }.toSet()

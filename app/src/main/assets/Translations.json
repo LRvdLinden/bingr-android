@@ -631,7 +631,10 @@
   "Your account can be used on up to %d screens at the same time.": "يمكن استخدام حسابك على %d شاشات كحد أقصى في الوقت نفسه.",
   "%d%% of the series watched": "تمت مشاهدة %d%% من المسلسل",
   "Season %d · %d%% watched": "الموسم %d · تمت مشاهدة %d%%",
-  "Trailer season %d": "إعلان الموسم %d"
+  "Trailer season %d": "إعلان الموسم %d",
+  "Each profile has its own accent color. The app icon is only changed on this device.": "لكل ملف شخصي لون تمييز خاص به. يتغير رمز التطبيق على هذا الجهاز فقط.",
+  "Each profile has its own accent color.": "لكل ملف شخصي لون تمييز خاص به.",
+  "Every profile has its own collections, on all your devices. They appear as rows on Home, and in Live TV, Movies and Series. Hold a channel, movie or series to add it.": "لكل ملف شخصي مجموعاته الخاصة على جميع أجهزتك. تظهر كصفوف في الصفحة الرئيسية وفي البث المباشر والأفلام والمسلسلات. اضغط مطولًا على قناة أو فيلم أو مسلسل لإضافته."
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -1265,7 +1268,10 @@
   "Your account can be used on up to %d screens at the same time.": "Dein Konto kann auf bis zu %d Bildschirmen gleichzeitig genutzt werden.",
   "%d%% of the series watched": "%d%% der Serie angesehen",
   "Season %d · %d%% watched": "Staffel %d · %d%% angesehen",
-  "Trailer season %d": "Trailer Staffel %d"
+  "Trailer season %d": "Trailer Staffel %d",
+  "Each profile has its own accent color. The app icon is only changed on this device.": "Jedes Profil hat seine eigene Akzentfarbe. Das App-Symbol wird nur auf diesem Gerät geändert.",
+  "Each profile has its own accent color.": "Jedes Profil hat seine eigene Akzentfarbe.",
+  "Every profile has its own collections, on all your devices. They appear as rows on Home, and in Live TV, Movies and Series. Hold a channel, movie or series to add it.": "Jedes Profil hat eigene Sammlungen, auf all deinen Geräten. Sie erscheinen als Reihen auf der Startseite sowie unter Live-TV, Filme und Serien. Halte einen Sender, Film oder eine Serie gedrückt, um sie hinzuzufügen."
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -1899,7 +1905,10 @@
   "Your account can be used on up to %d screens at the same time.": "Tu cuenta puede usarse en hasta %d pantallas a la vez.",
   "%d%% of the series watched": "%d%% de la serie visto",
   "Season %d · %d%% watched": "Temporada %d · %d%% visto",
-  "Trailer season %d": "Tráiler temporada %d"
+  "Trailer season %d": "Tráiler temporada %d",
+  "Each profile has its own accent color. The app icon is only changed on this device.": "Cada perfil tiene su propio color de acento. El icono de la app solo cambia en este dispositivo.",
+  "Each profile has its own accent color.": "Cada perfil tiene su propio color de acento.",
+  "Every profile has its own collections, on all your devices. They appear as rows on Home, and in Live TV, Movies and Series. Hold a channel, movie or series to add it.": "Cada perfil tiene sus propias colecciones, en todos tus dispositivos. Aparecen como filas en Inicio y en TV en directo, Películas y Series. Mantén pulsado un canal, una película o una serie para añadirlo."
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -2533,7 +2542,10 @@
   "Your account can be used on up to %d screens at the same time.": "Votre compte peut être utilisé sur %d écrans maximum en même temps.",
   "%d%% of the series watched": "%d%% de la série regardé",
   "Season %d · %d%% watched": "Saison %d · %d%% regardé",
-  "Trailer season %d": "Bande-annonce saison %d"
+  "Trailer season %d": "Bande-annonce saison %d",
+  "Each profile has its own accent color. The app icon is only changed on this device.": "Chaque profil a sa propre couleur d'accent. L'icône de l'app n'est modifiée que sur cet appareil.",
+  "Each profile has its own accent color.": "Chaque profil a sa propre couleur d'accent.",
+  "Every profile has its own collections, on all your devices. They appear as rows on Home, and in Live TV, Movies and Series. Hold a channel, movie or series to add it.": "Chaque profil a ses propres collections, sur tous vos appareils. Elles apparaissent en rangées sur l'Accueil, ainsi que dans TV en direct, Films et Séries. Maintenez une chaîne, un film ou une série pour l'ajouter."
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -3167,7 +3179,10 @@
   "Your account can be used on up to %d screens at the same time.": "Il tuo account può essere usato su un massimo di %d schermi contemporaneamente.",
   "%d%% of the series watched": "%d%% della serie visto",
   "Season %d · %d%% watched": "Stagione %d · %d%% visto",
-  "Trailer season %d": "Trailer stagione %d"
+  "Trailer season %d": "Trailer stagione %d",
+  "Each profile has its own accent color. The app icon is only changed on this device.": "Ogni profilo ha il proprio colore di accento. L'icona dell'app cambia solo su questo dispositivo.",
+  "Each profile has its own accent color.": "Ogni profilo ha il proprio colore di accento.",
+  "Every profile has its own collections, on all your devices. They appear as rows on Home, and in Live TV, Movies and Series. Hold a channel, movie or series to add it.": "Ogni profilo ha le proprie raccolte, su tutti i tuoi dispositivi. Appaiono come righe nella Home e in TV in diretta, Film e Serie. Tieni premuto un canale, un film o una serie per aggiungerlo."
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -3857,7 +3872,10 @@
   "Waiting…": "Wachten…",
   "%d%% of the series watched": "%d%% van de serie bekeken",
   "Season %d · %d%% watched": "Seizoen %d · %d%% bekeken",
-  "Trailer season %d": "Trailer seizoen %d"
+  "Trailer season %d": "Trailer seizoen %d",
+  "Each profile has its own accent color. The app icon is only changed on this device.": "Elk profiel heeft een eigen accentkleur. Het app-icoon verandert alleen op dit apparaat.",
+  "Each profile has its own accent color.": "Elk profiel heeft een eigen accentkleur.",
+  "Every profile has its own collections, on all your devices. They appear as rows on Home, and in Live TV, Movies and Series. Hold a channel, movie or series to add it.": "Elk profiel heeft eigen collecties, op al je apparaten. Ze verschijnen als rijen op Home en in Live TV, Films en Series. Houd een zender, film of serie ingedrukt om hem toe te voegen."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -4491,7 +4509,10 @@
   "Your account can be used on up to %d screens at the same time.": "Z konta można korzystać jednocześnie na maksymalnie %d ekranach.",
   "%d%% of the series watched": "Obejrzano %d%% serialu",
   "Season %d · %d%% watched": "Sezon %d · obejrzano %d%%",
-  "Trailer season %d": "Zwiastun sezonu %d"
+  "Trailer season %d": "Zwiastun sezonu %d",
+  "Each profile has its own accent color. The app icon is only changed on this device.": "Każdy profil ma własny kolor akcentu. Ikona aplikacji zmienia się tylko na tym urządzeniu.",
+  "Each profile has its own accent color.": "Każdy profil ma własny kolor akcentu.",
+  "Every profile has its own collections, on all your devices. They appear as rows on Home, and in Live TV, Movies and Series. Hold a channel, movie or series to add it.": "Każdy profil ma własne kolekcje, na wszystkich Twoich urządzeniach. Pojawiają się jako rzędy na stronie głównej oraz w TV na żywo, Filmach i Serialach. Przytrzymaj kanał, film lub serial, aby go dodać."
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -5125,7 +5146,10 @@
   "Your account can be used on up to %d screens at the same time.": "A tua conta pode ser usada em até %d ecrãs ao mesmo tempo.",
   "%d%% of the series watched": "%d%% da série visto",
   "Season %d · %d%% watched": "Temporada %d · %d%% visto",
-  "Trailer season %d": "Trailer temporada %d"
+  "Trailer season %d": "Trailer temporada %d",
+  "Each profile has its own accent color. The app icon is only changed on this device.": "Cada perfil tem a sua própria cor de destaque. O ícone da app só muda neste dispositivo.",
+  "Each profile has its own accent color.": "Cada perfil tem a sua própria cor de destaque.",
+  "Every profile has its own collections, on all your devices. They appear as rows on Home, and in Live TV, Movies and Series. Hold a channel, movie or series to add it.": "Cada perfil tem as suas próprias coleções, em todos os seus dispositivos. Aparecem como filas no Início e em TV em direto, Filmes e Séries. Mantenha premido um canal, filme ou série para o adicionar."
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -5759,7 +5783,10 @@
   "Your account can be used on up to %d screens at the same time.": "Hesabın aynı anda en fazla %d ekranda kullanılabilir.",
   "%d%% of the series watched": "Dizinin %%%d kadarı izlendi",
   "Season %d · %d%% watched": "%d. Sezon · %%%d izlendi",
-  "Trailer season %d": "%d. Sezon fragmanı"
+  "Trailer season %d": "%d. Sezon fragmanı",
+  "Each profile has its own accent color. The app icon is only changed on this device.": "Her profilin kendi vurgu rengi vardır. Uygulama simgesi yalnızca bu cihazda değişir.",
+  "Each profile has its own accent color.": "Her profilin kendi vurgu rengi vardır.",
+  "Every profile has its own collections, on all your devices. They appear as rows on Home, and in Live TV, Movies and Series. Hold a channel, movie or series to add it.": "Her profilin tüm cihazlarında kendi koleksiyonları vardır. Ana Sayfa'da ve Canlı TV, Filmler ve Diziler'de satır olarak görünürler. Eklemek için bir kanala, filme veya diziye basılı tutun."
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -6393,6 +6420,9 @@
   "Your account can be used on up to %d screens at the same time.": "你的账户最多可同时在 %d 个屏幕上使用。",
   "%d%% of the series watched": "已观看本剧 %d%%",
   "Season %d · %d%% watched": "第 %d 季 · 已观看 %d%%",
-  "Trailer season %d": "第 %d 季预告片"
+  "Trailer season %d": "第 %d 季预告片",
+  "Each profile has its own accent color. The app icon is only changed on this device.": "每个个人资料都有自己的强调色。应用图标只会在此设备上更改。",
+  "Each profile has its own accent color.": "每个个人资料都有自己的强调色。",
+  "Every profile has its own collections, on all your devices. They appear as rows on Home, and in Live TV, Movies and Series. Hold a channel, movie or series to add it.": "每个个人资料都有自己的合集，在你的所有设备上同步。它们会以行的形式显示在首页，以及直播电视、电影和剧集中。长按频道、电影或剧集即可添加。"
  }
 }

@@ -8,11 +8,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 
 /**
- * Accentkleur (build 52): rood, blauw, groen, paars, oranje of roze. Gesynchroniseerd via het account als
- * `settings.shared.accentColor` (zelfde sleutel en waarden als iOS). [Theme.red] is de accentkleur van de hele app.
+ * Accentkleur: rood, blauw, groen, paars, oranje of roze. [Theme.red] is de accentkleur van de hele app.
+ * Build 52/53: één kleur voor het hele account (`settings.shared.accentColor`).
+ * Build 54: per profiel, als veld `accentColor` op het gesynchroniseerde profielobject (ontbreekt = "red").
+ * De kleur volgt het actieve profiel (Compose-state), dus bij het wisselen van profiel verandert hij meteen.
  */
 object Accent {
+    /** Oude sleutel (build 52/53), alleen nog voor de eenmalige migratie naar de profielen. */
     const val PREF = "accentColor"
+    /** Lokaal: de migratie naar de profielen is gedaan (of was niet nodig). */
+    private const val MIGRATED = "accent.perProfile"
+    const val DEFAULT = "red"
 
     data class Option(val key: String, val color: Color, val titleKey: String)
 
@@ -25,26 +31,45 @@ object Accent {
         Option("pink", Color(0xFFE6448C), "Pink"),
     )
 
-    private var keyState by mutableStateOf("red")
-    val key: String get() = keyState
-    val color: Color get() = (options.firstOrNull { it.key == keyState } ?: options[0]).color
+    fun valid(k: String?): String? = k?.lowercase()?.takeIf { v -> options.any { it.key == v } }
 
-    /** Waarde uit Prefs lezen (bij het starten en na een sync). */
-    fun reload() {
-        val v = Prefs.string(PREF)
-        keyState = if (options.any { it.key == v }) v!! else "red"
+    /** Kleur van een profiel (ontbreekt of onbekend = rood). */
+    fun keyFor(p: ViewerProfile?): String = valid(p?.accentColor) ?: DEFAULT
+
+    val key: String get() = keyFor(Store.activeProfile)
+    val color: Color get() = (options.firstOrNull { it.key == key } ?: options[0]).color
+
+    /** Kleur kiezen voor het actieve profiel. */
+    fun set(k: String) {
+        val v = valid(k) ?: return
+        Store.setActiveAccent(v)
     }
 
-    fun set(k: String) {
-        if (options.none { it.key == k }) return
-        keyState = k
-        Prefs.put(PREF, k)
+    /**
+     * Eenmalige migratie (build 54): bestaat er een accentkleur van vóór build 54 ([shared] uit
+     * `settings.shared.accentColor`, anders de lokale instelling) en heeft nog geen enkel profiel een eigen kleur,
+     * dan krijgen alle bestaande profielen die kleur. Daarna wordt de gedeelde sleutel genegeerd.
+     */
+    fun migrate(shared: String?) {
+        if (Prefs.bool(MIGRATED, false)) return
+        if (Store.profiles.isEmpty()) return
+        if (Store.profiles.any { it.accentColor != null }) { Prefs.put(MIGRATED, true); return }
+        val old = valid(shared) ?: valid(Prefs.string(PREF))
+        if (old != null) Store.copyAccentToProfiles(old)
+        Prefs.put(MIGRATED, true)
+    }
+
+    /** Ander account op dit apparaat: migratie opnieuw mogelijk maken. */
+    fun resetMigration() {
+        Prefs.remove(MIGRATED)
+        Prefs.remove(PREF)
     }
 }
 
 /**
  * Alternatief app-icoon op telefoon/tablet via activity-aliassen in het manifest (build 52). Alleen lokaal,
- * niet gesynchroniseerd. Op TV is er alleen de vaste TV-banner.
+ * niet gesynchroniseerd. Op TV is er alleen de vaste TV-banner. Build 54: alleen het hoofdprofiel kan het kiezen
+ * ([canChoose]); de keuze blijft op dit apparaat bewaard (ook na updates) en geldt voor alle profielen.
  */
 object AppIcon {
     private const val PREF = "ui.appIcon"
@@ -63,6 +88,9 @@ object AppIcon {
     var current by mutableStateOf("default")
         private set
 
+    /** Mag het actieve profiel het icoon kiezen? Alleen het hoofdprofiel, en niet op TV. */
+    val canChoose: Boolean get() = !AppState.isTV && Store.canManage
+
     fun init() {
         current = Prefs.string(PREF)?.takeIf { k -> options.any { it.key == k } } ?: "default"
         // eerder halverwege gestopt (de launcher kan de app sluiten bij het wisselen): alsnog gelijkzetten
@@ -74,7 +102,7 @@ object AppIcon {
      * daarbij even af; bij de volgende start klopt alles dan toch (zie [init]).
      */
     fun set(k: String) {
-        if (AppState.isTV || options.none { it.key == k } || k == current) return
+        if (!canChoose || options.none { it.key == k } || k == current) return
         current = k
         Prefs.put(PREF, k)
         runCatching { apply(k) }

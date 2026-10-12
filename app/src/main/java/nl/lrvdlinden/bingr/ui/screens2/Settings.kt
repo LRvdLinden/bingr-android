@@ -525,11 +525,13 @@ fun SettingsScreen() {
             }
         }
 
-        // MARK: uiterlijk (build 52)
+        // MARK: uiterlijk (build 52; build 54: accentkleur per profiel, app-icoon alleen voor het hoofdprofiel)
         item {
-            S2Section(L("Appearance"), if (AppState.isTV) null else L("The app icon is only changed on this device.")) {
+            S2Section(L("Appearance"),
+                if (AppIcon.canChoose) L("Each profile has its own accent color. The app icon is only changed on this device.")
+                else L("Each profile has its own accent color.")) {
                 S2Dropdown(L("Accent color"), Accent.options.map { it.key to L(it.titleKey) }, Accent.key) { Accent.set(it) }
-                if (!AppState.isTV) {
+                if (AppIcon.canChoose) {
                     S2Dropdown(L("App icon"), AppIcon.options.map { it.key to L(it.titleKey) }, AppIcon.current) { k ->
                         if (k != AppIcon.current) iconConfirm = k
                     }

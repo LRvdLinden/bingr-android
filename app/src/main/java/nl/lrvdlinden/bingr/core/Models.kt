@@ -65,6 +65,8 @@ data class ViewerProfile(
     val streamSubtitleLanguage: String? = null,
     /** Kinderprofiel: alleen kinderinhoud (standaard t/m 12 jaar) */
     val isKids: Boolean? = null,
+    /** Accentkleur van dit profiel (build 54): "red", "blue", "green", "purple", "orange" of "pink"; null = rood */
+    val accentColor: String? = null,
 ) {
     val kids: Boolean get() = isKids ?: false
     /** Leeftijdsgrens die echt geldt (kinderprofiel zonder grens = t/m 12) */

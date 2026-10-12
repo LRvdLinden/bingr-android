@@ -217,7 +217,7 @@ fun CollectionsScreen(onClose: () -> Unit) {
     }
     S2Page(L("Collections"), onClose = onClose) {
         item {
-            S2Section(footer = L("Collections are shared with all your devices and appear as rows on Home, and in Live TV, Movies and Series. Hold a channel, movie or series to add it.")) {
+            S2Section(footer = L("Every profile has its own collections, on all your devices. They appear as rows on Home, and in Live TV, Movies and Series. Hold a channel, movie or series to add it.")) {
                 if (list.isEmpty()) S2Row(L("No collections yet. Make your own rows with your favorite channels, movies and series."), tint = Theme.secondary)
                 list.forEach { c ->
                     S2Row(c.name,

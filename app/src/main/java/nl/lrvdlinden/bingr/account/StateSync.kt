@@ -50,8 +50,8 @@ object StateSync {
         "playlist.refresh", "category.sort", "trakt.scrobble", "trakt.askRating",
         // build 51
         "player.zapDelay", "player.channelPreview", "player.matchFrameRate", "player.externalDisplay",
-        // build 52 (zelfde sleutels als iOS, in `shared`)
-        "accentColor", "deinterlace", "resumeLastChannel", IntroMarkers.PREF,
+        // build 52 (zelfde sleutels als iOS, in `shared`); accentColor is sinds build 54 per profiel (zie [Accent])
+        "deinterlace", "resumeLastChannel", IntroMarkers.PREF,
     )
     /** Niet als ruwe Android-waarde meesturen (staat al in `shared`). */
     private val sharedOnlyKeys = setOf(IntroMarkers.PREF)
@@ -95,8 +95,8 @@ object StateSync {
     private var serverSettings: JsonObject? = null
     private var serverConnections: JsonObject? = null
     private var serverReminders: JsonObject? = null
-    /** Collecties zoals de server ze kent (kleine letters id → object), voor velden die deze app niet kent. */
-    private var serverCollectionItems = mapOf<String, JsonObject>()
+    /** Collecties zoals de server ze kent (build 54: profiel → id → object, kleine letters), voor velden die deze app niet kent. */
+    private var serverCollectionItems = mapOf<String, Map<String, JsonObject>>()
     /** Sectienaam op de server per profiel (kleine letters id → naam), want iOS gebruikt hoofdletters. */
     private val sectionNames = mutableMapOf<String, String>()
 
@@ -200,7 +200,7 @@ object StateSync {
         schedule(wait)
     }
 
-    /** Een collectie is toegevoegd, gewijzigd of verwijderd (build 51). */
+    /** Een collectie is toegevoegd, gewijzigd of verwijderd (build 51), of een profiel met collecties is weg (build 54). */
     fun collectionsChanged() {
         if (applying > 0) return
         markDirty(COLLECTIONS)
@@ -279,7 +279,7 @@ object StateSync {
             Trakt.scrobbleEnabled = true
             Trakt.askRating = true
             settingKeys.forEach { Prefs.remove(it) }
-            Accent.reload()
+            Accent.resetMigration()
             IntroMarkers.reload()
         }
         runCatching { prefs.edit().clear().apply() }
@@ -324,8 +324,20 @@ object StateSync {
             mergeProfiles(all)
             synced = true
         }
+        migrateAccent()
         // lokale wijzigingen van vóór de sync
         if (dirty.isNotEmpty()) runUpload()
+    }
+
+    /**
+     * Build 54: accentkleur van vóór build 54 (`settings.shared.accentColor`) eenmalig naar alle profielen zonder
+     * eigen kleur. Pas als de profielen met het account samengevoegd zijn, anders zou een automatisch hoofdprofiel
+     * de kleur krijgen in plaats van de echte profielen.
+     */
+    private suspend fun migrateAccent() {
+        if (!ProfileSync.isSynced) return
+        val shared = (serverSettings?.get("shared") as? JsonObject)?.jS("accentColor")
+        withContext(Dispatchers.Main) { Accent.migrate(shared) }
     }
 
     private suspend fun runUpload() {
@@ -545,7 +557,7 @@ object StateSync {
             "parentalControl" to JsonPrimitive(Store.parental.enabled),
             "parentalAutoLockAdult" to JsonPrimitive(Store.parental.autoLockAdult),
             // build 52
-            "accentColor" to JsonPrimitive(Accent.key),
+            // accentColor: sinds build 54 per profiel; de oude waarde in `shared` blijft onaangeroerd (via de serverversie)
             "deinterlace" to JsonPrimitive(PlayerSettings.deinterlace),
             "resumeLastChannel" to JsonPrimitive(PlayerSettings.resumeLastChannel),
             "introMarkers" to IntroMarkers.toJson(IntroMarkers.all),
@@ -612,7 +624,7 @@ object StateSync {
             bool("traktScrobble")?.let { values["trakt.scrobble"] = it }
             bool("traktAskRating")?.let { values["trakt.askRating"] = it }
             // build 52
-            str("accentColor")?.let { v -> if (Accent.options.any { it.key == v }) values["accentColor"] = v }
+            // accentColor wordt sinds build 54 genegeerd, behalve voor de eenmalige migratie (zie [migrateAccent])
             str("deinterlace")?.let { v -> if (v in listOf("off", "auto", "on")) values["deinterlace"] = v }
             bool("resumeLastChannel")?.let { values["resumeLastChannel"] = it }
             (s["introMarkers"] as? JsonObject)?.let { o ->
@@ -654,7 +666,6 @@ object StateSync {
                     }
                 }
             }
-            Accent.reload()
             IntroMarkers.reload()
             Unit
         }
@@ -780,8 +791,9 @@ object StateSync {
         )
     }
 
-    private fun collectionJson(c: BingrCollection): JsonObject {
-        val base = serverCollectionItems[c.id.lowercase()] ?: JsonObject(emptyMap())
+    /** Collectie → JSON voor profiel [profileKey] (kleine letters); velden die deze app niet kent blijven. */
+    private fun collectionJson(profileKey: String, c: BingrCollection): JsonObject {
+        val base = serverCollectionItems[profileKey]?.get(c.id.lowercase()) ?: JsonObject(emptyMap())
         val m = base.toMutableMap()
         m["id"] = JsonPrimitive(c.id)
         m["name"] = JsonPrimitive(c.name)
@@ -806,32 +818,100 @@ object StateSync {
     }
 
     /**
-     * Per collectie wint de nieuwste `updatedAt` (ook tombstones); tombstones ouder dan 90 dagen vervallen.
+     * Build 54: collecties per profiel. Section `collections` =
+     * `{byProfile: {"<profielID>": {items:[…], updatedAt}}, migrated: true, updatedAt}`; elk item heeft het
+     * formaat van build 51. Onbekende velden (ook een oude `items`-lijst van vóór build 54) blijven bewaard.
+     *
+     * - Migratie: is `migrated` nog niet true en staat er een oude `items`-lijst (voor het hele account), dan krijgt
+     *   elk bestaand profiel die collecties (zelfde id's; wat het profiel al had blijft staan). Daarna `migrated: true`.
+     * - Per profiel en per collectie wint de nieuwste `updatedAt` (ook tombstones); tombstones ouder dan 90 dagen vervallen.
+     * - Profielen die hier verwijderd zijn, gaan ook van de server. Profielen die alleen op de server staan, blijven daar.
      * Lokaal toepassen en uploaden als het resultaat afwijkt van de server. true = gelukt.
      */
     private suspend fun mergeCollections(sec: Account.StateSection?, present: Boolean): Boolean {
         val data = sec?.data as? JsonObject
-        val serverObjs = ((data?.get("items") as? JsonArray) ?: JsonArray(emptyList()))
-            .mapNotNull { it as? JsonObject }.filter { it.jS("id") != null }
-        serverCollectionItems = serverObjs.associateBy { it.jS("id")!!.lowercase() }
-        val server = serverObjs.mapNotNull { collectionFrom(it) }.associateBy { it.id.lowercase() }
-        val local = withContext(Dispatchers.Main) { Collections.ensureLoaded(); Collections.all }
-        val out = LinkedHashMap<String, BingrCollection>()
-        for (c in local) out[c.id.lowercase()] = c
-        for ((k, c) in server) { val l = out[k]; if (l == null || c.updatedAt > l.updatedAt) out[k] = c }
         val cutoff = System.currentTimeMillis() - REMOVED_DAYS * 24 * 3_600_000L
-        val merged = out.values.filter { !it.deleted || (it.deletedAt ?: it.updatedAt) >= cutoff }
-        if (merged != local) withContext(Dispatchers.Main) { applyingChanges { Collections.applySynced(merged) } }
-        val serverList = server.values.filter { !it.deleted || (it.deletedAt ?: it.updatedAt) >= cutoff }
-        val same = serverList.size == merged.size && merged.all { m -> server[m.id.lowercase()] == m }
-        if (same && (present || merged.isEmpty())) return true
-        if (!present && merged.isEmpty()) return true
-        val json = JsonObject((data ?: JsonObject(emptyMap())) + mapOf(
-            "items" to JsonArray(merged.map { collectionJson(it) }),
-            "updatedAt" to JsonPrimitive(iso(merged.maxOfOrNull { it.updatedAt } ?: System.currentTimeMillis())),
-        ))
+        fun alive(c: BingrCollection) = !c.deleted || (c.deletedAt ?: c.updatedAt) >= cutoff
+        fun parseList(a: JsonElement?): List<JsonObject> = ((a as? JsonArray) ?: JsonArray(emptyList()))
+            .mapNotNull { it as? JsonObject }.filter { !it.jS("id").isNullOrBlank() }
+
+        // server: per profiel (kleine letters → oorspronkelijke sleutel, object, collecties)
+        val serverBy = (data?.get("byProfile") as? JsonObject) ?: JsonObject(emptyMap())
+        val serverKeys = serverBy.keys.associateBy { it.lowercase() }
+        val serverEntries = serverBy.mapNotNull { (k, v) -> (v as? JsonObject)?.let { k.lowercase() to it } }.toMap()
+        val serverLists = serverEntries.mapValues { (_, e) -> parseList(e["items"]).mapNotNull { collectionFrom(it) } }
+        serverCollectionItems = serverEntries.mapValues { (_, e) -> parseList(e["items"]).associateBy { it.jS("id")!!.lowercase() } }
+        val migrated = data?.jB("migrated") == true
+        val legacy = parseList(data?.get("items")).mapNotNull { collectionFrom(it) }
+
+        val (local, profiles) = withContext(Dispatchers.Main) {
+            Collections.ensureLoaded(); Collections.distributeLegacy()
+            Collections.snapshot() to Store.profiles.map { it.id }
+        }
+        val removed = local.removedProfiles.filterValues { it >= cutoff }
+            .filterKeys { id -> profiles.none { it.equals(id, ignoreCase = true) } }
+        val removedKeys = removed.keys.map { it.lowercase() }.toSet()
+
+        // samenvoegen per profiel (sleutel = kleine letters; de naam komt van het lokale profiel of de server)
+        val names = LinkedHashMap<String, String>()
+        serverKeys.forEach { (k, orig) -> names[k] = orig }
+        local.byProfile.keys.forEach { names.putIfAbsent(it.lowercase(), it) }
+        profiles.forEach { names[it.lowercase()] = it }
+        val merged = LinkedHashMap<String, List<BingrCollection>>()
+        for ((k, _) in names) {
+            if (k in removedKeys) continue
+            val out = LinkedHashMap<String, BingrCollection>()
+            local.byProfile.entries.firstOrNull { it.key.lowercase() == k }?.value?.forEach { out[it.id.lowercase()] = it }
+            for (c in serverLists[k] ?: emptyList()) {
+                val l = out[c.id.lowercase()]
+                if (l == null || c.updatedAt > l.updatedAt) out[c.id.lowercase()] = c
+            }
+            // migratie van de collecties voor het hele account (alleen voor bestaande profielen)
+            if (!migrated && profiles.any { it.lowercase() == k }) {
+                for (c in legacy) {
+                    val l = out[c.id.lowercase()]
+                    if (l == null || c.updatedAt > l.updatedAt) out[c.id.lowercase()] = c
+                }
+            }
+            val list = out.values.filter { alive(it) }
+            if (list.isNotEmpty() || k in serverKeys || profiles.any { it.lowercase() == k }) merged[k] = list
+        }
+
+        // lokaal: alleen profielen die op dit apparaat bestaan
+        val localMap = merged.filterKeys { k -> profiles.any { it.lowercase() == k } }
+            .mapKeys { (k, _) -> profiles.first { it.lowercase() == k } }
+        withContext(Dispatchers.Main) { applyingChanges { Collections.applySynced(localMap, removed) } }
+
+        // moet de server bijgewerkt worden?
+        val canMigrate = profiles.isNotEmpty()
+        val anything = merged.values.any { it.isNotEmpty() } || legacy.isNotEmpty()
+        if (!present && !anything) return true
+        var same = (migrated || !canMigrate) && serverKeys.keys.none { it in removedKeys }
+        if (same) for ((k, list) in merged) {
+            val srv = (serverLists[k] ?: emptyList()).filter { alive(it) }.associateBy { it.id.lowercase() }
+            if (k !in serverKeys && list.isEmpty()) continue
+            if (srv.size != list.size || list.any { srv[it.id.lowercase()] != it }) { same = false; break }
+        }
+        if (same) return true
+
+        val by = LinkedHashMap<String, JsonElement>()
+        for ((k, list) in merged) {
+            if (list.isEmpty() && k !in serverKeys) continue
+            val base = serverEntries[k] ?: JsonObject(emptyMap())
+            val items = list.sortedWith(compareBy({ it.order }, { it.name.lowercase() })).map { collectionJson(k, it) }
+            by[names[k] ?: k] = JsonObject(base + mapOf(
+                "items" to JsonArray(items),
+                "updatedAt" to JsonPrimitive(iso(list.maxOfOrNull { it.updatedAt } ?: 0L)),
+            ))
+        }
+        val fields = mutableMapOf<String, JsonElement>(
+            "byProfile" to JsonObject(by),
+            "updatedAt" to JsonPrimitive(iso(System.currentTimeMillis())),
+        )
+        if (migrated || canMigrate) fields["migrated"] = JsonPrimitive(true)
+        val json = JsonObject((data ?: JsonObject(emptyMap())) + fields)
         val ok = Account.putState(COLLECTIONS, json) != null
-        if (ok) serverCollectionItems = merged.associate { it.id.lowercase() to collectionJson(it) }
+        if (ok) serverCollectionItems = merged.mapValues { (k, list) -> list.associate { it.id.lowercase() to collectionJson(k, it) } }
         return ok
     }
 

@@ -8,7 +8,8 @@ import java.io.File
 import java.util.UUID
 
 // Collecties en het startscherm per profiel (build 51), volgens "Build 51: collecties, startscherm,
-// terugkijk-correctie en webconsole" in docs/ACCOUNT.md van de iOS-repo.
+// terugkijk-correctie en webconsole" in docs/ACCOUNT.md van de iOS-repo. Sinds build 54 horen de collecties
+// zelf ook bij een profiel (zie [Collections]).
 
 /** Afbeelding van een collectie: symbool + kleur (zoals een avatar), of een eigen plaatje ([url]). */
 @Serializable
@@ -21,7 +22,7 @@ data class CollectionImage(val symbol: String = "⭐", val colorIndex: Int = 0, 
 data class CollectionRef(val type: String, val id: String)
 
 /**
- * Eigen rij ("collectie"), voor het hele account. [kind] "manual" (vaste lijst [items]) of "smart"
+ * Eigen rij ("collectie") van een profiel (build 54; daarvoor voor het hele account). [kind] "manual" (vaste lijst [items]) of "smart"
  * (zoekwoorden [query], soorten [types], optioneel beperkt tot [group] en [sourceID]).
  * Tijden in epoch-ms; [deleted] = tombstone (zelfde regels als bij profielen).
  */
@@ -69,65 +70,126 @@ sealed class CollectionEntry {
     }
 }
 
-/** Alle collecties van het account (lokaal in files/store/collections.json, sync via StateSync "collections"). */
+/**
+ * Collecties per profiel (build 54). Lokaal in files/store/collections-profiles.json, sync via StateSync
+ * "collections" (`byProfile`). Elk profiel (ook een kinderprofiel) maakt en beheert zijn eigen collecties;
+ * de inhoud loopt altijd door de (leeftijds)gefilterde bibliotheek van het actieve profiel.
+ * Migratie: de collecties van vóór build 54 (voor het hele account, files/store/collections.json) gaan naar
+ * elk bestaand profiel, met dezelfde id's, zodat er niets verdwijnt.
+ */
 object Collections {
-    /** Alles, ook tombstones. */
-    var all by mutableStateOf(listOf<BingrCollection>()); private set
+    /** Lokale stand: per profiel-id alle collecties (ook tombstones), en verwijderde profielen (id → tijd). */
+    @Serializable
+    data class LocalState(
+        val byProfile: Map<String, List<BingrCollection>> = emptyMap(),
+        val removedProfiles: Map<String, Long> = emptyMap(),
+        /** Collecties van vóór build 54 die nog naar de profielen moeten (als er nog geen profielen waren). */
+        val legacy: List<BingrCollection> = emptyList(),
+    )
+
+    /** Per profiel (id zoals in [Store.profiles]) alle collecties, ook tombstones. */
+    var byProfile by mutableStateOf(mapOf<String, List<BingrCollection>>()); private set
+    private var removedProfiles = mapOf<String, Long>()
+    private var legacy = listOf<BingrCollection>()
     private var loaded = false
 
-    /** Zichtbare collecties in hun volgorde. */
-    val visible: List<BingrCollection>
-        get() { ensureLoaded(); return all.filter { !it.deleted }.sortedWith(compareBy({ it.order }, { it.name.lowercase() })) }
+    /** Profiel waar de collecties nu bij horen: het actieve profiel, anders het hoofdprofiel. */
+    private val profileKey: String? get() = Store.activeProfileID ?: Store.mainProfileID
 
-    private val file: File get() = File(AppState.appContext.filesDir, "store/collections.json")
+    /** Sleutel in [byProfile] voor dit profiel-id (hoofdletters maken niet uit, iOS gebruikt hoofdletters). */
+    private fun keyFor(id: String): String = byProfile.keys.firstOrNull { it.equals(id, ignoreCase = true) } ?: id
+
+    /** Alle collecties van een profiel, ook tombstones. */
+    fun of(profileID: String?): List<BingrCollection> {
+        ensureLoaded()
+        val id = profileID ?: return emptyList()
+        return byProfile[keyFor(id)] ?: emptyList()
+    }
+
+    /** Alle collecties van het actieve profiel, ook tombstones. */
+    val all: List<BingrCollection> get() = of(profileKey)
+
+    /** Zichtbare collecties van het actieve profiel in hun volgorde. */
+    val visible: List<BingrCollection>
+        get() = all.filter { !it.deleted }.sortedWith(compareBy({ it.order }, { it.name.lowercase() }))
+
+    private val legacyFile: File get() = File(AppState.appContext.filesDir, "store/collections.json")
+    private val file: File get() = File(AppState.appContext.filesDir, "store/collections-profiles.json")
 
     fun ensureLoaded() {
         if (loaded) return
         loaded = true
-        all = runCatching {
-            Http.json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(BingrCollection.serializer()), file.readText())
-        }.getOrDefault(emptyList())
+        val st = runCatching { Http.json.decodeFromString(LocalState.serializer(), file.readText()) }.getOrNull()
+        if (st != null) {
+            byProfile = st.byProfile; removedProfiles = st.removedProfiles; legacy = st.legacy
+        } else {
+            // eerste start met build 54: de oude collecties (voor het hele account) overnemen
+            legacy = runCatching {
+                Http.json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(BingrCollection.serializer()), legacyFile.readText())
+            }.getOrDefault(emptyList())
+            save()
+        }
+        distributeLegacy()
+    }
+
+    /** Oude collecties naar elk bestaand profiel (zodra er profielen zijn). Bestaande id's blijven staan. */
+    fun distributeLegacy() {
+        if (legacy.isEmpty() || Store.profiles.isEmpty()) return
+        val out = byProfile.toMutableMap()
+        for (p in Store.profiles) {
+            val k = keyFor(p.id)
+            val cur = out[k] ?: emptyList()
+            val ids = cur.map { it.id.lowercase() }.toSet()
+            out[k] = cur + legacy.filter { it.id.lowercase() !in ids }
+        }
+        byProfile = out
+        legacy = emptyList()
+        save()
+        // de oude lijst blijft als reservekopie staan, onder een andere naam
+        runCatching { if (legacyFile.exists()) legacyFile.renameTo(File(legacyFile.parentFile, "collections-pre54.json")) }
     }
 
     private fun save() {
         runCatching {
             file.parentFile?.mkdirs()
-            file.writeText(Http.json.encodeToString(kotlinx.serialization.builtins.ListSerializer(BingrCollection.serializer()), all))
+            file.writeText(Http.json.encodeToString(LocalState.serializer(), LocalState(byProfile, removedProfiles, legacy)))
         }
+    }
+
+    private fun setActive(list: List<BingrCollection>) {
+        val id = profileKey ?: return
+        byProfile = byProfile + (keyFor(id) to list)
+        save()
+        StateSync.collectionsChanged()
     }
 
     fun byID(id: String): BingrCollection? = visible.firstOrNull { it.id.equals(id, ignoreCase = true) }
 
-    /** Toevoegen of bijwerken (updatedAt = nu). Nieuwe collecties komen onderaan. */
+    /** Toevoegen of bijwerken (updatedAt = nu) voor het actieve profiel. Nieuwe collecties komen onderaan. */
     fun upsert(c: BingrCollection) {
         ensureLoaded()
-        val exists = all.any { it.id == c.id }
+        val cur = all
+        val exists = cur.any { it.id == c.id }
         val order = if (exists) c.order else (visible.maxOfOrNull { it.order } ?: -1) + 1
         val n = c.copy(order = order, updatedAt = System.currentTimeMillis(), deleted = false, deletedAt = null)
-        all = if (exists) all.map { if (it.id == n.id) n else it } else all + n
-        save()
-        StateSync.collectionsChanged()
+        setActive(if (exists) cur.map { if (it.id == n.id) n else it } else cur + n)
     }
 
     /** Verwijderen: tombstone, zodat andere apparaten hem ook verwijderen. */
     fun delete(id: String) {
         ensureLoaded()
         val now = System.currentTimeMillis()
-        all = all.map { if (it.id == id) it.copy(deleted = true, deletedAt = now, updatedAt = now, items = emptyList()) else it }
-        save()
-        StateSync.collectionsChanged()
+        setActive(all.map { if (it.id == id) it.copy(deleted = true, deletedAt = now, updatedAt = now, items = emptyList()) else it })
     }
 
     /** Volgorde opslaan (lijst met id's). */
     fun reorder(ids: List<String>) {
         ensureLoaded()
         val now = System.currentTimeMillis()
-        all = all.map { c ->
+        setActive(all.map { c ->
             val i = ids.indexOf(c.id)
             if (i >= 0 && c.order != i) c.copy(order = i, updatedAt = now) else c
-        }
-        save()
-        StateSync.collectionsChanged()
+        })
     }
 
     fun contains(c: BingrCollection, ref: CollectionRef): Boolean = c.items.any { it.id == ref.id && it.type == ref.type }
@@ -138,18 +200,36 @@ object Collections {
         upsert(c.copy(items = items))
     }
 
-    /** Uit de sync (roept geen sync-hooks aan). */
-    fun applySynced(list: List<BingrCollection>) {
+    /** Lokale stand voor de sync. */
+    fun snapshot(): LocalState { ensureLoaded(); return LocalState(byProfile, removedProfiles, legacy) }
+
+    /** Uit de sync (roept geen sync-hooks aan): per profiel de samengevoegde lijst. */
+    fun applySynced(map: Map<String, List<BingrCollection>>, removed: Map<String, Long>) {
         ensureLoaded()
-        if (list == all) return
-        all = list
+        if (map == byProfile && removed == removedProfiles) return
+        byProfile = map
+        removedProfiles = removed
         save()
+    }
+
+    /**
+     * Profiel verwijderd: zijn collecties weg, en onthouden (90 dagen) zodat de sync ze ook van de server haalt.
+     * [fromSync]: het profiel is elders verwijderd; dan niet zelf een upload starten.
+     */
+    fun profileDeleted(id: String, fromSync: Boolean = false) {
+        ensureLoaded()
+        val k = byProfile.keys.filter { it.equals(id, ignoreCase = true) }
+        byProfile = byProfile - k.toSet()
+        removedProfiles = removedProfiles + (id to System.currentTimeMillis())
+        save()
+        if (!fromSync) StateSync.collectionsChanged()
     }
 
     /** Ander account op dit apparaat. */
     fun wipe() {
-        all = emptyList(); loaded = true
+        byProfile = emptyMap(); removedProfiles = emptyMap(); legacy = emptyList(); loaded = true
         runCatching { file.delete() }
+        runCatching { legacyFile.delete() }
     }
 
     fun ref(c: Channel) = CollectionRef(BingrCollection.CHANNEL, c.id)

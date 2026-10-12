@@ -264,8 +264,9 @@ object Store {
 
     fun upsertProfile(p: ViewerProfile) {
         val old = profiles.firstOrNull { it.id == p.id }
-        // updatedAt (build 41): alleen bij naam, avatar, kinderprofiel of leeftijdsgrens (niet bij kijkvoorkeuren)
-        if (old == null || old.name != p.name || old.avatar != p.avatar || old.kids != p.kids || old.ageLimit != p.ageLimit) {
+        // updatedAt (build 41): alleen bij naam, avatar, kinderprofiel, leeftijdsgrens of accentkleur (niet bij kijkvoorkeuren)
+        if (old == null || old.name != p.name || old.avatar != p.avatar || old.kids != p.kids || old.ageLimit != p.ageLimit ||
+            old.accentColor != p.accentColor) {
             ProfileSync.profileEdited(p.id)
         }
         profiles = if (profiles.any { it.id == p.id }) profiles.map { if (it.id == p.id) p else it } else profiles + p
@@ -323,6 +324,7 @@ object Store {
         val newList = list.filter { it.id !in gone }
         if (newList.isEmpty()) return
         for (id in gone) {
+            Collections.profileDeleted(id, fromSync = true)
             runCatching { photoFile(id).delete() }
             setSecret("profile.$id.pin", null)
             runCatching { File(dir, "profile-$id").deleteRecursively() }
@@ -343,6 +345,30 @@ object Store {
         }
     }
 
+    /**
+     * Accentkleur van het actieve profiel wijzigen (build 54). Gaat met het profielobject mee naar het account
+     * (`updatedAt` = nu) en is meteen overal zichtbaar, want [Accent] leest het actieve profiel.
+     */
+    fun setActiveAccent(key: String) {
+        val p = activeProfile ?: return
+        if (p.accentColor == key) return
+        upsertProfile(p.copy(accentColor = key))
+    }
+
+    /**
+     * Eenmalige migratie (build 54): de accentkleur van vóór build 54 (`settings.shared.accentColor` of de lokale
+     * instelling) naar alle profielen die er nog geen hebben. true = er is iets gewijzigd.
+     */
+    fun copyAccentToProfiles(key: String): Boolean {
+        val missing = profiles.filter { it.accentColor == null }
+        if (missing.isEmpty()) return false
+        missing.forEach { ProfileSync.profileEdited(it.id) }
+        profiles = profiles.map { if (it.accentColor == null) it.copy(accentColor = key) else it }
+        write("profiles", profiles)
+        ProfileSync.profilesChanged()
+        return true
+    }
+
     /** Profiel met al zijn gegevens verwijderen. Het hoofdaccount kan niet verwijderd worden. */
     fun deleteProfile(p: ViewerProfile) {
         if (isMain(p)) return
@@ -350,6 +376,8 @@ object Store {
         ProfileSync.profileDeleted(p.id)
         // en de overige gegevens van dit profiel uit het account (build 44): delete_state profile.<id>
         StateSync.profileDeleted(p.id)
+        // en zijn collecties (build 54)
+        Collections.profileDeleted(p.id)
         profiles = profiles.filterNot { it.id == p.id }
         write("profiles", profiles)
         ProfileSync.profilesChanged()

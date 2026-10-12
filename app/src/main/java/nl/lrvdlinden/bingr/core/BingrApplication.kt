@@ -21,7 +21,8 @@ class BingrApplication : Application() {
             packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
             !packageManager.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
         // build 52: accentkleur, app-icoon en downloads (na isTV: op TV geen icoonkeuze en geen downloads)
-        Accent.reload()
+        // build 54: accentkleur per profiel; zonder account meteen de oude kleur naar de profielen (met account na de sync)
+        if (!(Account.isSignedIn && Account.configured)) Accent.migrate(null)
         IntroMarkers.reload()
         AppIcon.init()
         Downloads.init(this)
