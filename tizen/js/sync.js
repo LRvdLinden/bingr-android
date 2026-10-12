@@ -429,9 +429,20 @@
 
   /** Serverobject → model {sets, progress, history}. */
   function parseState(o) {
-    var removed = (o && o.removed) || {};
+    var removedObj = (o && o.removed && typeof o.removed === 'object') ? o.removed : {};
+    // verwijderingen per veld: `removed.<veld>` plus de oudere iOS-velden `<veld>Removed` (`progressRemoved`,
+    // `historyRemoved`, …) van Apple-builds vóór 60; per sleutel wint de nieuwste tijd
+    function removedFor(f) {
+      var a = removedObj[f], b = o ? o[f + 'Removed'] : null;
+      a = (a && typeof a === 'object') ? a : null; b = (b && typeof b === 'object' && !Array.isArray(b)) ? b : null;
+      if (!a || !b) return a || b;
+      var out = B.copy(a);
+      Object.keys(b).forEach(function (k) { if (!B.has(out, k) || (time(b[k]) || 0) > (time(out[k]) || 0)) out[k] = b[k]; });
+      return out;
+    }
+    var removed = { progress: removedFor('progress'), history: removedFor('history') };
     var st = { sets: {}, progress: {}, history: {} };
-    SET_FIELDS.forEach(function (f) { st.sets[f] = parseSetField(o[f], removed[f]); });
+    SET_FIELDS.forEach(function (f) { st.sets[f] = parseSetField(o[f], removedFor(f)); });
     var pr = o.progress || {};
     Object.keys(pr).forEach(function (k) {
       var p = pr[k];
@@ -513,7 +524,9 @@
       if (e.artwork) h.artwork = e.artwork;
       h.type = e.type;
       if (e.channelID) h.channelID = e.channelID;
-      h.date = B.iso(e.date);
+      // `at` en `date` zijn dezelfde tijd (iOS las `at`, Android/Tizen `date`): schrijf allebei
+      h.at = B.iso(e.date);
+      h.date = h.at;
       return h;
     });
     removed.history = {};
@@ -738,7 +751,9 @@
     var c = D.collections;
     if (!c || typeof c !== 'object') return [];
     var list = null;
-    if ((B.int(c.version) || 0) >= 2 && c.profiles && typeof c.profiles === 'object') {
+    // gemigreerd (contract): `version >= 2`, of `migrated: true` (vroege build 54), of er is al een object `profiles`
+    var migrated = (B.int(c.version) || 0) >= 2 || c.migrated === true || (c.profiles && typeof c.profiles === 'object' && !Array.isArray(c.profiles));
+    if (migrated && c.profiles && typeof c.profiles === 'object') {
       var keys = Object.keys(c.profiles).filter(function (k) { return lower(k) === lower(profileId); });
       list = [];
       keys.forEach(function (k) { list = list.concat((c.profiles[k] && c.profiles[k].items) || []); });

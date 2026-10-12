@@ -121,6 +121,13 @@
             tools:node="merge" />
 
         <receiver android:name=".ReminderReceiver" android:exported="false" />
+        <!-- Herinneringen opnieuw plannen na een herstart (alarmen overleven dat niet) -->
+        <receiver android:name=".BootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

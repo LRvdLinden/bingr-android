@@ -108,6 +108,7 @@ object Downloads {
         // was bezig toen de app stopte → weer in de wachtrij
         synchronized(lock) { list = loaded.map { if (it.status == DOWNLOADING) it.copy(status = QUEUED) else it } }
         publish(save = false)
+        verifyFiles()
         createChannel()
         if (list.any { it.status == QUEUED }) schedule()
     }
@@ -216,6 +217,22 @@ object Downloads {
         val d = get(key) ?: return
         mutate { l -> l.filterNot { it.key == key } }
         runCatching { file(d).delete() }
+    }
+
+    /**
+     * Voltooide downloads waarvan het bestand buiten de app is verwijderd (bestandsbeheer, opslag opgeschoond):
+     * uit de lijst halen, zodat de detailpagina niet meer "Gedownload" toont en je opnieuw kunt downloaden.
+     * Bij het starten en telkens als de app weer op de voorgrond komt.
+     */
+    fun verifyFiles() {
+        if (!::ctx.isInitialized || !supported) return
+        // opslag (even) niet beschikbaar: niets weghalen, anders verdwijnen downloads die er gewoon nog zijn
+        val ext = ctx.getExternalFilesDir("downloads") ?: return
+        if (android.os.Environment.getExternalStorageState(ext) != android.os.Environment.MEDIA_MOUNTED) return
+        val missing = synchronized(lock) { list.filter { it.status == DONE && runCatching { !file(it).isFile }.getOrDefault(false) } }
+        if (missing.isEmpty()) return
+        val keys = missing.map { it.key }.toSet()
+        mutate { l -> l.filterNot { it.key in keys } }
     }
 
     /** Profiel verwijderd (hier of via de sync, build 60): zijn downloads en bestanden ook weg. */

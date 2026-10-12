@@ -303,6 +303,12 @@ object Reminders {
         keep.filter { it.start > now && it !in old }.forEach { runCatching { schedule(ctx, it) } }
     }
 
+    /** Na het opstarten van het apparaat zijn alle alarmen weg: de toekomstige herinneringen opnieuw plannen. */
+    fun rescheduleAll(ctx: Context) {
+        val now = System.currentTimeMillis()
+        Store.reminders.filter { it.start > now }.forEach { runCatching { schedule(ctx, it) } }
+    }
+
     /** Alle alarmen annuleren (ander account op dit apparaat). */
     fun cancelAll() {
         val ctx = AppState.appContext
@@ -373,5 +379,14 @@ object Reminders {
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Reminders.showNotification(context, intent)
+    }
+}
+
+/** Na een herstart van het apparaat (of een app-update) de herinneringen opnieuw plannen. */
+class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        when (intent.action) {
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> Reminders.rescheduleAll(context.applicationContext)
+        }
     }
 }

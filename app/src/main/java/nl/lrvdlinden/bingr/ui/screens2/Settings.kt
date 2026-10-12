@@ -471,9 +471,13 @@ fun SettingsScreen() {
                 } else {
                     S2Toggle(L("Show on external display"), ExternalDisplay.enabled) { ExternalDisplay.use(it) }
                 }
+                // build 60 (docs/ACCOUNT.md): `subtitleLanguage` = taal van ondertitels in de stream, "" = de app-taal.
+                // Het oude "Uit" is nu "Automatische ondertitels: Uit" en staat hier niet meer.
                 S2Dropdown(L("Default subtitle language"),
-                    listOf("" to L("As in the stream"), "off" to L("Off")) + TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },
-                    TrackPreferences.subtitle) { v ->
+                    listOf("" to L("App language")) + TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },
+                    TrackPreferences.subtitle.takeIf { it != "off" } ?: "") { v ->
+                    // oud "off" eerst vastleggen als automatische stand, anders gaat "Uit" verloren
+                    if (TrackPreferences.subtitle == "off") TrackPreferences.autoSubtitles = TrackPreferences.autoSubtitles
                     TrackPreferences.subtitle = v
                     Store.updateActivePreferences { it.copy(streamSubtitleLanguage = v) }
                 }

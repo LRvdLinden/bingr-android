@@ -15,7 +15,7 @@ data class MediaTrack(val id: String, val name: String, val lang: String? = null
  */
 object TrackPreferences {
     const val audioKey = "player.audioLanguage"       // "" = zoals de stream
-    const val subtitleKey = "player.subtitleLanguage" // "" = zoals de stream, "off" = uit
+    const val subtitleKey = "player.subtitleLanguage" // "" = de app-taal; oud "off" = automatische ondertitels uit
 
     /** Verhoogt bij elke wijziging zodat Compose opnieuw tekent. */
     private var version by mutableStateOf(0)

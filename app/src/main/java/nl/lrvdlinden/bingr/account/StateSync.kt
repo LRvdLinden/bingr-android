@@ -855,7 +855,8 @@ object StateSync {
         val serverEntries = serverBy.mapNotNull { (k, v) -> (v as? JsonObject)?.let { k.lowercase() to it } }.toMap()
         val serverLists = serverEntries.mapValues { (_, e) -> parseList(e["items"]).mapNotNull { collectionFrom(it) } }
         serverCollectionItems = serverEntries.mapValues { (_, e) -> parseList(e["items"]).associateBy { it.jS("id")!!.lowercase() } }
-        val migrated = (data?.jI("version") ?: 0) >= 2 || data?.jB("migrated") == true
+        // gemigreerd (contract): `version >= 2`, of `migrated: true` (vroege build 54), of er is al een object `profiles`
+        val migrated = (data?.jI("version") ?: 0) >= 2 || data?.jB("migrated") == true || data?.get("profiles") is JsonObject
         val legacy = parseList(data?.get("items")).mapNotNull { collectionFrom(it) }
 
         val (local, profiles) = withContext(Dispatchers.Main) {
@@ -1096,8 +1097,18 @@ object StateSync {
     }
 
     private fun serverState(id: String, o: JsonObject): PState {
-        val removed = o["removed"] as? JsonObject
-        val sets = setFields.associateWith { f -> parseSetField(o[f], removed?.get(f) as? JsonObject) }
+        val removedObj = o["removed"] as? JsonObject
+        // Verwijderingen per veld: `removed.<veld>` plus de oudere iOS-velden `<veld>Removed`
+        // (`progressRemoved`, `historyRemoved`, …) van Apple-builds vóór 60; per sleutel wint de nieuwste tijd.
+        fun removedFor(f: String): JsonObject? {
+            val a = removedObj?.get(f) as? JsonObject
+            val b = o[f + "Removed"] as? JsonObject
+            if (a == null || b == null) return a ?: b
+            val out = a.toMutableMap()
+            b.forEach { (k, v) -> val c = out[k]; if (c == null || (time(v) ?: 0L) > (time(c) ?: 0L)) out[k] = v }
+            return JsonObject(out)
+        }
+        val sets = setFields.associateWith { f -> parseSetField(o[f], removedFor(f)) }
         val progress = HashMap<String, Item<ProgressEntry>>()
         (o["progress"] as? JsonObject)?.forEach { (k, v) ->
             val p = v as? JsonObject ?: return@forEach
@@ -1105,7 +1116,7 @@ object StateSync {
                 progress[k] = Item(time(p["updatedAt"]) ?: 0L, null)
             } else parseProgress(id, p)?.let { progress[k] = Item(it.updated, it) }
         }
-        (removed?.get("progress") as? JsonObject)?.forEach { (k, v) ->
+        removedFor("progress")?.forEach { (k, v) ->
             val at = time(v) ?: 0L
             val c = progress[k]
             if (c == null || at > c.at) progress[k] = Item(at, null)
@@ -1116,7 +1127,7 @@ object StateSync {
             val c = history[h.id]
             if (c == null || h.date > c.at) history[h.id] = Item(h.date, h)
         }
-        (removed?.get("history") as? JsonObject)?.forEach { (k, v) ->
+        removedFor("history")?.forEach { (k, v) ->
             val at = time(v) ?: 0L
             val c = history[k]
             if (c == null || at >= c.at) history[k] = Item(at, null)
@@ -1208,11 +1219,14 @@ object StateSync {
                 e.artwork?.let { put("artwork", JsonPrimitive(it)) }
                 put("type", JsonPrimitive(e.type.name.lowercase()))
                 e.channelID?.let { put("channelID", JsonPrimitive(it)) }
+                // `at` en `date` zijn dezelfde tijd (iOS las `at`, Android/Tizen `date`): schrijf allebei
+                put("at", JsonPrimitive(iso(e.date)))
                 put("date", JsonPrimitive(iso(e.date)))
             })
         })
         removed["history"] = JsonObject(s.history.filter { it.value.value == null }.toSortedMap().mapValues { JsonPrimitive(iso(it.value.at)) })
-        out["removed"] = JsonObject(removed)
+        // onbekende sleutels in `removed` (van nieuwere apps) blijven staan
+        out["removed"] = JsonObject(((base?.get("removed") as? JsonObject) ?: JsonObject(emptyMap())) + removed)
         s.prefs?.let { p ->
             val v = p.value ?: KijkPrefs(null, null, null, null)
             fun j(x: String?) = x?.let { JsonPrimitive(it) } ?: JsonNull

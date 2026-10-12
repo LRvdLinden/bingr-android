@@ -20,9 +20,18 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         current = this
         setContent { BingrTheme { BingrRoot() } }
-        if (Build.VERSION.SDK_INT >= 33) {
+        // meldingen (herinneringen, downloads): één keer vragen, alleen op telefoon/tablet (op TV niet)
+        if (Build.VERSION.SDK_INT >= 33 && !AppState.isTV && !Prefs.bool("notifications.asked") &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            Prefs.put("notifications.asked", true)
             requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // bestand van een download buiten de app verwijderd → niet meer als "Gedownload" tonen
+        Downloads.verifyFiles()
     }
 
     override fun onDestroy() { if (current === this) current = null; super.onDestroy() }
