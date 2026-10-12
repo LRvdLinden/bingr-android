@@ -419,7 +419,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         langVersions = t?.let { runCatching { ContentLanguage.versions(it) }.getOrNull() } ?: emptyList()
     }
     // intro en aftiteling (build 52)
-    val markerKey = IntroMarkers.keyFor(player.item)
+    // build 60: één keer per titel opzoeken (zonder serie-id doorzoekt dit de hele bibliotheek), niet bij elke tik
+    val markerKey = remember(player.item.id, player.item.seriesID, Playlists.source?.id) { IntroMarkers.keyFor(player.item) }
     val marker = IntroMarkers.get(markerKey)
     val introRange = if (!player.isLive && player.errorText == null) marker?.intro else null
     val showSkip = introRange != null && player.currentTime >= introRange.start && player.currentTime < introRange.endInclusive - 1 &&
@@ -722,7 +723,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             player.start(s.url)
         }, onDismiss = { panel = null })
         PlayerPanel.RATE -> RatingPanel(player.item) { panel = null; close() }
-        PlayerPanel.INTRO -> markerKey?.let { k -> IntroMarkersPanel(player, k) { panel = null } } ?: run { panel = null }
+        // geen sleutel (meer): paneel sluiten via een effect, niet tijdens het opbouwen (build 60)
+        PlayerPanel.INTRO -> if (markerKey != null) IntroMarkersPanel(player, markerKey) { panel = null } else LaunchedEffect(Unit) { panel = null }
         PlayerPanel.BACKUP -> {
             LaunchedEffect(player.item.id) { loadBackups() }
             BackupSourcesPanel(

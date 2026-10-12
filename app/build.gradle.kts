@@ -72,6 +72,14 @@ android {
 
     // Vertalingen: app/src/main/assets/Translations.json (kopie van Shared/Resources/Translations.json uit de iOS-repo)
 
+    // Lint (build 60): volledige controle na de release-build, alleen ter info in het CI-log (blokkeert nooit)
+    lint {
+        abortOnError = false
+        textReport = true
+        textOutput = file("stdout")
+        explainIssues = false
+    }
+
     packaging {
         resources { excludes += listOf("/META-INF/{AL2.0,LGPL2.1}", "META-INF/DEPENDENCIES") }
         jniLibs { useLegacyPackaging = true }
@@ -118,3 +126,6 @@ dependencies {
     // Downloads op de achtergrond (build 52): hervat na netwerkverlies en herstart
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 }
+
+// Lint na assembleRelease (zie lint { } hierboven): rapport in het CI-log, fouten blokkeren de APK niet
+tasks.matching { it.name == "assembleRelease" }.configureEach { finalizedBy("lintRelease") }

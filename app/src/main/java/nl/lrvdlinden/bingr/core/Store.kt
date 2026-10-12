@@ -115,7 +115,14 @@ object Store {
         runCatching { Http.json.decodeFromString<T>(File(d, "$name.json").readText()) }.getOrDefault(def)
 
     private inline fun <reified T> writeIn(d: File, name: String, value: T) {
-        runCatching { File(d, "$name.json").writeText(Http.json.encodeToString(value)) }
+        // build 60: eerst naar een tijdelijk bestand en dan hernoemen (atomair), zodat een app die midden in het
+        // schrijven stopt (update, geheugen vol, afsluiten) nooit een half bestand achterlaat (= profielen of lijsten kwijt)
+        runCatching {
+            val f = File(d, "$name.json")
+            val tmp = File(d, "$name.json.tmp")
+            tmp.writeText(Http.json.encodeToString(value))
+            if (!tmp.renameTo(f)) { f.delete(); if (!tmp.renameTo(f)) tmp.delete() }
+        }
     }
 
     private inline fun <reified T> read(name: String, def: T): T = readIn(dir, name, def)
@@ -329,6 +336,7 @@ object Store {
         if (newList.isEmpty()) return
         for (id in gone) {
             Collections.profileDeleted(id, fromSync = true)
+            Downloads.profileDeleted(id)
             runCatching { photoFile(id).delete() }
             setSecret("profile.$id.pin", null)
             runCatching { File(dir, "profile-$id").deleteRecursively() }
@@ -382,6 +390,8 @@ object Store {
         StateSync.profileDeleted(p.id)
         // en zijn collecties (build 54)
         Collections.profileDeleted(p.id)
+        // en zijn downloads (build 60): anders blijven ze onzichtbaar opslag innemen
+        Downloads.profileDeleted(p.id)
         profiles = profiles.filterNot { it.id == p.id }
         write("profiles", profiles)
         ProfileSync.profilesChanged()

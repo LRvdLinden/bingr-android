@@ -175,6 +175,7 @@ object Downloads {
         if (!supported) return L("Downloads are not available on this device.")
         val src = Playlists.source?.id
         find(src, item.id)?.let { existing ->
+            shareWithActive(existing)
             if (existing.status == FAILED || existing.status == PAUSED) resume(existing.key)
             return null
         }
@@ -195,6 +196,15 @@ object Downloads {
         return null
     }
 
+    /**
+     * Al gedownload door een ander profiel (build 60): voortaan gedeeld (profileID null), anders toont de
+     * detailpagina "Gedownload" terwijl hij in Downloads van dit profiel nergens staat.
+     */
+    fun shareWithActive(d: DownloadItem) {
+        val me = Store.activeProfileID ?: return
+        if (d.profileID != null && d.profileID != me) update(d.key) { it.copy(profileID = null) }
+    }
+
     fun pause(key: String) = update(key) { if (it.status == DONE) it else it.copy(status = PAUSED) }
 
     fun resume(key: String) {
@@ -206,6 +216,16 @@ object Downloads {
         val d = get(key) ?: return
         mutate { l -> l.filterNot { it.key == key } }
         runCatching { file(d).delete() }
+    }
+
+    /** Profiel verwijderd (hier of via de sync, build 60): zijn downloads en bestanden ook weg. */
+    fun profileDeleted(id: String) {
+        if (!::ctx.isInitialized || !supported) return
+        val gone = synchronized(lock) { list.filter { it.profileID != null && it.profileID.equals(id, ignoreCase = true) } }
+        if (gone.isEmpty()) return
+        val keys = gone.map { it.key }.toSet()
+        mutate { l -> l.filterNot { it.key in keys } }
+        gone.forEach { d -> runCatching { file(d).delete() } }
     }
 
     /** Afspeelbaar item voor een voltooide download (lokaal bestand, hervat op de opgeslagen positie). */

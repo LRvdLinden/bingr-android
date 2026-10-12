@@ -378,7 +378,8 @@ object ContentLanguage {
                 val p = TitleCleaner.parse(displayTitle(title))
                 if (Net.normTitle(p.title) != norm) return false
                 val oy = y ?: p.year
-                return year == null || oy == null || oy == year
+                // jaar ±1 (docs/ACCOUNT.md, build 59): releasejaren verschillen soms per land of bron
+                return year == null || oy == null || kotlin.math.abs(oy - year) <= 1
             }
             val out = ArrayList<Version>()
             when (t) {

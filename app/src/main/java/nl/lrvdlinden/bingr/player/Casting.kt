@@ -282,6 +282,8 @@ object Casting {
             // AVI, FLV, TS-films e.d.: proberen, de ontvanger herkent het formaat soms zelf
             else -> { out += Attempt(url, if (ext == "ts") "video/mp2t" else "video/mp4"); out += Attempt(url, "video/mp4", relay = true) }
         }
+        // download op de telefoon (build 60): de Chromecast kan geen file://-adres openen, dus alleen via het doorgeefluik
+        if (u?.scheme.equals("file", ignoreCase = true)) return out.map { it.copy(relay = true) }.distinct()
         return out.distinct()
     }
 

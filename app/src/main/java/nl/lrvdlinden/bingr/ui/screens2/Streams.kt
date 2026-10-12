@@ -148,9 +148,10 @@ private fun StreamRow(s: Account.StreamInfo, details: Boolean) {
 @Composable
 fun StreamLimitScreen(info: Account.StreamList, onRetry: () -> Unit, onClose: () -> Unit) {
     var data by remember(info) { mutableStateOf(info) }
-    var working by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val firstButton = rememberInitialFocus(key = info)
+    var working by remember { mutableStateOf(false) }
+    // TV (build 60): na de spinner van "Try again" de focus terug op de knop (anders geen focus meer)
+    val firstButton = rememberInitialFocus(key = info to working)
     BackHandler { onClose() }
 
     fun retry() {

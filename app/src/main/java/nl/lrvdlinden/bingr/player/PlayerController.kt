@@ -492,6 +492,8 @@ class PlayerController(item: PlayableItem) {
         stopped = true
         recordHistory()
         timer?.cancel(); timer = null
+        // OpenSubtitles-zoekactie van deze titel niet laten doorlopen na het sluiten (build 60)
+        osJob?.cancel(); osJob = null
         saveProgress()
         if (!isPreview) { scrobble(Trakt.Scrobble.STOP, position); StateSync.flush() }
         engine.release()

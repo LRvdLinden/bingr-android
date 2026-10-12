@@ -120,7 +120,10 @@ object CastRelay {
         val segs = path.substringBefore('?').split('/').filter { it.isNotEmpty() }
         if (segs.size < 2 || segs[0] != token) { writeHead(out, 404, "Not Found", emptyMap()); return }
         if (segs[1] == "sub") { serveSubtitle(out, method, segs.getOrNull(2)?.substringBefore('.')); return }
-        val upstream = decode(segs[1])?.takeIf { it.startsWith("http", true) } ?: run { writeHead(out, 400, "Bad Request", emptyMap()); return }
+        val target = decode(segs[1]) ?: run { writeHead(out, 400, "Bad Request", emptyMap()); return }
+        // build 60: een download (bestand op de telefoon) casten; de Chromecast kan geen file://-adres openen
+        if (target.startsWith("file:", true)) { serveFile(out, method, target, headers["range"]); return }
+        val upstream = target.takeIf { it.startsWith("http", true) } ?: run { writeHead(out, 400, "Bad Request", emptyMap()); return }
 
         val rb = Request.Builder().url(upstream).header("User-Agent", Http.USER_AGENT)
         headers["range"]?.let { rb.header("Range", it) }
@@ -164,6 +167,67 @@ object CastRelay {
                 // Chromecast heeft de verbinding gesloten (zappen/stoppen): normaal
             }
         }
+    }
+
+    /**
+     * Lokaal bestand (download, build 60) met HTTP Range, zodat de Chromecast kan spoelen. Alleen bestanden in de
+     * eigen app-mappen; al het andere geeft 404.
+     */
+    private fun serveFile(out: OutputStream, method: String, uri: String, range: String?) {
+        val f = runCatching { File(java.net.URI(uri)).canonicalFile }.getOrNull()
+        if (f == null || !f.isFile || !allowedFile(f)) { writeHead(out, 404, "Not Found", emptyMap()); return }
+        val len = f.length()
+        val type = when (f.extension.lowercase(Locale.ROOT)) {
+            "mp4", "m4v", "mov" -> "video/mp4"
+            "mkv" -> "video/x-matroska"
+            "webm" -> "video/webm"
+            "ts" -> "video/mp2t"
+            "mp3" -> "audio/mpeg"
+            "m4a", "aac" -> "audio/mp4"
+            else -> "application/octet-stream"
+        }
+        var start = 0L
+        var end = len - 1
+        var partial = false
+        Regex("bytes=(\\d*)-(\\d*)").find(range.orEmpty())?.let { m ->
+            val a = m.groupValues[1].toLongOrNull()
+            val b = m.groupValues[2].toLongOrNull()
+            when {
+                a != null -> { start = a; if (b != null) end = minOf(b, len - 1) }
+                b != null -> start = maxOf(0L, len - b)
+            }
+            partial = true
+        }
+        if (len <= 0L || start >= len || start > end) {
+            writeHead(out, 416, "Range Not Satisfiable", mapOf("Content-Range" to "bytes */$len")); return
+        }
+        val count = end - start + 1
+        val h = linkedMapOf("Content-Type" to type, "Content-Length" to count.toString(), "Accept-Ranges" to "bytes")
+        if (partial) h["Content-Range"] = "bytes $start-$end/$len"
+        writeHead(out, if (partial) 206 else 200, if (partial) "Partial Content" else "OK", h)
+        if (method == "HEAD") return
+        try {
+            java.io.RandomAccessFile(f, "r").use { raf ->
+                raf.seek(start)
+                val buf = ByteArray(64 * 1024)
+                var left = count
+                while (left > 0) {
+                    val n = raf.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
+                    if (n < 0) break
+                    out.write(buf, 0, n)
+                    left -= n
+                }
+                out.flush()
+            }
+        } catch (_: java.io.IOException) {
+            // Chromecast heeft de verbinding gesloten (spoelen/stoppen): normaal
+        }
+    }
+
+    private fun allowedFile(f: File): Boolean {
+        val ctx = AppState.appContext
+        val roots = listOfNotNull(ctx.getExternalFilesDir(null), ctx.filesDir).mapNotNull { runCatching { it.canonicalPath }.getOrNull() }
+        return roots.any { f.path.startsWith(it + File.separator) }
     }
 
     /** Ondertitel als WebVTT (UTF-8) met CORS-headers; de ontvanger weigert tekstsporen zonder Access-Control-Allow-Origin. */

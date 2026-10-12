@@ -308,6 +308,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
     /** Downloaden (build 52, telefoon/tablet): film of aflevering. */
     fun download(item: PlayableItem, seriesTitle: String?) {
         val existing = Downloads.find(pid, item.id)
+        existing?.let { Downloads.shareWithActive(it) }
         if (existing?.isDone == true) { flash(L("Downloaded")); return }
         if (existing != null && existing.status != Downloads.FAILED && existing.status != Downloads.PAUSED) { flash(L("Downloading…")); return }
         scope.launch {
