@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.mediarouter.media.MediaRouteSelector
 import androidx.mediarouter.media.MediaRouter
 import com.google.android.gms.cast.CastMediaControlIntent
+import com.google.android.gms.cast.HlsSegmentFormat
+import com.google.android.gms.cast.HlsVideoSegmentFormat
 import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
 import com.google.android.gms.cast.MediaMetadata
@@ -73,6 +75,12 @@ object Casting {
 
     private var initialized = false
     private var client: RemoteMediaClient? = null
+
+    // Wat we nu proberen te casten, met de nog te proberen alternatieve adressen (bij een fout de volgende).
+    private var pendingItem: PlayableItem? = null
+    private var pendingPosMs = 0L
+    private var candidates: List<String> = emptyList()
+    private var currentUrl: String? = null
 
     private val clientCallback = object : RemoteMediaClient.Callback() {
         override fun onStatusUpdated() { updateStatus() }
@@ -141,14 +149,53 @@ object Casting {
     private fun updateStatus() {
         val c = client ?: return
         isPlaying = c.isPlaying
+        val failed = c.playerState == MediaStatus.PLAYER_STATE_IDLE && c.idleReason == MediaStatus.IDLE_REASON_ERROR
+        // fout bij het laden: probeer het volgende adres (bijv. .m3u8 ↔ .ts) voordat we opgeven
+        if (failed && candidates.isNotEmpty() && pendingItem != null && (c.mediaInfo?.contentId == null || c.mediaInfo?.contentId == currentUrl)) {
+            val next = candidates.first(); candidates = candidates.drop(1)
+            status = L("Connecting to %@…", deviceName ?: "Chromecast")
+            load(c, pendingItem!!, next, pendingPosMs)
+            return
+        }
+        if (c.isPlaying) { candidates = emptyList() }
         status = when {
-            c.playerState == MediaStatus.PLAYER_STATE_IDLE && c.idleReason == MediaStatus.IDLE_REASON_ERROR ->
-                L("This stream can't be played on Chromecast.")
+            failed -> L("This stream can't be played on Chromecast.")
             c.isPlaying -> L("Playing on Chromecast")
             c.isPaused -> L("Paused on Chromecast")
             c.isBuffering -> L("Connecting to %@…", deviceName ?: "Chromecast")
             else -> deviceName ?: "Chromecast"
         }
+    }
+
+    /**
+     * Adressen om te proberen, beste eerst. De standaard-ontvanger van Chromecast speelt geen ruwe
+     * MPEG-TS-streams (.ts), wel HLS. Xtream-servers leveren elke live-zender ook als .m3u8, dus die
+     * nemen we eerst; het originele adres blijft als terugval.
+     */
+    internal fun castCandidates(url: String, live: Boolean): List<String> {
+        val out = mutableListOf<String>()
+        val u = runCatching { Uri.parse(url) }.getOrNull()
+        val path = u?.path.orEmpty()
+        val segs = path.split('/').filter { it.isNotEmpty() }
+        val lower = path.lowercase(Locale.ROOT)
+        if (u != null && !lower.endsWith(".m3u8") && !lower.endsWith(".mpd")) {
+            when {
+                // Xtream: /live/user/pass/123.ts (of zonder extensie)
+                segs.size >= 4 && segs[segs.size - 4].equals("live", true) -> {
+                    val last = segs.last().substringBeforeLast('.')
+                    out += u.buildUpon().path("/" + (segs.dropLast(1) + "$last.m3u8").joinToString("/")).build().toString()
+                }
+                // Xtream kort: /user/pass/123 → /live/user/pass/123.m3u8
+                live && segs.size == 3 && segs[2].substringBeforeLast('.').all { it.isDigit() } -> {
+                    val last = segs[2].substringBeforeLast('.')
+                    out += u.buildUpon().path("/live/${segs[0]}/${segs[1]}/$last.m3u8").build().toString()
+                }
+                // andere live .ts-adressen: vaak werkt dezelfde naam met .m3u8
+                live && lower.endsWith(".ts") -> out += url.replaceFirst(Regex("\\.ts(?=($|\\?))", RegexOption.IGNORE_CASE), ".m3u8")
+            }
+        }
+        out += url
+        return out.distinct()
     }
 
     private fun contentType(url: String): String {
@@ -164,6 +211,12 @@ object Casting {
     /** Zet [item] op de verbonden Chromecast. false = geen sessie. */
     fun cast(item: PlayableItem, url: String, positionMs: Long): Boolean {
         val c = client ?: castContext(AppState.appContext)?.sessionManager?.currentCastSession?.remoteMediaClient ?: return false
+        val all = castCandidates(url, item.type == MediaType.LIVE)
+        pendingItem = item; pendingPosMs = positionMs; candidates = all.drop(1)
+        return load(c, item, all.first(), positionMs)
+    }
+
+    private fun load(c: RemoteMediaClient, item: PlayableItem, url: String, positionMs: Long): Boolean {
         val type = when (item.type) {
             MediaType.MOVIE -> MediaMetadata.MEDIA_TYPE_MOVIE
             MediaType.EPISODE, MediaType.SERIES -> MediaMetadata.MEDIA_TYPE_TV_SHOW
@@ -174,17 +227,23 @@ object Casting {
         item.subtitle?.let { md.putString(MediaMetadata.KEY_SUBTITLE, it) }
         item.artwork?.takeIf { it.startsWith("http") }?.let { md.addImage(WebImage(Uri.parse(it))) }
         val live = item.type == MediaType.LIVE
-        val info = MediaInfo.Builder(url)
+        val ct = contentType(url)
+        val b = MediaInfo.Builder(url)
             .setContentUrl(url)
             .setStreamType(if (live) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED)
-            .setContentType(contentType(url))
+            .setContentType(ct)
             .setMetadata(md)
-            .build()
+        // IPTV-HLS gebruikt bijna altijd MPEG-TS-segmenten; zonder deze hint verwacht de ontvanger fMP4/AAC
+        if (ct == "application/x-mpegurl") {
+            b.setHlsSegmentFormat(HlsSegmentFormat.TS)
+            b.setHlsVideoSegmentFormat(HlsVideoSegmentFormat.MPEG2_TS)
+        }
         val req = MediaLoadRequestData.Builder()
-            .setMediaInfo(info)
+            .setMediaInfo(b.build())
             .setAutoplay(true)
             .setCurrentTime(if (live) 0L else positionMs.coerceAtLeast(0))
             .build()
+        currentUrl = url
         return runCatching { c.load(req); true }.getOrDefault(false)
     }
 
