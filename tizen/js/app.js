@@ -56,6 +56,7 @@
     try { if (!(window.webapis && webapis.avplay)) document.getElementById('av-player').style.display = 'none'; } catch (e) { /* stil */ }
     U.registerKeys();
     document.addEventListener('keydown', U.onKeyDown, true);
+    document.addEventListener('keyup', U.onKeyUp, true);
     document.addEventListener('visibilitychange', onVisibility);
     U.push(S.splash());
     B.on('signedOut', function () { toLogin(); });
@@ -73,6 +74,8 @@
     if (onLogin) return;
     onLogin = true;
     if (B.player.current) B.player.current.close();
+    if (B.multiview.current) B.multiview.current.close();
+    B.preview.stop();
     app.profile = null;
     U.reset(S.login(function () { onLogin = false; afterLogin(true); }));
   }
@@ -84,7 +87,7 @@
     var reg = (fresh || !A.isRegistered()) ? A.registerDevice() : Promise.resolve('ok');
     reg.then(function (r) {
       if (r && r.limit) { showLimit(r); return; }
-      A.fetchConfig();
+      A.fetchConfig().then(function (ok) { if (ok) B.emit('config'); });
       var haveCache = D.profiles.length > 0;
       var sync = Promise.all([D.syncProfiles(), D.syncSources(), D.syncState()]);
       // met cache meteen door; zonder cache maximaal 8 seconden wachten
@@ -110,6 +113,9 @@
   }
   app.switchProfile = function () {
     if (B.player.current) B.player.current.close();
+    if (B.multiview.current) B.multiview.current.close();
+    B.preview.stop();
+    B.ageRatings.stop();
     D.flush();
     showProfiles();
   };
@@ -124,12 +130,28 @@
     var main = S.main();
     U.reset(main);
     Lib.select(src).then(function () {
-      Lib.warmOthers();
       maybeResumeChannel();
+      // achtergrondwerk pas als de app rustig is: reservebronnen en leeftijdsclassificaties
+      B.whenQuiet(function () { Lib.warmOthers(); warmAges(); }, 2500);
     });
-    D.syncState().then(function () { if (app.profile === p) { Lib.applyFilters(); } });
+    D.syncState().then(function () { if (app.profile === p) { Lib.applyFilters(); B.trakt.refresh(false); } });
+    B.reminders.start();
   }
+  /** TMDB-leeftijden bijwerken als dit profiel een leeftijdsgrens heeft (kindergroepen eerst). */
+  function warmAges() {
+    if (!app.profile || D.ageLimit(app.profile) == null) return;
+    B.ageRatings.warm(Lib.raw);
+  }
+  // nieuwe classificaties: opnieuw filteren (alleen bij een leeftijdsgrens), als de afstandsbediening stil is
+  var agePending = false;
+  B.on('ageRatings', function () {
+    if (!app.profile || D.ageLimit(app.profile) == null || agePending) return;
+    agePending = true;
+    B.whenQuiet(function () { agePending = false; Lib.applyFilters(); }, 1500);
+  });
+  B.on('config', function () { if (app.profile) { B.trakt.refresh(false); warmAges(); } });
   function PCrelock() { if (B.parental.isUnlocked()) B.parental.lock(); }
+  B.ageRatings.preload();
 
   /** Instelling "Laatste zender hervatten": na het kiezen van een profiel meteen die zender. */
   function maybeResumeChannel() {
@@ -144,6 +166,7 @@
 
   app.signOut = function () {
     if (B.player.current) B.player.current.close();
+    if (B.multiview.current) B.multiview.current.close();
     D.flush().then(function () { return A.signOut(); });
   };
 
@@ -188,11 +211,14 @@
   function onVisibility() {
     if (document.hidden) {
       clearInterval(hbTimer);
+      B.preview.stop();
       if (B.player.current) B.player.current.pauseForBackground();
+      if (B.multiview.current) B.multiview.current.pauseForBackground();
       D.flush();
     } else {
       startHeartbeat();
       if (B.player.current) B.player.current.resumeFromBackground();
+      if (B.multiview.current) B.multiview.current.resumeFromBackground();
     }
   }
 
@@ -200,7 +226,7 @@
   B.on('settings', function () {
     var before = B.lang;
     B.setLanguage(D.shared('appLanguage', '') || '');
-    if (B.lang === before || B.player.current || onLogin) return;
+    if (B.lang === before || B.player.current || B.multiview.current || onLogin) return;
     var top = U.top();
     if (!top || top.el.classList.contains('splash')) return;
     if (app.profile) { var main = S.main(); U.reset(main); }

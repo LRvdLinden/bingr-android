@@ -236,6 +236,15 @@
   Xtream.prototype.vodInfo = function (vodID) {
     return B.getJSON(this.api('get_vod_info', [['vod_id', String(vodID)]]), null, 30000).then(function (j) { return (j && j.info) || null; });
   };
+  /** Terugkijken (tv_archive): /timeshift/<user>/<pw>/<minuten>/<jjjj-mm-dd:uu-mm lokale tijd>/<id>.ts (= XtreamClient.catchupURL). */
+  Xtream.prototype.catchupURL = function (ch, start, end) {
+    if (!/^x\d/.test(String(ch.id))) return null;
+    var sid = String(ch.id).slice(1);
+    var d = new Date(start);
+    var stamp = d.getFullYear() + '-' + B.pad2(d.getMonth() + 1) + '-' + B.pad2(d.getDate()) + ':' + B.pad2(d.getHours()) + '-' + B.pad2(d.getMinutes());
+    var minutes = Math.max(1, Math.round((end - start) / 60000));
+    return this.server + '/timeshift/' + this.username + '/' + this.password + '/' + minutes + '/' + stamp + '/' + sid + '.ts';
+  };
   Xtream.prototype.xmltvURL = function () {
     return B.query(this.server + '/xmltv.php', [['username', this.username], ['password', this.password]]);
   };
@@ -357,6 +366,43 @@
       return self.js(self.url([['type', live ? 'itv' : 'vod'], ['action', 'create_link'], ['cmd', cmd], ['forced_storage', 'undefined'], ['disable_ad', '0']]));
     }).then(function (js) { return directURL(js && js.cmd); });
   };
+  /**
+   * Terugkijken op een MAC-portal: het programma in het archief zoeken (epg get_simple_data_table) en daarvoor
+   * een tv_archive-link maken. Lukt dat niet, dan de live-link met ?utc=…&lutc=… (Flussonic-stijl, veel portals).
+   */
+  Stalker.prototype.archiveLink = function (ch, start, end) {
+    var self = this;
+    var cid = String(ch.id).replace(/^st/, '');
+    var d = new Date(start);
+    var day = d.getFullYear() + '-' + B.pad2(d.getMonth() + 1) + '-' + B.pad2(d.getDate());
+    function fallback() {
+      if (!ch.stalkerCmd) return null;
+      return self.createLink(ch.stalkerCmd, true).then(function (u) {
+        if (!u) return null;
+        return u + (u.indexOf('?') >= 0 ? '&' : '?') + 'utc=' + Math.floor(start / 1000) + '&lutc=' + Math.floor(Date.now() / 1000);
+      }, function () { return null; });
+    }
+    return (this.token ? Promise.resolve() : this.connect()).then(function () {
+      var found = null, page = 1;
+      function next() {
+        return self.js(self.url([['type', 'epg'], ['action', 'get_simple_data_table'], ['ch_id', cid], ['date', day], ['p', String(page)]])).then(function (js) {
+          var list = (js && js.data) || [];
+          for (var i = 0; i < list.length; i++) {
+            var s = B.num(list[i].start_timestamp) * 1000;
+            if (Math.abs(s - start) <= 5 * 60000 && (B.int(list[i].mark_archive) === 1 || list[i].mark_archive === true)) { found = list[i]; break; }
+          }
+          var total = B.int(js && js.total_items) || 0, per = B.int(js && js.max_page_items) || list.length || 1;
+          if (!found && list.length && page * per < total && page < 6) { page++; return next(); }
+          return found;
+        }, function () { return null; });
+      }
+      return next();
+    }).then(function (prog) {
+      if (!prog || prog.id == null) return fallback();
+      return self.js(self.url([['type', 'tv_archive'], ['action', 'create_link'], ['cmd', 'auto /media/' + prog.id + '.mpg'], ['forced_storage', 'undefined'], ['disable_ad', '0']]))
+        .then(function (js) { return directURL(js && js.cmd) || fallback(); }, fallback);
+    }, fallback);
+  };
   P.Stalker = Stalker;
 
   // MARK: XMLTV (tekst doorlopen zonder DOM: grote gidsen passen anders niet in het geheugen van de tv)
@@ -379,8 +425,10 @@
       .replace(/&#(\d+);/g, function (m, d) { return String.fromCharCode(parseInt(d, 10)); })
       .replace(/&amp;/g, '&').trim();
   }
+  var attrRes = {};
   function attr(tag, name) {
-    var m = new RegExp('\\s' + name + '="([^"]*)"').exec(tag);
+    var re = attrRes[name] || (attrRes[name] = new RegExp('\\s' + name + '="([^"]*)"'));
+    var m = re.exec(tag);
     return m ? unxml(m[1]) : null;
   }
   function inner(block, tag) {
@@ -392,41 +440,138 @@
     return unxml(block.substring(s + 1, e));
   }
   /**
-   * XMLTV-tekst → {kanaal-id: [programma's]}. Alleen kanalen uit [wanted] (kleine letters; leeg = alles)
-   * en programma's van 3 uur terug tot 36 uur vooruit.
+   * Doorlopende XMLTV-lezer: stukken tekst erin (push), complete <programme>-blokken eruit.
+   * wanted: {kanaal-id in kleine letters: ondergrens in ms} (leeg = alles, 3 uur terug); bovengrens 36 uur vooruit.
+   * Zo hoeft een grote (uitgepakte) gids nooit in z'n geheel als één string in het geheugen.
    */
-  P.parseXMLTV = function (text, wanted) {
-    var now = Date.now(), lower = now - 3 * 3600000, upper = now + 36 * 3600000;
-    var out = {};
-    var pos = 0;
-    var want = wanted && Object.keys(wanted).length ? wanted : null;
+  function XMLTVReader(wanted) {
+    this.now = Date.now();
+    this.lower = this.now - 3 * 3600000;
+    this.upper = this.now + 36 * 3600000;
+    this.want = wanted && Object.keys(wanted).length ? wanted : null;
+    this.out = {};
+    this.buf = '';
+    this.count = 0;
+  }
+  XMLTVReader.prototype.push = function (text) {
+    var buf = this.buf ? this.buf + text : text;
+    var pos = 0, keep = -1;
     while (true) {
-      var i = text.indexOf('<programme', pos);
+      var i = buf.indexOf('<programme', pos);
       if (i < 0) break;
-      var tagEnd = text.indexOf('>', i);
-      var end = text.indexOf('</programme>', tagEnd);
-      if (tagEnd < 0) break;
-      var selfClosing = text.charAt(tagEnd - 1) === '/';
-      if (!selfClosing && end < 0) break;
-      var tag = text.substring(i, tagEnd);
+      var tagEnd = buf.indexOf('>', i);
+      if (tagEnd < 0) { keep = i; break; }
+      var selfClosing = buf.charAt(tagEnd - 1) === '/';
+      var end = selfClosing ? tagEnd : buf.indexOf('</programme>', tagEnd);
+      if (end < 0) { keep = i; break; }
+      var tag = buf.substring(i, tagEnd);
       pos = selfClosing ? tagEnd + 1 : end + 12;
       var ch = attr(tag, 'channel');
       if (!ch) continue;
       var key = ch.toLowerCase();
-      if (want && !want[key]) continue;
+      var low = this.lower;
+      if (this.want) {
+        if (!B.has(this.want, key)) continue;
+        if (typeof this.want[key] === 'number') low = Math.min(low, this.want[key]);
+      }
       var s = xmlDate(attr(tag, 'start')), e = xmlDate(attr(tag, 'stop'));
-      if (s == null || e == null || e < lower || s > upper) continue;
-      var block = selfClosing ? '' : text.substring(tagEnd + 1, end);
-      (out[key] = out[key] || []).push({ title: inner(block, 'title') || '', description: inner(block, 'desc') || '', start: s, end: e });
+      if (s == null || e == null || e < low || s > this.upper) continue;
+      var block = selfClosing ? '' : buf.substring(tagEnd + 1, end);
+      (this.out[key] = this.out[key] || []).push({ title: inner(block, 'title') || '', description: inner(block, 'desc') || '', start: s, end: e });
+      this.count++;
     }
+    // onvolledig laatste blok bewaren; anders alleen een staartje (een '<programme' kan over de grens vallen)
+    if (keep >= 0) this.buf = buf.substring(keep);
+    else this.buf = buf.length - pos > 12 ? buf.substring(buf.length - 12) : buf.substring(pos);
+  };
+  XMLTVReader.prototype.finish = function () {
+    var out = this.out;
     for (var k in out) if (B.has(out, k)) out[k].sort(function (a, b) { return a.start - b.start; });
+    this.buf = '';
     return out;
   };
+  P.XMLTVReader = XMLTVReader;
+
+  /** XMLTV-tekst → {kanaal-id: [programma's]} in één keer (tests en kleine gidsen). */
+  P.parseXMLTV = function (text, wanted) {
+    var r = new XMLTVReader(wanted);
+    r.push(text);
+    return r.finish();
+  };
+
+  /**
+   * Gids laden: binair ophalen; gzip (.xml.gz, 1f 8b) in stukken uitpakken met pako, de tekst in stukken
+   * decoderen (TextDecoder) en meteen doorlezen. Tussen de stukken krijgt de afstandsbediening voorrang.
+   */
   P.loadXMLTV = function (url, wanted) {
-    return B.http(url, { timeout: 120000 }).then(function (r) {
-      if (r.status < 200 || r.status >= 300 || !r.text) return {};
-      if (r.text.charCodeAt(0) === 0x1f) return {}; // gzip-bestand: de tv kan dit niet zelf uitpakken
-      return P.parseXMLTV(r.text, wanted);
+    return B.http(url, { timeout: 180000, binary: true }).then(function (r) {
+      if (r.status < 200 || r.status >= 300 || !r.buffer || !r.buffer.byteLength) return {};
+      return P.readXMLTVBuffer(r.buffer, wanted);
     }, function () { return {}; });
   };
+  P.readXMLTVBuffer = function (buffer, wanted) {
+    var bytes = new Uint8Array(buffer);
+    var reader = new XMLTVReader(wanted);
+    var gz = bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+    var dec = makeDecoder();
+    var CHUNK = 256 * 1024;
+    return new Promise(function (resolve) {
+      var inflator = null, failed = false;
+      if (gz) {
+        if (!window.pako || !window.pako.Inflate) { resolve({}); return; }
+        inflator = new window.pako.Inflate();
+        inflator.onData = function (chunk) { reader.push(dec.decode(chunk, true)); };
+        inflator.onEnd = function (status) { if (status !== 0) failed = true; };
+      }
+      var off = 0;
+      function step() {
+        var t0 = Date.now();
+        try {
+          while (off < bytes.length && Date.now() - t0 < 14) {
+            var part = bytes.subarray(off, Math.min(bytes.length, off + CHUNK));
+            off += part.length;
+            if (inflator) {
+              inflator.push(part, off >= bytes.length);
+              if (inflator.err) { failed = true; break; }
+            } else reader.push(dec.decode(part, true));
+          }
+        } catch (e) { failed = true; }
+        if (failed || off >= bytes.length) {
+          try { reader.push(dec.decode(new Uint8Array(0), false)); } catch (e) { /* stil */ }
+          bytes = null;
+          resolve(reader.finish());
+          return;
+        }
+        setTimeout(step, Date.now() - B.lastKeyAt < 250 ? 24 : 0);
+      }
+      step();
+    });
+  };
+  /** UTF-8-decoder; TextDecoder als die er is, anders een eenvoudige eigen versie. */
+  function makeDecoder() {
+    if (window.TextDecoder) {
+      var td = new window.TextDecoder('utf-8');
+      return { decode: function (u8, more) { return td.decode(u8, { stream: !!more }); } };
+    }
+    var rest = [];
+    return {
+      decode: function (u8) {
+        var s = '';
+        var all = rest.length ? rest.concat(Array.prototype.slice.call(u8)) : u8;
+        var n = all.length, i = 0;
+        // onvolledig teken aan het eind bewaren
+        var cut = n;
+        for (var b = Math.max(0, n - 3); b < n; b++) {
+          var c = all[b];
+          var need = c >= 0xf0 ? 4 : c >= 0xe0 ? 3 : c >= 0xc0 ? 2 : 1;
+          if (need > 1 && b + need > n) { cut = b; break; }
+        }
+        rest = Array.prototype.slice.call(all, cut);
+        var chunk = [];
+        for (i = 0; i < cut; i += 8192) chunk.push(String.fromCharCode.apply(null, Array.prototype.slice.call(all, i, Math.min(cut, i + 8192))));
+        try { s = decodeURIComponent(escape(chunk.join(''))); } catch (e) { s = chunk.join(''); }
+        return s;
+      }
+    };
+  }
 })();

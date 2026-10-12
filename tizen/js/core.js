@@ -62,6 +62,72 @@
       h.slice(8, 10).join('') + '-' + h.slice(10).join('');
   };
 
+  // MARK: planning (zware klussen in stukjes, zodat de toetsen nooit blijven hangen)
+
+  /** Laatste toetsaanslag (ms); zwaar werk wacht tot de gebruiker even stil is. */
+  B.lastKeyAt = 0;
+  B.keyRepeating = false;
+  B.debounce = function (fn, ms) {
+    var t = null;
+    var d = function () {
+      var self = this, args = arguments;
+      clearTimeout(t);
+      t = setTimeout(function () { t = null; fn.apply(self, args); }, ms);
+    };
+    d.cancel = function () { clearTimeout(t); t = null; };
+    return d;
+  };
+  /** fn uitvoeren als de browser niets te doen heeft (requestIdleCallback, anders setTimeout). */
+  B.idle = function (fn, timeout) {
+    if (window.requestIdleCallback) return window.requestIdleCallback(fn, { timeout: timeout || 1500 });
+    return setTimeout(function () { fn({ timeRemaining: function () { return 8; }, didTimeout: true }); }, 30);
+  };
+  /** Pas uitvoeren als er ~ms geen toets is ingedrukt (scrollen gaat altijd voor). */
+  B.whenQuiet = function (fn, ms) {
+    ms = ms || 350;
+    function check() {
+      var since = Date.now() - B.lastKeyAt;
+      if (since < ms || B.keyRepeating) setTimeout(check, Math.max(60, ms - since));
+      else fn();
+    }
+    check();
+  };
+  /**
+   * Lijst in stukjes verwerken: per stap hooguit ~budget ms, dan even terug naar de browser.
+   * each(item, index) ; resolve als alles klaar is. cancel() via het teruggegeven object.
+   */
+  B.chunked = function (list, each, budget) {
+    budget = budget || 12;
+    var i = 0, cancelled = false;
+    var p = new Promise(function (resolve, reject) {
+      function step() {
+        if (cancelled) { reject(new Error('cancelled')); return; }
+        var t0 = Date.now();
+        try {
+          while (i < list.length) {
+            each(list[i], i);
+            i++;
+            if ((i & 63) === 0 && Date.now() - t0 > budget) break;
+          }
+        } catch (e) { reject(e); return; }
+        if (i >= list.length) resolve();
+        else setTimeout(step, Date.now() - B.lastKeyAt < 200 ? 16 : 0);
+      }
+      step();
+    });
+    p.cancel = function () { cancelled = true; };
+    return p;
+  };
+  /** Binair zoeken in een op `start` gesorteerde lijst: index van het laatste item met start <= t (of -1). */
+  B.bsearchStart = function (list, t) {
+    var lo = 0, hi = list.length - 1, ans = -1;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      if (list[mid].start <= t) { ans = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    return ans;
+  };
+
   // MARK: tijd (ISO-8601 zoals de andere apps: 2026-10-12T18:00:00.000Z)
 
   B.now = function () { return Date.now(); };
@@ -224,6 +290,7 @@
       if (opt.binary) x.responseType = 'arraybuffer';
       var h = opt.headers || {};
       for (var k in h) if (B.has(h, k)) { try { x.setRequestHeader(k, h[k]); } catch (e) { /* verboden header */ } }
+      if (opt.onProgress) x.onprogress = function (ev) { try { opt.onProgress(ev.loaded, ev.lengthComputable ? ev.total : 0); } catch (e) { /* stil */ } };
       x.onload = function () {
         var r = { status: x.status, text: '', json: null, buffer: null, headers: x };
         if (opt.binary) r.buffer = x.response;

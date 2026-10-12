@@ -321,6 +321,20 @@
       };
     });
   };
+  /**
+   * put_sources: altijd de hele lijst, met tombstones (zoals de webconsole en de apps). Gooit bij een fout.
+   * Geeft updatedAt van de server terug.
+   */
+  A.putSources = function (sources, mainSourceID) {
+    // tombstones ouder dan 90 dagen mogen weg (ACCOUNT.md)
+    var cut = Date.now() - 90 * 86400000;
+    sources = sources.filter(function (s) { return !(s && s.deleted === true && (B.parseISO(s.deletedAt || s.updatedAt) || 0) < cut); });
+    return authed({ action: 'put_sources', sources: sources, mainSourceID: mainSourceID || null }).then(function (r) {
+      if (!r) throw new AccountError(L('No internet connection.'), 'offline');
+      if (!r.ok || (r.json && r.json.ok === false)) throw generic();
+      return (r.json && r.json.updatedAt) || B.iso();
+    });
+  };
   /** get_state: {naam: {data, updatedAt}}; null = mislukt. */
   A.getState = function (sections) {
     var body = { action: 'get_state' };

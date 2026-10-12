@@ -48,6 +48,8 @@
     B.store.keys('lastChannel.').forEach(function (k) { B.store.del(k); });
     B.store.del('lastProfile'); B.store.del('activeSource');
     B.idb.clear();
+    // Trakt, OpenSubtitles en herinneringen van het vorige account
+    B.emit('wipe');
   };
 
   // MARK: instellingen (settings.shared, gelijk op alle platforms)
@@ -170,16 +172,104 @@
 
   // MARK: servers
 
-  D.supportedKinds = ['M3U / M3U8', 'Xtream Codes', 'Stalker / MAC-portal'];
+  D.kinds = ['M3U / M3U8', 'Xtream Codes', 'Stalker / MAC-portal', 'Plex', 'Jellyfin', 'Emby', 'Stremio'];
+  D.supportedKinds = D.kinds;
   D.syncSources = function () {
     return A.getSources().then(function (r) {
       if (!r) return false;
-      D.sources = r.sources.filter(function (s) { return s.deleted !== true; });
-      D.mainSourceID = r.mainSourceID;
-      save();
-      B.emit('sources');
+      applySources(r);
       return true;
     });
+  };
+  function applySources(r) {
+    D.sources = r.sources.filter(function (s) { return s.deleted !== true; });
+    D.mainSourceID = r.mainSourceID;
+    save();
+    B.emit('sources');
+  }
+
+  /**
+   * Bron toevoegen of wijzigen (alleen hoofdprofiel, zoals de andere apps). Eerst de nieuwste lijst van de server
+   * lezen (met tombstones), dan alleen deze bron vervangen, updatedAt = nu, en de hele lijst terug (put_sources).
+   * Onbekende velden, het apple/android-blok, catchupOffsets en ongewijzigde secrets blijven staan.
+   * opts: {makeMain: true|false}
+   */
+  D.saveSource = function (src, opts) {
+    opts = opts || {};
+    return A.getSources().then(function (r) {
+      if (!r) throw new Error(L('No internet connection.'));
+      var list = r.sources.slice();
+      var idx = -1;
+      for (var i = 0; i < list.length; i++) if (lower(list[i].id) === lower(src.id)) { idx = i; break; }
+      var base = idx >= 0 && list[idx].deleted !== true ? list[idx] : {};
+      var o = B.assign({}, base, src);
+      o.secrets = B.assign({}, (base && base.secrets) || {}, src.secrets || {});
+      Object.keys(o.secrets).forEach(function (k) { if (o.secrets[k] == null) delete o.secrets[k]; });
+      ['m3uURL', 'epgURL', 'serverURL', 'username', 'macAddress'].forEach(function (k) { if (o[k] == null) o[k] = ''; });
+      o.preferHLS = !!o.preferHLS;
+      delete o.deleted; delete o.deletedAt;
+      o.updatedAt = B.iso();
+      if (idx >= 0) list[idx] = o; else list.push(o);
+      var main = r.mainSourceID;
+      var alive = list.filter(function (s) { return s.deleted !== true; });
+      var mainValid = !!main && alive.some(function (s) { return lower(s.id) === lower(main); });
+      if (opts.makeMain || !mainValid) main = o.id;
+      return A.putSources(list, main).then(function (at) {
+        applySources({ sources: list, mainSourceID: main, updatedAt: at });
+        return o;
+      });
+    });
+  };
+  /** Bron verwijderen: tombstone {id, deleted, deletedAt, updatedAt}; hoofdserver schuift door naar de eerste die overblijft. */
+  D.deleteSource = function (id) {
+    return A.getSources().then(function (r) {
+      if (!r) throw new Error(L('No internet connection.'));
+      var now = B.iso();
+      var list = r.sources.map(function (s) { return lower(s.id) === lower(id) ? { id: s.id, deleted: true, deletedAt: now, updatedAt: now } : s; });
+      var main = r.mainSourceID;
+      if (lower(main) === lower(id)) {
+        var first = list.filter(function (s) { return s.deleted !== true; })[0];
+        main = first ? first.id : null;
+      }
+      return A.putSources(list, main).then(function (at) {
+        applySources({ sources: list, mainSourceID: main, updatedAt: at });
+        if (lower(B.store.get('activeSource', '')) === lower(id)) B.store.del('activeSource');
+        B.idb.del('lib:' + id); B.idb.del('epg:' + id); B.idb.del('chan:' + id);
+      });
+    });
+  };
+  /** Hoofdserver van het account wijzigen. */
+  D.setMainSource = function (id) {
+    return A.getSources().then(function (r) {
+      if (!r) throw new Error(L('No internet connection.'));
+      return A.putSources(r.sources, id).then(function (at) { applySources({ sources: r.sources, mainSourceID: id, updatedAt: at }); });
+    });
+  };
+  /** Terugkijk-correctie per zender in minuten (−120…120, build 51), gedeeld veld catchupOffsets van de bron. */
+  D.catchupOffset = function (src, channelID) {
+    var o = src && src.catchupOffsets;
+    var v = o && B.has(o, channelID) ? B.int(o[channelID]) : 0;
+    return v || 0;
+  };
+  D.setCatchupOffset = function (src, channelID, minutes) {
+    var m = B.clamp(Math.round(minutes || 0), -120, 120);
+    var offsets = B.assign({}, (src && src.catchupOffsets) || {});
+    if (m === 0) delete offsets[channelID]; else offsets[channelID] = m;
+    var local = D.sourceById(src.id);
+    if (local) { local.catchupOffsets = offsets; save(); }
+    return A.getSources().then(function (r) {
+      if (!r) return;
+      var list = r.sources.map(function (s) {
+        if (lower(s.id) !== lower(src.id) || s.deleted === true) return s;
+        var c = B.assign({}, s);
+        var cur = B.assign({}, s.catchupOffsets || {});
+        if (m === 0) delete cur[channelID]; else cur[channelID] = m;
+        c.catchupOffsets = cur;
+        c.updatedAt = B.iso();
+        return c;
+      });
+      return A.putSources(list, r.mainSourceID).then(function (at) { applySources({ sources: list, mainSourceID: r.mainSourceID, updatedAt: at }); });
+    }).catch(B.noop);
   };
   D.sourceById = function (id) {
     for (var i = 0; i < D.sources.length; i++) if (lower(D.sources[i].id) === lower(id)) return D.sources[i];
@@ -423,6 +513,8 @@
       D.pins = readPins(all);
       save();
       B.emit('settings');
+      // connections (Trakt/OpenSubtitles) en herinneringen voegen zelf samen
+      B.emit('state', all);
       if (!P.id) return true;
       return mergeActive(all);
     }).catch(function (e) { B.log('sync', e); return false; }).then(function (r) { syncing = null; return r; });
@@ -577,6 +669,38 @@
       }
     }
     return null;
+  };
+
+  /**
+   * Intro-markering zetten of wissen (alle velden null = gewist; blijft staan zodat het wissen doorkomt).
+   * Zoals setShared: nieuwste settings van de server, alleen deze serie aanpassen, het geheel uploaden.
+   */
+  D.setIntroMarker = function (sourceId, seriesId, marker) {
+    var key = sourceId + ':' + seriesId;
+    function r1(v) { return v == null ? null : Math.round(v * 10) / 10; }
+    var val = { introStart: r1(marker.introStart), introEnd: r1(marker.introEnd), creditsStart: r1(marker.creditsStart) };
+    function put(map) {
+      var out = B.assign({}, map || {});
+      Object.keys(out).forEach(function (k) { if (lower(k) === lower(key) && k !== key) { key = k; } });
+      out[key] = val;
+      return out;
+    }
+    var local = D.settings ? B.copy(D.settings) : { data: {} };
+    local.data = local.data || {};
+    local.data.shared = local.data.shared || {};
+    local.data.shared.introMarkers = put(local.data.shared.introMarkers);
+    local.data.updatedAt = B.iso();
+    D.settings = local; save();
+    return A.getState(['settings']).then(function (all) {
+      var cur = all && all.settings && all.settings.data;
+      var data = cur && typeof cur === 'object' ? B.copy(cur) : B.copy(local.data);
+      data.shared = data.shared || {};
+      data.shared.introMarkers = put(data.shared.introMarkers);
+      data.updatedAt = B.iso();
+      return A.putState('settings', data).then(function (at) {
+        if (at != null) { D.settings = { data: data, updatedAt: at || data.updatedAt }; save(); }
+      });
+    }).catch(B.noop);
   };
 
   /** Startscherm-indeling van het actieve profiel (homeLayout in profile.<id>), of null. */

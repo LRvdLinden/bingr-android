@@ -74,7 +74,10 @@
     space: '<path d="M4 10v4h16v-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
     tv: '<rect x="2.5" y="4.5" width="19" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 20.5h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     phone: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
-    laptop: '<rect x="4.5" y="5" width="15" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2 18.5h20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+    laptop: '<rect x="4.5" y="5" width="15" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2 18.5h20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+    grid: '<rect x="3" y="3" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13" y="3" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="13" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13" y="13" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/>',
+    bell: '<path d="M12 3a6 6 0 0 0-6 6v4.2L4 17h16l-2-3.8V9a6 6 0 0 0-6-6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 19.5a2.5 2.5 0 0 0 5 0" fill="none" stroke="currentColor" stroke-width="2"/>',
+    flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'
   };
   U.logo = function (small) {
     return U.h('div.logo' + (small ? '.small' : ''), [U.h('div.logo-word', 'BINGR'), U.h('div.logo-bar')]);
@@ -156,10 +159,44 @@
   };
 
   /** Ruimtelijke navigatie: dichtstbijzijnde focusbare in die richting, met voorkeur voor dezelfde rij/kolom. */
+  function isF(el) { return el && el.classList && el.classList.contains('f') && !el.classList.contains('disabled'); }
+  /** Snelle weg: links/rechts binnen een rij (.row-track) en omhoog/omlaag tussen rijen op Home, zonder alles op te meten. */
+  function fastMove(cur, dir) {
+    var parent = cur.parentNode;
+    if (!parent || !parent.classList) return null;
+    if ((dir === 'left' || dir === 'right') && parent.classList.contains('row-track')) {
+      var n = dir === 'left' ? cur.previousElementSibling : cur.nextElementSibling;
+      while (n && !isF(n)) n = dir === 'left' ? n.previousElementSibling : n.nextElementSibling;
+      return n || false;
+    }
+    if ((dir === 'up' || dir === 'down') && parent.classList.contains('row-track')) {
+      var block = cur.closest('.row-block');
+      if (!block || !block.parentNode || !block.parentNode.classList.contains('sy-track')) return null;
+      var nb = dir === 'up' ? block.previousElementSibling : block.nextElementSibling;
+      while (nb && !nb.querySelector('.f')) nb = dir === 'up' ? nb.previousElementSibling : nb.nextElementSibling;
+      if (!nb) return dir === 'up' ? null : false;
+      var fm = nb.querySelector('.fm');
+      if (fm && fm._last && fm.contains(fm._last)) return fm._last;
+      var cands = nb.querySelectorAll('.f');
+      // zichtbare x zonder de lopende overgang: offsetLeft min de schuifpositie van de rij
+      var vx = function (c) { var sc = c.parentNode && c.parentNode.parentNode; return c.offsetLeft - ((sc && sc._pos) || 0); };
+      var ax = vx(cur), best = null, bd = Infinity;
+      for (var i = 0; i < cands.length; i++) {
+        var d = Math.abs(vx(cands[i]) - ax);
+        if (d < bd) { bd = d; best = cands[i]; }
+        else if (best && d > bd) break;
+      }
+      return best;
+    }
+    return null;
+  }
   U.move = function (dir) {
     var cur = U.focused;
     var layer = U.layer();
     if (!cur || !layer.contains(cur)) { U.focusFirst(layer); return true; }
+    var fast = fastMove(cur, dir);
+    if (fast) { U.focus(fast); return true; }
+    if (fast === false && (dir === 'right' || dir === 'down')) return false;
     var a = cur.getBoundingClientRect();
     var ax = a.left + a.width / 2, ay = a.top + a.height / 2;
     var best = null, bestScore = Infinity;
@@ -193,37 +230,77 @@
     return true;
   };
 
-  /** Scrollers (.sx horizontaal, .sy verticaal) zo zetten dat het element in beeld is. */
+  /**
+   * Scrollers (.sx horizontaal, .sy verticaal) zo zetten dat het element in beeld is.
+   * Heeft de scroller een track (.row-track of .sy-track als eerste kind), dan schuift die met een CSS-transform
+   * (GPU, geen herberekening van de pagina); anders scrollLeft/scrollTop.
+   */
   U.reveal = function (el) {
     var p = el.parentNode;
     while (p && p !== document.body) {
       if (p.classList) {
-        if (p.classList.contains('sx')) {
-          var pad = parseInt(p.getAttribute('data-pad') || '60', 10);
-          var x = elLeftIn(el, p);
-          if (x - pad < p.scrollLeft) p.scrollLeft = Math.max(0, x - pad);
-          else if (x + el.offsetWidth + pad > p.scrollLeft + p.clientWidth) p.scrollLeft = x + el.offsetWidth + pad - p.clientWidth;
-        }
-        if (p.classList.contains('sy')) {
-          var padY = parseInt(p.getAttribute('data-pad') || '80', 10);
-          var y = elTopIn(el, p);
-          var mode = p.getAttribute('data-align');
-          if (mode === 'top') {
-            var anchor = el.closest('.row-block') || el;
-            var ty = elTopIn(anchor, p) - padY;
-            p.scrollTop = Math.max(0, ty);
-          } else if (y - padY < p.scrollTop) p.scrollTop = Math.max(0, y - padY);
-          else if (y + el.offsetHeight + padY > p.scrollTop + p.clientHeight) p.scrollTop = y + el.offsetHeight + padY - p.clientHeight;
-        }
+        if (p.classList.contains('sx')) revealX(el, p);
+        if (p.classList.contains('sy')) revealY(el, p);
       }
       p = p.parentNode;
     }
   };
-  function elLeftIn(el, container) {
-    return el.getBoundingClientRect().left - container.getBoundingClientRect().left + container.scrollLeft;
+  function trackOf(p, cls) {
+    if (p._track !== undefined) return p._track;
+    var f = p.firstElementChild;
+    p._track = f && f.classList.contains(cls) ? f : null;
+    return p._track;
   }
-  function elTopIn(el, container) {
-    return el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+  U.scrollPos = function (p) { return trackOf(p, p.classList.contains('sx') ? 'row-track' : 'sy-track') ? (p._pos || 0) : (p.classList.contains('sx') ? p.scrollLeft : p.scrollTop); };
+  U.scrollTo = function (p, v) {
+    var horiz = p.classList.contains('sx');
+    var t = trackOf(p, horiz ? 'row-track' : 'sy-track');
+    v = Math.max(0, Math.round(v));
+    if (!t) { if (horiz) p.scrollLeft = v; else p.scrollTop = v; return; }
+    if (p._pos === v) return;
+    p._pos = v;
+    t.style.transform = horiz ? 'translate3d(' + (-v) + 'px,0,0)' : 'translate3d(0,' + (-v) + 'px,0)';
+  };
+  /**
+   * Positie van el binnen de track via offsetLeft/offsetTop (de lay-out, niet de lopende CSS-overgang):
+   * zo klopt de berekening ook als je drukt terwijl de vorige verschuiving nog loopt. null = niet te bepalen.
+   */
+  function offsetIn(el, track, horiz) {
+    var v = 0, n = el;
+    while (n && n !== track) {
+      v += horiz ? n.offsetLeft : n.offsetTop;
+      n = n.offsetParent;
+      if (n && !track.contains(n) && n !== track) return null;
+    }
+    return n === track ? v : null;
+  }
+  function revealX(el, p) {
+    var pad = parseInt(p.getAttribute('data-pad') || '60', 10);
+    var cur = U.scrollPos(p);
+    var t = trackOf(p, 'row-track');
+    var x = t ? offsetIn(el, t, true) : null;
+    if (x == null) x = el.getBoundingClientRect().left - p.getBoundingClientRect().left + cur;
+    var w = el.offsetWidth;
+    if (x - pad < cur) U.scrollTo(p, x - pad);
+    else if (x + w + pad > cur + p.clientWidth) U.scrollTo(p, x + w + pad - p.clientWidth);
+  }
+  function revealY(el, p) {
+    var padY = parseInt(p.getAttribute('data-pad') || '80', 10);
+    var cur = U.scrollPos(p);
+    var t = trackOf(p, 'sy-track');
+    function top(n) {
+      var v = t ? offsetIn(n, t, false) : null;
+      return v != null ? v : n.getBoundingClientRect().top - p.getBoundingClientRect().top + cur;
+    }
+    var mode = p.getAttribute('data-align');
+    if (mode === 'top') {
+      var anchor = el.closest('.row-block') || el;
+      U.scrollTo(p, top(anchor) - padY);
+      return;
+    }
+    var y = top(el);
+    if (y - padY < cur) U.scrollTo(p, y - padY);
+    else if (y + el.offsetHeight + padY > cur + p.clientHeight) U.scrollTo(p, y + el.offsetHeight + padY - p.clientHeight);
   }
 
   // MARK: toetsen
@@ -258,9 +335,21 @@
     } catch (e) { B.log('keys', e); }
   };
 
+  var lastHandled = 0;
+  /** Ingedrukt gehouden pijltjes: hooguit één stap per ~75 ms, zodat de tv het tekenen bijhoudt. */
+  U.REPEAT_MS = 75;
+  U.onKeyUp = function () { B.keyRepeating = false; };
   U.onKeyDown = function (e) {
     var name = U.keyName(e);
     if (!name) return;
+    var now = Date.now();
+    var arrow = name === 'left' || name === 'right' || name === 'up' || name === 'down';
+    B.keyRepeating = !!e.repeat || (arrow && now - B.lastKeyAt < 140);
+    B.lastKeyAt = now;
+    if (arrow && e.repeat && now - lastHandled < U.REPEAT_MS) { e.preventDefault(); e.stopPropagation(); return; }
+    lastHandled = now;
+    // herinnering in beeld: groen = naar die zender
+    if (B.reminders && B.reminders.onKey(name)) { e.preventDefault(); e.stopPropagation(); return; }
     // tekstvelden (alleen in de test-browser) houden hun letters
     if (e.target && e.target.tagName === 'INPUT' && name === 'back' && e.keyCode === 8) return;
     var top = U.top();
@@ -291,8 +380,11 @@
     return el;
   };
 
+  var lastToast = null;
   U.toast = function (text, ms) {
-    var t = U.h('div.toast', text);
+    // één melding tegelijk: een nieuwe vervangt de vorige (anders liggen ze over elkaar)
+    if (lastToast && lastToast.parentNode) lastToast.parentNode.removeChild(lastToast);
+    var t = lastToast = U.h('div.toast', text);
     document.body.appendChild(t);
     setTimeout(function () { t.classList.add('show'); }, 10);
     setTimeout(function () { t.classList.remove('show'); setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 400); }, ms || 3000);
@@ -335,33 +427,49 @@
   };
 
   /**
-   * Schermtoetsenbord (Netflix-stijl). opts: {layout: 'search'|'email'|'pin', onChange(v), onDone(v), value}
+   * Schermtoetsenbord. opts: {layout, onChange(v), onDone(v), value, max}
+   *   'search' | 'email' | 'pin'  : zoals voorheen (Netflix-stijl, alfabetisch)
+   *   'url' | 'text' | 'mac'      : QWERTY voor de afstandsbediening, met snelkoppelingen (.com, http://, https://, :, /)
+   * Cijfertoetsen van de afstandsbediening typen ook (via press).
    */
   U.keyboard = function (opts) {
     opts = opts || {};
     var value = opts.value || '';
-    var rows;
-    if (opts.layout === 'pin') rows = [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['⌫', '0', 'OK']];
-    else {
+    var rows, layout = opts.layout || 'search';
+    var qwerty = layout === 'url' || layout === 'text' || layout === 'mac';
+    if (layout === 'pin') rows = [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['⌫', '0', 'OK']];
+    else if (layout === 'mac') {
+      rows = [['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'], ['A', 'B', 'C', 'D', 'E', 'F', ':', '-'], ['⌫', '✕', 'OK']];
+    } else if (qwerty) {
+      rows = [
+        ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+        ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+        ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '-'],
+        ['⇧', 'z', 'x', 'c', 'v', 'b', 'n', 'm', '.', '/'],
+        layout === 'url' ? ['http://', 'https://', ':', '_', '@', '.com', '.nl'] : ['@', '.', '_', '!', '?', '&', '+', '#'],
+        ['␣', '⌫', '✕', 'OK']
+      ];
+    } else {
       var letters = 'abcdefghijklmnopqrstuvwxyz1234567890'.split('');
-      if (opts.layout === 'email') letters = letters.concat(['@', '.', '_', '-', '+', '!']);
+      if (layout === 'email') letters = letters.concat(['@', '.', '_', '-', '+', '!']);
       rows = [];
       for (var i = 0; i < letters.length; i += 6) rows.push(letters.slice(i, i + 6));
-      rows.push(opts.layout === 'email' ? ['⇧', '.com', '⌫'] : ['␣', '⌫', '✕']);
+      rows.push(layout === 'email' ? ['⇧', '.com', '⌫'] : ['␣', '⌫', '✕']);
     }
     var upper = false;
-    var el = U.h('div.kb' + (opts.layout === 'pin' ? '.kb-pin' : ''));
+    var el = U.h('div.kb.fm' + (layout === 'pin' ? '.kb-pin' : '') + (qwerty ? '.kb-qwerty' : ''));
     function render() {
       U.clear(el);
       rows.forEach(function (r) {
         var row = U.h('div.kb-row');
         r.forEach(function (k) {
-          var label = k;
           var wide = k.length > 1 || k === '␣' || k === '⌫' || k === '✕' || k === '⇧';
           var node;
           if (k === '⌫') node = U.h('div.key.f.wide', [U.icon('backspace')]);
-          else if (k === '␣') node = U.h('div.key.f.wide', [U.icon('space')]);
-          else node = U.h('div.key.f' + (wide ? '.wide' : ''), upper && k.length === 1 ? k.toUpperCase() : label);
+          else if (k === '␣') node = U.h('div.key.f.wide.space', [U.icon('space')]);
+          else if (k === 'OK') node = U.h('div.key.f.wide.ok', opts.okLabel || 'OK');
+          else node = U.h('div.key.f' + (wide ? '.wide' : '') + (k === '⇧' && upper ? '.on' : ''), upper && k.length === 1 ? k.toUpperCase() : k);
+          node._k = k;
           node.onEnter = function () { press(k); };
           row.appendChild(node);
         });
@@ -380,14 +488,43 @@
     }
     function refocus(prev) {
       var keys = el.querySelectorAll('.key');
-      if (prev) for (var i = 0; i < keys.length; i++) if (keys[i].textContent.toLowerCase() === prev.textContent.toLowerCase()) { U.focus(keys[i]); return; }
+      if (prev) for (var i = 0; i < keys.length; i++) if (keys[i]._k === prev._k) { U.focus(keys[i]); return; }
       if (keys.length) U.focus(keys[0]);
     }
     render();
     el.press = press;
-    el.setValue = function (v) { value = v; };
+    el.setValue = function (v) { value = v || ''; };
     el.getValue = function () { return value; };
     return el;
+  };
+
+  /**
+   * Tekstveld bewerken met het schermtoetsenbord (servers, inloggen).
+   * o: {title, value, layout ('url'|'text'|'email'|'mac'), secret, placeholder, hint}; fn(nieuwe waarde) bij OK.
+   */
+  U.editText = function (o, fn) {
+    var value = o.value || '';
+    var field = U.h('div.et-field');
+    function draw() {
+      var shown = o.secret ? new Array(value.length + 1).join('•') : value;
+      field.textContent = shown || o.placeholder || '';
+      field.classList.toggle('placeholder', !value);
+    }
+    var kb = U.keyboard({ layout: o.layout || 'text', value: value, okLabel: L('OK'), onChange: function (v) { value = v; draw(); },
+      onDone: function (v) { U.pop(); fn(v); } });
+    var s = { el: U.h('div.layer.edit-text', [U.h('div.et-box', [U.h('h2', o.title || ''), field,
+      o.hint ? U.h('div.et-hint.dim', o.hint) : null, kb])]) };
+    s.onKey = function (name) {
+      if (name.charAt(0) === 'd' && name.length === 2) { kb.press(name.charAt(1)); return true; }
+      if (name === 'done') { U.pop(); fn(value); return true; }
+      return false;
+    };
+    s.onBack = function () { U.pop(); };
+    draw();
+    U.push(s);
+    var first = kb.querySelector('.key');
+    if (first) U.focus(first);
+    return s;
   };
 
   /** Pincode vragen (4 cijfers; cijfertoetsen van de afstandsbediening werken ook). fn(pin) → true = goed. */
@@ -421,14 +558,203 @@
   // MARK: plaatjes
 
   /** Achtergrondafbeelding met nette terugval (titel op een kleurverloop). */
-  U.img = function (url, cls, fallbackText) {
+  U.img = function (url, cls, fallbackText, eager) {
     var el = U.h('div.img' + (cls ? '.' + cls : ''));
     if (fallbackText) el.appendChild(U.h('div.img-fallback', fallbackText));
     if (url) {
-      var i = new Image();
-      i.onload = function () { el.style.backgroundImage = 'url("' + String(url).replace(/"/g, '%22') + '")'; el.classList.add('loaded'); };
-      i.src = url;
+      el._src = url;
+      if (eager || !lazyObserver()) loadImg(el);
+      else lazyObserver().observe(el);
     }
     return el;
+  };
+  function loadImg(el) {
+    var url = el._src;
+    if (!url || el._loading) return;
+    el._loading = true;
+    var i = new Image();
+    i.onload = function () { el.style.backgroundImage = 'url("' + String(url).replace(/"/g, '%22') + '")'; el.classList.add('loaded'); };
+    i.src = url;
+  }
+  /** Posters en logo's pas laden als ze (bijna) in beeld komen: minder geheugen en netwerk tijdens het scrollen. */
+  var io;
+  function lazyObserver() {
+    if (io !== undefined) return io;
+    io = null;
+    try {
+      if (window.IntersectionObserver) {
+        io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (en) {
+            if (en.isIntersecting || en.intersectionRatio > 0) { io.unobserve(en.target); loadImg(en.target); }
+          });
+        }, { root: null, rootMargin: '400px 700px 400px 700px' });
+      }
+    } catch (e) { io = null; }
+    return io;
+  }
+
+  // MARK: virtuele lijst (lange lijsten: alleen de rijen in beeld bestaan in de DOM)
+
+  /**
+   * U.vlist({count, rowHeight, render(i) → element (.f), height, buffer, onFocusIndex(i)})
+   * Geeft {el, focusIndex(i), refresh(count), index()} terug. Omhoog/omlaag regelt de lijst zelf; links/rechts
+   * gaat naar de normale ruimtelijke navigatie. CH+/CH− springen een pagina.
+   */
+  U.vlist = function (o) {
+    var rowH = o.rowHeight, height = o.height, buffer = o.buffer || 4;
+    var el = U.h('div.vlist' + (o.cls ? '.' + o.cls : ''));
+    var track = U.h('div.vlist-track');
+    el.appendChild(track);
+    var count = o.count, top = 0, cur = 0, nodes = {}, pos = 0;
+    var visibleRows = Math.ceil(height / rowH);
+    function place(i) {
+      var n = nodes[i];
+      if (n) return n;
+      n = o.render(i);
+      n.style.position = 'absolute';
+      n.style.top = (i * rowH) + 'px';
+      n.style.left = '0'; n.style.right = '0';
+      n._vi = i;
+      n.onKey = (function (orig) {
+        return function (name, e) {
+          if (orig && orig(name, e) === true) return true;
+          if (name === 'up' || name === 'down') { var t = n._vi + (name === 'up' ? -1 : 1); if (t < 0 || t >= count) return name === 'down'; api.focusIndex(t); return true; }
+          if (name === 'chup' || name === 'chdown') { api.focusIndex(B.clamp(n._vi + (name === 'chup' ? -visibleRows : visibleRows), 0, count - 1)); return true; }
+          return false;
+        };
+      })(n.onKey);
+      var userFocus = n.onFocus;
+      n.onFocus = function () { cur = n._vi; if (o.onFocusIndex) o.onFocusIndex(n._vi); if (userFocus) userFocus(); };
+      nodes[i] = n;
+      track.appendChild(n);
+      return n;
+    }
+    function windowAt(first) {
+      var from = Math.max(0, first - buffer), to = Math.min(count - 1, first + visibleRows + buffer);
+      Object.keys(nodes).forEach(function (k) {
+        var i = +k;
+        if ((i < from || i > to) && nodes[i] !== U.focused) { track.removeChild(nodes[i]); delete nodes[i]; }
+      });
+      for (var i = from; i <= to; i++) place(i);
+    }
+    function scrollTo(i) {
+      // het gekozen item zo houden dat er boven nog ~2 rijen zichtbaar zijn
+      var want = top;
+      if (i < top + 1) want = Math.max(0, i - 1);
+      else if (i > top + visibleRows - 3) want = Math.min(Math.max(0, count - visibleRows + 1), i - visibleRows + 3);
+      top = Math.max(0, want);
+      var p = top * rowH;
+      if (p !== pos) { pos = p; track.style.transform = 'translate3d(0,' + (-p) + 'px,0)'; }
+      windowAt(top);
+    }
+    var api = {
+      el: el,
+      index: function () { return cur; },
+      focusIndex: function (i) {
+        if (!count) return;
+        i = B.clamp(i, 0, count - 1);
+        scrollTo(i);
+        U.focus(place(i));
+      },
+      node: function (i) { return nodes[i] || null; },
+      refresh: function (n) {
+        count = n == null ? count : n;
+        Object.keys(nodes).forEach(function (k) { track.removeChild(nodes[k]); });
+        nodes = {};
+        cur = Math.min(cur, Math.max(0, count - 1));
+        track.style.height = (count * rowH) + 'px';
+        scrollTo(cur);
+      },
+      redrawVisible: function () {
+        var f = U.focused, fi = f && f._vi;
+        Object.keys(nodes).forEach(function (k) { track.removeChild(nodes[k]); });
+        nodes = {};
+        windowAt(top);
+        if (fi != null && nodes[fi] && f && !document.body.contains(f)) U.focus(nodes[fi], true);
+      },
+      reset: function (n) { cur = 0; top = 0; pos = -1; api.refresh(n); }
+    };
+    api.reset(count);
+    return api;
+  };
+
+  /**
+   * Virtueel raster (posters): rijen van `cols` kaarten; alleen de rijen in beeld bestaan. Zelfde api als vlist.
+   * o: {count, cols, cellW, cellH, height, render(i)}
+   */
+  U.vgrid = function (o) {
+    var cols = o.cols, cellH = o.cellH, cellW = o.cellW, height = o.height, buffer = o.buffer || 2;
+    var el = U.h('div.vgrid');
+    var track = U.h('div.vlist-track');
+    el.appendChild(track);
+    var count = o.count, topRow = 0, cur = 0, nodes = {}, pos = -1;
+    var visRows = Math.ceil(height / cellH);
+    function rows() { return Math.ceil(count / cols); }
+    function place(i) {
+      var n = nodes[i];
+      if (n) return n;
+      n = o.render(i);
+      n.style.position = 'absolute';
+      n.style.top = (Math.floor(i / cols) * cellH) + 'px';
+      n.style.left = ((i % cols) * cellW) + 'px';
+      n._vi = i;
+      n.onKey = (function (orig) {
+        return function (name, e) {
+          if (orig && orig(name, e) === true) return true;
+          var c = n._vi % cols, t = null;
+          if (name === 'up') t = n._vi - cols;
+          else if (name === 'down') { t = n._vi + cols; if (t >= count && Math.floor(n._vi / cols) < rows() - 1) t = count - 1; }
+          else if (name === 'left') { if (c === 0) return false; t = n._vi - 1; }
+          else if (name === 'right') { if (c === cols - 1 || n._vi + 1 >= count) return false; t = n._vi + 1; }
+          else if (name === 'chup' || name === 'chdown') t = B.clamp(n._vi + (name === 'chup' ? -1 : 1) * cols * visRows, 0, count - 1);
+          if (t == null) return false;
+          if (t < 0) return false;
+          if (t >= count) return true;
+          api.focusIndex(t);
+          return true;
+        };
+      })(n.onKey);
+      var userFocus = n.onFocus;
+      n.onFocus = function () { cur = n._vi; if (o.onFocusIndex) o.onFocusIndex(n._vi); if (userFocus) userFocus(); };
+      nodes[i] = n;
+      track.appendChild(n);
+      return n;
+    }
+    function windowAt(first) {
+      var from = Math.max(0, (first - buffer) * cols), to = Math.min(count - 1, (first + visRows + buffer) * cols - 1);
+      Object.keys(nodes).forEach(function (k) {
+        var i = +k;
+        if ((i < from || i > to) && nodes[i] !== U.focused) { track.removeChild(nodes[i]); delete nodes[i]; }
+      });
+      for (var i = from; i <= to; i++) place(i);
+    }
+    function scrollTo(i) {
+      var r = Math.floor(i / cols);
+      var want = topRow;
+      if (r < topRow) want = r;
+      else if (r > topRow + visRows - 2) want = r - visRows + 2;
+      topRow = Math.max(0, want);
+      var p = topRow * cellH;
+      if (p !== pos) { pos = p; track.style.transform = 'translate3d(0,' + (-p) + 'px,0)'; }
+      windowAt(topRow);
+    }
+    var api = {
+      el: el,
+      index: function () { return cur; },
+      focusIndex: function (i) { if (!count) return; i = B.clamp(i, 0, count - 1); scrollTo(i); U.focus(place(i)); },
+      reset: function (n) {
+        count = n; cur = 0; topRow = 0; pos = -1;
+        Object.keys(nodes).forEach(function (k) { track.removeChild(nodes[k]); });
+        nodes = {};
+        track.style.height = (rows() * cellH) + 'px';
+        scrollTo(0);
+      },
+      redrawVisible: function () {
+        Object.keys(nodes).forEach(function (k) { if (nodes[k] !== U.focused) { track.removeChild(nodes[k]); delete nodes[k]; } });
+        windowAt(topRow);
+      }
+    };
+    api.reset(count);
+    return api;
   };
 })();

@@ -5,6 +5,11 @@ import json, os, time, urllib.parse, random, colorsys
 from datetime import datetime, timezone, timedelta
 
 SRC = 'A1B2C3D4-0000-4000-8000-000000000001'
+JF = 'B2C3D4E5-0000-4000-8000-000000000002'
+PX = 'C3D4E5F6-0000-4000-8000-000000000003'
+SM = 'D4E5F6A7-0000-4000-8000-000000000004'
+# wat de app tijdens een test bewaart (put_sources / put_state)
+SAVED = {}
 MAIN = '11111111-AAAA-4000-8000-000000000001'
 KIDS = '22222222-BBBB-4000-8000-000000000002'
 SAM = '33333333-CCCC-4000-8000-000000000003'
@@ -109,17 +114,42 @@ def sources():
         {'id': SRC, 'name': 'Thuis IPTV', 'kind': 'Xtream Codes', 'avatar': {'symbol': 'tv', 'colorIndex': 0}, 'm3uURL': '', 'epgURL': '',
          'serverURL': 'http://xtream.test', 'username': 'demo', 'macAddress': '', 'preferHLS': True, 'secrets': {'password': 'demo'},
          'android': {'customization': {'renamed': {}, 'hidden': [], 'groupOrder': [], 'channelOrder': {}, 'merged': {}}, 'lockedGroups': []},
-         'updatedAt': iso(datetime.now(timezone.utc))}], 'mainSourceID': SRC, 'updatedAt': iso(datetime.now(timezone.utc))}
+         'updatedAt': iso(datetime.now(timezone.utc)), 'catchupOffsets': {'x2': -5}},
+        {'id': JF, 'name': 'Jellyfin thuis', 'kind': 'Jellyfin', 'avatar': {'symbol': 'film', 'colorIndex': 2}, 'm3uURL': '', 'epgURL': '',
+         'serverURL': 'http://jf.test', 'username': 'leon', 'macAddress': '', 'preferHLS': False,
+         'secrets': {'session': json.dumps({'token': 'jf-token', 'userID': 'u1', 'serverURI': 'http://jf.test'})},
+         'updatedAt': iso(datetime.now(timezone.utc))},
+        {'id': PX, 'name': 'Plex', 'kind': 'Plex', 'avatar': {'symbol': 'film', 'colorIndex': 3}, 'm3uURL': '', 'epgURL': '',
+         'serverURL': 'http://px.test', 'username': '', 'macAddress': '', 'preferHLS': False,
+         'secrets': {'password': 'plex-user', 'session': json.dumps({'token': 'px-token', 'userID': 'Server', 'serverURI': 'http://px.test'})},
+         'updatedAt': iso(datetime.now(timezone.utc))},
+        {'id': SM, 'name': 'Stremio', 'kind': 'Stremio', 'avatar': {'symbol': 'play', 'colorIndex': 4}, 'm3uURL': 'http://stremio.test/manifest.json',
+         'epgURL': '', 'serverURL': '', 'username': '', 'macAddress': '', 'preferHLS': False, 'secrets': {},
+         'updatedAt': iso(datetime.now(timezone.utc))},
+        {'id': 'DEAD0000-0000-4000-8000-00000000000A', 'deleted': True, 'deletedAt': iso(datetime.now(timezone.utc)), 'updatedAt': iso(datetime.now(timezone.utc))}],
+        'mainSourceID': SRC, 'updatedAt': iso(datetime.now(timezone.utc))}
+
+
+MODE = {'big': False}
 
 
 def xtream(action, params):
+    if MODE['big'] and action in ('get_live_streams', 'get_vod_streams'):
+        # grote bibliotheek voor de prestatietest: 6000 zenders, 25000 films
+        if action == 'get_live_streams':
+            return [{'stream_id': i + 1, 'num': i + 1, 'name': 'Zender %d' % (i + 1), 'stream_icon': 'http://img.test/l%02d.png' % (i % 20),
+                     'category_id': str(1 + i % 4), 'epg_channel_id': 'ch%d.nl' % (i % 20 + 1), 'tv_archive': 0} for i in range(6000)]
+        return [{'stream_id': i + 1, 'name': '%s %d (%d)' % (TITLES[i % 24], i, 1990 + i % 35), 'stream_icon': 'http://img.test/p%02d.jpg' % (i % 24),
+                 'category_id': ['10', '11', '12', '13'][i % 4], 'container_extension': 'mp4', 'rating': str(5 + (i % 50) / 10),
+                 'added': str(int(time.time()) - i * 600)} for i in range(25000)]
     if not action:
         return {'user_info': {'auth': 1, 'username': 'demo', 'status': 'Active'}, 'server_info': {}}
     if action == 'get_live_categories':
         return [{'category_id': k, 'category_name': v} for k, v in GROUPS_LIVE.items()]
     if action == 'get_live_streams':
         return [{'stream_id': i + 1, 'num': i + 1, 'name': n, 'stream_icon': 'http://img.test/l%02d.png' % i, 'category_id': g,
-                 'epg_channel_id': 'ch%d.nl' % (i + 1), 'tv_archive': 0} for i, (n, g) in enumerate(CHANNELS)]
+                 'epg_channel_id': 'ch%d.nl' % (i + 1), 'tv_archive': 1 if i < 6 else 0, 'tv_archive_duration': 3 if i < 6 else 0}
+                for i, (n, g) in enumerate(CHANNELS)]
     if action == 'get_vod_categories':
         return [{'category_id': k, 'category_name': v} for k, v in VOD_GROUPS.items()]
     if action == 'get_vod_streams':
@@ -150,13 +180,13 @@ def xtream(action, params):
 
 
 def xmltv():
-    now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) - timedelta(hours=2)
+    now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) - timedelta(hours=26)
     shows = ['Journaal', 'Het weer', 'Talkshow', 'Documentaire: De zee', 'Voetbal: Ajax – PSV', 'Film: Red Horizon', 'Quiz', 'Late Night', 'Tekenfilms', 'Nieuws']
     out = ['<?xml version="1.0" encoding="UTF-8"?><tv>']
     for i in range(len(CHANNELS)):
         t = now
         k = i
-        while t < now + timedelta(hours=10):
+        while t < now + timedelta(hours=34):
             d = timedelta(minutes=[30, 45, 60, 90][k % 4])
             fmt = lambda x: x.strftime('%Y%m%d%H%M%S +0000')
             out.append('<programme start="%s" stop="%s" channel="ch%d.nl"><title lang="nl">%s</title><desc>Beschrijving van %s.</desc></programme>'
@@ -182,12 +212,22 @@ def device_auth(body, mode):
     if a == 'heartbeat':
         return 200, {'ok': True}
     if a == 'config':
-        return 200, {'tmdbAPIKey': '', 'omdbAPIKey': ''}
+        return 200, {'tmdbAPIKey': 'tmdb-test', 'omdbAPIKey': '', 'traktClientID': 'trakt-id', 'traktClientSecret': 'trakt-secret',
+                     'openSubtitlesAPIKey': 'os-key'}
     if a == 'get_sources':
-        return 200, sources()
+        return 200, SAVED['sources'] if SAVED.get('sources') else sources()
+    if a == 'put_sources':
+        SAVED['sources'] = {'sources': body.get('sources') or [], 'mainSourceID': body.get('mainSourceID'), 'updatedAt': iso(datetime.now(timezone.utc))}
+        return 200, {'ok': True, 'updatedAt': iso(datetime.now(timezone.utc))}
     if a == 'get_state':
-        return 200, {'sections': state()}
+        st = state()
+        st.update(SAVED.get('state', {}))
+        want = body.get('sections')
+        if want:
+            st = {k: v for k, v in st.items() if k in want}
+        return 200, {'sections': st}
     if a == 'put_state':
+        SAVED.setdefault('state', {})[body.get('section')] = {'data': body.get('data'), 'updatedAt': iso(datetime.now(timezone.utc))}
         return 200, {'ok': True, 'updatedAt': iso(datetime.now(timezone.utc))}
     if a == 'stream_start':
         if mode == 'streamlimit':
@@ -204,3 +244,145 @@ def device_auth(body, mode):
 def session():
     return {'access_token': 'h.' + 'eyJzdWIiOiJ1c2VyLTEifQ' + '.s', 'refresh_token': 'r2', 'expires_in': 3600,
             'user': {'id': 'user-1', 'email': 'leon@example.com'}}
+
+
+# MARK: andere diensten (Jellyfin, Plex, Stremio, TMDB, Trakt, OpenSubtitles, video)
+
+def gz(data):
+    import gzip
+    return gzip.compress(data.encode('utf-8') if isinstance(data, str) else data)
+
+
+def make_media(out):
+    """Kort testfilmpje (VP9 in MP4, speelt in Chromium) voor het voorbeeld in Live TV en multiview."""
+    import shutil, subprocess
+    f = os.path.join(out, 'clip.mp4')
+    if os.path.exists(f) or not shutil.which('ffmpeg'):
+        return f if os.path.exists(f) else None
+    subprocess.run(['ffmpeg', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=25', '-t', '120',
+                    '-c:v', 'libvpx-vp9', '-b:v', '300k', '-deadline', 'realtime', '-cpu-used', '8', f], check=False)
+    return f if os.path.exists(f) else None
+
+
+JSON = {'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json'}
+
+
+def other(url, method, body, img_dir):
+    """Antwoord voor de andere testdomeinen: (status, headers, bytes) of None."""
+    u = urllib.parse.urlparse(url)
+    q = urllib.parse.parse_qs(u.query)
+    host, path = u.netloc, u.path
+    qs = q.get('query', [''])[0].lower()
+    j = lambda o, code=200: (code, JSON, json.dumps(o).encode())
+    if host == 'jf.test':
+        if path == '/Users/AuthenticateByName':
+            return j({'AccessToken': 'jf-new', 'User': {'Id': 'u1'}})
+        if path.startswith('/Items/') and path.endswith('/Images/Primary'):
+            n = sum(ord(c) for c in path) % 24
+            return 200, {'Access-Control-Allow-Origin': '*', 'Content-Type': 'image/jpeg'}, open(os.path.join(img_dir, 'p%02d.jpg' % n), 'rb').read()
+        if path == '/Users/u1/Items':
+            t = q.get('IncludeItemTypes', [''])[0]
+            if t == 'Movie':
+                return j({'Items': [{'Id': 'm%d' % i, 'Name': TITLES[i], 'ProductionYear': 2010 + i, 'Genres': ['Drama' if i % 2 else 'Animatie'],
+                                     'CommunityRating': 7.1, 'Overview': 'Jellyfin-film.', 'DateCreated': '2026-10-0%dT10:00:00.0000000Z' % (i % 9 + 1),
+                                     'ProviderIds': {'Imdb': 'tt00%05d' % i}} for i in range(8)]})
+            if t == 'Series':
+                return j({'Items': [{'Id': 's1', 'Name': 'Northern Lights', 'ProductionYear': 2021, 'Genres': ['Drama'], 'Overview': 'Jellyfin-serie.',
+                                     'ProviderIds': {'Imdb': 'tt0099999'}}]})
+        if path == '/Shows/s1/Episodes':
+            return j({'Items': [{'Id': 'e%d' % e, 'Name': 'Deel %d' % e, 'ParentIndexNumber': 1, 'IndexNumber': e, 'RunTimeTicks': 27000000000} for e in range(1, 6)]})
+        if path == '/LiveTv/Channels':
+            return 404, JSON, b'{}'
+        return 404, JSON, b'{}'
+    if host == 'px.test':
+        if path == '/identity':
+            return j({'MediaContainer': {'machineIdentifier': 'abc'}})
+        if path == '/library/sections':
+            return j({'MediaContainer': {'Directory': [{'key': '1', 'type': 'movie', 'title': 'Films'}, {'key': '2', 'type': 'show', 'title': 'Series'}]}})
+        if path == '/library/sections/1/all':
+            return j({'MediaContainer': {'Metadata': [{'ratingKey': str(100 + i), 'title': TITLES[i + 8], 'year': 2018 + i % 5, 'thumb': '/thumb/%d' % i,
+                                                       'Genre': [{'tag': 'Plex-films'}], 'addedAt': 1760000000 + i,
+                                                       'Media': [{'Part': [{'key': '/parts/%d/file.mp4' % i}]}],
+                                                       'Guid': [{'id': 'imdb://tt01%05d' % i}]} for i in range(6)]}})
+        if path == '/library/sections/2/all':
+            return j({'MediaContainer': {'Metadata': [{'ratingKey': '200', 'title': 'Echo Park', 'year': 2019, 'thumb': '/thumb/9'}]}})
+        if path == '/library/metadata/200/allLeaves':
+            return j({'MediaContainer': {'Metadata': [{'ratingKey': str(300 + e), 'title': 'Episode %d' % e, 'parentIndex': 1, 'index': e,
+                                                       'duration': 1500000, 'Media': [{'Part': [{'key': '/parts/e%d.mp4' % e}]}]} for e in range(1, 4)]}})
+        if path.startswith('/thumb/'):
+            n = int(path.split('/')[-1]) % 24
+            return 200, {'Access-Control-Allow-Origin': '*', 'Content-Type': 'image/jpeg'}, open(os.path.join(img_dir, 'p%02d.jpg' % n), 'rb').read()
+        return 404, JSON, b'{}'
+    if host == 'plex.tv':
+        if path == '/api/v2/pins' and method == 'POST':
+            return j({'id': 4242, 'code': 'B7KQ'})
+        if path == '/api/v2/pins/4242':
+            return j({'id': 4242, 'code': 'B7KQ', 'authToken': 'plex-user-token'})
+        if path == '/api/v2/resources':
+            return j([{'name': 'Server', 'provides': 'server', 'accessToken': 'px-token',
+                       'connections': [{'uri': 'http://px.test', 'local': True}]}])
+    if host == 'stremio.test':
+        if path == '/manifest.json':
+            return j({'name': 'Test-add-on', 'resources': ['catalog', 'meta', 'stream'], 'types': ['movie', 'series'],
+                      'catalogs': [{'type': 'movie', 'id': 'top', 'name': 'Populair'}, {'type': 'series', 'id': 'top', 'name': 'Populair'}]})
+        if path == '/catalog/movie/top.json':
+            return j({'metas': [{'id': 'tt02%05d' % i, 'name': TITLES[i + 4], 'poster': 'http://img.test/p%02d.jpg' % (i + 4),
+                                 'releaseInfo': '2020', 'imdbRating': '7.%d' % i} for i in range(6)]})
+        if path == '/catalog/series/top.json':
+            return j({'metas': [{'id': 'tt0300001', 'name': 'Wild Coast', 'poster': 'http://img.test/p11.jpg', 'releaseInfo': '2022'}]})
+        if path == '/meta/series/tt0300001.json':
+            return j({'meta': {'videos': [{'id': 'tt0300001:1:%d' % e, 'season': 1, 'episode': e, 'name': 'Afl. %d' % e} for e in range(1, 4)]}})
+        if path.startswith('/stream/'):
+            return j({'streams': [{'name': '1080p', 'title': 'Test-bron', 'url': 'http://video.test/clip.mp4'},
+                                  {'name': 'Torrent', 'infoHash': 'abc'}]})
+        return 404, JSON, b'{}'
+    if host == 'api.themoviedb.org':
+        if path in ('/3/search/movie', '/3/search/tv'):
+            kids = any(w in qs for w in ['dragon', 'space kids', 'golden'])
+            if not qs:
+                return j({'results': []})
+            return j({'results': [{'id': 1000 + len(qs), 'genre_ids': [16, 10751] if kids else [53, 18], 'adult': False}]})
+        if path.startswith('/3/find/'):
+            return j({'movie_results': [], 'tv_results': []})
+        if path.endswith('/release_dates'):
+            mid = int(path.split('/')[3])
+            cert = 'AL' if mid % 2 else '16'
+            return j({'results': [{'iso_3166_1': 'NL', 'release_dates': [{'certification': cert}]}, {'iso_3166_1': 'US', 'release_dates': [{'certification': 'PG-13'}]}]})
+        if path.endswith('/content_ratings'):
+            return j({'results': [{'iso_3166_1': 'NL', 'rating': '12'}]})
+        return j({})
+    if host in ('api.trakt.tv', 'auth.trakt.tv'):
+        if path == '/oauth/device/code':
+            return j({'device_code': 'dev123', 'user_code': '7F3K2Q9M', 'verification_url': 'https://trakt.tv/activate', 'expires_in': 600, 'interval': 1})
+        if path == '/oauth/device/token':
+            return j({'access_token': 'trakt-at', 'refresh_token': 'trakt-rt', 'created_at': int(time.time()), 'expires_in': 7776000})
+        if path == '/users/settings':
+            return j({'user': {'username': 'leon'}})
+        if path == '/sync/last_activities':
+            return j({'all': '2026-10-12T10:00:00.000Z'})
+        if path == '/sync/watched/movies':
+            return j([{'movie': {'title': 'Neon District', 'year': 2017, 'ids': {'imdb': 'tt0000003'}}}])
+        if path == '/sync/watched/shows':
+            return j([{'show': {'title': 'Midnight Harbor', 'year': 2020, 'ids': {'imdb': 'tt1000001'}},
+                       'seasons': [{'number': 1, 'episodes': [{'number': 1}, {'number': 2}, {'number': 3}]}]}])
+        if path.startswith('/search/'):
+            return j([{'movie': {'title': qs, 'year': 2020, 'ids': {'imdb': 'tt0000777'}}, 'show': {'title': qs, 'ids': {'imdb': 'tt1000001'}}}])
+        if path.startswith('/scrobble/') or path.startswith('/sync/history'):
+            with open(os.path.join(os.path.dirname(img_dir), 'requests.jsonl'), 'a') as f:
+                f.write(json.dumps({'trakt': path, 'body': json.loads(body or '{}')}) + '\n')
+            return j({'id': 1}, 201)
+        return j({})
+    if host == 'api.opensubtitles.com':
+        if path == '/api/v1/login':
+            return j({'token': 'os-token', 'base_url': 'api.opensubtitles.com', 'user': {'remaining_downloads': 20}})
+        if path == '/api/v1/subtitles':
+            return j({'data': [{'attributes': {'language': 'nl', 'release': 'Iron.Valley.2020.1080p.NL', 'download_count': 1200, 'from_trusted': True,
+                                               'files': [{'file_id': 77, 'file_name': 'iron.srt'}]}},
+                               {'attributes': {'language': 'en', 'release': 'Iron.Valley.2020.EN', 'download_count': 900,
+                                               'files': [{'file_id': 78}]}}]})
+        if path == '/api/v1/download':
+            return j({'link': 'http://os.test/sub.srt', 'remaining': 19})
+    if host == 'os.test':
+        srt = '1\n00:00:00,500 --> 00:00:30,000\nDit is een <i>ondertitel</i> van OpenSubtitles.\nTweede regel.\n\n2\n00:00:30,500 --> 00:01:00,000\nNog een.\n'
+        return 200, {'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/x-subrip'}, srt.encode('cp1252')
+    return None

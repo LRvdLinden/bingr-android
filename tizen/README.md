@@ -14,15 +14,32 @@ voortgang, collecties en instellingen er gewoon: alles komt uit je account en sy
 - **Inloggen** met QR-code / code op bingr.online/tv (of e-mail met het schermtoetsenbord), sessie vernieuwen, uitloggen, limiet van 15 apparaten met het scherm *Te veel apparaten*
 - **Wie kijkt er?** met avatars (emoji, getekende figuurtjes en profielfoto's uit je account), kinderprofielen, pincode per profiel en accentkleur per profiel
 - **Home** in Netflix-stijl: billboard, Verder kijken, Mijn lijst, Top 10, Nu live, Onlangs toegevoegd, je eigen **collecties** (per profiel, slim en handmatig) en categorierijen, in de volgorde van je startscherm-indeling
-- **Live TV** met categorieën, favorieten, recente zenders, nu/straks uit de tv-gids en een **gids-raster**
+- **Live TV** met categorieën, favorieten, recente zenders, nu/straks uit de tv-gids, een **voorbeeld** van de zender waar je op staat en een **gids-raster** (tot 7 dagen terug)
 - **Films** en **Series** met categorieën, detailpagina met seizoenen en afleveringen, voortgang in procenten en automatisch de huidige aflevering
 - **Zoeken** met schermtoetsenbord
 - **Speler** met Samsung AVPlay (HLS, TS, MP4), terugval op HTML5-video, hervatten, audio- en ondertitelsporen, zappen met CH+/CH− of omhoog/omlaag (met vertraging) en cijfertoetsen, **intro overslaan**, **volgende aflevering** met aftellen, reservebron bij een live-fout, foutscherm met *Probeer opnieuw* / *Andere bron*
-- **Tegelijk kijken** (max. 6, met de lijst van wie er kijkt), kijkgeschiedenis, apparaten beheren, wie kijkt er nu
+- **Servers beheren op de tv** (Instellingen → Jouw servers, alleen het hoofdprofiel): toevoegen, wijzigen en verwijderen van M3U (+ EPG-URL), Xtream Codes (met test van de inlog en *Toch opslaan*), Stalker/MAC-portal, Plex (koppelcode op plex.tv/link), Jellyfin, Emby en Stremio (add-ons en/of Stremio-account). Hoofdserver kiezen. Opslaan gaat met `put_sources`, precies zoals de webconsole: altijd de hele lijst, tombstones bij verwijderen, onbekende velden, het `apple`/`android`-blok en `catchupOffsets` blijven staan, een leeg wachtwoord betekent ongewijzigd. Tekst invoeren met een schermtoetsenbord dat met de pijltjes werkt (lay-outs voor tekst, URL en MAC-adres).
+- **Plex, Jellyfin, Emby en Stremio**: bladeren en afspelen (films, series met seizoenen en afleveringen, Stremio met *Kies een bron*), met dezelfde id's als de andere apps, zodat voortgang, Mijn lijst en collecties gewoon meegaan
+- **Terugkijken** (catch-up) bij Xtream en Stalker vanuit de gids of het programmavenster (*Kijken vanaf het begin*), met de **terugkijk-correctie per zender** (−120…+120 min, gedeeld via de server)
+- **Trakt**: scrobbelen en *bekeken*-vinkjes met het gedeelde token van je account; is er nog geen koppeling, dan koppel je Trakt op de tv met een code/QR-code (trakt.tv/activate). Alleen voor het hoofdprofiel.
+- **OpenSubtitles**: zoeken en tonen in de speler (Ondertitels → OpenSubtitles…), met de gedeelde inlog en API-sleutel; standaardtaal in Instellingen; inloggen kan ook op de tv
+- **Herinneringen** vanuit de gids (*Herinner mij*), gedeeld met je andere apparaten; als het programma begint verschijnt er een melding in beeld (groen: live kijken). Lijst in Instellingen → Herinneringen.
+- **Multiview**: 2 tot 4 zenders tegelijk (Live TV → Multiview). Een Samsung-tv heeft maar één AVPlay-speler: de tegel met geluid gebruikt AVPlay (alle formaten), de andere tegels spelen gedempt via HTML5-video (HLS/MP4, hoeveel tegelijk hangt af van de tv). OK geeft een tegel het geluid, geel haalt hem weg, Afspelen opent hem volledig. Telt als één stream.
+- **Intro en aftiteling markeren** in de speler (rode knop of de knop *Intro en aftiteling*): intro begin/eind en begin aftiteling zetten, ±5 s bijstellen, gedeeld als `settings.shared.introMarkers` voor alle afleveringen van de serie
+- **Gezipte tv-gidsen** (`.xml.gz`) met het meegeleverde pako (inflate)
+- **Leeftijdsclassificaties uit TMDB** (Kijkwijzer eerst, dan VS, VK, …), gecachet in IndexedDB en op de achtergrond bijgewerkt (kindergroepen eerst, in kleine batches, alleen als de afstandsbediening stil is): het kinderfilter werkt daardoor hetzelfde als op Android
+- **Tegelijk kijken** (max. 6, met de lijst van wie er kijkt), kijkgeschiedenis, apparaten beheren, wie kijkt er nu (met profielavatars)
 - **Kinderslot** en leeftijdsfilter met dezelfde regels als Android (kinderprofiel: alleen kinderzenders en -categorieën; volwassenengroepen nooit; vergrendelde groepen en aanpassingen uit het Android-blok van de server)
-- **Instellingen**: taal (11 talen, gedeeld met je account), accentkleur, actieve server, bibliotheek verversen, laatste zender hervatten, zapvertraging, kinderslot
+- **Instellingen**: taal (11 talen, gedeeld met je account), accentkleur, actieve server, servers, bibliotheek verversen, laatste zender hervatten, zapvertraging, live-voorbeeld, Trakt, OpenSubtitles, herinneringen, kinderslot
+- **Soepel op oude tv's**: lijsten en collecties één keer per wijziging berekend en onthouden, zwaar werk in stukjes zodat de toetsen nooit blijven hangen, ingedrukt houden afgeremd, virtuele lijsten en rasters (alleen wat in beeld is bestaat, scrollen met `transform`), kleine posters pas laden als ze in beeld komen, nu/straks via een index met binair zoeken, het Live TV-voorbeeld pas na ~1,2 s stilstand met één hergebruikte speler
 
-Nog niet op de tv (wel in de andere apps): servers toevoegen of wijzigen (doe je in de app op je telefoon of op bingr.online), Plex/Jellyfin/Emby/Stremio, terugkijken (catch-up), Trakt, OpenSubtitles, herinneringen, multiview, intro-markeringen zelf zetten en gezipte tv-gidsen (`.xml.gz`). MAC-portals werken alleen als het portal het MAC-adres ook als parameter accepteert (een tv-app mag geen eigen cookie meesturen).
+Beperkingen die blijven:
+
+- Multiview: alleen de tegel met geluid speelt `.ts`-streams; de andere tegels hebben HLS of MP4 nodig (bij Xtream: zet *Live TV als HLS* aan). Kan een tegel niet spelen, dan zie je nu/straks en kun je hem met OK het geluid geven.
+- MAC-portals werken alleen als het portal het MAC-adres ook als parameter accepteert (een tv-app mag geen eigen cookie meesturen); terugkijken bij Stalker hangt af van het portal (archief per programma of `utc`-parameter).
+- Downloaden, casten en het wijzigen van profielen, collecties of de startscherm-indeling doe je in de andere apps of op bingr.online; op de tv zie je het resultaat.
+- Stremio speelt alleen bronnen met een gewone URL (geen torrents).
+- Inloggen bij Jellyfin/Emby gebeurt met gebruikersnaam en wachtwoord; Bingr bewaart alleen de sessie, niet het wachtwoord.
 
 ## Installeren op je Samsung-tv
 
@@ -114,13 +131,16 @@ Bingr staat daarna bij **Apps** op de tv.
 | Afspelen/Pauze, Stop, ⏩ ⏪ | speler (⏩/⏪ springen 30 s; links/rechts 10 s) |
 | CH+ / CH−, omhoog/omlaag | zappen tijdens live TV |
 | Cijfers | zendernummer kiezen; pincode invoeren |
-| Geel | zender als favoriet in Live TV |
+| Geel | zender als favoriet in Live TV; tegel weghalen in multiview |
+| Blauw / Info in Live TV | tv-gids |
+| Rood | intro en aftiteling markeren (tijdens een aflevering) |
+| Groen | live kijken bij een herinnering in beeld |
 | Info | balk van de speler tonen of verbergen |
 
 ## Voor ontwikkelaars
 
 - Gewone HTML/CSS/JavaScript zonder build-stap en zonder frameworks, geschreven voor de oude Chromium van tv's uit 2018 (M56): geen `?.`, `??`, object-spread, `Promise.finally` of CSS grid.
-- `js/core.js` (opslag, netwerk, hash, titels, vertalingen), `account.js` (Supabase-account), `sync.js` (profielen, servers, state, collecties), `providers.js` (M3U, Xtream, Stalker, XMLTV), `library.js` (laden, cachen, filters en kinderslot), `player.js` (AVPlay), `ui.js` (focus en toetsen), `screens.js` en `app.js`.
+- `js/core.js` (opslag, netwerk, hash, titels, vertalingen, planning in stukjes), `account.js` (Supabase-account), `sync.js` (profielen, servers, state, collecties, intro-markeringen), `providers.js` (M3U, Xtream, Stalker, XMLTV), `mediaservers.js` (Plex, Jellyfin/Emby, Stremio), `library.js` (laden, cachen, filters en kinderslot), `agerating.js` (TMDB-leeftijden), `connections.js` (Trakt, OpenSubtitles), `reminders.js`, `player.js` (AVPlay, voorbeeld), `multiview.js`, `ui.js` (focus, toetsen, virtuele lijsten, schermtoetsenbord), `screens.js`, `extras.js` (servers, Trakt, herinneringen) en `app.js`. Externe bibliotheken in `js/lib/`: `qrcode.js` en `pako_inflate.min.js` (MIT/Zlib).
 - Id's en sync-sleutels zijn gelijk aan Android en iOS (bijv. `x123`, `xv456`, `xs789`, `ep:<serie>|s-e`, `profile.<id>`, collecties `version: 2`), zodat alles tussen de apps synchroniseert.
 - Lokale opslag: `localStorage` met het voorvoegsel `bingr.` en een schemaversie (`bingr.schema`, migraties in `B.migrate`), grote caches in IndexedDB (`bingr`).
 - Teksten komen uit `app/src/main/assets/Translations.json`; `python3 tizen/tools/make_strings.py` maakt `js/strings.js`. Teksten die alleen op de tv bestaan staan in `tools/strings-extra.json`.
