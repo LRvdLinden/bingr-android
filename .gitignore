@@ -14,3 +14,4 @@ captures/
 *.wgt
 tizen/.buildResult/
 tizen/.sign/
+__pycache__/
