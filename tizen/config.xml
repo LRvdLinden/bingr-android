@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Bingr voor Samsung Tizen TV.
+  Package-id (BingrTVapp) en app-id (BingrTVapp.Bingr) blijven altijd gelijk: anders installeert een update
+  als een nieuwe app en ben je je gegevens kwijt. De versie zet CI op 1.0.<BINGR_BUILD>.
+-->
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
+        id="http://bingr.online/tizen" version="1.0.0" viewmodes="maximized">
+  <tizen:application id="BingrTVapp.Bingr" package="BingrTVapp" required_version="4.0"/>
+  <tizen:profile name="tv-samsung"/>
+  <name>Bingr</name>
+  <description>Bingr: je eigen IPTV in Netflix-stijl. Live TV, films en series van je eigen servers.</description>
+  <author href="https://bingr.online">Bingr</author>
+  <icon src="icon.png"/>
+  <content src="index.html"/>
+  <feature name="http://tizen.org/feature/screen.size.all"/>
+  <access origin="*" subdomains="true"/>
+  <tizen:allow-navigation>*</tizen:allow-navigation>
+  <tizen:content-security-policy>default-src * 'self' data: blob: 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval' file: http: https:; img-src * data: blob: http: https:; media-src * blob: data: http: https:; connect-src * http: https:; style-src 'self' 'unsafe-inline';</tizen:content-security-policy>
+  <tizen:privilege name="http://tizen.org/privilege/internet"/>
+  <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+  <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+  <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>
+  <tizen:privilege name="http://developer.samsung.com/privilege/productinfo"/>
+  <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
+</widget>

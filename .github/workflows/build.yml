@@ -100,3 +100,154 @@ jobs:
           cd /tmp/logs && git init -q -b ci-logs && git add -A
           git -c user.name=github-actions -c user.email=actions@github.com commit -qm "CI-log $(cat status.txt)"
           git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs
+
+  # Samsung Tizen TV: .wgt uit tizen/ (zelfde versie en buildnummer als de APK)
+  tizen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Tizen Studio CLI uit de cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/tizen-studio
+          key: tizen-studio-web-cli-v1
+
+      - name: Tizen Studio CLI installeren
+        if: steps.cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          set -e
+          for v in 6.1 6.0 5.6 5.5; do
+            url="https://download.tizen.org/sdk/Installer/tizen-studio_$v/web-cli_Tizen_Studio_${v}_ubuntu-64.bin"
+            if curl -fsSL --retry 2 -o "$RUNNER_TEMP/web-cli.bin" "$url"; then echo "Tizen Studio $v gedownload"; break; fi
+            rm -f "$RUNNER_TEMP/web-cli.bin"
+          done
+          test -s "$RUNNER_TEMP/web-cli.bin"
+          chmod +x "$RUNNER_TEMP/web-cli.bin"
+          "$RUNNER_TEMP/web-cli.bin" --accept-license "$HOME/tizen-studio" > "$RUNNER_TEMP/install.log" 2>&1 || { tail -40 "$RUNNER_TEMP/install.log"; exit 1; }
+          tail -5 "$RUNNER_TEMP/install.log"
+
+      - name: Ondertekenprofiel klaarzetten
+        id: sign
+        continue-on-error: true
+        env:
+          AUTHOR_P12: ${{ secrets.TIZEN_AUTHOR_P12_BASE64 }}
+          AUTHOR_PW: ${{ secrets.TIZEN_AUTHOR_PASSWORD }}
+          DIST_P12: ${{ secrets.TIZEN_DISTRIBUTOR_P12_BASE64 }}
+          DIST_PW: ${{ secrets.TIZEN_DISTRIBUTOR_PASSWORD }}
+        run: |
+          set -e
+          T="$HOME/tizen-studio/tools/ide/bin/tizen"
+          test -x "$T"
+          "$T" version || true
+          KS="$RUNNER_TEMP/keys"; mkdir -p "$KS"
+          if [ -n "$AUTHOR_P12" ] && [ -n "$DIST_P12" ]; then
+            echo "$AUTHOR_P12" | base64 -d > "$KS/author.p12"
+            echo "$DIST_P12" | base64 -d > "$KS/distributor.p12"
+            "$T" security-profiles add -n bingr -a "$KS/author.p12" -p "$AUTHOR_PW" -d "$KS/distributor.p12" -dp "$DIST_PW"
+            APW="$AUTHOR_PW"; DPW="$DIST_PW"; KIND=samsung
+            echo "::notice::Tizen-app wordt ondertekend met het Samsung-certificaat uit de secrets"
+          else
+            # geen Samsung-certificaat: tijdelijk eigen auteurscertificaat met de standaard Tizen-distributeur
+            APW="ci-$(openssl rand -hex 12)"; DPW="tizenpkcs12passfordsigner"; KIND=tizen
+            "$T" certificate -a BingrCI -p "$APW" -c NL -ct Bingr -o Bingr -n "Bingr CI" -f bingr-ci
+            AUTHOR=$(find "$HOME/tizen-studio-data" -name 'bingr-ci.p12' | head -1)
+            "$T" security-profiles add -n bingr -a "$AUTHOR" -p "$APW"
+            echo "::warning::Secrets TIZEN_AUTHOR_P12_BASE64 / TIZEN_DISTRIBUTOR_P12_BASE64 ontbreken: de .wgt krijgt een tijdelijk test-certificaat en installeert niet op een Samsung-tv. Zie tizen/README.md."
+          fi
+          # zonder sleutelbos (headless runner) wachtwoorden direct in profiles.xml zetten
+          PROFILES=$(find "$HOME/tizen-studio-data" -name profiles.xml | head -1)
+          python3 - "$PROFILES" "$APW" "$DPW" <<'PY'
+          import re, sys
+          p, apw, dpw = sys.argv[1:4]
+          s = open(p, encoding='utf-8').read()
+          def fix(m):
+              item = m.group(0)
+              if 'key=""' in item:
+                  return item
+              pw = apw if 'distributor="0"' in item else dpw
+              return re.sub(r'password="[^"]*"', 'password="%s"' % pw, item)
+          s = re.sub(r'<profileitem\b[^>]*/>', fix, s)
+          open(p, 'w', encoding='utf-8').write(s)
+          PY
+          "$T" security-profiles list || true
+          echo "TIZEN_CLI=$T" >> "$GITHUB_ENV"
+          echo "TIZEN_PROFILE=bingr" >> "$GITHUB_ENV"
+          echo "SIGN_KIND=$KIND" >> "$GITHUB_ENV"
+
+      - name: .wgt bouwen
+        run: |
+          tizen/tools/package.sh "$RUNNER_TEMP/out"
+          V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
+          mkdir -p dist
+          if [ -f "$RUNNER_TEMP/out/Bingr-$V-build$B.wgt" ]; then
+            if [ "${SIGN_KIND:-}" = "samsung" ]; then
+              cp "$RUNNER_TEMP/out/Bingr-$V-build$B.wgt" dist/
+            else
+              cp "$RUNNER_TEMP/out/Bingr-$V-build$B.wgt" "dist/Bingr-$V-build$B-testsigned.wgt"
+            fi
+          else
+            cp "$RUNNER_TEMP/out/"*.wgt dist/
+          fi
+          ls -la dist
+          echo "SIGN_KIND=${SIGN_KIND:-unsigned}" > dist/signing.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bingr-Tizen-wgt
+          path: dist/
+
+  tizen-release:
+    needs: [apk, tizen]
+    if: ${{ always() && needs.tizen.result == 'success' && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: Bingr-Tizen-wgt
+          path: dist
+
+      - name: .wgt bij de GitHub-release zetten
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
+          TAG="v$V-build$B"
+          KIND=$(grep -o 'SIGN_KIND=.*' dist/signing.txt | cut -d= -f2)
+          # de APK-job maakt de release; bestaat hij nog niet (APK mislukt), dan hier maken
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "Bingr $V (build $B)" --notes "Bingr $V, build $B." --latest || gh release view "$TAG" >/dev/null
+          fi
+          case "$KIND" in
+            samsung) NOTE="Samsung TV (Tizen): installeer de .wgt met Tizen Studio of de tizen-CLI over de vorige versie heen; je gegevens blijven bewaard. Uitleg: https://github.com/${{ github.repository }}/blob/main/tizen/README.md" ;;
+            tizen) NOTE="Samsung TV (Tizen): deze .wgt is met een tijdelijk test-certificaat ondertekend (de Samsung-certificaat-secrets ontbreken) en installeert niet op een Samsung-tv. Uitleg: https://github.com/${{ github.repository }}/blob/main/tizen/README.md" ;;
+            *) NOTE="Samsung TV (Tizen): deze .wgt is niet ondertekend (de Tizen-CLI was niet beschikbaar). Uitleg: https://github.com/${{ github.repository }}/blob/main/tizen/README.md" ;;
+          esac
+          gh release view "$TAG" --json body -q .body > body.md || true
+          if ! grep -q "Samsung TV (Tizen)" body.md; then
+            printf '\n%s\n' "$NOTE" >> body.md
+          else
+            python3 - "$NOTE" <<'PY'
+          import sys
+          note = sys.argv[1]
+          lines = open('body.md', encoding='utf-8').read().split('\n')
+          lines = [note if l.startswith('Samsung TV (Tizen)') else l for l in lines]
+          open('body.md', 'w', encoding='utf-8').write('\n'.join(lines))
+          PY
+          fi
+          gh release edit "$TAG" --notes-file body.md
+          # oude .wgt-varianten van deze build weghalen, dan de nieuwe uploaden
+          for a in $(gh release view "$TAG" --json assets -q '.assets[].name' | grep '\.wgt$' || true); do
+            [ -f "dist/$a" ] || gh release delete-asset "$TAG" "$a" -y || true
+          done
+          gh release upload "$TAG" dist/*.wgt --clobber

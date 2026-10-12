@@ -16,6 +16,10 @@ Wat er nieuw is per build: [CHANGELOG.md](CHANGELOG.md) · [bingr.online/changel
 
 Op **Android TV / Google TV / Fire TV**: installeer de app *Downloader*, sta onbekende bronnen toe en open daarin de link hierboven.
 
+### Samsung TV (Tizen)
+
+Bingr draait ook op **Samsung-smart-tv's** (2018 en nieuwer). De app staat in [`tizen/`](tizen/) en wordt bij elke build mee gebouwd: bij elke release staat naast de APK een `Bingr-…wgt`. Installeren gaat via de ontwikkelaarsmodus van de tv en een eigen Samsung-certificaat; de stappen staan in **[tizen/README.md](tizen/README.md)**. Inloggen met je telefoon (QR-code), daarna synchroniseert alles met je account.
+
 ## Screenshots
 
 > Ontwerp-previews van de schermen (gerenderd vanuit de mockups in de iOS-repo met `tools/make_screenshots.py --android`, met fictieve titels en zenders en echte posters van TMDB). Worden vervangen door echte screenshots van de app.

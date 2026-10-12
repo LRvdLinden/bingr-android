@@ -11,3 +11,6 @@ local.properties
 *.aab
 .DS_Store
 captures/
+*.wgt
+tizen/.buildResult/
+tizen/.sign/
