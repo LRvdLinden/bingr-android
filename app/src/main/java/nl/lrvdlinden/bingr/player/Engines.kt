@@ -373,7 +373,7 @@ class VlcEngine(ctx: Context) : PlaybackEngine {
     override val isPlaying: Boolean get() = !released && player.isPlaying
     override val duration: Double get() = if (released) 0.0 else player.getLength().coerceAtLeast(0) / 1000.0
     override val time: Double get() = if (released) 0.0 else player.getTime().coerceAtLeast(0) / 1000.0
-    override val position: Double get() = if (duration > 0) player.getPosition().toDouble().coerceIn(0.0, 1.0) else 0.0
+    override val position: Double get() = if (duration > 0) player.getPosition().toDouble().takeIf { !it.isNaN() }?.coerceIn(0.0, 1.0) ?: 0.0 else 0.0
     override var rate: Float = 1f
         set(v) { field = v; if (!released) player.setRate(v) }
     override var muted: Boolean = false

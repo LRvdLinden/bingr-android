@@ -14,7 +14,7 @@ object WebVTT {
 
     /** WebVTT-tekst uit SRT- of WebVTT-tekst; [shiftSeconds] = + is later tonen. */
     fun from(text: String, shiftSeconds: Double = 0.0): String {
-        val clean = text.replace("﻿", "").replace("\r\n", "\n").replace("\r", "\n")
+        val clean = text.replace("\uFEFF", "").replace("\r\n", "\n").replace("\r", "\n")
         val isVTT = clean.trimStart().startsWith("WEBVTT")
         val blocks = mutableListOf<List<String>>()
         var cur = mutableListOf<String>()

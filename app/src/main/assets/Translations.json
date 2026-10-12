@@ -778,7 +778,8 @@
   "This title can't be downloaded (streaming only).": "لا يمكن تنزيل هذا العنوان (بث فقط).",
   "Trakt and OpenSubtitles require a one-time app registration. Saved on this device; use Export to take them along.": "يتطلب Trakt وOpenSubtitles تسجيل التطبيق مرة واحدة. يُحفظ على هذا الجهاز؛ استخدم التصدير لنقله.",
   "Try ExoPlayer (HDR, Dolby Vision)": "تجربة ExoPlayer (HDR، Dolby Vision)",
-  "Try VLC (all formats)": "تجربة VLC (كل الصيغ)"
+  "Try VLC (all formats)": "تجربة VLC (كل الصيغ)",
+  "Standard": "قياسي"
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -1559,7 +1560,8 @@
   "This title can't be downloaded (streaming only).": "Dieser Titel kann nicht heruntergeladen werden (nur Streaming).",
   "Trakt and OpenSubtitles require a one-time app registration. Saved on this device; use Export to take them along.": "Trakt und OpenSubtitles erfordern eine einmalige App-Registrierung. Auf diesem Gerät gespeichert; nimm sie mit Export mit.",
   "Try ExoPlayer (HDR, Dolby Vision)": "ExoPlayer testen (HDR, Dolby Vision)",
-  "Try VLC (all formats)": "VLC testen (alle Formate)"
+  "Try VLC (all formats)": "VLC testen (alle Formate)",
+  "Standard": "Standard"
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -2340,7 +2342,8 @@
   "This title can't be downloaded (streaming only).": "Este título no se puede descargar (solo streaming).",
   "Trakt and OpenSubtitles require a one-time app registration. Saved on this device; use Export to take them along.": "Trakt y OpenSubtitles requieren registrar la app una vez. Se guarda en este dispositivo; usa Exportar para llevarlo contigo.",
   "Try ExoPlayer (HDR, Dolby Vision)": "Probar ExoPlayer (HDR, Dolby Vision)",
-  "Try VLC (all formats)": "Probar VLC (todos los formatos)"
+  "Try VLC (all formats)": "Probar VLC (todos los formatos)",
+  "Standard": "Estándar"
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -3121,7 +3124,8 @@
   "This title can't be downloaded (streaming only).": "Ce titre ne peut pas être téléchargé (streaming uniquement).",
   "Trakt and OpenSubtitles require a one-time app registration. Saved on this device; use Export to take them along.": "Trakt et OpenSubtitles nécessitent un enregistrement unique de l’app. Enregistré sur cet appareil ; utilisez Exporter pour l’emporter.",
   "Try ExoPlayer (HDR, Dolby Vision)": "Essayer ExoPlayer (HDR, Dolby Vision)",
-  "Try VLC (all formats)": "Essayer VLC (tous formats)"
+  "Try VLC (all formats)": "Essayer VLC (tous formats)",
+  "Standard": "Standard"
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -3902,7 +3906,8 @@
   "This title can't be downloaded (streaming only).": "Questo titolo non può essere scaricato (solo streaming).",
   "Trakt and OpenSubtitles require a one-time app registration. Saved on this device; use Export to take them along.": "Trakt e OpenSubtitles richiedono una registrazione dell’app una tantum. Salvato su questo dispositivo; usa Esporta per portarlo con te.",
   "Try ExoPlayer (HDR, Dolby Vision)": "Prova ExoPlayer (HDR, Dolby Vision)",
-  "Try VLC (all formats)": "Prova VLC (tutti i formati)"
+  "Try VLC (all formats)": "Prova VLC (tutti i formati)",
+  "Standard": "Standard"
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -5465,7 +5470,8 @@
   "This title can't be downloaded (streaming only).": "Tego tytułu nie można pobrać (tylko streaming).",
   "Trakt and OpenSubtitles require a one-time app registration. Saved on this device; use Export to take them along.": "Trakt i OpenSubtitles wymagają jednorazowej rejestracji aplikacji. Zapisane na tym urządzeniu; użyj eksportu, aby je przenieść.",
   "Try ExoPlayer (HDR, Dolby Vision)": "Wypróbuj ExoPlayer (HDR, Dolby Vision)",
-  "Try VLC (all formats)": "Wypróbuj VLC (wszystkie formaty)"
+  "Try VLC (all formats)": "Wypróbuj VLC (wszystkie formaty)",
+  "Standard": "Standardowa"
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -6246,7 +6252,8 @@
   "This title can't be downloaded (streaming only).": "Este título não pode ser transferido (apenas streaming).",
   "Trakt and OpenSubtitles require a one-time app registration. Saved on this device; use Export to take them along.": "O Trakt e o OpenSubtitles exigem um registo único da app. Guardado neste dispositivo; use Exportar para o levar.",
   "Try ExoPlayer (HDR, Dolby Vision)": "Experimentar ExoPlayer (HDR, Dolby Vision)",
-  "Try VLC (all formats)": "Experimentar VLC (todos os formatos)"
+  "Try VLC (all formats)": "Experimentar VLC (todos os formatos)",
+  "Standard": "Padrão"
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -7027,7 +7034,8 @@
   "This title can't be downloaded (streaming only).": "Bu içerik indirilemez (yalnızca yayın).",
   "Trakt and OpenSubtitles require a one-time app registration. Saved on this device; use Export to take them along.": "Trakt ve OpenSubtitles tek seferlik uygulama kaydı gerektirir. Bu cihazda kaydedilir; taşımak için Dışa aktar'ı kullan.",
   "Try ExoPlayer (HDR, Dolby Vision)": "ExoPlayer'ı dene (HDR, Dolby Vision)",
-  "Try VLC (all formats)": "VLC'yi dene (tüm biçimler)"
+  "Try VLC (all formats)": "VLC'yi dene (tüm biçimler)",
+  "Standard": "Standart"
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -7808,6 +7816,7 @@
   "This title can't be downloaded (streaming only).": "此内容无法下载（仅限在线播放）。",
   "Trakt and OpenSubtitles require a one-time app registration. Saved on this device; use Export to take them along.": "Trakt 和 OpenSubtitles 需要一次性注册应用。保存在此设备上；可通过导出带到其他设备。",
   "Try ExoPlayer (HDR, Dolby Vision)": "试用 ExoPlayer（HDR、Dolby Vision）",
-  "Try VLC (all formats)": "试用 VLC（所有格式）"
+  "Try VLC (all formats)": "试用 VLC（所有格式）",
+  "Standard": "标准"
  }
 }

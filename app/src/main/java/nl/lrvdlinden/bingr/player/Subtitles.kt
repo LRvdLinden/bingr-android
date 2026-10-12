@@ -75,7 +75,7 @@ object SRT {
     fun decode(bytes: ByteArray): String {
         if (startsWith(bytes, 0xFF, 0xFE)) return String(bytes, 2, bytes.size - 2, Charsets.UTF_16LE)
         if (startsWith(bytes, 0xFE, 0xFF)) return String(bytes, 2, bytes.size - 2, Charsets.UTF_16BE)
-        if (isUTF8(bytes)) return String(bytes, Charsets.UTF_8).replace("﻿", "")
+        if (isUTF8(bytes)) return String(bytes, Charsets.UTF_8).replace("\uFEFF", "")
         val cp1252 = runCatching { Charset.forName("windows-1252") }.getOrNull()
         return if (cp1252 != null) String(bytes, cp1252) else String(bytes, Charsets.ISO_8859_1)
     }

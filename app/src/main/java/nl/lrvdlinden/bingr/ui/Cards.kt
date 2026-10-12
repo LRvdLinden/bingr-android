@@ -64,7 +64,7 @@ fun PosterCard(
             Row(Modifier.align(Alignment.TopEnd).padding(5.dp).clip(RoundedCornerShape(4.dp)).background(Theme.imdb)
                 .padding(horizontal = 5.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Star, null, tint = Color.Black, modifier = Modifier.size(tvs(10)))
-                Text(String.format("%.1f", rating), color = Color.Black, fontSize = tsp(10), fontWeight = FontWeight.Bold)
+                Text(String.format(Localizer.locale, "%.1f", rating), color = Color.Black, fontSize = tsp(10), fontWeight = FontWeight.Bold)
             }
         }
         if (language != null) LanguageStrip(language, Modifier.align(Alignment.BottomCenter))

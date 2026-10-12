@@ -912,7 +912,7 @@ private fun percent(share: Double): Int {
 @Composable
 private fun ThinProgress(share: Double) {
     Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f))) {
-        Box(Modifier.fillMaxWidth(share.toFloat().coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(50)).background(Theme.red))
+        Box(Modifier.fillMaxWidth(share.toFloat().takeIf { !it.isNaN() }?.coerceIn(0f, 1f) ?: 0f).fillMaxHeight().clip(RoundedCornerShape(50)).background(Theme.red))
     }
 }
 

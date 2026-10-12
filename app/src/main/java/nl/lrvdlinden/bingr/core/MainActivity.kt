@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() { if (current === this) current = null; super.onDestroy() }
 
     // Invoer bijhouden (build 56): zware achtergrondklussen en het zendervoorbeeld wachten tot er niet meer gescrold wordt
+    @android.annotation.SuppressLint("RestrictedApi")   // lint ziet de gewone Activity-methode ten onrechte als androidx-intern
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         UserActivity.touch(repeat = event.repeatCount > 0)
         return super.dispatchKeyEvent(event)

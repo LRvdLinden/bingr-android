@@ -201,6 +201,6 @@ fun BingrLogo(size: TextUnit = 26.sp) {
 @Composable
 fun ProgressBar(value: Double, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(3.dp).background(Color.White.copy(alpha = 0.3f))) {
-        Box(Modifier.fillMaxHeight().fillMaxWidth(value.toFloat().coerceIn(0f, 1f)).background(Theme.red))
+        Box(Modifier.fillMaxHeight().fillMaxWidth(value.toFloat().takeIf { !it.isNaN() }?.coerceIn(0f, 1f) ?: 0f).background(Theme.red))
     }
 }
