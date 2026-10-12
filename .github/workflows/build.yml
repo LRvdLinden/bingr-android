@@ -125,6 +125,8 @@ jobs:
         continue-on-error: true
         run: |
           set -e
+          mkdir -p "$RUNNER_TEMP/tlogs"
+          exec > >(tee -a "$RUNNER_TEMP/tlogs/download.log") 2>&1
           for v in 6.1 6.0 5.6 5.5; do
             url="https://download.tizen.org/sdk/Installer/tizen-studio_$v/web-cli_Tizen_Studio_${v}_ubuntu-64.bin"
             if curl -fsSL --retry 2 -o "$RUNNER_TEMP/web-cli.bin" "$url"; then echo "Tizen Studio $v gedownload"; break; fi
@@ -132,8 +134,9 @@ jobs:
           done
           test -s "$RUNNER_TEMP/web-cli.bin"
           chmod +x "$RUNNER_TEMP/web-cli.bin"
-          "$RUNNER_TEMP/web-cli.bin" --accept-license "$HOME/tizen-studio" > "$RUNNER_TEMP/install.log" 2>&1 || { tail -40 "$RUNNER_TEMP/install.log"; exit 1; }
-          tail -5 "$RUNNER_TEMP/install.log"
+          mkdir -p "$RUNNER_TEMP/tlogs"
+          "$RUNNER_TEMP/web-cli.bin" --accept-license "$HOME/tizen-studio" > "$RUNNER_TEMP/tlogs/install.log" 2>&1 || { tail -40 "$RUNNER_TEMP/tlogs/install.log"; exit 1; }
+          tail -5 "$RUNNER_TEMP/tlogs/install.log"
 
       - name: Ondertekenprofiel klaarzetten
         id: sign
@@ -145,6 +148,9 @@ jobs:
           DIST_PW: ${{ secrets.TIZEN_DISTRIBUTOR_PASSWORD }}
         run: |
           set -e
+          mkdir -p "$RUNNER_TEMP/tlogs"
+          exec > >(tee -a "$RUNNER_TEMP/tlogs/sign.log") 2>&1
+          ls "$HOME/tizen-studio" "$HOME/tizen-studio/tools/ide/bin" 2>&1 | head -40 || true
           T="$HOME/tizen-studio/tools/ide/bin/tizen"
           test -x "$T"
           "$T" version || true
@@ -185,7 +191,8 @@ jobs:
 
       - name: .wgt bouwen
         run: |
-          tizen/tools/package.sh "$RUNNER_TEMP/out"
+          mkdir -p "$RUNNER_TEMP/tlogs"
+          tizen/tools/package.sh "$RUNNER_TEMP/out" 2>&1 | tee "$RUNNER_TEMP/tlogs/package.log"
           V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
           mkdir -p dist
           if [ -f "$RUNNER_TEMP/out/Bingr-$V-build$B.wgt" ]; then
@@ -204,6 +211,16 @@ jobs:
         with:
           name: Bingr-Tizen-wgt
           path: dist/
+
+      - name: Tizen-log op branch ci-logs-tizen zetten
+        if: always()
+        run: |
+          set +e
+          mkdir -p /tmp/tlogs; cp "$RUNNER_TEMP"/tlogs/*.log /tmp/tlogs/ 2>/dev/null; cp dist/signing.txt /tmp/tlogs/ 2>/dev/null
+          echo "${{ job.status }} $(git rev-parse --short HEAD)" > /tmp/tlogs/status.txt
+          cd /tmp/tlogs && git init -q -b ci-logs-tizen && git add -A
+          git -c user.name=github-actions -c user.email=actions@github.com commit -qm "Tizen-log $(cat status.txt)"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs-tizen
 
   tizen-release:
     needs: [apk, tizen]
