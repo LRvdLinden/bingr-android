@@ -110,6 +110,8 @@ class PlayerController(item: PlayableItem) {
     private var lastGoodPosition = 0.0
     /** Live: na de stille poging één keer automatisch naar een andere server (reservebron) geprobeerd. */
     var triedBackup = false
+    /** Reservebron wordt gezocht: intussen niet de foutmelding tonen. */
+    private var backupPending = false
     /** Live-zender kan niet spelen na de stille poging: PlayerScreen zoekt een reservebron (anders [showFailure]). */
     var onLiveFailure: (() -> Unit)? = null
     private var pausedAt: Long? = null
@@ -150,7 +152,7 @@ class PlayerController(item: PlayableItem) {
         timeshiftStart = null; behindLive = 0.0; pausedAt = null
         attempts = 0; triedOtherEngine = false; reconnecting = false; errorText = null; isBuffering = true
         stallSince = null
-        retryPending = false; everPlayed = false; lastGoodPosition = 0.0; triedBackup = false
+        retryPending = false; everPlayed = false; lastGoodPosition = 0.0; triedBackup = false; backupPending = false
     }
 
     /** Kan niet afspelen (geen stream gevonden): foutmelding met "Try again" in plaats van een eindeloze spinner. */
@@ -276,11 +278,12 @@ class PlayerController(item: PlayableItem) {
      */
     private fun reconnect() {
         val u = url ?: return
-        if (retryPending || errorText != null) return
+        if (retryPending || backupPending || errorText != null) return
         if (attempts >= 1) {
             val hook = onLiveFailure
             if (isLive && !triedBackup && hook != null && !isPreview) {
                 triedBackup = true
+                backupPending = true
                 reconnecting = true
                 hook()
                 return
@@ -317,7 +320,7 @@ class PlayerController(item: PlayableItem) {
     /** Foutmelding tonen (Opnieuw / Andere bron / Andere speler); de timer stopt. */
     fun showFailure() {
         errorText = L("This stream can't be played right now."); reconnecting = false; isBuffering = false
-        retryPending = false
+        retryPending = false; backupPending = false
         if (!isLive) lastGoodPosition.takeIf { it > 0.0 }?.let { item = item.copy(resumeAt = it) }
         timer?.cancel(); timer = null
     }
@@ -341,6 +344,7 @@ class PlayerController(item: PlayableItem) {
     fun playAlternative(u: String) {
         if (!isLive) item = item.copy(resumeAt = lastGoodPosition.takeIf { it > 0.0 } ?: position)
         else { catchupProvider = null; timeshiftStart = null; behindLive = 0.0; liveURL = u }
+        backupPending = false
         attempts = 0; triedOtherEngine = false; reconnecting = false
         start(u)
     }
