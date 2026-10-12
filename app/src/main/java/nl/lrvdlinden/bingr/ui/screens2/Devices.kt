@@ -28,9 +28,15 @@ import androidx.compose.material.icons.filled.PhoneIphone
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Tablet
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,7 +52,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,7 +71,7 @@ import java.util.Date
 fun deviceIcon(platform: String): ImageVector = when (platform) {
     "iPhone" -> Icons.Default.PhoneIphone
     "iPad", "Android tablet" -> Icons.Default.Tablet
-    "Apple TV", "Android TV", "Fire TV" -> Icons.Default.Tv
+    "Apple TV", "Android TV", "Google TV", "Fire TV" -> Icons.Default.Tv
     "Mac" -> Icons.Default.Laptop
     else -> Icons.Default.Smartphone
 }
@@ -86,9 +96,12 @@ fun deviceLastUsed(ms: Long?, current: Boolean): String? {
     }
 }
 
-/** Eén apparaat: icoon, naam (+ "This device"), platform, gekoppeld en laatst gebruikt, knop Remove. */
+/** Eén apparaat: icoon, naam (+ "This device"), platform, gekoppeld en laatst gebruikt, knoppen Rename en Remove. */
 @Composable
-private fun DeviceRow(d: Account.Device, removeFocus: FocusRequester?, enabled: Boolean, onRemove: () -> Unit) {
+private fun DeviceRow(
+    d: Account.Device, removeFocus: FocusRequester?, enabled: Boolean,
+    onRename: (() -> Unit)? = null, onRemove: () -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = tvs(12)),
         verticalAlignment = Alignment.CenterVertically
@@ -116,18 +129,22 @@ private fun DeviceRow(d: Account.Device, removeFocus: FocusRequester?, enabled: 
                 overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(tvs(10)))
-        DeviceRemoveButton(removeFocus, enabled, onRemove)
+        if (onRename != null) {
+            DeviceSmallButton(L("Rename"), Color.White, null, enabled, onRename)
+            Spacer(Modifier.width(tvs(8)))
+        }
+        DeviceSmallButton(L("Remove"), Theme.red, removeFocus, enabled, onRemove)
     }
 }
 
-/** Kleine knop "Remove"; op tv wit bij focus. */
+/** Kleine knop ("Rename", "Remove"); op tv wit bij focus. */
 @Composable
-private fun DeviceRemoveButton(fr: FocusRequester?, enabled: Boolean, onClick: () -> Unit) {
+private fun DeviceSmallButton(label: String, tint: Color, fr: FocusRequester?, enabled: Boolean, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val lit = focused && AppState.isTV
     Text(
-        L("Remove"),
-        color = if (lit) Color.Black else Theme.red.copy(alpha = if (enabled) 1f else 0.4f),
+        label,
+        color = if (lit) Color.Black else tint.copy(alpha = if (enabled) 1f else 0.4f),
         fontSize = tsp(14), fontWeight = FontWeight.SemiBold, maxLines = 1,
         modifier = Modifier
             .then(if (fr != null) Modifier.focusRequester(fr) else Modifier)
@@ -153,7 +170,44 @@ private fun DeviceRemoveConfirm(d: Account.Device, onDismiss: () -> Unit, onConf
     )
 }
 
-/** Mijn Bingr → Account → "Devices": alle gekoppelde apparaten, met Remove. */
+/** "Rename": tekstveld met de huidige naam (max. 60 tekens), Save en Cancel. Op tv opent het tv-toetsenbord. */
+@Composable
+private fun DeviceRenameDialog(d: Account.Device, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var text by remember { mutableStateOf(TextFieldValue(d.name, TextRange(d.name.length))) }
+    val fr = remember { FocusRequester() }
+    val valid = text.text.isNotBlank()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Theme.elevated,
+        title = { Text(L("Rename"), color = Color.White) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { if (it.text.length <= 60) text = it },
+                label = { Text(L("Device name")) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { if (valid) { onSave(text.text.trim()); onDismiss() } }),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.White, unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+                    focusedLabelColor = Color.White, unfocusedLabelColor = Theme.secondary, cursorColor = Theme.red,
+                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                    focusedContainerColor = Theme.card, unfocusedContainerColor = Theme.card,
+                ),
+                modifier = Modifier.fillMaxWidth().focusRequester(fr)
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text.text.trim()); onDismiss() }, enabled = valid) {
+                Text(L("Save"), color = if (valid) Theme.red else Theme.secondary)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(L("Cancel"), color = Color.White) } }
+    )
+    LaunchedEffect(Unit) { runCatching { fr.requestFocus() } }
+}
+
+/** Mijn Bingr → Account → "Devices": alle gekoppelde apparaten, met Rename en Remove. */
 @Composable
 fun DevicesScreen(onClose: () -> Unit) {
     var data by remember { mutableStateOf<Account.DeviceLimit?>(null) }
@@ -161,6 +215,7 @@ fun DevicesScreen(onClose: () -> Unit) {
     var loading by remember { mutableStateOf(true) }
     var reload by remember { mutableIntStateOf(0) }
     var confirm by remember { mutableStateOf<Account.Device?>(null) }
+    var renaming by remember { mutableStateOf<Account.Device?>(null) }
     val firstRemove = rememberInitialFocus(key = data)
 
     LaunchedEffect(reload) {
@@ -180,7 +235,8 @@ fun DevicesScreen(onClose: () -> Unit) {
                 itemsIndexed(d.devices, key = { _, dv -> dv.id }) { i, dev ->
                     Column(Modifier.s2Cell(i, d.devices.size)) {
                         if (i > 0) S2Divider()
-                        DeviceRow(dev, if (i == 0) firstRemove else null, enabled = !Account.busy) { confirm = dev }
+                        DeviceRow(dev, if (i == 0) firstRemove else null, enabled = !Account.busy,
+                            onRename = { renaming = dev }) { confirm = dev }
                     }
                 }
             }
@@ -190,6 +246,18 @@ fun DevicesScreen(onClose: () -> Unit) {
                 }
             }
             error?.let { e -> item { S2Footer(e) } }
+        }
+    }
+
+    renaming?.let { dev ->
+        DeviceRenameDialog(dev, onDismiss = { renaming = null }) { name ->
+            if (name.isEmpty() || name == dev.name) return@DeviceRenameDialog
+            AppScope.launch {
+                try { Account.renameDevice(dev.id, name); error = null; reload++ }
+                catch (e: CancellationException) { throw e }
+                catch (e: AccountException) { error = e.message }
+                catch (e: Exception) { error = L("Something went wrong. Please try again.") }
+            }
         }
     }
 

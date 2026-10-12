@@ -73,7 +73,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -112,7 +111,6 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
     var afterPIN by remember { mutableStateOf<(() -> Unit)?>(null) }
     var seasonMenu by remember { mutableStateOf(false) }
     var recMatches by remember(target.id) { mutableStateOf(mapOf<String, DetailTarget>()) }
-    var shareQR by remember { mutableStateOf(false) }
 
     val pid = Playlists.source?.id
     val lib = Playlists.library
@@ -263,7 +261,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
     }
 
     fun share() {
-        if (tv) { if (shareURL != null) shareQR = true; return }
+        if (tv) return
         ShareSheet.share(ctx, shareTitle, shareText, shareURL)
     }
 
@@ -279,7 +277,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
         lib.series.firstOrNull { it.id == id }?.let { ScreensNav.detail(DetailTarget.SeriesT(it)) }
     }
 
-    BackHandler(enabled = !showSources && !ageGate && !shareQR) { onClose() }
+    BackHandler(enabled = !showSources && !ageGate) { onClose() }
     BackHandler(enabled = showSources) { showSources = false }
 
     val playFocus = rememberInitialFocus(key = target.id)
@@ -288,7 +286,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
 
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         Column(
-            Modifier.fillMaxSize().blockFocus(showSources || ageGate || shareQR).verticalScroll(rememberScrollState()),
+            Modifier.fillMaxSize().blockFocus(showSources || ageGate).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(tvs(22))
         ) {
             // MARK: kop
@@ -390,8 +388,8 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                         ) { toggleMyList() }
                         if (trailerID != null) DetailCircleButton(Icons.Default.Theaters) { Trailer.open(ctx, trailerID) }
                         if (isMovie) DetailCircleButton(if (isWatchedTitle) Icons.Default.CheckCircle else Icons.Default.Check) { toggleWatchedMovie() }
-                        // Android TV kan niet delen: QR-code om met je telefoon te scannen
-                        if (!tv || shareURL != null) DetailCircleButton(Icons.Default.Share) { share() }
+                        // geen deelknop op Android TV, Google TV en Fire TV (zie docs/ACCOUNT.md, build 45)
+                        if (!tv) DetailCircleButton(Icons.Default.Share) { share() }
                         DetailCapsule(L("Other sources"), Modifier.weight(1f), busy = sourcesLoading) { openSources() }
                     }
                 }
@@ -635,28 +633,6 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                     else { ScreensNav.clear(); AppState.open(h.playlist, thenShow = h.itemID) }
                 }
             )
-        }
-
-        if (shareQR) {
-            val url = shareURL
-            S2FullDialog(onDismiss = { shareQR = false }) {
-                Column(
-                    Modifier.fillMaxSize().padding(40.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(tvs(16), Alignment.CenterVertically)
-                ) {
-                    Text(L("Share"), color = Color.White, fontSize = tsp(30), fontWeight = FontWeight.Bold)
-                    Text(shareText, color = Theme.secondary, fontSize = tsp(18), textAlign = TextAlign.Center)
-                    if (url != null) {
-                        QrCodeImage(url, tvs(240))
-                        Text(L("Scan with your phone to share via WhatsApp, iMessage and more."),
-                            color = Theme.secondary, fontSize = tsp(15), textAlign = TextAlign.Center)
-                        Text(url, color = Color.White, fontSize = tsp(14), fontFamily = FontFamily.Monospace)
-                    }
-                    val closeFocus = rememberInitialFocus(enabled = true)
-                    NetflixButton(L("Close"), kind = NetflixKind.SECONDARY, modifier = Modifier.focusRequester(closeFocus)) { shareQR = false }
-                }
-            }
         }
 
         if (ageGate) {

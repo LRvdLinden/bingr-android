@@ -305,14 +305,23 @@ object Account {
             android.provider.Settings.Global.getString(AppState.appContext.contentResolver, android.provider.Settings.Global.DEVICE_NAME)
         }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: Build.MODEL ?: "Android"
 
-    /** Android, Android tablet, Android TV of Fire TV. */
+    /** Android, Android tablet, Android TV, Google TV of Fire TV (zie docs/ACCOUNT.md, build 45). */
     val devicePlatform: String
         get() = when {
             Build.MANUFACTURER.equals("Amazon", ignoreCase = true) -> "Fire TV"
+            AppState.isTV && isGoogleTV -> "Google TV"
             AppState.isTV -> "Android TV"
             runCatching { AppState.appContext.resources.configuration.smallestScreenWidthDp }.getOrDefault(0) >= 600 -> "Android tablet"
             else -> "Android"
         }
+
+    /** Google TV: GOOGLE_EXPERIENCE, of een Chromecast, of merk "google". */
+    private val isGoogleTV: Boolean
+        get() = runCatching {
+            AppState.appContext.packageManager.hasSystemFeature("com.google.android.feature.GOOGLE_EXPERIENCE")
+        }.getOrDefault(false) ||
+            (Build.MODEL ?: "").contains("Chromecast", ignoreCase = true) ||
+            (Build.BRAND ?: "").equals("google", ignoreCase = true)
 
     /** register_device is gelukt (lokaal onthouden; gewist bij uitloggen). */
     var deviceRegistered by mutableStateOf(false)
@@ -389,6 +398,14 @@ object Account {
     /** remove_device: het apparaat wordt op de server uitgelogd. */
     suspend fun removeDevice(id: String) = working {
         val r = deviceCall("remove_device", id)
+        if (!r.ok) throw generic()
+    }
+
+    /** rename_device: eigen naam voor een apparaat (max. 60 tekens); register_device overschrijft die daarna niet meer. */
+    suspend fun renameDevice(id: String, name: String) = working {
+        val clean = name.trim().take(60)
+        if (clean.isEmpty()) throw generic()
+        val r = deviceCall("rename_device", id, mapOf("name" to clean))
         if (!r.ok) throw generic()
     }
 
