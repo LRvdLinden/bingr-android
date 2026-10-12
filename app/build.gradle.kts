@@ -1,4 +1,5 @@
 import java.io.File
+import java.util.Properties
 
 plugins {
     id("com.android.application")
@@ -12,7 +13,7 @@ val buildNumber = (findProperty("BINGR_BUILD") as String?)?.toIntOrNull() ?: 1
 val marketing = (findProperty("BINGR_VERSION") as String?) ?: "1.0.0"
 
 // App-sleutels: uit GitHub Secrets (CI) of local.properties
-val localProps = java.util.Properties().apply {
+val localProps = Properties().apply {
     val f = File(rootDir, "local.properties"); if (f.exists()) f.inputStream().use { load(it) }
 }
 fun key(name: String): String = (System.getenv(name) ?: localProps.getProperty(name) ?: "").trim().replace("\"", "")
