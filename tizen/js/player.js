@@ -351,11 +351,10 @@
       if (item.type === 'episode' && ctx.series) return B.clang.forItem(ctx.series, true);
       return null;
     }
-    /** Gewenste audiotaal kiezen (settings.shared.audioLanguage, standaard de app-taal; "original" = originele taal). */
+    /** Gewenste audiotaal kiezen (settings.shared.audioLanguage, standaard de app-taal; "stream" = niets kiezen). */
     function applyTrackPrefs() {
       if (!engine || audioChosen) return;
       var pref = B.clang.preferredAudio();
-      if (pref === 'original') { var cl = contentLang(); pref = cl && cl.a ? cl.a : ''; }
       if (!pref) return;
       var tr = engine.tracks();
       if (tr.audio.length < 2) return;

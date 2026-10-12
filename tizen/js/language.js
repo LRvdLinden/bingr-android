@@ -289,28 +289,29 @@
 
   // MARK: voorkeuren (settings.shared, gedeeld met de andere apps)
 
-  /** Gewenste audiotaal: audioLanguage, standaard de taal van de app. "original" = de originele taal van de titel. */
+  /** Gewenste audiotaal: audioLanguage, standaard de taal van de app; "stream" = zoals de stream (niets kiezen → ''). */
   CL.preferredAudio = function () {
     var v = String(B.data.shared('audioLanguage', '') || '');
-    if (v === 'original') return 'original';
-    return CL.norm(v) || CL.norm(B.lang) || 'en';
+    if (v === 'stream') return '';
+    return CL.norm(v) || CL.appLanguage();
   };
-  /** Gewenste ondertiteltaal: subtitleLanguage, anders de OpenSubtitles-taal, anders de audiotaal / app-taal. */
-  CL.preferredSubtitle = function (skipOwn) {
-    var D = B.data;
-    var raw = skipOwn ? '' : String(D.shared('subtitleLanguage', '') || '');
-    var v = raw === 'off' ? '' : CL.norm(raw);
-    if (v) return v;
-    var os = CL.norm(D.shared('openSubtitlesLanguage', '') || '');
-    if (os) return os;
-    var a = CL.preferredAudio();
-    return a !== 'original' ? a : (CL.norm(B.lang) || 'en');
+  /** Taal van de app als ISO 639-1 ("zh-Hans" → "zh"). */
+  CL.appLanguage = function () { return CL.norm(B.lang) || 'en'; };
+  /** Gewenste ondertiteltaal: subtitleLanguage (taalcode), anders de taal van de app (= TrackPreferences op Android). */
+  CL.preferredSubtitle = function () {
+    var raw = String(B.data.shared('subtitleLanguage', '') || '');
+    var v = raw === 'off' || raw === 'stream' ? '' : CL.norm(raw);
+    return v || CL.appLanguage();
   };
-  /** Automatische ondertitels: "off" | "whenNeeded" | "always" (standaard "whenNeeded"; oud: true = altijd). */
+  /**
+   * Automatische ondertitels: "off" | "whenNeeded" | "always", standaard "whenNeeded".
+   * Oudere apps zetten true/false: aan = "always", uit = de nieuwe standaard (zoals Android).
+   */
   CL.autoSubtitles = function () {
     var v = B.data.shared('autoSubtitles', null);
-    if (v === true || v === 'true') return 'always';
-    if (v === 'off' || v === 'always' || v === 'whenNeeded') return v;
+    var s = String(v == null ? '' : v).trim().toLowerCase();
+    if (s === 'off' || s === 'none' || s === 'never') return 'off';
+    if (s === 'always' || s === 'on' || s === 'true' || s === '1') return 'always';
     return 'whenNeeded';
   };
 

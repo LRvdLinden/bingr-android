@@ -1372,9 +1372,9 @@
       var CLg = B.clang;
       var langOpts = ['nl', 'en', 'de', 'fr', 'es', 'it', 'pt', 'pl', 'tr', 'ar', 'hi'];
       var aud = String(D.shared('audioLanguage', '') || '');
-      function audLabel(v) { return v === 'original' ? L('Original language') : (v ? CLg.name(v) : L('Same as app') + ' (' + CLg.name(B.lang) + ')'); }
+      function audLabel(v) { return v === 'stream' ? L('As in the stream') : (v ? CLg.name(v) : L('Same as app') + ' (' + CLg.name(B.lang) + ')'); }
       row(L('Default audio language'), audLabel(aud), function () {
-        U.choose(L('Default audio language'), [{ value: '', label: audLabel('') }, { value: 'original', label: L('Original language') }]
+        U.choose(L('Default audio language'), [{ value: '', label: audLabel('') }, { value: 'stream', label: L('As in the stream') }]
           .concat(langOpts.map(function (c) { return { value: c, label: CLg.name(c) }; })), aud, function (v) { D.setShared('audioLanguage', v); render(); });
       });
       var autoS = CLg.autoSubtitles();
@@ -1386,7 +1386,7 @@
       });
       var subRaw = String(D.shared('subtitleLanguage', '') || '');
       var subCur = subRaw === 'off' ? '' : CLg.norm(subRaw);
-      var subAuto = L('Automatic') + ' (' + CLg.name(CLg.preferredSubtitle(true)) + ')';
+      var subAuto = L('Same as app') + ' (' + CLg.name(CLg.appLanguage()) + ')';
       row(L('Subtitle language'), subCur ? CLg.name(subCur) : subAuto, function () {
         U.choose(L('Subtitle language'), [{ value: '', label: subAuto }].concat(langOpts.map(function (c) { return { value: c, label: CLg.name(c) }; })), subCur, function (v) {
           D.setShared('subtitleLanguage', v); render();

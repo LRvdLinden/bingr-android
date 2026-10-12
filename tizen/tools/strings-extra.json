@@ -983,30 +983,6 @@
     "ar": "يحتوي تلفاز سامسونج على مشغّل فيديو كامل واحد: يستخدمه المربع الذي يصدر الصوت، وتعمل المربعات الأخرى بلا صوت حيث يستطيع التلفاز.",
     "zh-Hans": "三星电视只有一个完整的视频播放器：有声音的画面使用它，其他画面在电视支持时静音播放。"
   },
-  "Multi": {
-    "nl": "Multi",
-    "de": "Multi",
-    "fr": "Multi",
-    "es": "Multi",
-    "it": "Multi",
-    "pt": "Multi",
-    "pl": "Multi",
-    "tr": "Multi",
-    "ar": "متعدد",
-    "zh-Hans": "多语"
-  },
-  "%@ subtitles": {
-    "nl": "%@ ondertitels",
-    "de": "%@ Untertitel",
-    "fr": "sous-titres %@",
-    "es": "subtítulos %@",
-    "it": "sottotitoli %@",
-    "pt": "legendas %@",
-    "pl": "napisy %@",
-    "tr": "%@ altyazı",
-    "ar": "ترجمة %@",
-    "zh-Hans": "%@ 字幕"
-  },
   "Language: %@": {
     "nl": "Taal: %@",
     "de": "Sprache: %@",
@@ -1019,30 +995,6 @@
     "ar": "اللغة: %@",
     "zh-Hans": "语言：%@"
   },
-  "Multiple languages": {
-    "nl": "Meerdere talen",
-    "de": "Mehrere Sprachen",
-    "fr": "Plusieurs langues",
-    "es": "Varios idiomas",
-    "it": "Più lingue",
-    "pt": "Vários idiomas",
-    "pl": "Wiele języków",
-    "tr": "Birden fazla dil",
-    "ar": "لغات متعددة",
-    "zh-Hans": "多种语言"
-  },
-  "Other language": {
-    "nl": "Andere taal",
-    "de": "Andere Sprache",
-    "fr": "Autre langue",
-    "es": "Otro idioma",
-    "it": "Altra lingua",
-    "pt": "Outro idioma",
-    "pl": "Inny język",
-    "tr": "Başka dil",
-    "ar": "لغة أخرى",
-    "zh-Hans": "其他语言"
-  },
   "No other language version found.": {
     "nl": "Geen andere taalversie gevonden.",
     "de": "Keine andere Sprachversion gefunden.",
@@ -1054,18 +1006,6 @@
     "tr": "Başka dil sürümü bulunamadı.",
     "ar": "لم يتم العثور على نسخة بلغة أخرى.",
     "zh-Hans": "未找到其他语言版本。"
-  },
-  "This stream has one audio language": {
-    "nl": "Deze stream heeft één audiotaal",
-    "de": "Dieser Stream hat nur eine Audiosprache",
-    "fr": "Ce flux n’a qu’une seule langue audio",
-    "es": "Esta transmisión tiene un solo idioma de audio",
-    "it": "Questo stream ha una sola lingua audio",
-    "pt": "Esta transmissão tem um só idioma de áudio",
-    "pl": "Ten strumień ma jeden język audio",
-    "tr": "Bu yayında tek bir ses dili var",
-    "ar": "يحتوي هذا البث على لغة صوت واحدة",
-    "zh-Hans": "此串流只有一种音频语言"
   },
   "Watch another language version from the same moment:": {
     "nl": "Kijk vanaf hetzelfde moment verder in een andere taal:",
@@ -1103,30 +1043,6 @@
     "ar": "تم تشغيل الترجمة تلقائيًا: %@",
     "zh-Hans": "已自动开启字幕：%@"
   },
-  "Audio & subtitles": {
-    "nl": "Audio en ondertitels",
-    "de": "Audio & Untertitel",
-    "fr": "Audio et sous-titres",
-    "es": "Audio y subtítulos",
-    "it": "Audio e sottotitoli",
-    "pt": "Áudio e legendas",
-    "pl": "Dźwięk i napisy",
-    "tr": "Ses ve altyazılar",
-    "ar": "الصوت والترجمة",
-    "zh-Hans": "音频和字幕"
-  },
-  "Original language": {
-    "nl": "Originele taal",
-    "de": "Originalsprache",
-    "fr": "Langue originale",
-    "es": "Idioma original",
-    "it": "Lingua originale",
-    "pt": "Idioma original",
-    "pl": "Język oryginalny",
-    "tr": "Orijinal dil",
-    "ar": "اللغة الأصلية",
-    "zh-Hans": "原始语言"
-  },
   "Same as app": {
     "nl": "Zoals de app",
     "de": "Wie die App",
@@ -1138,42 +1054,6 @@
     "tr": "Uygulama ile aynı",
     "ar": "مثل التطبيق",
     "zh-Hans": "与应用相同"
-  },
-  "When needed": {
-    "nl": "Als het nodig is",
-    "de": "Bei Bedarf",
-    "fr": "Si nécessaire",
-    "es": "Cuando haga falta",
-    "it": "Quando serve",
-    "pt": "Quando necessário",
-    "pl": "Gdy potrzeba",
-    "tr": "Gerektiğinde",
-    "ar": "عند الحاجة",
-    "zh-Hans": "需要时"
-  },
-  "Always": {
-    "nl": "Altijd",
-    "de": "Immer",
-    "fr": "Toujours",
-    "es": "Siempre",
-    "it": "Sempre",
-    "pt": "Sempre",
-    "pl": "Zawsze",
-    "tr": "Her zaman",
-    "ar": "دائمًا",
-    "zh-Hans": "始终"
-  },
-  "Automatic subtitles": {
-    "nl": "Automatische ondertitels",
-    "de": "Automatische Untertitel",
-    "fr": "Sous-titres automatiques",
-    "es": "Subtítulos automáticos",
-    "it": "Sottotitoli automatici",
-    "pt": "Legendas automáticas",
-    "pl": "Automatyczne napisy",
-    "tr": "Otomatik altyazı",
-    "ar": "ترجمة تلقائية",
-    "zh-Hans": "自动字幕"
   },
   "Subtitle language": {
     "nl": "Ondertiteltaal",
