@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/LRvdLinden/bingr-android?label=APK)](https://github.com/LRvdLinden/bingr-android/releases/latest)
 
 Native IPTV- en mediaspeler voor **Android-telefoon, tablet en Android TV / Google TV / Fire TV** met de look & feel van Netflix.
-Kotlin · Jetpack Compose · Android 7.0+ · Media3 (ExoPlayer) én VLC · 11 talen · versie 1.0.0 (build 48).
+Kotlin · Jetpack Compose · Android 7.0+ · Media3 (ExoPlayer) én VLC · 11 talen · versie 1.0.0 (build 49).
 
 De versie voor iPhone, iPad, Apple TV en Mac staat in [iptv-ios-appletv](https://github.com/LRvdLinden/iptv-ios-appletv), de website in [bingr-website](https://github.com/LRvdLinden/bingr-website) ([bingr.online](https://bingr.online)).
 
@@ -68,6 +68,7 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
 - **NAS via SMB/DLNA**: servers op je netwerk vinden en afspelen
 - **Eén hoofdaccount, meerdere profielen**: het hoofdaccount stelt de server, Trakt, OpenSubtitles, kinderslot en categorieën in en maakt profielen aan. Elk profiel heeft **volledig eigen gegevens**: Mijn lijst, Verder kijken, favorieten, bekeken en kijkgeschiedenis. Eigen naam, avatar (icoon, een van 16 getekende figuurtjes of een eigen foto) en eigen **pincode**
 - **Zoeken in al je afspeellijsten** tegelijk: films, series, zenders en categorieën
+- **Personenpagina's** (Netflix-stijl): tik op een acteur of actrice in de cast voor foto, bio en alle films en series waarin die speelt; wat in je afspeellijst staat kijk je direct. **Zoeken op naam** van een acteur of actrice toont ook personen (via TMDB)
 
 **Kijken**
 - Twee engines: **Media3/ExoPlayer** voor HLS/DASH/MP4 en **VLC** voor .ts, .mkv, AC3/DTS en de rest; automatisch kiezen of zelf instellen

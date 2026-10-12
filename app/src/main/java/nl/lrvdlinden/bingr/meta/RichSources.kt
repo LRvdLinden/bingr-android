@@ -51,7 +51,7 @@ object TraktDetails {
                 val person = p.jO("person")
                 val name = person.jS("name") ?: return@mapNotNull null
                 TitleDetails.CastMember(name = name, role = p.jList("characters").firstOrNull().jFlex ?: p.jS("character"),
-                    photo = image(person.jO("images"), "headshot"))
+                    photo = image(person.jO("images"), "headshot"), tmdbID = person.jO("ids").jI("tmdb"))
             }
             val rel = related.await().jItems.map { x ->
                 TitleDetails.Recommendation(title = x.jS("title") ?: "?", year = x.jI("year"), poster = image(x.jO("images"), "poster"),
@@ -181,7 +181,7 @@ object TMDB {
             cast = castSrc.take(20).mapNotNull { c ->
                 val name = c.jS("name") ?: return@mapNotNull null
                 TitleDetails.CastMember(name = name, role = c.jS("character") ?: c.jList("roles").firstOrNull().jS("character"),
-                    photo = img(c.jS("profile_path"), "w185"))
+                    photo = img(c.jS("profile_path"), "w185"), tmdbID = c.jI("id"))
             },
             recommendations = f.jO("recommendations").jList("results").take(15).map { r ->
                 TitleDetails.Recommendation(title = r.jS("title") ?: r.jS("name") ?: "?",
@@ -189,6 +189,66 @@ object TMDB {
                     poster = img(r.jS("poster_path"), "w342"), imdbID = null, isShow = isShow)
             },
         )
+    }
+
+    // MARK: personen (cast-pagina's en zoeken op naam)
+
+    data class Person(
+        val id: Int, val name: String, val photo: String?, val department: String?,
+        val birthday: String?, val deathday: String?, val birthplace: String?, val biography: String?,
+    )
+    data class PersonHit(val id: Int, val name: String, val photo: String?, val department: String?, val popularity: Double)
+    /** Eén film of serie waarin iemand speelt. [titles] = titel in de app-taal en origineel (om te koppelen). */
+    data class Credit(
+        val id: Int, val isShow: Boolean, val title: String, val titles: List<String>, val year: Int?,
+        val poster: String?, val overview: String?, val popularity: Double, val date: String?,
+    ) { val key: String get() = (if (isShow) "tv-" else "movie-") + id }
+
+    /** Persoon in de app-taal; lege biografie → Engels (en-US). */
+    suspend fun person(id: Int): Person? {
+        val lang = language
+        val r = get("/person/$id", listOf("language" to lang)) ?: return null
+        var bio = r.jS("biography")?.trim()
+        if (bio.isNullOrEmpty() && lang != "en-US") bio = get("/person/$id", listOf("language" to "en-US")).jS("biography")?.trim()
+        return Person(
+            id = r.jI("id") ?: id, name = r.jS("name") ?: "", photo = img(r.jS("profile_path"), "h632"),
+            department = r.jS("known_for_department"), birthday = r.jS("birthday"), deathday = r.jS("deathday"),
+            birthplace = r.jS("place_of_birth"), biography = bio?.takeIf { it.isNotEmpty() },
+        )
+    }
+
+    /** Alle films en series waarin iemand speelt (cast, ontdubbeld; zonder talkshows en nieuws), populairste eerst. */
+    suspend fun personCredits(id: Int): List<Credit> {
+        val r = get("/person/$id/combined_credits", listOf("language" to language)) ?: return emptyList()
+        val seen = HashSet<String>()
+        val out = ArrayList<Credit>()
+        for (c in r.jList("cast")) {
+            val cid = c.jI("id") ?: continue
+            val isShow = c.jS("media_type") == "tv"
+            if (!isShow && c.jS("media_type") != "movie") continue
+            val genres = c.jList("genre_ids").mapNotNull { it.jFlex?.toIntOrNull() }
+            if (isShow && (10767 in genres || 10763 in genres)) continue
+            val credit = Credit(
+                id = cid, isShow = isShow,
+                title = c.jS(if (isShow) "name" else "title") ?: continue,
+                titles = listOf("title", "name", "original_title", "original_name").mapNotNull { c.jS(it) }.filter { it.isNotEmpty() }.distinct(),
+                year = yearOf(c.jS("release_date") ?: c.jS("first_air_date")),
+                poster = img(c.jS("poster_path"), "w342"), overview = c.jS("overview")?.takeIf { it.isNotBlank() },
+                popularity = c.jD("popularity") ?: 0.0, date = (c.jS("release_date") ?: c.jS("first_air_date"))?.takeIf { it.isNotEmpty() },
+            )
+            if (seen.add(credit.key)) out.add(credit)
+        }
+        return out.sortedWith(compareByDescending<Credit> { it.popularity }.thenByDescending { it.date ?: "" })
+    }
+
+    /** Zoeken op naam (acteurs en actrices eerst). */
+    suspend fun searchPeople(query: String): List<PersonHit> {
+        val r = get("/search/person", listOf("query" to query, "language" to language, "include_adult" to "false")) ?: return emptyList()
+        return r.jList("results").mapNotNull { p ->
+            val id = p.jI("id") ?: return@mapNotNull null
+            PersonHit(id = id, name = p.jS("name") ?: return@mapNotNull null, photo = img(p.jS("profile_path"), "w185"),
+                department = p.jS("known_for_department"), popularity = p.jD("popularity") ?: 0.0)
+        }
     }
 
     /** Afleveringen van één seizoen; key "s-e". */

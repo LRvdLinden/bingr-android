@@ -528,10 +528,16 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                         contentPadding = PaddingValues(horizontal = Theme.edge),
                         horizontalArrangement = Arrangement.spacedBy(tvs(26)),
                         verticalArrangement = Arrangement.spacedBy(tvs(14)),
-                        modifier = Modifier.fillMaxWidth().height(tvs(76) * 2 + tvs(14))
+                        modifier = Modifier.fillMaxWidth().height(tvs(84) * 2 + tvs(14))
                     ) {
                         items(cast) { c ->
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            // tik/OK → personenpagina (met TMDB; zonder id zoekt die op naam)
+                            val canOpen = People.isAvailable
+                            Row(
+                                (if (canOpen) Modifier.focusLift(1.05f) { ScreensNav.person(PersonRef(c.name, c.tmdbID, screensText(c.photo))) } else Modifier)
+                                    .padding(4.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
                                 Box(
                                     Modifier.size(tvs(70)).clip(CircleShape).background(Theme.elevated),
                                     contentAlignment = Alignment.Center

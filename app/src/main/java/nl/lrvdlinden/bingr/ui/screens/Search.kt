@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -113,6 +114,7 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
     var groupHits by remember { mutableStateOf(emptyList<GroupHit>()) }
     var searching by remember { mutableStateOf(false) }
     var program by remember { mutableStateOf<ProgramHit?>(null) }
+    var people by remember { mutableStateOf(emptyList<TMDB.PersonHit>()) }
     val focusManager = LocalFocusManager.current
 
     BackHandler(enabled = modal && program == null) { onClose() }
@@ -145,6 +147,16 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
         programs = p
         groupHits = g
         searching = false
+    }
+
+    // personen (TMDB) vanaf 3 tekens; nieuwe invoer annuleert de vorige zoekopdracht
+    LaunchedEffect(query) {
+        val q = query.trim()
+        if (q.length < 3 || !People.isAvailable) { people = emptyList(); return@LaunchedEffect }
+        delay(450)
+        val r = screensSafe { People.search(q) } ?: emptyList()
+        if (q != query.trim()) return@LaunchedEffect
+        people = r.filter { it.photo != null || it.department == "Acting" }.take(20)
     }
 
     val lib = Playlists.library
@@ -215,7 +227,7 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
                         }
                     }
                 } else if (results.channels.isEmpty() && results.movies.isEmpty() && results.series.isEmpty() &&
-                    (results.other.isEmpty() || !Store.isMainActive) && programs.isEmpty() && groupHits.isEmpty() && !searching) {
+                    (results.other.isEmpty() || !Store.isMainActive) && programs.isEmpty() && groupHits.isEmpty() && people.isEmpty() && !searching) {
                     full {
                         Text(
                             L("Nothing found for “%@”.", q), color = Theme.secondary, fontSize = tsp(15), textAlign = TextAlign.Center,
@@ -257,6 +269,40 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
                                 ) {
                                     Text(g.title, color = Color.White, fontSize = tsp(14), fontWeight = FontWeight.SemiBold, maxLines = 1)
                                     Text("${g.items.size}", color = Theme.secondary, fontSize = tsp(12))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // personen
+                if (people.isNotEmpty() && q.length >= 3) full {
+                    Column(Modifier.bleedHorizontal(edge), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SearchSectionTitle(L("People"), Modifier.padding(start = edge))
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = edge, vertical = if (tv) 10.dp else 0.dp),
+                            horizontalArrangement = Arrangement.spacedBy(tvs(16))
+                        ) {
+                            items(people, key = { it.id }) { p ->
+                                Column(
+                                    Modifier.width(tvs(96)).focusLift(1.08f) { ScreensNav.person(PersonRef(p.name, p.id, p.photo)) },
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(
+                                        Modifier.size(tvs(84)).clip(CircleShape).background(Theme.elevated),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            p.name.split(" ").filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1) },
+                                            color = Theme.secondary, fontSize = tsp(20), fontWeight = FontWeight.Bold
+                                        )
+                                        if (p.photo != null) RemoteImage(p.photo, Modifier.matchParentSize())
+                                    }
+                                    Text(
+                                        p.name, color = Color.White, fontSize = tsp(13), maxLines = 2, textAlign = TextAlign.Center,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                             }
                         }

@@ -44,6 +44,30 @@ class TitleMatcher(movies: List<Movie>, series: List<Series>) {
     fun movies(list: List<ExternalTitle>, limit: Int = 10): List<Movie> = find(list, movieIndex, allMovies, limit)
     fun series(list: List<ExternalTitle>, limit: Int = 10): List<Series> = find(list, seriesIndex, allSeries, limit)
 
+    /**
+     * Precies één titel koppelen (personenpagina): eerst titel + jaar; alleen op titel als het jaar
+     * in je lijst ontbreekt of hooguit een jaar afwijkt (zelfde titel, andere film voorkomen).
+     */
+    fun movie(t: ExternalTitle): Movie? = one(t, movieIndex, allMovies) { it.year ?: TitleCleaner.parse(it.title).year }
+    fun series(t: ExternalTitle): Series? = one(t, seriesIndex, allSeries) { it.year ?: TitleCleaner.parse(it.title).year }
+
+    private fun <T> one(t: ExternalTitle, idx: Map<String, Int>, items: List<T>, yearOf: (T) -> Int?): T? {
+        for (title in t.titles) {
+            val n = norm(title)
+            if (n.length <= 1) continue
+            t.year?.let { y -> idx["$n|$y"]?.let { return items[it] } }
+        }
+        for (title in t.titles) {
+            val n = norm(title)
+            if (n.length <= 1) continue
+            val i = idx[n] ?: continue
+            val item = items[i]
+            val y = yearOf(item)
+            if (t.year == null || y == null || kotlin.math.abs(y - t.year) <= 1) return item
+        }
+        return null
+    }
+
     private fun <T> find(list: List<ExternalTitle>, idx: Map<String, Int>, items: List<T>, limit: Int): List<T> {
         val out = ArrayList<T>()
         val seen = HashSet<Int>()

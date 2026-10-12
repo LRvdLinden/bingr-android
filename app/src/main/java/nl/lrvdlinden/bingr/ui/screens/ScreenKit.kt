@@ -28,6 +28,7 @@ sealed class ScreenEntry {
     data class Detail(val target: DetailTarget) : ScreenEntry()
     data class Category(val target: CategoryTarget) : ScreenEntry()
     data object Search : ScreenEntry()
+    data class Person(val ref: PersonRef) : ScreenEntry()
 }
 
 /**
@@ -44,6 +45,7 @@ object ScreensNav {
     fun detail(t: DetailTarget) = push(ScreenEntry.Detail(t))
     fun category(t: CategoryTarget) = push(ScreenEntry.Category(t))
     fun search() = push(ScreenEntry.Search)
+    fun person(r: PersonRef) = push(ScreenEntry.Person(r))
     fun close(id: Long) { stack.removeAll { it.id == id } }
     fun clear() { stack.clear() }
 }
@@ -59,6 +61,7 @@ fun ScreensStackHost() {
                     is ScreenEntry.Detail -> DetailScreen(e.target, onClose = { ScreensNav.close(item.id) })
                     is ScreenEntry.Category -> CategoryScreen(e.target, onClose = { ScreensNav.close(item.id) })
                     ScreenEntry.Search -> SearchScreen(modal = true, onClose = { ScreensNav.close(item.id) })
+                    is ScreenEntry.Person -> PersonScreen(e.ref, onClose = { ScreensNav.close(item.id) })
                 }
             }
         }

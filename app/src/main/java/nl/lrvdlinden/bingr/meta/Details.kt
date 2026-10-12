@@ -33,7 +33,8 @@ data class TitleDetails(
     var tmdbID: Int? = null,
 ) {
     data class Rating(val source: String, val value: String) { val id: String get() = source }
-    data class CastMember(val name: String, val role: String? = null, val photo: String? = null) {
+    /** [tmdbID] = TMDB-persoon (voor de personenpagina); zonder id zoekt die pagina op naam. */
+    data class CastMember(val name: String, val role: String? = null, val photo: String? = null, val tmdbID: Int? = null) {
         val id: String get() = name + (role ?: "")
     }
     data class Recommendation(val title: String, val year: Int?, val poster: String?, val imdbID: String?, val isShow: Boolean) {

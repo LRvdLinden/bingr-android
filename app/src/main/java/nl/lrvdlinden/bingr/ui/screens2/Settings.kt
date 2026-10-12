@@ -101,7 +101,7 @@ private fun S2AppFooter() {
         Text(L("Version: %@ (%@)", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toString()),
             color = if (focused) Color.White else Theme.secondary, fontSize = tsp(13), textAlign = TextAlign.Center)
         Spacer(Modifier.height(tvs(4)))
-        Text("\u00A9 2026 Bingr \u00B7 L\u00E9on van der Linden",
+        Text("\u00A9 2026 Bingr",
             color = Theme.secondary, fontSize = tsp(12), textAlign = TextAlign.Center)
     }
 }
