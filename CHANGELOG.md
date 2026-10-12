@@ -4,6 +4,32 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 58
+_12 oktober 2026_
+
+### Alle apps
+
+**Verbeterd**
+
+- De knop Afspelen is nu gevuld in de accentkleur van je profiel (standaard rood) met witte tekst en icoon; op tv's blijft de selectie duidelijk zichtbaar
+- De knop Andere bronnen heeft overal een eigen icoon: op de detailpagina, in de speler en bij een afspeelfout
+
+### Samsung TV (Tizen)
+
+**Nieuw**
+
+- Servers toevoegen, wijzigen en verwijderen op de tv (M3U, Xtream, Stalker, Plex, Jellyfin, Emby, Stremio) met een schermtoetsenbord en keuze van de hoofdserver
+- Plex, Jellyfin, Emby en Stremio: bladeren en afspelen
+- Terugkijken bij Xtream en Stalker, met terugkijk-correctie per zender
+- Trakt (scrobbelen en bekeken, koppelen met een code), OpenSubtitles in de speler en herinneringen met een melding in beeld
+- Multiview: 2 tot 4 zenders tegelijk
+- Intro en aftiteling markeren in de speler, gedeeld met je andere apps
+
+**Verbeterd**
+
+- Ingepakte tv-gidsen (.xml.gz) en leeftijden via TMDB (Kijkwijzer eerst): het kinderfilter werkt nu hetzelfde als op de andere apps
+- Veel soepeler scrollen en zappen, ook op oudere tv's; het zendervoorbeeld start pas als je stilstaat
+
 ## Versie 1.0.0 · Build 57
 _12 oktober 2026_
 
