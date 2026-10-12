@@ -426,7 +426,7 @@ fun SettingsScreen() {
                 if (AppState.isTV) {
                     S2Toggle(L("Match frame rate"), matchFrameRate) { matchFrameRate = it; PlayerSettings.matchFrameRate = it }
                 } else {
-                    S2Toggle(L("Show on external display"), ExternalDisplay.enabled) { ExternalDisplay.setEnabled(it) }
+                    S2Toggle(L("Show on external display"), ExternalDisplay.enabled) { ExternalDisplay.use(it) }
                 }
                 S2Dropdown(L("Default subtitle language"),
                     listOf("" to L("As in the stream"), "off" to L("Off")) + TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },

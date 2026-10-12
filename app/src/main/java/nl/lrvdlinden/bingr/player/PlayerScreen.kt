@@ -599,7 +599,7 @@ private fun PlayerControls(
                     }
                     if (ExternalDisplay.display != null) {
                         PlayerRoundIcon(if (ExternalDisplay.enabled) Icons.Filled.Tv else Icons.Filled.DesktopAccessDisabled,
-                            L("Show on external display"), 22) { ExternalDisplay.setEnabled(!ExternalDisplay.enabled) }
+                            L("Show on external display"), 22) { ExternalDisplay.use(!ExternalDisplay.enabled) }
                     }
                 }
                 if (live) {

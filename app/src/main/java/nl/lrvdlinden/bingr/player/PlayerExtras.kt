@@ -268,7 +268,7 @@ object ExternalDisplay {
         display = runCatching { dm?.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)?.firstOrNull() }.getOrNull()
     }
 
-    fun setEnabled(v: Boolean) { enabled = v; PlayerSettings.externalDisplay = v }
+    fun use(v: Boolean) { enabled = v; PlayerSettings.externalDisplay = v }
 
     /** Het scherm waar de video nu naartoe gaat (null = op het apparaat zelf). */
     val target: Display? get() = if (AppState.isTV || !enabled) null else display
