@@ -4,6 +4,60 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 60
+_13 oktober 2026_
+
+### Alle apps
+
+**Verbeterd**
+
+- Het maximum van 6 schermen en 15 apparaten klopt nu ook als apparaten precies tegelijk starten of inloggen; kijkgeschiedenis ouder dan 8 dagen wordt altijd gewist
+- Audiotaal 'Zoals in de stream' en de ondertitelinstellingen werken op alle apps hetzelfde
+
+**Opgelost**
+
+- Je wordt niet meer onterecht uitgelogd als je sessie net verlopen is of de server even niet bereikbaar is
+- Wat je uit Verder kijken of je geschiedenis haalt, komt niet meer terug op je andere apparaten
+
+### Alle apps en de website
+
+**Opgelost**
+
+- Servers die je op een ander apparaat of op de website toevoegt, verdwijnen niet meer als een ander apparaat tegelijk een oudere lijst opslaat
+
+### iOS, iPadOS, tvOS, macOS, Android en Android TV
+
+**Opgelost**
+
+- Plex crasht niet meer bij een onbruikbaar serveradres; Chromecast-sessies sluiten netjes af; OpenSubtitles vindt betere treffers
+
+### Android
+
+**Nieuw**
+
+- Downloads casten naar een Chromecast; downloads van een ander profiel staan ook in je eigen Downloads en verwijderde bestanden verdwijnen uit de lijst
+
+**Opgelost**
+
+- Meldingen-toestemming wordt maar één keer gevraagd en herinneringen blijven werken na een herstart van je telefoon
+
+### Android en Android TV
+
+**Opgelost**
+
+- Profielen, lijsten en voortgang raken niet meer kwijt als de app midden in het opslaan stopt; reservebronnen houden rekening met het kinderprofiel; ontbrekende vertalingen aangevuld
+
+### Samsung TV (Tizen)
+
+**Nieuw**
+
+- Apparaten hernoemen, en bij inloggen met e-mail ook een account maken of je wachtwoord herstellen
+
+**Opgelost**
+
+- De speler wordt netjes vrijgegeven als de app naar de achtergrond gaat en speelt daarna verder op dezelfde plek (ook multiview)
+- Geen vastlopende focus meer in lege lijsten en de tv-gids; server opslaan zonder internet geeft een duidelijke melding; minder geheugengebruik
+
 ## Versie 1.0.0 · Build 59
 _12 oktober 2026_
 
