@@ -49,7 +49,9 @@ object TrackPreferences {
         get() {
             version
             Prefs.string(autoSubtitlesKey)?.let { normalizedMode(it)?.let { m -> return m } }
-            return if (Prefs.bool("autoSubtitles", false)) AUTO_ALWAYS else AUTO_WHEN_NEEDED
+            if (Prefs.bool("autoSubtitles", false)) return AUTO_ALWAYS
+            // build 60: oud "Standaard ondertiteltaal: Uit" (vóór build 59) = geen automatische ondertitels (docs/ACCOUNT.md)
+            return if (Prefs.string(subtitleKey) == "off") AUTO_OFF else AUTO_WHEN_NEEDED
         }
         set(v) { Prefs.put(autoSubtitlesKey, normalizedMode(v) ?: AUTO_WHEN_NEEDED); version++ }
 

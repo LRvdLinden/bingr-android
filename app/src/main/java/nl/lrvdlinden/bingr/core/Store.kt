@@ -238,7 +238,10 @@ object Store {
         if (auto != null) Prefs.put("autoSubtitles", auto) else if (fresh) Prefs.put("autoSubtitles", false)
         // build 59: ondertitelstand (off/whenNeeded/always) van dit profiel, anders de standaard
         val mode = p.subtitleMode
-        if (mode != null) TrackPreferences.autoSubtitles = mode else if (fresh) TrackPreferences.autoSubtitles = TrackPreferences.AUTO_WHEN_NEEDED
+        // zonder eigen stand: oud "ondertitels uit" (streamSubtitleLanguage "off") = geen automatische ondertitels (build 60)
+        if (mode != null) TrackPreferences.autoSubtitles = mode
+        else if (fresh) TrackPreferences.autoSubtitles =
+            if (p.streamSubtitleLanguage == "off") TrackPreferences.AUTO_OFF else TrackPreferences.AUTO_WHEN_NEEDED
         val audio = p.audioLanguage
         if (audio != null) TrackPreferences.audio = audio else if (fresh) TrackPreferences.audio = ""
         val sub = p.streamSubtitleLanguage
@@ -295,7 +298,7 @@ object Store {
         if (list.isEmpty()) return
         val main = mainID?.takeIf { id -> list.any { it.id == id } } ?: list.first().id
         val adopted = adoptFrom != null && list.none { it.id == adoptFrom }
-        if (adopted && adoptFrom != null) {
+        if (adopted) {
             runCatching {
                 val old = File(dir, "profile-$adoptFrom")
                 val new = File(dir, "profile-$main")

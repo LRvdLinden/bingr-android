@@ -294,7 +294,7 @@ object SourceSync {
         val localMain = Store.mainSourceID
         val takeMain = importing || localMain == null || merged.none { it.id == localMain }
         val mainID = if (takeMain) data.mainSourceID else null
-        if (!takeMain && data.mainSourceID == null && localMain != null && merged.isNotEmpty()) needUpload = true
+        if (!takeMain && data.mainSourceID == null && merged.isNotEmpty()) needUpload = true
 
         val before = Playlists.source
         val oldPasswords = incoming.keys.associateWith { Store.secret("playlist.$it.password") }

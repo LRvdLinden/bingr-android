@@ -605,7 +605,12 @@ object StateSync {
             }
             str("audioLanguage")?.let { values["player.audioLanguage"] = it }
             str("subtitleLanguage")?.let { values["player.subtitleLanguage"] = it }
-            TrackPreferences.normalizedMode(str("autoSubtitles"))?.let { values[TrackPreferences.autoSubtitlesKey] = it }
+            val autoRaw = str("autoSubtitles")
+            TrackPreferences.normalizedMode(autoRaw)?.let { values[TrackPreferences.autoSubtitlesKey] = it }
+            // oud formaat (build 60, docs/ACCOUNT.md build 59): subtitleLanguage "off" zonder nieuwe stand = autoSubtitles "off"
+            if (str("subtitleLanguage") == "off" && (autoRaw == null || autoRaw == "false" || autoRaw == "0")) {
+                values[TrackPreferences.autoSubtitlesKey] = TrackPreferences.AUTO_OFF
+            }
             str("openSubtitlesLanguage")?.let { values["os.language"] = it }
             (s["openSubtitlesLanguages"] as? JsonArray)?.let { a ->
                 values["os.languages"] = Http.json.encodeToString(ListSerializer(String.serializer()), a.mapNotNull { it.jFlex })

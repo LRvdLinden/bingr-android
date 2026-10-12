@@ -40,10 +40,12 @@ object BackupSources {
         val epg = c.epgID?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() }
         val norm = normalize(c.name)
         if (epg == null && norm.length < 2) return emptyList()
+        // build 60: zelfde verbergen/kinderslot/leeftijdsgrens als het actieve profiel (zoals globaal zoeken)
+        val contexts = others.associate { it.id to Playlists.context(it) }
         return withContext(Dispatchers.Default) {
             val out = ArrayList<Hit>()
             for (p in others) {
-                val lib = withContext(Dispatchers.IO) { runCatching { Playlists.readCache(p) }.getOrNull() } ?: continue
+                val lib = filtered(p, contexts[p.id]) ?: continue
                 val byEpg = if (epg != null) lib.channels.firstOrNull { it.epgID?.trim()?.lowercase(Locale.ROOT) == epg } else null
                 val hit = byEpg ?: lib.channels.firstOrNull { normalize(it.name) == norm }
                 if (hit != null && (hit.streamURL != null || hit.stalkerCmd != null)) {
@@ -59,11 +61,12 @@ object BackupSources {
         val current = Playlists.source?.id
         val norm = Net.normTitle(TitleCleaner.parse(title).title.ifEmpty { title })
         if (norm.isEmpty()) return emptyList()
+        val others = Store.playlists.filter { it.id != current }
+        val contexts = others.associate { it.id to Playlists.context(it) }
         return withContext(Dispatchers.Default) {
             val out = ArrayList<Hit>()
-            for (p in Store.playlists) {
-                if (p.id == current) continue
-                val lib = withContext(Dispatchers.IO) { runCatching { Playlists.readCache(p) }.getOrNull() } ?: continue
+            for (p in others) {
+                val lib = filtered(p, contexts[p.id]) ?: continue
                 val m = lib.movies.firstOrNull {
                     Net.normTitle(TitleCleaner.parse(it.title).title.ifEmpty { it.title }) == norm &&
                         (year == null || it.year == null || it.year == year)
@@ -72,6 +75,12 @@ object BackupSources {
             }
             out
         }
+    }
+
+    /** Cache van een andere server, gefilterd voor het actieve profiel (kinderprofiel, verborgen en vergrendelde groepen). */
+    private suspend fun filtered(p: PlaylistSource, ctx: Playlists.FilterContext?): Library? {
+        val raw = withContext(Dispatchers.IO) { runCatching { Playlists.readCache(p) }.getOrNull() } ?: return null
+        return if (ctx != null) runCatching { Playlists.apply(raw, ctx) }.getOrNull() else raw
     }
 
     /** Afspeel-URL van een treffer (MAC-portal: eerst een link aanmaken). */

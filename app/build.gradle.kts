@@ -76,7 +76,7 @@ android {
     lint {
         abortOnError = false
         textReport = true
-        textOutput = file("stdout")
+        textOutput = file("build/reports/lint-results-release.txt")
         explainIssues = false
     }
 
@@ -128,4 +128,10 @@ dependencies {
 }
 
 // Lint na assembleRelease (zie lint { } hierboven): rapport in het CI-log, fouten blokkeren de APK niet
+val printLintReport = tasks.register("printLintReport") {
+    val report = layout.buildDirectory.file("reports/lint-results-release.txt")
+    mustRunAfter(tasks.matching { it.name == "copyReleaseLintReports" })
+    doLast { report.get().asFile.takeIf { it.exists() }?.let { println("=== Lint ===\n" + it.readText()) } }
+}
 tasks.matching { it.name == "assembleRelease" }.configureEach { finalizedBy("lintRelease") }
+tasks.matching { it.name == "lintRelease" }.configureEach { finalizedBy(printLintReport) }

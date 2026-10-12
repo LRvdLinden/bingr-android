@@ -719,6 +719,8 @@ class PlayerController(item: PlayableItem) {
             "" -> {}
             else -> engine.subtitleTracks.firstOrNull { TrackPreferences.matches(it, sub) }?.let { engine.selectSubtitle(it) }
         }
+        // ook op de Chromecast (build 60): daar ging alleen de automatische keuze heen, niet de standaard-ondertiteltaal
+        if (TrackPreferences.subtitle.isNotEmpty()) Casting.subtitlesChanged(this)
     }
 
     /** Beste ondertitel van OpenSubtitles in [lang] op de achtergrond zoeken en inladen (ook naar de Chromecast). */

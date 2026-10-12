@@ -898,7 +898,7 @@ fun ProfileEditScreen(existing: ViewerProfile?, onClose: () -> Unit) {
                 }
 
                 // pincode van dit profiel
-                if (canPIN && existing != null) {
+                if (canPIN) {
                     Column {
                         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Theme.card)) {
                             S2Row(if (hasPIN) L("This profile is protected with a PIN") else L("No PIN on this profile"),

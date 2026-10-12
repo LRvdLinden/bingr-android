@@ -27,7 +27,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.MergeType
+import androidx.compose.material.icons.automirrored.filled.MergeType
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material.icons.filled.Search
@@ -275,7 +275,7 @@ fun ManageScreen(onClose: () -> Unit) {
             add(S2Action(if (hidden) L("Show") else L("Hide"), if (hidden) Icons.Default.Visibility else Icons.Default.VisibilityOff) {
                 update { it.copy(hidden = if (hidden) it.hidden - key else it.hidden + key) }
             })
-            add(S2Action(L("Merge into…"), Icons.Default.MergeType) { merging = g })
+            add(S2Action(L("Merge into…"), Icons.AutoMirrored.Filled.MergeType) { merging = g })
             if (Store.parental.enabled && pid != null) {
                 add(S2Action(if (locked) L("Unlock") else L("Lock with PIN"), if (locked) Icons.Default.LockOpen else Icons.Default.Lock) {
                     ParentalControl.toggleLock(pid, g)

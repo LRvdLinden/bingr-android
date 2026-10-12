@@ -556,7 +556,8 @@ fun SettingsScreen() {
             }
         }
 
-        if (isMain) {
+        // niet op TV (build 60): daar is geen deelmenu of bestandskiezer, dus beide knoppen liepen dood
+        if (isMain && !AppState.isTV) {
             // MARK: delen tussen apparaten (vervangt iCloud)
             item {
                 S2Section(L("Share between devices"),
