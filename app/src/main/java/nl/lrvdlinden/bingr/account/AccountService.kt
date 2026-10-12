@@ -10,7 +10,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.IOException
@@ -86,6 +90,7 @@ object Account {
         deviceLimit = null
         isSignedIn = false
         ProfileSync.reset()
+        SourceSync.reset()
     }
 
     /** user.id uit de sessie (of het `sub` van het access_token). */
@@ -424,7 +429,7 @@ object Account {
                 // vernieuwen mislukt met 400/401 tijdens de aanroep → sessie is al gewist
                 if (!isSignedIn) AppState.signedOut()
                 // account_data opnieuw lezen (o.a. nieuwe profielfoto's van andere apparaten)
-                else ProfileSync.refreshFromServer()
+                else { ProfileSync.refreshFromServer(); SourceSync.refreshFromServer() }
             } finally {
                 checking = false
             }
@@ -651,6 +656,54 @@ object Account {
             deviceCheck()
             // profielen van het account ophalen/samenvoegen (stil, ook offline geen probleem)
             ProfileSync.launchSync()
+            // servers en afspeellijsten van het account (build 43)
+            SourceSync.rememberOwner()
+            SourceSync.launchSync()
         }
+    }
+
+    // MARK: servers en afspeellijsten via het account (build 43)
+
+    /** Antwoord van get_sources: alle bronnen (ook tombstones), de actieve server en wanneer de server het laatst gewijzigd is. */
+    data class SourcesData(val sources: List<JsonObject>, val mainSourceID: String?, val updatedAt: String?)
+
+    /** device-auth-aanvraag met een geldig access_token; bij 401 één keer vernieuwen. null = netwerkfout of geen sessie. */
+    private suspend fun authedDeviceAuth(body: JsonElement): Reply? {
+        if (!isSignedIn || !configured) return null
+        var token = runCatching { validAccessToken() }.getOrNull() ?: return null
+        repeat(2) { attempt ->
+            val r = try { post("/functions/v1/device-auth", body, bearer = token) } catch (e: AccountException) { return null }
+            if (r.code != 401 || attempt == 1) return r
+            when (refresh()) {
+                RefreshResult.OK -> token = accessToken ?: return null
+                RefreshResult.INVALID -> { AppState.signedOut(); return null }
+                RefreshResult.OFFLINE -> return null
+            }
+        }
+        return null
+    }
+
+    /** get_sources (versleuteld bewaard door de Edge Function). null = mislukt. */
+    suspend fun getSources(): SourcesData? {
+        val r = authedDeviceAuth(buildJsonObject { put("action", "get_sources") }) ?: return null
+        if (!r.ok) return null
+        val j = r.json.jObj ?: return null
+        if (j["sources"] !is JsonArray && j["sources"] != null && j["sources"] !is JsonNull) return null
+        return SourcesData(
+            sources = j.jList("sources").mapNotNull { it as? JsonObject }.filter { !it.jS("id").isNullOrBlank() },
+            mainSourceID = j.jS("mainSourceID")?.takeIf { it.isNotBlank() },
+            updatedAt = j.jS("updatedAt")?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    /** put_sources: altijd de hele lijst (met tombstones). true = opgeslagen. */
+    suspend fun putSources(sources: JsonArray, mainSourceID: String?): Boolean {
+        val body = JsonObject(mapOf(
+            "action" to JsonPrimitive("put_sources"),
+            "sources" to sources,
+            "mainSourceID" to (mainSourceID?.let { JsonPrimitive(it) } ?: JsonNull),
+        ))
+        val r = authedDeviceAuth(body) ?: return false
+        return r.ok && r.json.jB("ok") != false
     }
 }

@@ -50,18 +50,23 @@ object AppState {
 
     /**
      * Na inloggen (of "Continue without account") → apparaat registreren (max. 10; bij de limiet
-     * eerst het scherm "Too many devices") → profielen van het account ophalen → "Wie kijkt er?".
+     * eerst het scherm "Too many devices") → profielen en servers van het account ophalen → "Wie kijkt er?".
      */
     fun signedIn() {
         if (!Account.isSignedIn) { stage = Stage.PICKER; return }
         AppScope.launch {
+            // ander account dan het vorige op dit apparaat: eerst de lokale gegevens van dat account wissen
+            SourceSync.checkAccountSwitch()
             // limiet: het scherm "Too many devices" roept na een geslaagde registratie opnieuw signedIn() aan
             if (Account.ensureRegistered() == Account.RegisterResult.LIMIT) return@launch
             if (!Account.isSignedIn) return@launch
             // app-sleutels van de server ophalen (op de achtergrond)
             Account.launchConfigFetch()
-            // even wachten op de profielen van het account (nooit langer dan een paar seconden; fouten zijn stil)
-            withTimeoutOrNull(6_000) { ProfileSync.syncNow() }
+            // even wachten op de profielen en servers van het account (max. 8 seconden; fouten zijn stil)
+            withTimeoutOrNull(8_000) {
+                ProfileSync.syncNow()
+                SourceSync.syncNow()
+            }
             if (stage == Stage.AUTH && Account.isSignedIn) stage = Stage.PICKER
         }
     }

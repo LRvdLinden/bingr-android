@@ -344,6 +344,7 @@ object Store {
     fun setMainSource(id: String) {
         mainSourceID = id
         saveMeta()
+        SourceSync.sourcesChanged()
     }
 
     /** Hoort een opgeslagen item bij het actieve profiel? Oude items zonder profiel horen bij het hoofdaccount. */
@@ -357,7 +358,19 @@ object Store {
 
     fun secret(key: String): String? = secrets.getString(key, null)
     fun setSecret(key: String, value: String?) {
+        val old = secrets.getString(key, null)
         secrets.edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
+        // wachtwoord of token van een server gewijzigd → ook naar het account (build 43)
+        if (old != value && key.startsWith("playlist.")) SourceSync.secretChanged(key)
+    }
+
+    /** Alle geheimen met dit voorvoegsel (bijv. "playlist.<id>."), sleutel → waarde. */
+    fun secretsWithPrefix(prefix: String): Map<String, String> = runCatching {
+        secrets.all.mapNotNull { (k, v) -> if (k.startsWith(prefix) && v is String) k to v else null }.toMap()
+    }.getOrDefault(emptyMap())
+
+    private fun removeSecrets(match: (String) -> Boolean) {
+        runCatching { secrets.edit().apply { secrets.all.keys.filter(match).forEach { remove(it) } }.apply() }
     }
 
     // MARK: servers (afspeellijsten)
@@ -368,6 +381,7 @@ object Store {
      */
     fun upsert(p: PlaylistSource) {
         val n = p.copy(updatedAt = System.currentTimeMillis())
+        SourceSync.sourceEdited(n.id)
         playlists = if (playlists.any { it.id == n.id }) playlists.map { if (it.id == n.id) n else it } else playlists + n
         write("playlists", playlists)
         if (mainSourceID == null || playlists.none { it.id == mainSourceID }) setMainSource(n.id)
@@ -379,15 +393,87 @@ object Store {
             adoptLegacyData(main.id)
             if (activeProfileID == null) selectProfile(main)
         }
+        SourceSync.sourcesChanged()
     }
 
     fun delete(p: PlaylistSource) {
+        // tombstone (build 43): andere apparaten van het account verwijderen deze server ook
+        SourceSync.sourceDeleted(p.id)
         playlists = playlists.filterNot { it.id == p.id }
         write("playlists", playlists)
         if (mainSourceID == p.id) { mainSourceID = playlists.firstOrNull()?.id; saveMeta() }
         setSecret(p.passwordKey, null)
+        removeSecrets { it.startsWith("playlist.${p.id}.") }
         photoFile(p.id).delete()
         customizations = customizations - p.id; write("custom", customizations)
+        SourceSync.sourcesChanged()
+    }
+
+    // MARK: servers uit het Bingr-account (build 43, zie [SourceSync])
+
+    /**
+     * Servers uit de account-sync overnemen: nieuwe lijst en servers die elders verwijderd zijn (tombstone; die gaan
+     * hier weg met geheimen, foto, aanpassingen en vergrendelde groepen). [mainID] wordt de hoofdserver als die in
+     * de lijst staat. Roept geen sync-hooks aan.
+     */
+    fun applySyncedSources(list: List<PlaylistSource>, removed: List<String>, mainID: String?) {
+        for (id in removed) {
+            removeSecrets { it.startsWith("playlist.$id.") }
+            runCatching { photoFile(id).delete() }
+        }
+        if (removed.isNotEmpty()) {
+            customizations = customizations - removed.toSet(); write("custom", customizations)
+            val locked = parental.lockedGroups.filterNot { k -> removed.any { k.startsWith("$it|") } }.toSet()
+            if (locked != parental.lockedGroups) { parental = parental.copy(lockedGroups = locked); write("parental", parental) }
+            photoVersion++
+        }
+        playlists = list
+        write("playlists", playlists)
+        val main = mainID?.let { m -> list.firstOrNull { it.id.equals(m, ignoreCase = true) }?.id }
+        when {
+            main != null && main != mainSourceID -> { mainSourceID = main; saveMeta() }
+            mainSourceID == null || list.none { it.id == mainSourceID } -> { mainSourceID = list.firstOrNull()?.id; saveMeta() }
+        }
+        // servers maar nog geen profiel: hoofdprofiel aanmaken (zoals bij het eerste toevoegen)
+        if (profiles.isEmpty() && list.isNotEmpty()) ensureMainProfile()
+    }
+
+    /** Instellingen van een server uit het "android"-blok: aanpassingen en vergrendelde groepen. null = niet aanraken. */
+    fun applySyncedSourceSettings(id: String, custom: Customization?, lockedGroups: Set<String>?) {
+        if (custom != null && customizations[id] != custom) {
+            customizations = if (custom == Customization()) customizations - id else customizations + (id to custom)
+            write("custom", customizations)
+        }
+        if (lockedGroups != null) {
+            val others = parental.lockedGroups.filterNot { it.startsWith("$id|") }.toSet()
+            val locked = others + lockedGroups.map { "$id|$it" }
+            if (locked != parental.lockedGroups) { parental = parental.copy(lockedGroups = locked); write("parental", parental) }
+        }
+    }
+
+    /** Vergrendelde groepen van één server (zonder het voorvoegsel "<id>|"). */
+    fun lockedGroups(id: String): Set<String> =
+        parental.lockedGroups.filter { it.startsWith("$id|") }.map { it.removePrefix("$id|") }.toSet()
+
+    /**
+     * Een ander Bingr-account logt in op dit apparaat: servers, profielen en gegevens van het vorige account wissen
+     * (geheimen, pincodes, foto's, per-profielgegevens, aanpassingen, kinderslot en herinneringen).
+     */
+    fun wipeAccountData() {
+        (playlists.map { it.id } + profiles.map { it.id }).forEach { runCatching { photoFile(it).delete() } }
+        removeSecrets { it.startsWith("playlist.") || it.startsWith("profile.") || it == "parental.pin" }
+        runCatching { dir.listFiles()?.forEach { f -> if (f.isDirectory && f.name.startsWith("profile-")) f.deleteRecursively() } }
+        for (name in profileFiles) runCatching { File(dir, "$name.json").delete() }
+        playlists = emptyList(); write("playlists", playlists)
+        profiles = emptyList(); write("profiles", profiles)
+        customizations = emptyMap(); write("custom", customizations)
+        parental = ParentalSettings(); write("parental", parental)
+        reminders = emptyList(); write("reminders", reminders)
+        mainSourceID = null; mainProfileIDStored = null; saveMeta()
+        activeProfileID = null; Prefs.put("activeProfileID", null)
+        activePlaylistID = null
+        photoVersion++
+        loadProfileData()
     }
 
     // MARK: foto's (profiel-id of server-id)
@@ -474,14 +560,22 @@ object Store {
 
     fun customization(playlist: String) = customizations[playlist] ?: Customization()
     fun updateCustomization(playlist: String, change: (Customization) -> Customization) {
-        customizations = customizations + (playlist to change(customization(playlist)))
+        val old = customization(playlist)
+        val n = change(old)
+        customizations = customizations + (playlist to n)
         write("custom", customizations)
+        if (n != old) { SourceSync.sourceEdited(playlist); SourceSync.sourcesChanged() }
     }
 
     // MARK: kinderslot — gedeeld (ingesteld door het hoofdaccount)
 
     fun updateParental(change: (ParentalSettings) -> ParentalSettings) {
+        val old = parental.lockedGroups
         parental = change(parental); write("parental", parental)
+        // vergrendelde groepen horen bij een server (android-blok, build 43)
+        val diff = (old - parental.lockedGroups) + (parental.lockedGroups - old)
+        val ids = diff.map { it.substringBefore('|') }.toSet().filter { id -> playlists.any { it.id == id } }
+        if (ids.isNotEmpty()) { ids.forEach { SourceSync.sourceEdited(it) }; SourceSync.sourcesChanged() }
     }
 
     // MARK: herinneringen

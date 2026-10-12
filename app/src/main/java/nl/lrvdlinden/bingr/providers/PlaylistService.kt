@@ -559,6 +559,21 @@ object Playlists {
         return p
     }
 
+    /** Geen server meer open (server elders verwijderd of ander account ingelogd): bibliotheek leegmaken. */
+    fun unload() {
+        filterJob?.cancel(); filterJob = null
+        filterGeneration++
+        source = null
+        Store.activePlaylistID = null
+        stalker = null
+        stremioAddons = emptyList()
+        episodeCache = emptyMap()
+        error = null
+        isFiltering = false
+        rawLibrary = Library()
+        library = Library()
+    }
+
     /** Afspeellijst helemaal verwijderen (profiel, wachtwoord, sessie en cache). */
     fun forget(p: PlaylistSource) {
         Store.delete(p)

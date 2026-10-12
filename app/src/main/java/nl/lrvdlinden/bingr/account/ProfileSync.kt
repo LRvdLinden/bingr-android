@@ -454,7 +454,7 @@ object ProfileSync {
         return ViewerProfile(id = o.jS("id")!!, name = name, avatar = av, ageLimit = age, isKids = if (kids) true else null)
     }
 
-    private fun avatar(e: JsonElement?, kids: Boolean, current: PlaylistAvatar? = null): PlaylistAvatar {
+    internal fun avatar(e: JsonElement?, kids: Boolean, current: PlaylistAvatar? = null): PlaylistAvatar {
         val fallback = current ?: if (kids) PlaylistAvatar.randomIllustration() else PlaylistAvatar.random()
         val palettes = PlaylistAvatar.palettes.size
         return when (e) {
