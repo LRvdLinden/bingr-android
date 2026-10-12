@@ -8,6 +8,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -95,11 +96,21 @@ object Playlists {
             snapshotFlow { Store.activeProfile?.let { "${it.effectiveAgeLimit ?: 0}-${it.strictAgeFilter}" } ?: "" }
                 .drop(1).collect { applyCustomizations() }
         }
-        // nieuwe IMDb-classificaties binnen → leeftijdsfilter opnieuw toepassen
+        AppScope.launch { runCatching { AgeRatings.preload() } }
+        // nieuwe IMDb- of TMDB-classificaties binnen → leeftijdsfilter opnieuw toepassen
         AppScope.launch {
-            snapshotFlow { Metadata.version }.drop(1).debounce(3_000).collect {
+            snapshotFlow { Metadata.version to AgeRatings.version }.drop(1).debounce(3_000).collect {
                 if (Store.activeProfile?.effectiveAgeLimit != null) applyCustomizations()
             }
+        }
+        // profiel met leeftijdsgrens: classificaties van de hele (ongefilterde) lijst op de achtergrond bijwerken (build 53)
+        AppScope.launch {
+            snapshotFlow { System.identityHashCode(rawLibrary) to (Store.activeProfile?.effectiveAgeLimit != null) }
+                .debounce(2_000)
+                .collectLatest { (_, limited) ->
+                    if (!limited) return@collectLatest
+                    try { AgeRatings.warm(rawLibrary) } catch (e: CancellationException) { throw e } catch (_: Exception) { }
+                }
         }
     }
 
@@ -312,8 +323,8 @@ object Playlists {
             if ("$playlist|$g" in ctx.lockedGroups) return true
             return ctx.autoLockAdult && ParentalControl.isAdultGroup(g)
         }
-        fun allowed(rated: String?, group: String, genre: String? = null): Boolean =
-            ctx.unlocked || ParentalControl.allowedFor(rated, group, ageLimit, genre, ctx.strict)
+        fun allowed(rated: String?, group: String, genre: String?, info: AgeRating?): Boolean =
+            ctx.unlocked || ParentalControl.allowedFor(rated, group, ageLimit, genre, ctx.strict, info)
         fun group(g: String): String {
             val merged = c.merged[g] ?: g
             return c.renamed[Customization.groupKey(merged)] ?: merged
@@ -329,17 +340,19 @@ object Playlists {
             groupOK[g] = ok
             return ok
         }
-        fun ageOK(md: TitleMetadata?, g: String): Boolean = ageLimit == null || allowed(md?.rated, g, md?.genre)
+        // leeftijd: TMDB (Kijkwijzer eerst, AgeRatings) en anders OMDb (Metadata); beide caches zijn thread-veilig
+        fun ageOK(md: TitleMetadata?, info: AgeRating?, g: String): Boolean =
+            ageLimit == null || allowed(md?.rated, g, md?.genre, info)
 
         var channels = raw.channels.filter { visible(it.id, it.group) }
             .map { ch -> ch.copy(group = group(ch.group), name = c.renamed[ch.id] ?: ch.name) }
         // kinderprofiel / leeftijdsgrens: geen volwassenen-zenders (streng: alleen kinderzenders)
-        if (ageLimit != null) channels = channels.filter { allowed(null, it.group) }
+        if (ageLimit != null && !ctx.unlocked) channels = channels.filter { ParentalControl.channelAllowedFor(it.name, it.group, ageLimit, ctx.strict) }
         val movies = raw.movies.filter {
-            visible(it.id, it.group) && (ageLimit == null || ageOK(Metadata.cached(it), it.group))
+            visible(it.id, it.group) && (ageLimit == null || ageOK(Metadata.cached(it), AgeRatings.cached(it), it.group))
         }.map { m -> m.copy(group = group(m.group), title = c.renamed[m.id] ?: m.title) }
         val series = raw.series.filter {
-            visible(it.id, it.group) && (ageLimit == null || ageOK(Metadata.cached(it), it.group))
+            visible(it.id, it.group) && (ageLimit == null || ageOK(Metadata.cached(it), AgeRatings.cached(it), it.group))
         }.map { se -> se.copy(group = group(se.group), title = c.renamed[se.id] ?: se.title) }
 
         // eigen volgorde: groepen, dan kanalen binnen een groep

@@ -59,7 +59,8 @@ import java.util.Locale
 @Composable
 fun PersonScreen(ref: PersonRef, onClose: () -> Unit) {
     val tv = AppState.isTV
-    val kids = Store.activeProfile?.kids == true
+    // kinderprofiel of leeftijdsgrens: alleen wat (gefilterd) in de eigen lijst staat
+    val kids = Store.activeProfile?.effectiveAgeLimit != null
     var person by remember(ref) { mutableStateOf<TMDB.Person?>(null) }
     var available by remember(ref) { mutableStateOf(emptyList<Pair<TMDB.Credit, DetailTarget>>()) }
     var more by remember(ref) { mutableStateOf(emptyList<TMDB.Credit>()) }
@@ -179,7 +180,7 @@ fun PersonScreen(ref: PersonRef, onClose: () -> Unit) {
                 }
             }
 
-            // MARK: meer met … (niet voor kinderprofielen)
+            // MARK: meer met … (niet voor kinderprofielen en profielen met een leeftijdsgrens)
             if (!kids && more.isNotEmpty()) {
                 PersonRow(L("More with %@", name)) {
                     LazyRow(

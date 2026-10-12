@@ -251,6 +251,68 @@ object TMDB {
         }
     }
 
+    /**
+     * Leeftijdsinfo voor het kinderfilter (build 53): TMDB-id, genres en minimumleeftijd
+     * (certificering per land, Kijkwijzer eerst; series via content_ratings, films via release_dates).
+     * null = netwerkfout (niet cachen); found = false = TMDB kent de titel niet.
+     */
+    suspend fun ageInfo(imdb: String?, title: String, year: Int?, isShow: Boolean): AgeRating? {
+        if (!Secrets.isSet(Secrets.tmdbAPIKey)) return null
+        val now = System.currentTimeMillis()
+        var hit: JsonElement? = null
+        if (imdb != null) {
+            val f = get("/find/$imdb", listOf("external_source" to "imdb_id")) ?: return null
+            hit = f.jList(if (isShow) "tv_results" else "movie_results").firstOrNull()
+        }
+        if (hit == null) {
+            val path = if (isShow) "/search/tv" else "/search/movie"
+            val q = mutableListOf("query" to title, "include_adult" to "true")
+            if (year != null) q.add((if (isShow) "first_air_date_year" else "year") to year.toString())
+            val r = get(path, q) ?: return null
+            hit = r.jList("results").firstOrNull()
+            // jaar uit de lijst klopt niet altijd (jaar van toevoegen i.p.v. uitkomen): zonder jaar nog een keer
+            if (hit == null && year != null) hit = (get(path, listOf("query" to title, "include_adult" to "true")) ?: return null).jList("results").firstOrNull()
+        }
+        val h = hit ?: return AgeRating(found = false, checked = now)
+        val id = h.jI("id") ?: return AgeRating(found = false, checked = now)
+        val genres = h.jList("genre_ids").mapNotNull { it.jFlex?.trim()?.toIntOrNull() }
+        val certs = ArrayList<Pair<String, String>>()
+        if (isShow) {
+            val r = get("/tv/$id/content_ratings") ?: return null
+            for (c in r.jList("results")) {
+                val country = c.jS("iso_3166_1") ?: continue
+                c.jS("rating")?.takeIf { it.isNotBlank() }?.let { certs.add(country to it) }
+            }
+        } else {
+            val r = get("/movie/$id/release_dates") ?: return null
+            for (c in r.jList("results")) {
+                val country = c.jS("iso_3166_1") ?: continue
+                for (d in c.jList("release_dates")) d.jS("certification")?.takeIf { it.isNotBlank() }?.let { certs.add(country to it) }
+            }
+        }
+        val age = if (h.jB("adult") == true) 18 else ParentalControl.ageFromCertifications(certs)
+        return AgeRating(tmdbID = id, age = age, genres = genres, found = true, checked = now)
+    }
+
+    /**
+     * Trailer van één seizoen (build 53): YouTube, Trailer vóór Teaser, de app-taal vóór Engels.
+     * null = geen seizoenstrailer (dan de trailer van de serie gebruiken).
+     */
+    suspend fun seasonTrailer(tvID: Int, season: Int): String? {
+        val base = language.take(2)
+        val r = get("/tv/$tvID/season/$season/videos", listOf("language" to language, "include_video_language" to "$base,en")) ?: return null
+        var list = r.jList("results")
+        // sommige TMDB-antwoorden negeren include_video_language: dan nog een keer in het Engels
+        if (list.none { it.jS("site") == "YouTube" && (it.jS("type") == "Trailer" || it.jS("type") == "Teaser") } && base != "en") {
+            list = list + get("/tv/$tvID/season/$season/videos", listOf("language" to "en-US")).jList("results")
+        }
+        fun typeRank(v: JsonElement) = when (v.jS("type")) { "Trailer" -> 0; "Teaser" -> 1; else -> 9 }
+        fun langRank(v: JsonElement) = when (v.jS("iso_639_1")) { base -> 0; "en" -> 1; else -> 2 }
+        return list.filter { it.jS("site") == "YouTube" && typeRank(it) < 9 && !it.jS("key").isNullOrBlank() }
+            .sortedWith(compareBy<JsonElement> { typeRank(it) }.thenBy { langRank(it) }.thenByDescending { it.jB("official") == true })
+            .firstOrNull()?.jS("key")
+    }
+
     /** Afleveringen van één seizoen; key "s-e". */
     suspend fun season(tvID: Int, season: Int): Map<String, TitleDetails.EpisodeInfo> {
         val r = get("/tv/$tvID/season/$season", listOf("language" to language))

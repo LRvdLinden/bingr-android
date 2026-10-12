@@ -132,55 +132,100 @@ object ParentalControl {
         return adultWords.any { l.contains(it) }
     }
 
-    private val kidsWords = listOf("kid", "kinder", "kinderen", "child", "junior", "jeugd", "cartoon", "anim", "disney",
+    // let op: "anim" zou ook "anime" raken (vaak niet voor kinderen); daarom "animat" (animation, animatie, animated)
+    private val kidsWords = listOf("kid", "kinder", "child", "junior", "jeugd", "cartoon", "animat", "disney",
         "nick", "pixar", "dreamworks", "family", "familie", "enfant", "jeunesse", "niños", "infantil",
         "bambini", "ragazzi", "çocuk", "cocuk", "dzieci", "bajki", "kika", "zapp", "baby", "boomerang",
         "cbeebies", "pbs kids", "toon", "أطفال", "儿童", "动画")
+    /** Woorden die een "kindergroep" toch uitsluiten. */
+    private val notKidsWords = listOf("anime", "hentai", "horror", "thriller", "family guy")
+    /** Zendernamen die duidelijk voor kinderen zijn (zonder "family": "Family" is vaak een gewone zender). */
+    private val kidsChannelWords = listOf("kids", "kinder", "junior", "cartoon", "disney", "nick", "boomerang", "cbeebies",
+        "baby", "zapp", "kika", "toon", "jeugd", "jeunesse", "pbs kids", "duck tv", "jimjam", "minimax", "pop kids")
 
     /** Groep met kinderinhoud? */
     fun isKidsGroup(g: String): Boolean {
         val l = g.lowercase()
-        return !isAdultGroup(g) && kidsWords.any { l.contains(it) }
+        return !isAdultGroup(g) && notKidsWords.none { l.contains(it) } && kidsWords.any { l.contains(it) }
+    }
+
+    /**
+     * Mag deze zender op dit profiel? Kinderprofiel / t/m 12 ([strict]): alleen kindercategorieën
+     * (of een zender die duidelijk een kinderzender is, ook in een gewone landengroep). Anders: geen volwassenengroepen.
+     */
+    fun channelAllowedFor(name: String, group: String, limit: Int?, strict: Boolean): Boolean {
+        if (limit == null) return true
+        if (isAdultGroup(group) || isAdultGroup(name)) return false
+        if (!strict) return true
+        if (isKidsGroup(group)) return true
+        val n = name.lowercase()
+        return notKidsWords.none { n.contains(it) } && kidsChannelWords.any { n.contains(it) }
     }
 
     private val ageTable = mapOf(
         "G" to 0, "TV-Y" to 0, "TV-G" to 0, "AL" to 0, "U" to 0, "ALL" to 0, "APPROVED" to 0, "PASSED" to 0,
         "TV-Y7" to 7, "TV-Y7-FV" to 7, "PG" to 9, "TV-PG" to 10, "UC" to 0,
-        "PG-13" to 13, "TV-14" to 14, "12A" to 12, "M" to 15, "MA15+" to 15,
-        "R" to 17, "TV-MA" to 17, "NC-17" to 18, "X" to 18, "R18+" to 18, "18" to 18,
+        "PG-13" to 13, "TV-14" to 14, "12A" to 12, "M" to 15, "MA15+" to 15, "MA 15+" to 15,
+        "R" to 17, "TV-MA" to 17, "NC-17" to 18, "X" to 18, "R18+" to 18, "R 18+" to 18, "18" to 18,
+        "BTL" to 0, "TP" to 0, "L" to 0, "ATP" to 0, "KT" to 0,
     )
 
-    /** Minimumleeftijd uit een classificatie (IMDb/OMDb "Rated": PG-13, TV-MA, 16, …). null = onbekend. */
+    /** Minimumleeftijd uit een classificatie (Kijkwijzer AL/6/9/12/14/16/18, PG-13, TV-MA, FSK 16, …). null = onbekend. */
     fun minimumAge(rated: String?): Int? {
         val r = rated?.uppercase()?.trim() ?: return null
-        if (r.isEmpty() || r == "N/A" || r == "NOT RATED" || r == "UNRATED") return null
+        if (r.isEmpty() || r == "N/A" || r == "NR" || r == "NOT RATED" || r == "UNRATED" || r == "NOT_RATED") return null
         ageTable[r]?.let { return it }
-        val n = r.filter { it.isDigit() }.toIntOrNull() ?: return null
+        // getallen als getal vergelijken, nooit als tekst ("9" > "12" als tekst)
+        val n = Regex("\\d{1,2}").find(r)?.value?.toIntOrNull() ?: return null
         return if (n <= 21) n else null
     }
 
+    /** Landen in volgorde van voorkeur: Kijkwijzer eerst, dan VS, VK, Duitsland. */
+    private val certCountries = listOf("NL", "US", "GB", "DE", "BE", "FR", "IE", "AU", "CA")
+
     /**
-     * Mag dit profiel dit zien? (Onbekende classificatie = toegestaan, behalve in volwassenengroepen;
-     * bij [strict] (kinderprofiel / t/m 12) alleen wat zeker geschikt is.) Ontgrendeld = alles.
+     * Minimumleeftijd uit TMDB-certificeringen (land → code). Per land de hoogste (een film kan meerdere
+     * uitgaven hebben); het eerste land uit [certCountries] dat iets bruikbaars heeft wint; anders het
+     * strengste van alle andere landen.
      */
-    fun allowed(rated: String?, group: String, limit: Int?, genre: String? = null, strict: Boolean = false): Boolean {
-        if (isUnlocked) return true
-        return allowedFor(rated, group, limit, genre, strict)
+    fun ageFromCertifications(certs: List<Pair<String, String>>): Int? {
+        val byCountry = HashMap<String, Int>()
+        for ((c, code) in certs) {
+            val a = minimumAge(code) ?: continue
+            val cc = c.uppercase()
+            byCountry[cc] = maxOf(byCountry[cc] ?: 0, a)
+        }
+        for (c in certCountries) byCountry[c]?.let { return it }
+        return byCountry.values.maxOrNull()
     }
 
-    /** Dezelfde regel zonder app-status (veilig op de achtergrond, bijv. Dispatchers.Default). */
-    fun allowedFor(rated: String?, group: String, limit: Int?, genre: String? = null, strict: Boolean = false): Boolean {
+    /**
+     * Mag dit profiel dit zien? Ontgrendeld = alles. Zie [allowedFor].
+     */
+    fun allowed(rated: String?, group: String, limit: Int?, genre: String? = null, strict: Boolean = false,
+                info: AgeRating? = null): Boolean {
+        if (isUnlocked) return true
+        return allowedFor(rated, group, limit, genre, strict, info)
+    }
+
+    /**
+     * Dezelfde regel zonder app-status (veilig op de achtergrond, bijv. Dispatchers.Default).
+     * - geen grens → alles; volwassenengroep → nooit
+     * - bekende leeftijd (TMDB: Kijkwijzer eerst; anders OMDb "Rated") → alleen als die ≤ de grens is
+     * - onbekende leeftijd, gewoon profiel → toegestaan
+     * - onbekende leeftijd, kinderprofiel / t/m 12 ([strict]): nooit bij horror/thriller/misdaad/oorlog;
+     *   wel bij animatie/familie/kids, of als de categorie duidelijk voor kinderen is; anders verborgen
+     */
+    fun allowedFor(rated: String?, group: String, limit: Int?, genre: String? = null, strict: Boolean = false,
+                   info: AgeRating? = null): Boolean {
         if (limit == null) return true
         if (isAdultGroup(group)) return false
-        val age = minimumAge(rated)
-        if (age != null && age > limit) return false
+        val age = info?.age ?: minimumAge(rated)
+        if (age != null) return age <= limit
         if (!strict) return true
-        // Kinderprofiel / t/m 12 jaar: alleen bekende leeftijd binnen de grens, een kindergroep of genre animatie/familie.
-        if (age != null) return true
-        if (isKidsGroup(group)) return true
-        val g = genre?.lowercase()
-        if (g != null && (g.contains("animation") || g.contains("family"))) return true
-        return false
+        if (AgeRatings.isAdultGenre(info, genre)) return false
+        if (AgeRatings.isKidsGenre(info, genre)) return true
+        return isKidsGroup(group)
     }
 }
 

@@ -69,6 +69,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.foundation.focusGroup
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -116,6 +120,12 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
     var seasonMenu by remember { mutableStateOf(false) }
     var addToCollection by remember { mutableStateOf(false) }
     var recMatches by remember(target.id) { mutableStateOf(mapOf<String, DetailTarget>()) }
+    /** Trailer per seizoen (TMDB, build 53); null-waarde = opgezocht, geen seizoenstrailer. */
+    var seasonTrailers by remember(target.id) { mutableStateOf(mapOf<Int, String?>()) }
+    /** Leeftijdsinfo uit TMDB (build 53) voor de leeftijdscontrole bij afspelen. */
+    var ageInfo by remember(target.id) { mutableStateOf<AgeRating?>(null) }
+    /** TV: na het kiezen van een seizoen de focus op de huidige aflevering zetten. */
+    var focusEpisode by remember(target.id) { mutableStateOf(false) }
 
     val pid = Playlists.source?.id
     val lib = Playlists.library
@@ -128,6 +138,9 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
     val heroImage = if (tv) screensText(details?.backdrop) ?: screensText(details?.poster) ?: target.poster
     else screensText(details?.poster) ?: target.poster ?: screensText(details?.backdrop)
     val trailerID = screensText(details?.trailerYouTubeID) ?: fetchedTrailer
+    // seizoenstrailer (build 53): trailer van het gekozen seizoen, anders die van de serie
+    val seasonTrailer: String? = if (target is DetailTarget.SeriesT) seasonTrailers[season] else null
+    val trailerToPlay = seasonTrailer ?: trailerID
     val isMovie = target is DetailTarget.MovieT
     val seasons = remember(episodes) { episodes.map { it.season }.distinct().sorted() }
     val progress = Store.progress
@@ -189,6 +202,18 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
         val info = screensSafe { Details.season(tmdb, season) } ?: emptyMap()
         if (info.isNotEmpty()) seasonInfo = seasonInfo + info
     }
+    LaunchedEffect(season, details?.tmdbID) {
+        if (target !is DetailTarget.SeriesT) return@LaunchedEffect
+        val tmdb = screensInt(details?.tmdbID) ?: return@LaunchedEffect
+        if (seasonTrailers.containsKey(season)) return@LaunchedEffect
+        val s = season
+        val key = screensSafe { TMDB.seasonTrailer(tmdb, s) }
+        seasonTrailers = seasonTrailers + (s to key)
+    }
+    LaunchedEffect(target.id) {
+        if (Store.activeProfile?.effectiveAgeLimit == null) return@LaunchedEffect
+        ageInfo = AgeRatings.cached(target) ?: screensSafe { AgeRatings.lookup(target) }
+    }
     // aanbevelingen die in deze afspeellijst staan
     val recKey = details?.recommendations?.map { it.id }
     LaunchedEffect(recKey, System.identityHashCode(lib)) {
@@ -226,7 +251,9 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
         }
         val rated = screensText(details?.certification) ?: cached?.rated
         val genre = cached?.genre ?: details?.genres?.takeIf { it.isNotEmpty() }?.joinToString(",")
-        if (ParentalControl.allowed(rated, target.group, limit, genre, prof?.strictAgeFilter ?: false)) { action(); return }
+        // TMDB-classificatie (Kijkwijzer eerst) gaat vóór de OMDb/Trakt-classificatie (build 53)
+        val info = ageInfo ?: AgeRatings.cached(target)
+        if (ParentalControl.allowed(rated, target.group, limit, genre, prof?.strictAgeFilter ?: false, info)) { action(); return }
         if (ParentalControl.hasPIN) { afterPIN = action; ageGate = true }
         else flash(L("Not available on this profile (age limit)."))
     }
@@ -405,7 +432,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                             tint = if (inMyList) Theme.red else Color.White
                         ) { toggleMyList() }
                         if (!target.id.startsWith("rec-")) DetailCircleButton(Icons.AutoMirrored.Filled.PlaylistAdd) { addToCollection = true }
-                        if (trailerID != null) DetailCircleButton(Icons.Default.Theaters) { Trailer.open(ctx, trailerID) }
+                        if (trailerToPlay != null) DetailCircleButton(Icons.Default.Theaters) { Trailer.open(ctx, trailerToPlay) }
                         if (isMovie) DetailCircleButton(if (isWatchedTitle) Icons.Default.CheckCircle else Icons.Default.Check) { toggleWatchedMovie() }
                         // downloaden (build 52): niet op TV
                         val movieItem = (target as? DetailTarget.MovieT)?.let { Playables.movie(it.movie, imdb) }
@@ -419,6 +446,20 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                         // geen deelknop op Android TV, Google TV en Fire TV (zie docs/ACCOUNT.md, build 45)
                         if (!tv) DetailCircleButton(Icons.Default.Share) { share() }
                         DetailCapsule(L("Other sources"), Modifier.weight(1f), busy = sourcesLoading) { openSources() }
+                    }
+                }
+
+                // MARK: voortgang van de hele serie (build 53)
+                if (target is DetailTarget.SeriesT && episodes.isNotEmpty()) {
+                    val share = watchedShare(episodes, imdb, progress)
+                    if (share > 0) {
+                        Column(
+                            Modifier.widthIn(max = if (tv) 460.dp else 700.dp).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(L("%d%% of the series watched", percent(share)), color = Theme.secondary, fontSize = tsp(13))
+                            ThinProgress(share)
+                        }
                     }
                 }
 
@@ -468,8 +509,26 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                                         Icon(Icons.Default.KeyboardArrowDown, null, tint = Color.White, modifier = Modifier.size(tvs(18)))
                                     }
                                 }
-                                S2Menu(seasonMenu, seasons.map { it to L("Season %d", it) }, season,
-                                    onDismiss = { seasonMenu = false }, onSelect = { seasonMenu = false; season = it })
+                                S2Menu(seasonMenu, seasons.map { n ->
+                                    val sh = watchedShare(episodes.filter { it.season == n }, imdb, progress)
+                                    n to (if (sh > 0) L("Season %d · %d%% watched", n, percent(sh)) else L("Season %d", n))
+                                }, season,
+                                    onDismiss = { seasonMenu = false },
+                                    onSelect = { seasonMenu = false; if (season != it) { season = it; focusEpisode = tv } })
+                            }
+                        }
+                        // trailer van dit seizoen (build 53)
+                        if (seasonTrailer != null) {
+                            Spacer(Modifier.width(tvs(10)))
+                            Row(
+                                Modifier.focusLift(1.05f) { Trailer.open(ctx, seasonTrailer) }
+                                    .clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.12f))
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Theaters, null, tint = Color.White, modifier = Modifier.size(tvs(16)))
+                                Spacer(Modifier.width(6.dp))
+                                Text(L("Trailer season %d", season), color = Color.White, fontSize = tsp(14), fontWeight = FontWeight.Medium, maxLines = 1)
                             }
                         }
                         Spacer(Modifier.weight(1f))
@@ -494,20 +553,61 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                             CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(tvs(24)))
                         }
                     }
+                    // voortgang van dit seizoen (build 53)
+                    if (list.isNotEmpty()) {
+                        val sh = watchedShare(list, imdb, progress)
+                        if (sh > 0) {
+                            Column(
+                                Modifier.padding(horizontal = Theme.edge).widthIn(max = if (tv) 460.dp else 700.dp).fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(L("Season %d · %d%% watched", season, percent(sh)), color = Theme.secondary, fontSize = tsp(13))
+                                ThinProgress(sh)
+                            }
+                        }
+                    }
                     val rowState = rememberLazyListState()
-                    LaunchedEffect(season, episodes) {
+                    // huidige aflevering van dit seizoen: de volgende aflevering (half gekeken of eerste onbekeken)
+                    val currentID: String? = remember(season, episodes, progress) {
                         val n = nextEpisode
-                        val idx = if (n != null && n.season == season) list.indexOfFirst { it.id == n.id } else -1
-                        if (idx > 0) rowState.scrollToItem(idx)
+                        if (n != null && n.season == season) n.id else currentEpisodeOf(list, imdb)?.id
+                    }
+                    val currentFocus = remember { FocusRequester() }
+                    var currentAttached by remember { mutableStateOf(false) }
+                    // bij openen en bij een ander seizoen: de lijst naar de huidige aflevering laten scrollen
+                    var firstScroll by remember(target.id) { mutableStateOf(true) }
+                    LaunchedEffect(season, episodes.size) {
+                        if (list.isEmpty()) return@LaunchedEffect
+                        val idx = list.indexOfFirst { it.id == currentID }.coerceAtLeast(0)
+                        if (firstScroll) rowState.scrollToItem(idx) else rowState.animateScrollToItem(idx)
+                        firstScroll = false
+                        // TV: na het kiezen van een seizoen meteen de focus op die aflevering
+                        if (focusEpisode) {
+                            focusEpisode = false
+                            repeat(6) {
+                                delay(80)
+                                if (currentAttached && runCatching { currentFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+                            }
+                        }
                     }
                     LazyRow(
                         state = rowState,
                         contentPadding = PaddingValues(horizontal = Theme.edge, vertical = if (tv) 14.dp else 0.dp),
-                        horizontalArrangement = Arrangement.spacedBy(tvs(14))
+                        horizontalArrangement = Arrangement.spacedBy(tvs(14)),
+                        // TV: met de afstandsbediening naar de afleveringen → focus op de huidige aflevering (niet de eerste)
+                        modifier = Modifier.episodeEntry(tv) { if (currentAttached) currentFocus else null }
                     ) {
                         items(list) { e ->
                             val info = seasonInfo["${e.season}-${e.number}"] ?: details?.episodeInfo?.get("${e.season}-${e.number}")
+                            val isCurrent = e.id == currentID
+                            if (isCurrent) {
+                                DisposableEffect(e.id) {
+                                    currentAttached = true
+                                    onDispose { currentAttached = false }
+                                }
+                            }
                             EpisodeCard(
+                                modifier = if (isCurrent) Modifier.focusRequester(currentFocus) else Modifier,
                                 e = e, s = s, info = info, imdb = imdb,
                                 fallbackStill = screensText(details?.backdrop) ?: s.poster,
                                 onPlay = { ageChecked { AppState.play(Playables.episode(e, s, imdb)) } },
@@ -706,6 +806,56 @@ private fun nextEpisodeOf(episodes: List<Episode>, imdb: String?): Episode? {
     return resumed ?: episodes.firstOrNull { !Playables.isWatched(it, imdb) } ?: episodes.firstOrNull()
 }
 
+/**
+ * Huidige aflevering binnen één seizoen: half gekeken (laatst bijgewerkt), anders de eerste onbekeken.
+ * null = alles bekeken (dan begint de lijst gewoon vooraan).
+ */
+private fun currentEpisodeOf(list: List<Episode>, imdb: String?): Episode? {
+    val progress = Store.progress
+    val resumed = list.mapNotNull { e ->
+        progress[e.id]?.takeIf { it.fraction > 0.02 && it.fraction < 0.95 }?.let { e to it.updated }
+    }.maxByOrNull { it.second }?.first
+    return resumed ?: list.firstOrNull { !Playables.isWatched(it, imdb) }
+}
+
+/**
+ * Kijkvoortgang 0…1 over [list] (build 53): een bekeken aflevering telt als 1, een half gekeken aflevering
+ * als haar fractie (vanaf 95% als bekeken), gedeeld door het aantal bekende afleveringen.
+ */
+private fun watchedShare(list: List<Episode>, imdb: String?, progress: Map<String, ProgressEntry>): Double {
+    if (list.isEmpty()) return 0.0
+    var sum = 0.0
+    for (e in list) {
+        sum += if (Playables.isWatched(e, imdb)) 1.0
+        else (progress[e.id]?.fraction ?: 0.0).let { if (it >= 0.95) 1.0 else it.coerceIn(0.0, 1.0) }
+    }
+    return (sum / list.size).coerceIn(0.0, 1.0)
+}
+
+/** Percentage voor weergave: nooit 0% als je begonnen bent en nooit 100% als er nog iets openstaat. */
+private fun percent(share: Double): Int {
+    val p = Math.round(share * 100).toInt()
+    return when {
+        share >= 0.9999 -> 100
+        p >= 100 -> 99
+        p <= 0 && share > 0 -> 1
+        else -> p
+    }
+}
+
+/** Dunne voortgangsbalk (serie / seizoen). */
+@Composable
+private fun ThinProgress(share: Double) {
+    Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f))) {
+        Box(Modifier.fillMaxWidth(share.toFloat().coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(50)).background(Theme.red))
+    }
+}
+
+/** TV: focus die de afleveringenrij binnenkomt gaat naar [target] (als die er is), anders zoals normaal. */
+@OptIn(ExperimentalComposeUiApi::class)
+private fun Modifier.episodeEntry(tv: Boolean, target: () -> FocusRequester?): Modifier =
+    if (!tv) this else this.focusProperties { enter = { target() ?: FocusRequester.Default } }.focusGroup()
+
 @Composable
 private fun DetailSectionTitle(t: String) {
     Text(
@@ -761,6 +911,7 @@ private fun DetailCapsule(text: String, modifier: Modifier, busy: Boolean = fals
 
 @Composable
 private fun EpisodeCard(
+    modifier: Modifier = Modifier,
     e: Episode,
     s: Series,
     info: TitleDetails.EpisodeInfo?,
@@ -777,7 +928,7 @@ private fun EpisodeCard(
     var menu by remember { mutableStateOf(false) }
     Box {
         Column(
-            Modifier.width(w).focusLift(1.05f, onLongClick = { menu = true }, onClick = onPlay)
+            modifier.width(w).focusLift(1.05f, onLongClick = { menu = true }, onClick = onPlay)
                 .clip(RoundedCornerShape(tvs(14))).background(Color.White.copy(alpha = 0.06f))
                 .padding(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
