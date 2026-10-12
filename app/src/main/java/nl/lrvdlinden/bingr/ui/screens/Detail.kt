@@ -169,8 +169,10 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
             is DetailTarget.MovieT -> Trakt.imdb(target.movie)
             is DetailTarget.SeriesT -> Trakt.imdb(target.series)
         } ?: screensText(d?.imdbID)
+        // al begonnen met kijken: het seizoen van de volgende aflevering; anders het nieuwste seizoen
+        val started = episodes.any { e -> (Store.progress[e.id]?.fraction ?: 0.0) > 0.02 || Playables.isWatched(e, id) }
         val n = nextEpisodeOf(episodes, id)
-        season = n?.season ?: episodes.minOfOrNull { it.season } ?: 1
+        season = (if (started) n?.season else null) ?: episodes.maxOfOrNull { it.season } ?: 1
         loading = false
         if (screensText(d?.trailerYouTubeID) == null && id != null) {
             fetchedTrailer = screensSafe { Trakt.trailer(id, target.isSeries) }

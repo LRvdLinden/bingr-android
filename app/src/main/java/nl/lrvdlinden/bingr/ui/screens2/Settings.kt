@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Check
@@ -106,7 +107,7 @@ private fun S2AppFooter() {
     }
 }
 
-private enum class S2SettingsSub { CATEGORIES, MANAGE, HISTORY, NAS }
+private enum class S2SettingsSub { CATEGORIES, MANAGE, HISTORY, NAS, CHECK }
 private enum class S2PinMode { SET, UNLOCK, DISABLE }
 
 private const val S2_FILE_AUTHORITY = "nl.lrvdlinden.bingr.files"
@@ -178,6 +179,7 @@ fun SettingsScreen() {
         S2SettingsSub.MANAGE -> { ManageScreen { sub = null }; return }
         S2SettingsSub.HISTORY -> { HistoryScreen { sub = null }; return }
         S2SettingsSub.NAS -> { NetworkBrowserScreen { sub = null }; return }
+        S2SettingsSub.CHECK -> { SourceCheckScreen { sub = null }; return }
         null -> {}
     }
     val editingNow = editing
@@ -262,6 +264,7 @@ fun SettingsScreen() {
                         S2Row(L("Edit server"), icon = Icons.Default.Dns, onClick = { editing = current })
                         S2Row(L("Categories on/off (NL, BE, DE…)"), icon = Icons.Default.FilterList, onClick = { sub = S2SettingsSub.CATEGORIES })
                         S2Row(L("Manage groups and channels"), icon = Icons.Default.Tune, onClick = { sub = S2SettingsSub.MANAGE })
+                        S2Row(L("Check source"), icon = Icons.Default.Analytics, onClick = { sub = S2SettingsSub.CHECK })
                         S2Row(L("Refresh now"), icon = Icons.Default.Refresh, onClick = {
                             AppScope.launch { runCatching { Playlists.select(current, forceRefresh = true) } }
                         })
