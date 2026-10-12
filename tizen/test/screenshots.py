@@ -39,7 +39,7 @@ def run(page_setup, mode, steps):
                             f.write(json.dumps(data, ensure_ascii=False) + '\n')
                     code, body = fb.device_auth(data, mode)
                     return route.fulfill(status=code, headers=hdr, body=json.dumps(body))
-                if u.path.startswith('/auth/v1/token'):
+                if u.path.startswith('/auth/v1/token') or u.path.startswith('/auth/v1/verify'):
                     return route.fulfill(status=200, headers=hdr, body=json.dumps(fb.session()))
                 if u.path.startswith('/rest/v1/account_data'):
                     if req.method == 'GET':
@@ -92,6 +92,9 @@ if __name__ == '__main__':
     if which in ('all', 'login'):
         run('', 'normal', [('wait', 300), ('shot', '01-splash'), ('wait', 1800), ('shot', '02-login-qr'),
                            ('key', 'Enter', 600), ('shot', '02b-email')])
+    if which in ('all', 'qr'):
+        run('', 'approve', [('wait', 6000), ('shot', '02c-after-qr'),
+                            ('eval', 'JSON.stringify({auth: !!localStorage.getItem("bingr.auth"), reg: localStorage.getItem("bingr.deviceRegistered"), dev: localStorage.getItem("bingr.deviceId"), profiles: B.data.profiles.length})')])
     if which in ('all', 'limit'):
         run(SIGNED_IN.replace("'true'", "'false'"), 'limit', [('wait', 2500), ('shot', '03-device-limit')])
     if which in ('all', 'app'):
