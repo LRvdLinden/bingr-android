@@ -57,6 +57,9 @@ fun AuthScreen() {
         if (Account.isSignedIn) {
             if (AppState.isTV) { justSignedIn = true; delay(1600) }
             AppState.signedIn()
+        } else {
+            // uitgelogd (bv. Cancel bij "Too many devices"): weer het inlogscherm
+            justSignedIn = false
         }
     }
     Box(Modifier.fillMaxSize().background(Color.Black)) {

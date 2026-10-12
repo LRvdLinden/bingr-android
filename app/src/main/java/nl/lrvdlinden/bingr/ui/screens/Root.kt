@@ -54,7 +54,9 @@ import androidx.compose.runtime.withFrameMillis
 @Composable
 fun BingrRoot() {
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
-        val covered = AppState.playing != null || AppState.showMultiview
+        // register_device gaf device_limit → "Too many devices" over alles heen
+        val limit = Account.deviceLimit?.takeIf { Account.isSignedIn }
+        val covered = AppState.playing != null || AppState.showMultiview || limit != null
         Box(Modifier.fillMaxSize().blockFocus(covered)) {
             Crossfade(targetState = AppState.stage, animationSpec = tween(450), label = "stage") { stage ->
                 when (stage) {
@@ -66,13 +68,19 @@ fun BingrRoot() {
             }
         }
         if (AppState.showMultiview) {
-            FullLayer(Modifier.blockFocus(AppState.playing != null)) {
+            FullLayer(Modifier.blockFocus(AppState.playing != null || limit != null)) {
                 MultiviewScreen(onClose = { AppState.showMultiview = false })
             }
         }
         val item = AppState.playing
         if (item != null) {
-            FullLayer { PlayerScreen(item = item, onClose = { AppState.playing = null }) }
+            FullLayer(Modifier.blockFocus(limit != null)) { PlayerScreen(item = item, onClose = { AppState.playing = null }) }
+        }
+        if (limit != null) {
+            FullLayer { TooManyDevicesScreen(limit) }
+        }
+        LaunchedEffect(limit != null) {
+            if (limit != null) { AppState.playing = null; AppState.showMultiview = false }
         }
     }
 }

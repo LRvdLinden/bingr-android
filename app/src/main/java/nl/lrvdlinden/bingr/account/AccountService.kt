@@ -33,6 +33,8 @@ object Account {
         private set
 
     private var sp: SharedPreferences? = null
+    /** Apart bestand: blijft staan na uitloggen (device_id). */
+    private var deviceSp: SharedPreferences? = null
     private var accessToken: String? = null
     private var refreshToken: String? = null
     private var expiresAt: Long = 0L // epoch-seconden
@@ -51,6 +53,9 @@ object Account {
         email = p.getString("email", null)
         storedUserId = p.getString("user_id", null)
         isSignedIn = !refreshToken.isNullOrEmpty()
+        deviceSp = ctx.getSharedPreferences("bingr.device", Context.MODE_PRIVATE)
+        deviceRegistered = p.getBoolean("device_registered", false)
+        installLifecycleObserver()
     }
 
     // MARK: sessie opslaan
@@ -75,6 +80,8 @@ object Account {
     private fun clear() {
         accessToken = null; refreshToken = null; expiresAt = 0L; email = null; storedUserId = null
         sp?.edit()?.clear()?.apply()
+        deviceRegistered = false
+        deviceLimit = null
         isSignedIn = false
         ProfileSync.reset()
     }
@@ -210,11 +217,23 @@ object Account {
         L("If an account exists, you'll receive an email to reset your password.")
     }
 
-    /** Uitloggen: server op de hoogte brengen (mag mislukken), daarna altijd lokaal wissen. */
+    /**
+     * Uitloggen: eerst dit apparaat uit de lijst halen (remove_device, mag mislukken),
+     * dan de server op de hoogte brengen (mag mislukken), daarna altijd lokaal wissen.
+     */
     suspend fun signOut() = working {
+        if (configured && accessToken != null) {
+            runCatching { deviceCall("remove_device", deviceId) }
+        }
         val token = accessToken
         if (token != null && configured) runCatching { post("/auth/v1/logout", buildJsonObject { }, bearer = token) }
         clear()
+    }
+
+    /** Dit apparaat is op een ander apparaat verwijderd: lokaal uitloggen zonder logout-aanroep, terug naar het inlogscherm. */
+    fun revokedSignOut() {
+        clear()
+        AppState.signedOut()
     }
 
     /** Account verwijderen (device-auth delete_account), daarna lokaal uitloggen. */
@@ -259,6 +278,176 @@ object Account {
             AppState.isTV -> "Android TV"
             else -> "Android"
         }
+
+    // MARK: gekoppelde apparaten (max. 10)
+
+    /** Vaste UUID van dit apparaat; één keer gemaakt, alleen lokaal, blijft na uitloggen. */
+    val deviceId: String
+        get() {
+            val p = deviceSp ?: AppState.appContext.getSharedPreferences("bingr.device", Context.MODE_PRIVATE).also { deviceSp = it }
+            p.getString("device_id", null)?.takeIf { it.isNotEmpty() }?.let { return it }
+            val id = java.util.UUID.randomUUID().toString()
+            p.edit().putString("device_id", id).apply()
+            return id
+        }
+
+    /** Naam voor de apparatenlijst: Settings.Global DEVICE_NAME, anders Build.MODEL. */
+    val deviceDisplayName: String
+        get() = runCatching {
+            android.provider.Settings.Global.getString(AppState.appContext.contentResolver, android.provider.Settings.Global.DEVICE_NAME)
+        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: Build.MODEL ?: "Android"
+
+    /** Android, Android tablet, Android TV of Fire TV. */
+    val devicePlatform: String
+        get() = when {
+            Build.MANUFACTURER.equals("Amazon", ignoreCase = true) -> "Fire TV"
+            AppState.isTV -> "Android TV"
+            runCatching { AppState.appContext.resources.configuration.smallestScreenWidthDp }.getOrDefault(0) >= 600 -> "Android tablet"
+            else -> "Android"
+        }
+
+    /** register_device is gelukt (lokaal onthouden; gewist bij uitloggen). */
+    var deviceRegistered by mutableStateOf(false)
+        private set
+
+    private fun setRegistered(v: Boolean) {
+        deviceRegistered = v
+        sp?.edit()?.putBoolean("device_registered", v)?.apply()
+    }
+
+    data class Device(
+        val id: String, val name: String, val platform: String,
+        val createdAt: Long?, val lastSeenAt: Long?, val current: Boolean,
+    )
+
+    /** Antwoord van register_device met 403 device_limit. */
+    data class DeviceLimit(val limit: Int, val devices: List<Device>)
+
+    class DeviceLimitException(val info: DeviceLimit) : Exception("device_limit")
+
+    /** Niet-null: het scherm "Too many devices" staat open. */
+    var deviceLimit by mutableStateOf<DeviceLimit?>(null)
+
+    private fun parseDevices(list: List<JsonElement>): List<Device> {
+        val own = deviceId
+        return list.mapNotNull { d ->
+            val id = d.jS("device_id")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            Device(
+                id = id,
+                name = d.jS("name")?.takeIf { it.isNotBlank() } ?: d.jS("platform") ?: "?",
+                platform = d.jS("platform") ?: "",
+                createdAt = Net.parseISODate(d.jS("created_at")),
+                lastSeenAt = Net.parseISODate(d.jS("last_seen_at")),
+                current = d.jB("current") == true || id == own,
+            )
+        }
+    }
+
+    private suspend fun deviceCall(action: String, id: String, extra: Map<String, String> = emptyMap()): Reply {
+        val token = validAccessToken()
+        return post("/functions/v1/device-auth", buildJsonObject {
+            put("action", action); put("device_id", id)
+            extra.forEach { (k, v) -> put(k, v) }
+        }, bearer = token)
+    }
+
+    /** register_device; 403 device_limit → [DeviceLimitException]. */
+    suspend fun registerDevice() {
+        val r = deviceCall("register_device", deviceId, mapOf("name" to deviceDisplayName, "platform" to devicePlatform))
+        if (r.code == 403 || r.errorCode == "device_limit") {
+            if (r.errorCode == "device_limit" || r.json.jObj?.containsKey("devices") == true) {
+                throw DeviceLimitException(DeviceLimit(r.json.jI("limit") ?: 10, parseDevices(r.json.jList("devices"))))
+            }
+        }
+        if (!r.ok) throw generic()
+        setRegistered(true)
+    }
+
+    /** heartbeat; false = dit apparaat is verwijderd (revoked). */
+    suspend fun heartbeat(): Boolean {
+        val r = deviceCall("heartbeat", deviceId)
+        if (r.json.jB("revoked") == true) return false
+        if (!r.ok) throw generic()
+        return true
+    }
+
+    /** list_devices: limiet en apparaten (nieuwste gebruik eerst). */
+    suspend fun listDevices(): DeviceLimit {
+        val r = deviceCall("list_devices", deviceId)
+        if (!r.ok || r.json == null) throw generic()
+        return DeviceLimit(r.json.jI("limit") ?: 10, parseDevices(r.json.jList("devices")))
+    }
+
+    /** remove_device: het apparaat wordt op de server uitgelogd. */
+    suspend fun removeDevice(id: String) = working {
+        val r = deviceCall("remove_device", id)
+        if (!r.ok) throw generic()
+    }
+
+    enum class RegisterResult { OK, LIMIT, FAILED }
+
+    /**
+     * Zorgen dat dit apparaat geregistreerd is (na inloggen of voor een sessie van vóór build 39).
+     * Limiet → [deviceLimit] wordt gezet (scherm "Too many devices"). Netwerkfouten blokkeren nooit.
+     */
+    suspend fun ensureRegistered(): RegisterResult {
+        if (!isSignedIn || !configured) return RegisterResult.FAILED
+        if (deviceRegistered) return RegisterResult.OK
+        return try {
+            registerDevice(); RegisterResult.OK
+        } catch (e: DeviceLimitException) {
+            deviceLimit = e.info; RegisterResult.LIMIT
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            RegisterResult.FAILED
+        }
+    }
+
+    private var checking = false
+
+    /** Bij het starten, bij terugkeer naar de voorgrond en elke 5 minuten: heartbeat (of registreren). */
+    fun deviceCheck() {
+        if (!isSignedIn || !configured || checking || deviceLimit != null) return
+        if (AppState.stage == AppState.Stage.SPLASH || AppState.stage == AppState.Stage.AUTH) return
+        checking = true
+        AppScope.launch {
+            try {
+                if (deviceRegistered) {
+                    val alive = try { heartbeat() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { true }
+                    if (!alive && isSignedIn) revokedSignOut()
+                } else {
+                    ensureRegistered()
+                }
+                // vernieuwen mislukt met 400/401 tijdens de aanroep → sessie is al gewist
+                if (!isSignedIn) AppState.signedOut()
+            } finally {
+                checking = false
+            }
+        }
+    }
+
+    private var heartbeatJob: kotlinx.coroutines.Job? = null
+
+    private fun installLifecycleObserver() {
+        runCatching {
+            androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(
+                androidx.lifecycle.LifecycleEventObserver { _, e ->
+                    when (e) {
+                        androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
+                            deviceCheck()
+                            heartbeatJob?.cancel()
+                            heartbeatJob = AppScope.launch {
+                                while (true) { delay(5 * 60_000L); deviceCheck() }
+                            }
+                        }
+                        androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> { heartbeatJob?.cancel(); heartbeatJob = null }
+                        else -> {}
+                    }
+                }
+            )
+        }
+    }
 
     suspend fun startTv(device: String = deviceName): TvCode {
         val r = post("/functions/v1/device-auth", buildJsonObject { put("action", "start"); put("device", device) })
@@ -327,6 +516,8 @@ object Account {
         if (!isSignedIn || !configured) return
         AppScope.launch {
             if (refresh() == RefreshResult.INVALID) { AppState.signedOut(); return@launch }
+            // apparaat: heartbeat, of registreren als dat nog niet gebeurd is
+            deviceCheck()
             // profielen van het account ophalen/samenvoegen (stil, ook offline geen probleem)
             ProfileSync.launchSync()
         }

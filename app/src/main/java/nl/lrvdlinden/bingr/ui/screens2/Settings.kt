@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Download
@@ -113,6 +114,7 @@ fun SettingsScreen() {
     var pinMode by remember { mutableStateOf<S2PinMode?>(null) }
     var shareStatus by remember { mutableStateOf<String?>(null) }
     var linkingTv by remember { mutableStateOf(false) }
+    var showDevices by remember { mutableStateOf(false) }
     var accountConfirm by remember { mutableStateOf<String?>(null) }
     var accountError by remember { mutableStateOf<String?>(null) }
 
@@ -196,6 +198,7 @@ fun SettingsScreen() {
                 S2Section(L("Account")) {
                     S2Row(L("Signed in as %@", Account.email ?: ""), icon = Icons.Default.AccountCircle)
                     if (!AppState.isTV) S2Row(L("Link a TV"), icon = Icons.Default.Tv, onClick = { linkingTv = true })
+                    S2Row(L("Devices"), icon = Icons.Default.Devices, onClick = { showDevices = true })
                     S2Row(L("Sign out"), icon = Icons.AutoMirrored.Filled.Logout, onClick = { accountConfirm = "signout" })
                     S2Row(L("Delete account"), icon = Icons.Default.Delete, tint = Theme.red, onClick = { accountConfirm = "delete" })
                     if (Account.busy) S2Row("", leading = {
@@ -477,6 +480,7 @@ fun SettingsScreen() {
 
     // MARK: dialogen
     if (linkingTv) S2LinkTvScreen { linkingTv = false }
+    if (showDevices) DevicesScreen { showDevices = false }
     when (accountConfirm) {
         "signout" -> S2ActionDialog(
             L("Sign out of Bingr on this device?"),
