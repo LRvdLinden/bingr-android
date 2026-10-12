@@ -375,7 +375,8 @@ object Playlists {
                 else -> emptyList()
             }
         } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
-        episodeCache = episodeCache + (s.id to eps)
+        // alleen bewaren als er iets binnenkwam: bij een time-out of serverfout opnieuw proberen
+        if (eps.isNotEmpty()) episodeCache = episodeCache + (s.id to eps)
         return eps
     }
 

@@ -31,7 +31,13 @@ class XtreamClient(source: PlaylistSource, val password: String) {
         /** Afleveringen per seizoen: object {"1": [...]} of (bij sommige panelen) een lijst met lijsten. */
         fun episodeGroups(info: JsonElement?): List<Pair<String, List<JsonElement>>> =
             when (val eps = info.jObj?.get("episodes")) {
-                is JsonObject -> eps.entries.map { (k, v) -> k to v.jItems }
+                // {"1": [ep, ep]} of {"1": {"0": ep, "1": ep}}
+                is JsonObject -> eps.entries.map { (k, v) ->
+                    k to when (v) {
+                        is JsonObject -> v.entries.sortedBy { it.key.toIntOrNull() ?: 0 }.map { it.value }
+                        else -> v.jItems
+                    }
+                }
                 is JsonArray -> eps.mapIndexed { i, v ->
                     when (v) {
                         is JsonArray -> (i + 1).toString() to v.toList()
@@ -108,14 +114,16 @@ class XtreamClient(source: PlaylistSource, val password: String) {
         val u = api("get_series_info", listOf("series_id" to sid.toString())) ?: return emptyList()
         val info = Net.json(u)
         val out = ArrayList<Episode>()
+        val seen = HashSet<String>()
         for ((seasonKey, eps) in episodeGroups(info)) {
             for (e in eps) {
-                val eid = e.jS("id") ?: continue
+                val eid = e.jS("id") ?: e.jS("stream_id") ?: continue
+                if (!seen.add(eid)) continue
                 val i = e.jO("info")
                 out.add(Episode(id = "xe$eid", seriesID = series.id,
                     season = e.jI("season") ?: seasonKey.toIntOrNull() ?: 1,
                     number = e.jI("episode_num") ?: 0,
-                    title = e.jS("title") ?: L("Episode"),
+                    title = e.jS("title") ?: e.jS("name") ?: L("Episode"),
                     streamURL = "$server/series/$username/$password/$eid.${e.jS("container_extension") ?: "mp4"}",
                     still = Net.urlValue(i.jS("movie_image")), plot = i.jS("plot"),
                     durationSeconds = i.jI("duration_secs")))
