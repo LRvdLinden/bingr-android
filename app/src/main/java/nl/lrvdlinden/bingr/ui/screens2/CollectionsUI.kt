@@ -169,7 +169,7 @@ fun CollectionRow(c: BingrCollection, only: String? = null) {
         }
         val title = when (e) { is CollectionEntry.C -> e.channel.name; is CollectionEntry.M -> e.movie.title; is CollectionEntry.S -> e.series.title }
         S2ActionDialog(title, listOf(
-            S2Action(L("Remove") + " · " + c.name, Icons.Default.Close, destructive = true) { Collections.toggle(c, ref) },
+            S2Action(L("Remove from collection") + " · " + c.name, Icons.Default.Close, destructive = true) { Collections.toggle(c, ref) },
         ), onDismiss = { menuFor = null })
     }
 }
@@ -217,7 +217,8 @@ fun CollectionsScreen(onClose: () -> Unit) {
     }
     S2Page(L("Collections"), onClose = onClose) {
         item {
-            S2Section(footer = L("Smart collection") + ": " + L("Keywords") + " (sport, F1, …)") {
+            S2Section(footer = L("Collections are shared with all your devices and appear as rows on Home, and in Live TV, Movies and Series. Hold a channel, movie or series to add it.")) {
+                if (list.isEmpty()) S2Row(L("No collections yet. Make your own rows with your favorite channels, movies and series."), tint = Theme.secondary)
                 list.forEach { c ->
                     S2Row(c.name,
                         subtitle = if (c.isSmart) L("Smart collection") + " · " + c.query else L("%d titles", c.items.size),
@@ -236,10 +237,10 @@ fun CollectionsScreen(onClose: () -> Unit) {
     menuFor?.let { c ->
         val i = list.indexOfFirst { it.id == c.id }
         S2ActionDialog(c.name, buildList {
-            add(S2Action(L("Edit"), Icons.Default.Edit) { editing = c })
+            add(S2Action(L("Edit collection"), Icons.Default.Edit) { editing = c })
             if (i > 0) add(S2Action(L("Move up"), Icons.Default.KeyboardArrowUp) { move(c, -1) })
             if (i in 0 until list.size - 1) add(S2Action(L("Move down"), Icons.Default.KeyboardArrowDown) { move(c, 1) })
-            add(S2Action(L("Delete"), Icons.Default.Delete, destructive = true) { Collections.delete(c.id) })
+            add(S2Action(L("Delete collection"), Icons.Default.Delete, destructive = true) { Collections.delete(c.id) })
         }, onDismiss = { menuFor = null })
     }
 }
@@ -286,7 +287,7 @@ fun CollectionEditScreen(existing: BingrCollection?, onClose: () -> Unit, initia
     }
 
     S2FullDialog(onClose) {
-        S2Page(if (existing == null) L("New collection") else existing.name, onClose = onClose, actions = {
+        S2Page(if (existing == null) L("New collection") else L("Edit collection"), onClose = onClose, actions = {
             S2IconButton(Icons.Default.Check, L("Save"), tint = if (name.isBlank()) Theme.secondary else Color.White) { save() }
         }) {
             item {
@@ -344,7 +345,7 @@ fun CollectionEditScreen(existing: BingrCollection?, onClose: () -> Unit, initia
             }
             if (smart) {
                 item {
-                    S2Section(L("Keywords"), "sport, voetbal, F1") {
+                    S2Section(L("Keywords"), L("Keywords, e.g. sport, football, F1")) {
                         Box(Modifier.padding(12.dp)) { S2TextField(query, { query = it }, L("Keywords"), plain = false) }
                         S2Toggle(L("Live TV"), BingrCollection.CHANNEL in types) { types = if (it) types + BingrCollection.CHANNEL else types - BingrCollection.CHANNEL }
                         S2Toggle(L("Movies"), BingrCollection.MOVIE in types) { types = if (it) types + BingrCollection.MOVIE else types - BingrCollection.MOVIE }
@@ -365,7 +366,7 @@ fun CollectionEditScreen(existing: BingrCollection?, onClose: () -> Unit, initia
                 }
             } else {
                 item {
-                    S2Section(L("%d titles", items.size)) {
+                    S2Section(L("%d titles", items.size), L("Add channels, movies and series yourself: hold an item and choose “Add to collection…”.")) {
                         val byRef = preview.associateBy { e ->
                             when (e) { is CollectionEntry.C -> Collections.ref(e.channel); is CollectionEntry.M -> Collections.ref(DetailTarget.MovieT(e.movie)); is CollectionEntry.S -> Collections.ref(DetailTarget.SeriesT(e.series)) }
                         }
@@ -378,7 +379,7 @@ fun CollectionEditScreen(existing: BingrCollection?, onClose: () -> Unit, initia
                                     S2IconButton(Icons.Default.Close, L("Remove"), tint = Theme.secondary, size = tvs(18)) { items = items - r }
                                 })
                         }
-                        if (items.isEmpty()) S2Row(L("Add to collection…"), subtitle = "⋮ / " + L("My List"), tint = Theme.secondary)
+                        if (items.isEmpty()) S2Row(L("Nothing in this collection yet."), tint = Theme.secondary)
                     }
                 }
             }
@@ -392,7 +393,7 @@ fun CollectionEditScreen(existing: BingrCollection?, onClose: () -> Unit, initia
             }
             if (existing != null) item {
                 S2Section {
-                    S2Row(L("Delete"), icon = Icons.Default.Delete, tint = Theme.red, onClick = { confirmDelete = true })
+                    S2Row(L("Delete collection"), icon = Icons.Default.Delete, tint = Theme.red, onClick = { confirmDelete = true })
                 }
             }
             item {
@@ -404,7 +405,7 @@ fun CollectionEditScreen(existing: BingrCollection?, onClose: () -> Unit, initia
     }
     if (confirmDelete && existing != null) {
         S2ActionDialog(existing.name, listOf(
-            S2Action(L("Delete"), Icons.Default.Delete, destructive = true) { Collections.delete(existing.id); onClose() }
+            S2Action(L("Delete collection"), Icons.Default.Delete, destructive = true) { Collections.delete(existing.id); onClose() }
         ), onDismiss = { confirmDelete = false })
     }
 }

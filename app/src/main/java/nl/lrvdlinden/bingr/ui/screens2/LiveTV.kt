@@ -276,7 +276,7 @@ fun LiveTVScreen() {
             S2Action(if (c.catchupDays > 0) L("Guide & catch-up") else L("Guide"), Icons.Default.Schedule) { guideFor = c },
             S2Action(L("Open in Multiview"), Icons.Default.GridView) { AppState.openMultiview(listOf(c), visible) },
             S2Action(L("Add to collection…"), Icons.AutoMirrored.Filled.PlaylistAdd) { collectFor = c },
-        ) + (if (c.catchupDays > 0) listOf(S2Action(L("Catch-up offset") + catchupOffsetLabel(pid, c), Icons.Default.History) { offsetFor = c })
+        ) + (if (c.catchupDays > 0) listOf(S2Action(L("Catch-up offset…") + catchupOffsetLabel(pid, c), Icons.Default.History) { offsetFor = c })
             else emptyList()), onDismiss = { menuFor = null })
     }
     collectFor?.let { c -> AddToCollectionDialog(Collections.ref(c), c.name, c.logo) { collectFor = null } }

@@ -390,7 +390,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                             if (inMyList) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             tint = if (inMyList) Theme.red else Color.White
                         ) { toggleMyList() }
-                        DetailCircleButton(Icons.AutoMirrored.Filled.PlaylistAdd) { addToCollection = true }
+                        if (!target.id.startsWith("rec-")) DetailCircleButton(Icons.AutoMirrored.Filled.PlaylistAdd) { addToCollection = true }
                         if (trailerID != null) DetailCircleButton(Icons.Default.Theaters) { Trailer.open(ctx, trailerID) }
                         if (isMovie) DetailCircleButton(if (isWatchedTitle) Icons.Default.CheckCircle else Icons.Default.Check) { toggleWatchedMovie() }
                         // geen deelknop op Android TV, Google TV en Fire TV (zie docs/ACCOUNT.md, build 45)

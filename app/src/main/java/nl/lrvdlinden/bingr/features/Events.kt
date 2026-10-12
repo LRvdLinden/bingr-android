@@ -48,9 +48,10 @@ object EventParser {
     /** Evenement-info van deze zender, of null als het geen evenement is. */
     fun parse(c: Channel): EventInfo? {
         val inGroup = isEventGroup(c.group)
+        // snel afwijzen (grote lijsten): buiten een evenementgroep alleen namen met "vs"/"-" én een cijfer
+        if (!inGroup && (!c.name.any { it.isDigit() } || !versus.containsMatchIn(c.name))) return null
         val start = parseDate(c.name)
-        val hasVs = versus.containsMatchIn(c.name)
-        if (!inGroup && !(start != null && hasVs)) return null
+        if (!inGroup && start == null) return null
         return EventInfo(cleanTitle(c.name), start)
     }
 

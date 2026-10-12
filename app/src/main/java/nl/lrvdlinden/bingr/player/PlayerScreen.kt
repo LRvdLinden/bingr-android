@@ -400,7 +400,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Filled.Tv, null, tint = Theme.secondary, modifier = Modifier.size(tvs(56)))
                 Spacer(Modifier.height(10.dp))
-                Text(externalTarget.name ?: L("Show on external display"), color = Theme.secondary, fontSize = tsp(14))
+                Text(L("Playing on the external display"), color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.SemiBold)
+                Text(externalTarget.name ?: "", color = Theme.secondary, fontSize = tsp(12))
             }
         } else EngineView(player, Modifier.fillMaxSize())
 

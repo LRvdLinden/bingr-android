@@ -339,7 +339,7 @@ private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss:
                 }
                 // terugkijk-correctie per zender (build 51)
                 if (channel.catchupDays > 0 && pid.isNotEmpty()) {
-                    NetflixButton(L("Catch-up offset") + catchupOffsetLabel(pid, channel), Icons.Default.History,
+                    NetflixButton(L("Catch-up offset…") + catchupOffsetLabel(pid, channel), Icons.Default.History,
                         kind = NetflixKind.SECONDARY) { offsetOpen = true }
                 }
             }

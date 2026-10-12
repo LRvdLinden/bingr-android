@@ -234,7 +234,7 @@ class PlayerController(item: PlayableItem) {
             vlcFrameRateDone = true
             runCatching {
                 val t = (engine as? VlcEngine)?.player?.currentVideoTrack
-                if (t != null && t.frameRateDen > 0 && t.frameRateNum > 0) FrameRateMatcher.apply(t.frameRateNum.toFloat() / t.frameRateDen, null)
+                if (t != null && t.frameRateDen > 0 && t.frameRateNum > 0) FrameRateMatcher.apply(t.frameRateNum.toFloat() / t.frameRateDen, null, exo = false)
             }
         }
         sleepAt?.let { if (System.currentTimeMillis() >= it) { sleepAt = null; pause() } }

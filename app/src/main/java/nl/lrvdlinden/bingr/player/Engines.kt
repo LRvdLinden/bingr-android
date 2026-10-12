@@ -130,7 +130,7 @@ class ExoEngine(ctx: Context) : PlaybackEngine {
     private fun matchFrameRate() {
         if (released || !frameRateMatching || !FrameRateMatcher.enabled) return
         val fps = player.videoFormat?.frameRate ?: return
-        if (fps > 1f) FrameRateMatcher.apply(fps, FrameRateMatcher.surfaceOf(view))
+        if (fps > 1f) FrameRateMatcher.apply(fps, FrameRateMatcher.surfaceOf(view), exo = true)
     }
 
     override val state: EngineState

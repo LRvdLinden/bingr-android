@@ -178,14 +178,21 @@ object FrameRateMatcher {
 
     val enabled: Boolean get() = AppState.isTV && PlayerSettings.matchFrameRate
 
-    fun apply(fps: Float, surface: Surface?) {
+    /**
+     * [surface] = de video-surface van ExoPlayer (API 31+: setFrameRate); zonder surface (VLC) of op oudere
+     * Android-versies wordt de beeldschermmodus gewisseld.
+     */
+    fun apply(fps: Float, surface: Surface?, exo: Boolean = surface != null) {
         if (!enabled || fps <= 1f || !fps.isFinite()) return
-        if (abs(applied - fps) < 0.01f && (surface == null || Build.VERSION.SDK_INT < 31)) return
-        applied = fps
-        if (Build.VERSION.SDK_INT >= 31 && surface != null && surface.isValid) {
+        if (exo && Build.VERSION.SDK_INT >= 31) {
+            // ExoPlayer op API 31+: alleen via de surface (die kan later pas klaar zijn)
+            if (surface == null || !surface.isValid) return
+            applied = fps
             runCatching { surface.setFrameRate(fps, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE, Surface.CHANGE_FRAME_RATE_ALWAYS) }
             return
         }
+        if (abs(applied - fps) < 0.01f) return
+        applied = fps
         switchMode(fps)
     }
 
