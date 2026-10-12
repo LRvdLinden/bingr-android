@@ -108,8 +108,14 @@ fun s2StartOfDay(ms: Long): Long = Calendar.getInstance().apply {
     timeInMillis = ms; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
 }.timeInMillis
 
-/** Een menu-actie (lang indrukken / menuknop). */
-data class S2Action(val label: String, val icon: ImageVector? = null, val destructive: Boolean = false, val run: () -> Unit)
+/**
+ * Een menu-actie (lang indrukken / menuknop). [primary] (build 58): de afspeelactie, getoond als afspeelknop in de
+ * accentkleur ([NetflixKind.PLAY]) in plaats van als gewone rij.
+ */
+data class S2Action(
+    val label: String, val icon: ImageVector? = null, val destructive: Boolean = false, val primary: Boolean = false,
+    val run: () -> Unit,
+)
 
 /**
  * Volledig scherm met terugknop en titel (tegenhanger van een NavigationStack-pagina).
@@ -328,9 +334,15 @@ fun S2ActionDialog(title: String?, actions: List<S2Action>, onDismiss: () -> Uni
             }
             val fr = remember { FocusRequester() }
             actions.forEachIndexed { i, a ->
-                S2Row(a.label, icon = a.icon, tint = if (a.destructive) Theme.red else Color.White,
-                    focusRequester = if (i == 0) fr else null,
-                    onClick = { onDismiss(); a.run() })
+                if (a.primary) {
+                    NetflixButton(a.label, a.icon, kind = NetflixKind.PLAY,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth()
+                            .then(if (i == 0) Modifier.focusRequester(fr) else Modifier)) { onDismiss(); a.run() }
+                } else {
+                    S2Row(a.label, icon = a.icon, tint = if (a.destructive) Theme.red else Color.White,
+                        focusRequester = if (i == 0) fr else null,
+                        onClick = { onDismiss(); a.run() })
+                }
             }
             LaunchedEffect(Unit) { runCatching { fr.requestFocus() } }
         }

@@ -51,7 +51,6 @@ import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.SwitchVideo
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.DesktopAccessDisabled
@@ -573,7 +572,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                         }
                         val itmType = player.item.type
                         if (player.url != null && (itmType == MediaType.LIVE || itmType == MediaType.MOVIE || stremioChoices.size > 1)) {
-                            NetflixButton(L("Other source"), Icons.Filled.SwapHoriz, kind = NetflixKind.SECONDARY) {
+                            NetflixButton(L("Other source"), BingrIcons.otherSources, kind = NetflixKind.SECONDARY) {
                                 panel = if (itmType != MediaType.LIVE && stremioChoices.size > 1) PlayerPanel.SOURCES else PlayerPanel.BACKUP
                             }
                         }
@@ -842,7 +841,7 @@ private fun PlayerControls(
                     if (hasSources) buttons.add(Triple(Icons.Filled.VideoLibrary, L("Sources")) { onPanel(PlayerPanel.SOURCES) })
                     if (live && Playlists.library.channels.isNotEmpty()) buttons.add(Triple(Icons.Filled.GridView, "Multiview") { onMultiview() })
                     // build 52: andere bron (live) en intro/aftiteling markeren (afleveringen)
-                    if (live && Store.playlists.size > 1) buttons.add(Triple(Icons.Filled.SwapHoriz, L("Other source")) { onPanel(PlayerPanel.BACKUP) })
+                    if (live && Store.playlists.size > 1) buttons.add(Triple(BingrIcons.otherSources, L("Other source")) { onPanel(PlayerPanel.BACKUP) })
                     if (canMarkIntro) buttons.add(Triple(Icons.Filled.Flag, L("Intro & credits")) { onPanel(PlayerPanel.INTRO) })
                     buttons.add(Triple(Icons.Filled.Tune, L("Options")) { onPanel(PlayerPanel.OPTIONS) })
                     buttons.forEachIndexed { i, (icon, label, action) ->

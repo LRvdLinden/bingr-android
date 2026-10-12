@@ -441,7 +441,7 @@ fun ContinueCard(title: String, poster: String?, fraction: Double, caption: Stri
 fun ResumeDialog(choice: ResumeChoice, onDismiss: () -> Unit) {
     val pct = (choice.fraction * 100).roundToInt()
     val actions = buildList {
-        add(S2Action(choice.position?.let { L("Resume from %@", Playables.formatPosition(it)) } ?: L("Resume"), Icons.Default.PlayArrow) {
+        add(S2Action(choice.position?.let { L("Resume from %@", Playables.formatPosition(it)) } ?: L("Resume"), Icons.Default.PlayArrow, primary = true) {
             AppScope.launch { ResumePlayer.play(choice.id, choice.title, restart = false)?.let { ScreensNav.detail(it) } }
         })
         add(S2Action(L("Watch from the beginning"), Icons.Default.Replay) {
@@ -858,7 +858,7 @@ fun HeroBanner(target: DetailTarget, onPlay: () -> Unit, onInfo: () -> Unit, pla
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     NetflixButton(
-                        title = L("Play"), icon = Icons.Default.PlayArrow, kind = NetflixKind.PRIMARY,
+                        title = L("Play"), icon = Icons.Default.PlayArrow, kind = NetflixKind.PLAY,
                         modifier = if (playFocus != null) Modifier.focusRequester(playFocus) else Modifier, onClick = onPlay
                     )
                     NetflixButton(title = L("More info"), icon = Icons.Outlined.Info, kind = NetflixKind.SECONDARY, onClick = onInfo)
@@ -892,7 +892,7 @@ fun HeroBanner(target: DetailTarget, onPlay: () -> Unit, onInfo: () -> Unit, pla
                     )
                     Text(tags, color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        NetflixButton(title = L("Play"), icon = Icons.Default.PlayArrow, kind = NetflixKind.PRIMARY,
+                        NetflixButton(title = L("Play"), icon = Icons.Default.PlayArrow, kind = NetflixKind.PLAY,
                             modifier = Modifier.weight(1f), onClick = onPlay)
                         NetflixButton(title = L("Info"), icon = Icons.Outlined.Info, kind = NetflixKind.SECONDARY,
                             modifier = Modifier.weight(1f), onClick = onInfo)

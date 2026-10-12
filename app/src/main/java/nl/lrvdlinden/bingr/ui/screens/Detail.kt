@@ -404,25 +404,32 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                     Modifier.widthIn(max = if (tv) 460.dp else 700.dp).fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(tvs(12))
                 ) {
+                    // afspeelknop (build 58): gevuld in de accentkleur, wit icoon en witte tekst; op TV bij focus
+                    // groter met witte rand en gloed (nooit wit gevuld)
+                    var playFocused by remember { mutableStateOf(false) }
+                    val playShape = RoundedCornerShape(50)
                     Box(
                         Modifier.fillMaxWidth()
                             .focusRequester(playFocus)
-                            .focusLift(1.04f) { play() }
-                            .height(tvs(52)).clip(RoundedCornerShape(50)).background(Color.White),
+                            .onFocusChanged { playFocused = it.isFocused }
+                            .focusLift(if (tv) 1.06f else 1.04f) { play() }
+                            .playFocusRing(tv && playFocused, playShape)
+                            .height(tvs(52)).clip(playShape).background(Theme.red),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(tvs(22)))
+                            Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(tvs(22)))
                             Spacer(Modifier.width(6.dp))
-                            Text(playTitle, color = Color.Black, fontSize = tsp(16), fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Text(playTitle, color = Color.White, fontSize = tsp(16), fontWeight = FontWeight.SemiBold, maxLines = 1)
                         }
                         val p = resumeFraction ?: 0.0
                         if (p > 0.02) {
+                            // voortgang wit op een donkere baan, want de knop zelf is al de accentkleur
                             Box(
                                 Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, end = 24.dp, bottom = 6.dp)
-                                    .fillMaxWidth().height(3.dp)
+                                    .fillMaxWidth().height(3.dp).clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.3f))
                             ) {
-                                Box(Modifier.fillMaxWidth(p.toFloat().coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(50)).background(Theme.red))
+                                Box(Modifier.fillMaxWidth(p.toFloat().coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(50)).background(Color.White))
                             }
                         }
                     }
@@ -445,7 +452,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                         }
                         // geen deelknop op Android TV, Google TV en Fire TV (zie docs/ACCOUNT.md, build 45)
                         if (!tv) DetailCircleButton(Icons.Default.Share) { share() }
-                        DetailCapsule(L("Other sources"), Modifier.weight(1f), busy = sourcesLoading) { openSources() }
+                        DetailCapsule(L("Other sources"), Modifier.weight(1f), icon = BingrIcons.otherSources, busy = sourcesLoading) { openSources() }
                     }
                 }
 
@@ -893,7 +900,7 @@ private fun DetailCircleButton(icon: ImageVector, tint: Color = Color.White, onC
 }
 
 @Composable
-private fun DetailCapsule(text: String, modifier: Modifier, busy: Boolean = false, onClick: () -> Unit) {
+private fun DetailCapsule(text: String, modifier: Modifier, icon: ImageVector? = null, busy: Boolean = false, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val lit = AppState.isTV && focused
     Box(
@@ -905,7 +912,12 @@ private fun DetailCapsule(text: String, modifier: Modifier, busy: Boolean = fals
         contentAlignment = Alignment.Center
     ) {
         if (busy) CircularProgressIndicator(color = if (lit) Color.Black else Color.White, strokeWidth = 2.dp, modifier = Modifier.size(tvs(18)))
-        else Text(text, color = if (lit) Color.Black else Color.White, fontSize = tsp(15), fontWeight = FontWeight.Medium, maxLines = 1)
+        else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            // icoon (build 58): overal hetzelfde voor "Andere bronnen" ([BingrIcons.otherSources])
+            if (icon != null) Icon(icon, null, tint = if (lit) Color.Black else Color.White, modifier = Modifier.size(tvs(18)))
+            Text(text, color = if (lit) Color.Black else Color.White, fontSize = tsp(15), fontWeight = FontWeight.Medium, maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -1017,6 +1029,7 @@ private fun SourcesPanel(
                 .padding(vertical = 14.dp)
         ) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(BingrIcons.otherSources, null, tint = Color.White, modifier = Modifier.padding(end = 8.dp).size(tvs(20)))
                 Text(L("Other sources"), color = Color.White, fontSize = tsp(18), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Text(
                     L("Close"), color = Theme.red, fontSize = tsp(15), fontWeight = FontWeight.SemiBold,

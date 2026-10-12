@@ -323,12 +323,12 @@ private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss:
                     var hasFirst = false
                     fun firstMod(): Modifier = if (!hasFirst) { hasFirst = true; Modifier.focusRequester(first) } else Modifier
                     if (program.isNow) {
-                        NetflixButton(L("Watch live"), Icons.Default.PlayArrow, modifier = firstMod()) {
+                        NetflixButton(L("Watch live"), Icons.Default.PlayArrow, kind = NetflixKind.PLAY, modifier = firstMod()) {
                             onPlayed()
                             AppState.play(Playables.channel(channel, program), zap = Playlists.library.channels)
                         }
                     } else if (canCatchup && catchupURL != null) {
-                        NetflixButton(L("Watch from the start"), Icons.Default.History, modifier = firstMod()) { playCatchup(catchupURL) }
+                        NetflixButton(L("Watch from the start"), Icons.Default.History, kind = NetflixKind.PLAY, modifier = firstMod()) { playCatchup(catchupURL) }
                     } else if (program.start > now) {
                         val on = Store.hasReminder(rid)
                         NetflixButton(if (on) L("Reminder set") else L("Remind me"),

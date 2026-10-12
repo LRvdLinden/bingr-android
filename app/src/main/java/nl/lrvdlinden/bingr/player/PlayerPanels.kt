@@ -69,6 +69,7 @@ fun PlayerSheet(
     title: String,
     onDismiss: () -> Unit,
     doneLabel: String = L("Done"),
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val cfg = LocalConfiguration.current
@@ -84,6 +85,8 @@ fun PlayerSheet(
         ) {
             Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 8.dp, top = 10.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically) {
+                // optioneel icoon voor de titel (build 58, o.a. "Andere bron")
+                if (icon != null) Icon(icon, null, tint = Color.White, modifier = Modifier.padding(end = 8.dp).size(tvs(20)))
                 Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = tsp(18), modifier = Modifier.weight(1f),
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 PlayerFocusText(doneLabel, Modifier.focusRequester(done), bold = true, color = Theme.red, onClick = onDismiss)
@@ -510,7 +513,7 @@ fun BackupSourcesPanel(
     onPick: (BackupSources.Hit) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    PlayerSheet(L("Other source"), onDismiss, doneLabel = L("Close")) {
+    PlayerSheet(L("Other source"), onDismiss, doneLabel = L("Close"), icon = BingrIcons.otherSources) {
         currentServer?.let { item { PlayerSheetNote(L("Now playing from %@", it)) } }
         when {
             hits == null || loading -> item {

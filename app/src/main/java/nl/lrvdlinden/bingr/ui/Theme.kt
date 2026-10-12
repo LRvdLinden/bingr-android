@@ -18,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -94,9 +96,32 @@ fun Modifier.focusLift(
 @Composable
 fun rememberFocus(): MutableState<Boolean> = remember { mutableStateOf(false) }
 
-enum class NetflixKind { PRIMARY, SECONDARY, ACCENT }
+/**
+ * PLAY (build 58): de primaire afspeelknop, overal gevuld in de accentkleur van het profiel met wit icoon en
+ * witte tekst. Op TV wordt hij bij focus nooit wit, maar groter met een witte rand en gloed ([playFocusRing]).
+ */
+enum class NetflixKind { PRIMARY, SECONDARY, ACCENT, PLAY }
 
-/** Afspelen / Meer info: op TV wordt de geselecteerde knop wit (zoals Netflix). */
+/** Vaste iconen die op meerdere plekken hetzelfde moeten zijn (build 58). */
+object BingrIcons {
+    /** "Andere bronnen" / "Andere bron": detailpagina, spelerbalk, bronnenpaneel en foutmelding. */
+    val otherSources: androidx.compose.ui.graphics.vector.ImageVector get() = androidx.compose.material.icons.Icons.Rounded.SwapHoriz
+}
+
+/**
+ * Focusstijl van de afspeelknop op TV (build 58): bij focus een witte rand en een witte gloed; de vulling blijft
+ * de accentkleur. Zonder focus (of op telefoon) een onzichtbare rand van dezelfde dikte, zodat niets verspringt.
+ */
+fun Modifier.playFocusRing(focused: Boolean, shape: androidx.compose.ui.graphics.Shape): Modifier =
+    if (focused) this
+        .shadow(18.dp, shape, clip = false, ambientColor = Color.White, spotColor = Color.White)
+        .border(2.5.dp, Color.White, shape)
+    else this.border(2.5.dp, Color.Transparent, shape)
+
+/**
+ * Afspelen / Meer info: op TV wordt de geselecteerde knop wit (zoals Netflix), behalve de afspeelknop
+ * ([NetflixKind.PLAY]): die blijft in de accentkleur en krijgt bij focus een witte rand en gloed.
+ */
 @Composable
 fun NetflixButton(
     title: String,
@@ -106,9 +131,11 @@ fun NetflixButton(
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val light = if (AppState.isTV) kind != NetflixKind.ACCENT && focused else kind == NetflixKind.PRIMARY
+    val play = kind == NetflixKind.PLAY
+    val shape = RoundedCornerShape(6.dp)
+    val light = !play && (if (AppState.isTV) kind != NetflixKind.ACCENT && focused else kind == NetflixKind.PRIMARY)
     val bg = when {
-        kind == NetflixKind.ACCENT -> Theme.red
+        kind == NetflixKind.ACCENT || play -> Theme.red
         light -> Color.White
         else -> Color.White.copy(alpha = 0.22f)
     }
@@ -116,8 +143,9 @@ fun NetflixButton(
     Row(
         modifier
             .onFocusChanged { focused = it.isFocused }
-            .focusLift(1.06f, onClick = onClick)
-            .clip(RoundedCornerShape(6.dp))
+            .focusLift(if (play) 1.1f else 1.06f, onClick = onClick)
+            .then(if (play) Modifier.playFocusRing(AppState.isTV && focused, shape) else Modifier)
+            .clip(shape)
             .background(bg)
             .padding(horizontal = tvs(20), vertical = tvs(10)),
         verticalAlignment = Alignment.CenterVertically,
