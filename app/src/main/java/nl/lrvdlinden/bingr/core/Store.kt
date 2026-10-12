@@ -178,6 +178,7 @@ object Store {
         profiles = list
         write("profiles", list)
         mainProfileIDStored = list.first().id
+        ProfileSync.profilesChanged()
         val last = Prefs.string("lastPlaylistID")
         mainSourceID = playlists.firstOrNull { it.id == last }?.id ?: playlists.first().id
         saveMeta()
@@ -203,6 +204,7 @@ object Store {
         write("profiles", profiles)
         mainProfileIDStored = main.id
         saveMeta()
+        ProfileSync.profilesChanged()
         adoptLegacyData(main.id)
         if (activeProfileID == null) {
             activeProfileID = main.id
@@ -244,6 +246,45 @@ object Store {
         profiles = if (profiles.any { it.id == p.id }) profiles.map { if (it.id == p.id) p else it } else profiles + p
         write("profiles", profiles)
         if (mainProfileIDStored == null) { mainProfileIDStored = profiles.first().id; saveMeta() }
+        ProfileSync.profilesChanged()
+    }
+
+    /**
+     * Profielen uit het Bingr-account overnemen (zie [ProfileSync]): lijst vervangen en hoofdprofiel zetten.
+     * [adoptFrom]: het automatische hoofdprofiel van dit apparaat dat niet op de server staat; zijn gegevens
+     * (lijsten, voortgang, foto) gaan naar het hoofdprofiel van het account. Pincodes worden niet aangeraakt.
+     */
+    fun applyAccountProfiles(list: List<ViewerProfile>, mainID: String?, adoptFrom: String? = null) {
+        if (list.isEmpty()) return
+        val main = mainID?.takeIf { id -> list.any { it.id == id } } ?: list.first().id
+        val adopted = adoptFrom != null && list.none { it.id == adoptFrom }
+        if (adopted && adoptFrom != null) {
+            runCatching {
+                val old = File(dir, "profile-$adoptFrom")
+                val new = File(dir, "profile-$main")
+                if (old.exists() && (!new.exists() || new.listFiles().isNullOrEmpty())) {
+                    new.deleteRecursively()
+                    old.renameTo(new)
+                } else old.deleteRecursively()
+            }
+            runCatching {
+                val op = photoFile(adoptFrom)
+                if (op.exists()) { if (!photoFile(main).exists()) op.renameTo(photoFile(main)) else op.delete() }
+            }
+            setSecret("profile.$adoptFrom.pin", null)
+            photoVersion++
+        }
+        profiles = list
+        write("profiles", profiles)
+        mainProfileIDStored = main
+        saveMeta()
+        val act = activeProfileID
+        if (act != null && list.none { it.id == act }) {
+            activeProfileID = main
+            Prefs.put("activeProfileID", main)
+            list.firstOrNull { it.id == main }?.let { applyPreferences(it) }
+            loadProfileData()
+        }
     }
 
     /** Profiel met al zijn gegevens verwijderen. Het hoofdaccount kan niet verwijderd worden. */
@@ -251,6 +292,7 @@ object Store {
         if (isMain(p)) return
         profiles = profiles.filterNot { it.id == p.id }
         write("profiles", profiles)
+        ProfileSync.profilesChanged()
         setPhoto(p.id, null)
         setSecret("profile.${p.id}.pin", null)
         runCatching { File(dir, "profile-${p.id}").deleteRecursively() }

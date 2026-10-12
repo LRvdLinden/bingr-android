@@ -51,7 +51,8 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
 - Inloggen met e-mail en wachtwoord, **wachtwoord vergeten** via bingr.online/reset
 - **Android TV / Fire TV**: inloggen met je telefoon via **QR-code** of een code op **bingr.online/tv**, of met e-mail
 - **Tv koppelen** vanaf je telefoon of tablet (*Mijn Bingr → Account → Link a TV*), **uitloggen** en **account verwijderen**
-- De sessie staat alleen op dit apparaat; servers, profielen en voortgang blijven lokaal
+- **Profielen in je account**: bij de eerste login worden je bestaande profielen aan je account gekoppeld en gedeeld met iPhone, iPad, Apple TV en Mac (naam, avatar, kinderprofiel; zonder pincodes en eigen foto's)
+- De sessie staat alleen op dit apparaat; servers, voortgang, lijsten en pincodes blijven lokaal
 
 **Bronnen**
 - M3U/M3U8 + XMLTV-EPG, **Xtream Codes** (incl. catch-up), **Stalker/MAC-portal**

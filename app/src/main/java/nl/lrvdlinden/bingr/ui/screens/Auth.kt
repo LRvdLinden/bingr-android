@@ -158,7 +158,7 @@ private fun AuthEmailCard(onBack: (() -> Unit)?) {
     var error by remember { mutableStateOf<String?>(null) }
     var info by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val busy = Account.busy
+    val busy = Account.busy || ProfileSync.syncing
     val firstField = remember { FocusRequester() }
     val passwordField = remember { FocusRequester() }
 

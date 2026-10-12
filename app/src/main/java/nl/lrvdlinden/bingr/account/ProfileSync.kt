@@ -1,0 +1,225 @@
+package nl.lrvdlinden.bingr
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+
+/**
+ * Profielen van het Bingr-account (tabel `account_data`, PostgREST), volgens "Profielen migreren en delen"
+ * in docs/ACCOUNT.md van de iOS-repo:
+ * - server leeg, lokaal profielen → migreren (uploaden)
+ * - lokaal geen profielen (alleen het automatische hoofdprofiel of niets), server wel → importeren (zelfde id, zonder pincode)
+ * - allebei → samenvoegen op id (lokaal blijft, alleen-op-server wordt toegevoegd) en uploaden
+ * Daarna gaat elke wijziging (hele lijst) na ~2 s naar de server. Pincodes en eigen foto's gaan nooit mee.
+ * Fouten zijn stil: synchroniseren blokkeert de app nooit.
+ */
+object ProfileSync {
+    /** Bezig met de eerste synchronisatie na inloggen. */
+    var syncing by mutableStateOf(false)
+        private set
+
+    /** account_data is gelezen en verwerkt in deze sessie. */
+    private var synced = false
+    /** Profielobjecten zoals de server ze kent (kleine letters id → object), voor extra velden. */
+    private var serverObjects = mapOf<String, JsonObject>()
+    private var lastUploaded: String? = null
+    private var syncJob: Job? = null
+    private var uploadJob: Job? = null
+    /** Tijdens het overnemen van serverprofielen geen upload starten. */
+    private var applying = false
+
+    private val active: Boolean get() = Account.isSignedIn && Account.configured
+
+    /** Uitgelogd / account weg: alles vergeten. */
+    fun reset() {
+        syncJob?.cancel(); syncJob = null
+        uploadJob?.cancel(); uploadJob = null
+        synced = false
+        serverObjects = emptyMap()
+        lastUploaded = null
+        syncing = false
+    }
+
+    /** Aangeroepen door [Store] bij elke wijziging in de profielen. */
+    fun profilesChanged() {
+        if (applying || !active) return
+        if (!synced) { launchSync(); return }
+        uploadJob?.cancel()
+        uploadJob = AppScope.launch {
+            delay(2_000)
+            quietly { upload() }
+        }
+    }
+
+    /** Synchronisatie starten (of de lopende teruggeven). */
+    fun launchSync(): Job? {
+        if (!active) return null
+        syncJob?.takeIf { it.isActive }?.let { return it }
+        val job = AppScope.launch {
+            syncing = true
+            try { quietly { sync() } } finally { syncing = false }
+        }
+        syncJob = job
+        return job
+    }
+
+    /** Synchroniseren en wachten tot het klaar is (na inloggen, vóór "Wie kijkt er?"). */
+    suspend fun syncNow() { launchSync()?.join() }
+
+    private suspend fun quietly(block: suspend () -> Unit) {
+        try { block() } catch (e: CancellationException) { throw e } catch (_: Exception) { }
+    }
+
+    // MARK: netwerk
+
+    private fun headers(token: String) = mapOf(
+        "apikey" to Secrets.supabaseAnonKey,
+        "Authorization" to "Bearer $token",
+        "Accept" to "application/json",
+    )
+
+    /** Aanvraag met een geldig access_token; bij 401 één keer vernieuwen en opnieuw proberen. */
+    private suspend fun call(path: String, method: String, body: String? = null, extra: Map<String, String> = emptyMap()): Http.Response? {
+        var token = Account.validAccessToken()
+        repeat(2) { attempt ->
+            val r = Http.request(Secrets.supabaseUrl + path, method = method, headers = headers(token) + extra, jsonBody = body)
+            if (r.code != 401 || attempt == 1) return r
+            when (Account.refresh()) {
+                Account.RefreshResult.OK -> token = Account.validAccessToken()
+                Account.RefreshResult.INVALID -> { AppState.signedOut(); return null }
+                Account.RefreshResult.OFFLINE -> return null
+            }
+        }
+        return null
+    }
+
+    // MARK: synchroniseren
+
+    private fun idKey(id: String) = id.lowercase()
+
+    private suspend fun sync() {
+        val r = call("/rest/v1/account_data?select=profiles,updated_at", "GET") ?: return
+        if (!r.ok) return
+        val rows = Http.json.parseToJsonElement(r.body.ifBlank { "[]" }) as? JsonArray ?: return
+        val server = rows.firstOrNull().jList("profiles")
+            .mapNotNull { it as? JsonObject }
+            .filter { !it.jS("id").isNullOrBlank() }
+            .sortedBy { it.jI("order") ?: Int.MAX_VALUE }
+        if (!active) return
+        serverObjects = server.associateBy { idKey(it.jS("id")!!) }
+
+        val local = Store.profiles
+        val serverIDs = serverObjects.keys
+        // "lokaal geen profielen": niets, of alleen het automatische hoofdprofiel (dat nog niet op de server staat)
+        val localNone = local.isEmpty() || (local.size == 1 && idKey(local[0].id) !in serverIDs)
+
+        when {
+            server.isEmpty() && local.isEmpty() -> {}
+            server.isEmpty() -> { synced = true; upload() }                 // migreren
+            localNone -> {                                                  // importeren
+                val list = server.map(::toProfile)
+                val main = server.firstOrNull { it.jB("isMain") == true }?.jS("id") ?: list.first().id
+                withoutUpload { Store.applyAccountProfiles(list, main, adoptFrom = local.firstOrNull()?.id) }
+                lastUploaded = payload()
+            }
+            else -> {                                                       // samenvoegen
+                val localIDs = local.map { idKey(it.id) }.toSet()
+                val extra = server.filter { idKey(it.jS("id")!!) !in localIDs }.map(::toProfile)
+                if (extra.isNotEmpty()) withoutUpload { Store.applyAccountProfiles(local + extra, Store.mainProfileID) }
+                synced = true
+                upload()
+            }
+        }
+        synced = true
+    }
+
+    private inline fun withoutUpload(block: () -> Unit) {
+        applying = true
+        try { block() } finally { applying = false }
+    }
+
+    /** Serverprofiel → lokaal profiel (zelfde id, zonder pincode of foto). */
+    private fun toProfile(o: JsonObject): ViewerProfile {
+        val kids = o.jB("kids") ?: false
+        return ViewerProfile(
+            id = o.jS("id")!!,
+            name = o.jS("name")?.takeIf { it.isNotBlank() } ?: L("Profile"),
+            avatar = avatar(o["avatar"], kids),
+            ageLimit = o.jI("ageLimit"),
+            isKids = if (kids) true else null,
+        )
+    }
+
+    private fun avatar(e: JsonElement?, kids: Boolean): PlaylistAvatar {
+        val fallback = if (kids) PlaylistAvatar.randomIllustration() else PlaylistAvatar.random()
+        val palettes = PlaylistAvatar.palettes.size
+        return when (e) {
+            is JsonObject -> {
+                val symbol = (e.jS("symbol") ?: e.jS("emoji") ?: e.jS("figure"))?.takeIf { it.isNotBlank() } ?: fallback.symbol
+                val color = (e.jI("colorIndex") ?: e.jI("color") ?: fallback.colorIndex).let { ((it % palettes) + palettes) % palettes }
+                PlaylistAvatar(symbol, color)
+            }
+            is JsonPrimitive -> if (e is JsonNull || e.content.isBlank()) fallback else fallback.copy(symbol = e.content)
+            else -> fallback
+        }
+    }
+
+    // MARK: uploaden
+
+    /** De hele profiellijst zoals hij naar de server gaat (extra serververvelden blijven bewaard). */
+    private fun profilesJson(): JsonArray {
+        val mainID = Store.mainProfileID
+        return JsonArray(Store.profiles.mapIndexed { i, p ->
+            val base = serverObjects[idKey(p.id)] ?: JsonObject(emptyMap())
+            JsonObject(base + mapOf(
+                "id" to JsonPrimitive(p.id),
+                "name" to JsonPrimitive(p.name),
+                // alleen emoji/figuur + kleur; een eigen foto gaat nooit mee
+                "avatar" to buildJsonObject { put("symbol", p.avatar.symbol); put("colorIndex", p.avatar.colorIndex) },
+                "kids" to JsonPrimitive(p.kids),
+                "ageLimit" to (p.ageLimit?.let { JsonPrimitive(it) } ?: JsonNull),
+                "isMain" to JsonPrimitive(p.id == mainID),
+                "order" to JsonPrimitive(i),
+            ))
+        })
+    }
+
+    private fun payload(): String = profilesJson().toString()
+
+    private suspend fun upload() {
+        if (!active || !synced) return
+        val profiles = profilesJson()
+        if (profiles.isEmpty()) return
+        val key = profiles.toString()
+        if (key == lastUploaded) return
+        val userID = Account.userId ?: return
+        val body = JsonObject(mapOf(
+            "user_id" to JsonPrimitive(userID),
+            "profiles" to profiles,
+            "updated_at" to JsonPrimitive(isoNow()),
+        )).toString()
+        val r = call("/rest/v1/account_data", "POST", body, mapOf("Prefer" to "resolution=merge-duplicates,return=minimal")) ?: return
+        if (r.ok) {
+            lastUploaded = key
+            serverObjects = profiles.mapNotNull { it as? JsonObject }.associateBy { idKey(it.jS("id") ?: "") }
+        }
+    }
+
+    private fun isoNow(): String =
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date())
+}

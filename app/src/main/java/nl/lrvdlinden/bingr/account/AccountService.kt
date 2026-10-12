@@ -8,6 +8,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -34,6 +36,9 @@ object Account {
     private var accessToken: String? = null
     private var refreshToken: String? = null
     private var expiresAt: Long = 0L // epoch-seconden
+    private var storedUserId: String? = null
+    /** Refresh tokens zijn eenmalig: nooit twee vernieuwingen tegelijk. */
+    private val refreshLock = Mutex()
 
     val configured: Boolean get() = Secrets.accountsConfigured
 
@@ -44,6 +49,7 @@ object Account {
         accessToken = p.getString("access_token", null)
         expiresAt = p.getLong("expires_at", 0L)
         email = p.getString("email", null)
+        storedUserId = p.getString("user_id", null)
         isSignedIn = !refreshToken.isNullOrEmpty()
     }
 
@@ -55,20 +61,32 @@ object Account {
         val now = System.currentTimeMillis() / 1000
         val exp = session.jL("expires_at") ?: (now + (session.jL("expires_in") ?: 3600L))
         val mail = session.jO("user").jS("email")?.takeIf { it.isNotEmpty() } ?: fallbackEmail ?: email
-        accessToken = access; refreshToken = refresh; expiresAt = exp; email = mail
+        val uid = session.jO("user").jS("id")?.takeIf { it.isNotEmpty() } ?: jwtSubject(access) ?: storedUserId
+        accessToken = access; refreshToken = refresh; expiresAt = exp; email = mail; storedUserId = uid
         sp?.edit()?.apply {
             putString("access_token", access); putString("refresh_token", refresh)
             putLong("expires_at", exp); if (mail != null) putString("email", mail) else remove("email")
+            if (uid != null) putString("user_id", uid) else remove("user_id")
         }?.apply()
         isSignedIn = true
         return true
     }
 
     private fun clear() {
-        accessToken = null; refreshToken = null; expiresAt = 0L; email = null
+        accessToken = null; refreshToken = null; expiresAt = 0L; email = null; storedUserId = null
         sp?.edit()?.clear()?.apply()
         isSignedIn = false
+        ProfileSync.reset()
     }
+
+    /** user.id uit de sessie (of het `sub` van het access_token). */
+    val userId: String? get() = storedUserId ?: accessToken?.let { jwtSubject(it) }
+
+    private fun jwtSubject(token: String): String? = runCatching {
+        val part = token.split('.').getOrNull(1) ?: return null
+        val bytes = android.util.Base64.decode(part, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+        Http.json.parseToJsonElement(String(bytes, Charsets.UTF_8)).jS("sub")?.takeIf { it.isNotEmpty() }
+    }.getOrNull()
 
     // MARK: aanvragen
 
@@ -118,7 +136,11 @@ object Account {
      */
     suspend fun signUp(email: String, password: String): Boolean = working {
         validate(email, password)
-        val r = post("/auth/v1/signup", creds(email, password))
+        val r = post("/auth/v1/signup", buildJsonObject {
+            put("email", email.trim()); put("password", password)
+            // taal van de bevestigings- en resetmails
+            put("data", buildJsonObject { put("lang", Localizer.language) })
+        })
         if (r.ok) {
             val json = r.json ?: throw generic()
             if (store(json, email.trim())) return@working true
@@ -153,7 +175,9 @@ object Account {
     /**
      * Sessie vernieuwen. 400/401 → uitgelogd (INVALID); netwerk- of serverfout → sessie houden (OFFLINE).
      */
-    suspend fun refresh(): RefreshResult {
+    suspend fun refresh(): RefreshResult = refreshLock.withLock { refreshLocked() }
+
+    private suspend fun refreshLocked(): RefreshResult {
         val token = refreshToken ?: return RefreshResult.INVALID
         if (!configured) return RefreshResult.OFFLINE
         val r = try {
@@ -167,7 +191,7 @@ object Account {
     }
 
     /** Geldig access_token (zo nodig eerst vernieuwen). */
-    private suspend fun validAccessToken(): String {
+    internal suspend fun validAccessToken(): String {
         val now = System.currentTimeMillis() / 1000
         if (accessToken.isNullOrEmpty() || expiresAt - now < 60) {
             when (refresh()) {
@@ -302,7 +326,9 @@ object Account {
     fun refreshOnLaunch() {
         if (!isSignedIn || !configured) return
         AppScope.launch {
-            if (refresh() == RefreshResult.INVALID) AppState.signedOut()
+            if (refresh() == RefreshResult.INVALID) { AppState.signedOut(); return@launch }
+            // profielen van het account ophalen/samenvoegen (stil, ook offline geen probleem)
+            ProfileSync.launchSync()
         }
     }
 }

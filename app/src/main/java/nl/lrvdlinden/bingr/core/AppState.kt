@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** App-brede scope voor achtergrondwerk dat schermen overleeft. */
 val AppScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -47,8 +48,15 @@ object AppState {
         Account.refreshOnLaunch()
     }
 
-    /** Na inloggen (of "Continue without account") → "Wie kijkt er?". */
-    fun signedIn() { stage = Stage.PICKER }
+    /** Na inloggen (of "Continue without account") → profielen van het account ophalen → "Wie kijkt er?". */
+    fun signedIn() {
+        if (!Account.isSignedIn) { stage = Stage.PICKER; return }
+        AppScope.launch {
+            // even wachten op de profielen van het account (nooit langer dan een paar seconden; fouten zijn stil)
+            withTimeoutOrNull(6_000) { ProfileSync.syncNow() }
+            if (stage == Stage.AUTH && Account.isSignedIn) stage = Stage.PICKER
+        }
+    }
 
     /** Uitgelogd, account verwijderd of sessie ongeldig → inlogscherm (speler dicht). */
     fun signedOut() {
