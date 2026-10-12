@@ -109,6 +109,11 @@ class PlayerController(item: PlayableItem) {
     private var trackSignature = ""
     private var recordedHistory = false
     private var vlcFrameRateDone = false
+    /** Tegelijk kijken (build 51): de stream die bij de server is aangemeld, en voor welke titel. */
+    private var streamOwner: StreamSession.Owner? = null
+    private var streamItemID: String? = null
+    /** Niet-null: stream_start gaf 403 stream_limit → scherm "Too many people are watching". */
+    var streamLimit by mutableStateOf<Account.StreamList?>(null); private set
 
     val isLive: Boolean get() = item.type == MediaType.LIVE
     val canTimeshift: Boolean
@@ -153,6 +158,8 @@ class PlayerController(item: PlayableItem) {
         tracksApplied = false; playingTicks = 0
         if (stopped || timer == null) { watchedSeconds = 0.0; recordedHistory = false; attempts = 0; triedOtherEngine = false }
         stopped = false
+        // nieuwe titel of zender (ook zappen en de volgende aflevering): stream_start; herverbinden niet
+        if (!isPreview && streamItemID != item.id) beginStream()
         val exo = forceExo ?: prefersExo(url)
         if (exo != usingExo || timer == null) makeEngine(exo)
         engine.load(url, live = isLive && timeshiftStart == null, startFraction = startFraction())
@@ -334,6 +341,7 @@ class PlayerController(item: PlayableItem) {
     fun seekTo(fraction: Double) { if (!isLive) engine.seekToFraction(fraction) }
 
     fun stop() {
+        endStream()
         if (stopped) return
         stopped = true
         recordHistory()
@@ -353,6 +361,53 @@ class PlayerController(item: PlayableItem) {
         if (!isPreview) { scrobble(Trakt.Scrobble.STOP, 1.0); StateSync.flush() }
         onFinished?.invoke()
     }
+
+    // MARK: tegelijk kijken (build 51)
+
+    private fun beginStream() {
+        endStream()
+        streamItemID = item.id
+        streamLimit = null
+        val o = StreamSession.Owner(info = { streamInfo() }, onBlocked = { l -> blockedByLimit(l) })
+        streamOwner = o
+        StreamSession.begin(o)
+    }
+
+    private fun endStream() {
+        streamOwner?.let { StreamSession.end(it) }
+        streamOwner = null
+        streamItemID = null
+    }
+
+    /** Titel voor de server: bij live de zender plus het programma ("NPO 1 · Journaal"). */
+    private fun streamInfo(): StreamSession.Info {
+        val it = item
+        return when (it.type) {
+            MediaType.LIVE -> {
+                val lib = Playlists.library
+                val prog = it.channelID?.let { cid -> lib.channels.firstOrNull { c -> c.id == cid } }
+                    ?.let { c -> lib.nowPlaying(c)?.title } ?: it.subtitle
+                StreamSession.Info(listOfNotNull(it.title, prog?.takeIf { p -> p.isNotBlank() }).joinToString(" · "), "live", it.channelID ?: it.id)
+            }
+            MediaType.EPISODE -> StreamSession.Info(
+                listOfNotNull(it.title, it.subtitle?.takeIf { s -> s.isNotBlank() }).joinToString(" · "), "episode", it.id)
+            else -> StreamSession.Info(it.title, "movie", it.id)
+        }
+    }
+
+    /** 403 stream_limit: afspelen stoppen; het spelerscherm toont wie er kijkt. */
+    private fun blockedByLimit(l: Account.StreamList) {
+        streamOwner = null
+        streamItemID = null
+        saveProgress()
+        timer?.cancel(); timer = null
+        runCatching { engine.stop() }
+        isPlaying = false; isBuffering = false; reconnecting = false
+        streamLimit = l
+    }
+
+    /** "Close" of "Try again" op het scherm "Too many people are watching". */
+    fun clearStreamLimit() { streamLimit = null }
 
     /**
      * Scrobble naar Trakt. Bij [announce] kort laten zien dat Trakt meekijkt (of waarom niet), als

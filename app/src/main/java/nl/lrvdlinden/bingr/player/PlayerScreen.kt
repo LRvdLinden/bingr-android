@@ -527,6 +527,17 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         }
     }
 
+    // MARK: tegelijk kijken (build 51)
+
+    player.streamLimit?.let { info ->
+        StreamLimitScreen(
+            info,
+            onRetry = { player.clearStreamLimit(); scope.launch { start(player.item) } },
+            onClose = { player.clearStreamLimit(); close() },
+        )
+        return
+    }
+
     // MARK: panelen
 
     when (panel) {

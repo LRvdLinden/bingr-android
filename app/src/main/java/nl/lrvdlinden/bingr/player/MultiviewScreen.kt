@@ -82,6 +82,30 @@ fun MultiviewScreen(onClose: () -> Unit) {
     var menuFor by remember { mutableStateOf<String?>(null) }
     val firstTile = remember { FocusRequester() }
     val isTV = AppState.isTV
+    /** Tegelijk kijken (build 51): multiview telt als één stream. */
+    var streamLimit by remember { mutableStateOf<Account.StreamList?>(null) }
+    var streamOwner by remember { mutableStateOf<StreamSession.Owner?>(null) }
+
+    fun beginStream() {
+        val o = StreamSession.Owner(
+            info = {
+                val names = tiles.map { it.channel.name }
+                StreamSession.Info(
+                    (listOf("Multiview") + names.take(4)).joinToString(" · "), "live",
+                    tiles.firstOrNull()?.channel?.id ?: "multiview",
+                )
+            },
+            onBlocked = { l ->
+                streamOwner = null
+                tiles.forEach { it.controller.stop() }
+                streamLimit = l
+            },
+        )
+        streamOwner = o
+        StreamSession.begin(o)
+    }
+
+    fun endStream() { streamOwner?.let { StreamSession.end(it) }; streamOwner = null }
 
     fun focus(t: MultiviewTile) {
         active = t.id
@@ -110,6 +134,7 @@ fun MultiviewScreen(onClose: () -> Unit) {
     }
 
     fun closeAll() {
+        endStream()
         tiles.forEach { it.controller.stop() }
         tiles.clear()
         AppState.showMultiview = false
@@ -133,10 +158,12 @@ fun MultiviewScreen(onClose: () -> Unit) {
             for (c in AppState.multiviewStart.take(4)) add(c)
             if (tiles.isEmpty()) picking = true
         }
+        beginStream()
     }
     DisposableEffect(Unit) {
         MainActivity.current?.keepScreenOn(true)
         onDispose {
+            endStream()
             tiles.forEach { it.controller.stop() }
             MainActivity.current?.keepScreenOn(false)
         }
@@ -222,6 +249,14 @@ fun MultiviewScreen(onClose: () -> Unit) {
             picking = false
             add(c)
         }
+    }
+
+    streamLimit?.let { info ->
+        StreamLimitScreen(
+            info,
+            onRetry = { streamLimit = null; tiles.forEach { it.controller.retry() }; beginStream() },
+            onClose = { streamLimit = null; closeAll() },
+        )
     }
 }
 

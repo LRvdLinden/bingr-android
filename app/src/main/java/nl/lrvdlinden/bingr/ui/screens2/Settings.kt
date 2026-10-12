@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Download
@@ -109,7 +110,7 @@ private fun S2AppFooter() {
     }
 }
 
-private enum class S2SettingsSub { CATEGORIES, MANAGE, HISTORY, NAS, CHECK, COLLECTIONS, HOME_SCREEN }
+private enum class S2SettingsSub { CATEGORIES, MANAGE, HISTORY, NAS, CHECK, COLLECTIONS, HOME_SCREEN, WATCHING, WATCH_LOG }
 private enum class S2PinMode { SET, UNLOCK, DISABLE }
 
 private const val S2_FILE_AUTHORITY = "nl.lrvdlinden.bingr.files"
@@ -177,6 +178,15 @@ fun SettingsScreen() {
     }
 
     LaunchedEffect(Unit) { runCatching { OpenSubtitles.refreshUser() } }
+    /** Wie kijkt er nu (alleen hoofdprofiel), elke 30 s bijgewerkt. */
+    var watching by remember { mutableStateOf<Account.StreamList?>(null) }
+    LaunchedEffect(Account.isSignedIn, Store.canManage, sub) {
+        if (!Account.isSignedIn || !Store.canManage || sub != null) return@LaunchedEffect
+        while (true) {
+            try { watching = Account.listStreams() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { }
+            kotlinx.coroutines.delay(30_000L)
+        }
+    }
 
     // volledige subschermen (vervangen de lijst, zodat de focus erin blijft)
     when (sub) {
@@ -187,6 +197,8 @@ fun SettingsScreen() {
         S2SettingsSub.CHECK -> { SourceCheckScreen { sub = null }; return }
         S2SettingsSub.COLLECTIONS -> { CollectionsScreen { sub = null }; return }
         S2SettingsSub.HOME_SCREEN -> { HomeScreenSettings { sub = null }; return }
+        S2SettingsSub.WATCHING -> { WatchingNowScreen { sub = null }; return }
+        S2SettingsSub.WATCH_LOG -> { WatchLogScreen { sub = null }; return }
         null -> {}
     }
     val editingNow = editing
@@ -242,6 +254,12 @@ fun SettingsScreen() {
                     S2Row(L("Signed in as %@", Account.email ?: ""), icon = Icons.Default.AccountCircle)
                     if (!AppState.isTV) S2Row(L("Link a TV"), icon = Icons.Default.Tv, onClick = { linkingTv = true })
                     S2Row(L("Devices"), icon = Icons.Default.Devices, onClick = { showDevices = true })
+                    if (isMain) {
+                        S2Row(L("Watching now"), icon = Icons.Default.PlayCircle,
+                            value = watching?.let { w -> L("%d of %d watching now", w.streams.size, w.limit) },
+                            onClick = { sub = S2SettingsSub.WATCHING })
+                        S2Row(L("Watch history (7 days)"), icon = Icons.Default.History, onClick = { sub = S2SettingsSub.WATCH_LOG })
+                    }
                     S2Row(L("Sign out"), icon = Icons.AutoMirrored.Filled.Logout, onClick = { accountConfirm = "signout" })
                     S2Row(L("Delete account"), icon = Icons.Default.Delete, tint = Theme.red, onClick = { accountConfirm = "delete" })
                     if (Account.busy) S2Row("", leading = {

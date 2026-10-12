@@ -50,7 +50,7 @@ object AppState {
     }
 
     /**
-     * Na inloggen (of "Continue without account") → apparaat registreren (max. 10; bij de limiet
+     * Na inloggen (of "Continue without account") → apparaat registreren (limiet van de server; bij de limiet
      * eerst het scherm "Too many devices") → profielen en servers van het account ophalen → "Wie kijkt er?".
      */
     fun signedIn() {

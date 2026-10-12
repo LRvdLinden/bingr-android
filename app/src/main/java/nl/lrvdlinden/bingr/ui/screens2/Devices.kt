@@ -65,7 +65,7 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
-// Gekoppelde apparaten (max. 10), zie docs/ACCOUNT.md in de iOS-repo.
+// Gekoppelde apparaten (limiet van de server, nu 15), zie docs/ACCOUNT.md in de iOS-repo.
 
 /** Icoon per platform. */
 fun deviceIcon(platform: String): ImageVector = when (platform) {
@@ -122,7 +122,7 @@ private fun DeviceRow(
             }
             if (d.platform.isNotEmpty()) Text(d.platform, color = Theme.secondary, fontSize = tsp(13), maxLines = 1)
             val parts = listOfNotNull(
-                d.createdAt?.let { L("Linked %@", deviceDate(it)) },
+                (d.signedInAt ?: d.createdAt)?.let { L("Signed in since %@", deviceDate(it)) },
                 deviceLastUsed(d.lastSeenAt, d.current)?.let { L("Last used %@", it) },
             )
             if (parts.isNotEmpty()) Text(parts.joinToString(" · "), color = Theme.secondary, fontSize = tsp(12), maxLines = 2,

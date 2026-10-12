@@ -287,7 +287,7 @@ object Account {
             else -> "Android"
         }
 
-    // MARK: gekoppelde apparaten (max. 10)
+    // MARK: gekoppelde apparaten (limiet van de server)
 
     /** Vaste UUID van dit apparaat; één keer gemaakt, alleen lokaal, blijft na uitloggen. */
     val deviceId: String
@@ -335,10 +335,14 @@ object Account {
     data class Device(
         val id: String, val name: String, val platform: String,
         val createdAt: Long?, val lastSeenAt: Long?, val current: Boolean,
+        val signedInAt: Long? = null,
     )
 
     /** Antwoord van register_device met 403 device_limit. */
     data class DeviceLimit(val limit: Int, val devices: List<Device>)
+
+    /** Alleen als de server geen `limit` meestuurt; normaal komt de limiet altijd van de server. */
+    private const val DEFAULT_DEVICE_LIMIT = 15
 
     class DeviceLimitException(val info: DeviceLimit) : Exception("device_limit")
 
@@ -356,6 +360,7 @@ object Account {
                 createdAt = Net.parseISODate(d.jS("created_at")),
                 lastSeenAt = Net.parseISODate(d.jS("last_seen_at")),
                 current = d.jB("current") == true || id == own,
+                signedInAt = Net.parseISODate(d.jS("signed_in_at")),
             )
         }
     }
@@ -373,7 +378,7 @@ object Account {
         val r = deviceCall("register_device", deviceId, mapOf("name" to deviceDisplayName, "platform" to devicePlatform))
         if (r.code == 403 || r.errorCode == "device_limit") {
             if (r.errorCode == "device_limit" || r.json.jObj?.containsKey("devices") == true) {
-                throw DeviceLimitException(DeviceLimit(r.json.jI("limit") ?: 10, parseDevices(r.json.jList("devices"))))
+                throw DeviceLimitException(DeviceLimit(r.json.jI("limit") ?: DEFAULT_DEVICE_LIMIT, parseDevices(r.json.jList("devices"))))
             }
         }
         if (!r.ok) throw generic()
@@ -392,7 +397,7 @@ object Account {
     suspend fun listDevices(): DeviceLimit {
         val r = deviceCall("list_devices", deviceId)
         if (!r.ok || r.json == null) throw generic()
-        return DeviceLimit(r.json.jI("limit") ?: 10, parseDevices(r.json.jList("devices")))
+        return DeviceLimit(r.json.jI("limit") ?: DEFAULT_DEVICE_LIMIT, parseDevices(r.json.jList("devices")))
     }
 
     /** remove_device: het apparaat wordt op de server uitgelogd. */
@@ -771,5 +776,103 @@ object Account {
         ))
         val r = authedDeviceAuth(body) ?: return false
         return r.ok && r.json.jB("ok") != false
+    }
+
+    // MARK: tegelijk kijken, wie kijkt er nu, kijkgeschiedenis (build 51)
+
+    /** Eén lopende stream uit list_streams of het 403-antwoord van stream_start. */
+    data class StreamInfo(
+        val deviceId: String, val deviceName: String, val platform: String, val profileName: String,
+        val title: String, val kind: String, val startedAt: Long?, val lastPing: Long?, val signedInAt: Long?,
+    ) {
+        val current: Boolean get() = deviceId == Account.deviceId
+    }
+
+    data class StreamList(val limit: Int, val streams: List<StreamInfo>)
+
+    /** Eén regel uit watch_log. */
+    data class WatchEntry(
+        val deviceName: String, val platform: String, val profileName: String, val title: String, val kind: String,
+        val startedAt: Long, val endedAt: Long?, val minutes: Int,
+    )
+
+    sealed class StreamStart {
+        data object Ok : StreamStart()
+        data class Limit(val list: StreamList) : StreamStart()
+        /** Netwerkfout of geen sessie: gewoon afspelen. */
+        data object Failed : StreamStart()
+    }
+
+    private const val DEFAULT_STREAM_LIMIT = 6
+
+    private fun parseStreams(list: List<JsonElement>): List<StreamInfo> = list.mapNotNull { s ->
+        val id = s.jS("device_id")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        val platform = s.jS("platform") ?: ""
+        StreamInfo(
+            deviceId = id,
+            deviceName = s.jS("device_name")?.takeIf { it.isNotBlank() } ?: platform.ifEmpty { "?" },
+            platform = platform,
+            profileName = s.jS("profile_name") ?: "",
+            title = s.jS("title") ?: "",
+            kind = s.jS("kind") ?: "",
+            startedAt = Net.parseISODate(s.jS("started_at")),
+            lastPing = Net.parseISODate(s.jS("last_ping")),
+            signedInAt = Net.parseISODate(s.jS("signed_in_at")),
+        )
+    }
+
+    /** stream_start; 403 stream_limit = [StreamStart.Limit]. */
+    suspend fun streamStart(profileId: String, profileName: String, title: String, kind: String, contentId: String): StreamStart {
+        val r = authedDeviceAuth(buildJsonObject {
+            put("action", "stream_start"); put("device_id", deviceId)
+            put("profile_id", profileId); put("profile_name", profileName)
+            put("title", title); put("kind", kind); put("content_id", contentId)
+        }) ?: return StreamStart.Failed
+        if (r.code == 403 && (r.errorCode == "stream_limit" || r.json.jObj?.containsKey("streams") == true)) {
+            return StreamStart.Limit(StreamList(r.json.jI("limit") ?: DEFAULT_STREAM_LIMIT, parseStreams(r.json.jList("streams"))))
+        }
+        return if (r.ok) StreamStart.Ok else StreamStart.Failed
+    }
+
+    /** stream_ping: true = telt nog, false = gestopt (opnieuw stream_start), null = netwerkfout. */
+    suspend fun streamPing(title: String?): Boolean? {
+        val r = authedDeviceAuth(buildJsonObject {
+            put("action", "stream_ping"); put("device_id", deviceId)
+            if (!title.isNullOrBlank()) put("title", title)
+        }) ?: return null
+        if (r.json.jB("stopped") == true) return false
+        return if (r.ok) true else null
+    }
+
+    suspend fun streamStop() {
+        authedDeviceAuth(buildJsonObject { put("action", "stream_stop"); put("device_id", deviceId) })
+    }
+
+    /** list_streams: limiet en wie er nu kijkt. */
+    suspend fun listStreams(): StreamList {
+        val r = authedDeviceAuth(buildJsonObject { put("action", "list_streams") }) ?: throw AccountException(L("No internet connection."))
+        if (!r.ok || r.json == null) throw generic()
+        return StreamList(r.json.jI("limit") ?: DEFAULT_STREAM_LIMIT, parseStreams(r.json.jList("streams")))
+    }
+
+    /** watch_log over de laatste 7 dagen, nieuwste eerst. */
+    suspend fun watchLog(days: Int = 7): List<WatchEntry> {
+        val r = authedDeviceAuth(buildJsonObject { put("action", "watch_log"); put("days", days) })
+            ?: throw AccountException(L("No internet connection."))
+        if (!r.ok || r.json == null) throw generic()
+        return r.json.jList("entries").mapNotNull { e ->
+            val start = Net.parseISODate(e.jS("started_at")) ?: return@mapNotNull null
+            val platform = e.jS("platform") ?: ""
+            WatchEntry(
+                deviceName = e.jS("device_name")?.takeIf { it.isNotBlank() } ?: platform.ifEmpty { "?" },
+                platform = platform,
+                profileName = e.jS("profile_name") ?: "",
+                title = e.jS("title") ?: "",
+                kind = e.jS("kind") ?: "",
+                startedAt = start,
+                endedAt = Net.parseISODate(e.jS("ended_at")),
+                minutes = e.jI("minutes") ?: 0,
+            )
+        }.sortedByDescending { it.startedAt }
     }
 }
