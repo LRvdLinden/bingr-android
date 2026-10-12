@@ -2,6 +2,25 @@
 
 Alle versies van Bingr voor Android, Android TV en Fire TV (iPhone, iPad, Apple TV en Mac: [iptv-ios-appletv](https://github.com/LRvdLinden/iptv-ios-appletv/blob/main/CHANGELOG.md)). Per versie het buildnummer en de datum; het buildnummer loopt gelijk over alle platforms.
 
+## Versie 1.0.0 · Build 51
+_2026-10-12_
+
+- Tegelijk kijken: met één account kijk je op maximaal 6 schermen tegelijk; zijn het er meer, dan zie je wie er kijkt
+- Apparaten: je account werkt nu op maximaal 15 apparaten, met per apparaat sinds wanneer het is ingelogd
+- Wie kijkt er nu (hoofdaccount): Mijn Bingr → Account toont welk apparaat en profiel wat kijkt, en hoe lang al
+- Kijkgeschiedenis van 7 dagen (hoofdaccount): per dag wat er op welk apparaat en profiel gekeken is
+- Collecties: maak je eigen rijen met naam en afbeelding, handmatig (Aan collectie toevoegen…) of slim met zoekwoorden
+- Startscherm per profiel: zet rijen aan of uit en in je eigen volgorde (Mijn Bingr → Startscherm)
+- Zappen: veeg in de live-speler omhoog of omlaag naar de volgende of vorige zender, met zenderbalk en instelbare zapvertraging
+- Zendervoorbeeld: in Live TV en de tv-gids speelt de geselecteerde zender na een seconde zonder geluid mee
+- Terugkijk-correctie per zender: verschuif het begin van terugkijken met −120 tot +120 minuten
+- Apple TV: beeldfrequentie en dynamisch bereik passen zich aan de stream aan
+- Direct laden: je bewaarde lijst staat meteen in beeld en wordt op de achtergrond bijgewerkt
+- Evenementzenders (PPV, events) in een eigen groep Evenementen, op begintijd met LIVE-label
+- Zoeken: resultaten tonen de kleur van hun bron als je meerdere bronnen hebt
+- iPhone en iPad: op een extern scherm speelt de video schermvullend, de bediening blijft op je toestel
+- Website: servers, collecties, wie kijkt er nu en kijkgeschiedenis in Mijn Bingr
+
 ## Versie 1.0.0 · Build 50
 _2026-10-12_
 

@@ -59,8 +59,11 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
 - **Trakt en OpenSubtitles: gewoon inloggen**, de sleutels komen veilig van de Bingr-server
 - **Alles (Trakt, OpenSubtitles, instellingen, Mijn lijst, voortgang, bekeken, pincodes, herinneringen) gaat versleuteld mee met je account**: na opnieuw installeren of op een nieuw apparaat staat alles na het inloggen weer klaar
 - De sessie staat alleen op dit apparaat. Logt een ander account in, dan worden de servers, profielen en gegevens van het vorige account eerst van het apparaat gewist
-- **Max. 10 apparaten** per account: zit je aan de limiet, dan verwijder je bij het inloggen eerst een apparaat (*Too many devices*). Beheer al je apparaten via *Mijn Bingr → Account → Devices* (ook op tv); een verwijderd apparaat wordt **automatisch uitgelogd**
+- **Max. 15 apparaten** per account (de limiet komt van de server, build 51): zit je aan de limiet, dan verwijder je bij het inloggen eerst een apparaat (*Too many devices*). Beheer al je apparaten via *Mijn Bingr → Account → Devices* (ook op tv); een verwijderd apparaat wordt **automatisch uitgelogd**
 - **Apparaten hernoemen**: geef elk gekoppeld apparaat (ook dit apparaat) een eigen naam via *Mijn Bingr → Account → Devices → Rename*, ook op tv met het tv-toetsenbord en op bingr.online/account. Android-telefoon, -tablet, Android TV, **Google TV** en Fire TV worden elk als eigen apparaattype herkend
+- **Max. 6 schermen tegelijk**: elke stream (ook zappen, de volgende aflevering en multiview als één stream) meldt zich aan bij je account; zitten er al 6 te kijken, dan stopt het afspelen met *Too many people are watching*, met wie er kijkt en *Try again* / *Close*. Zonder internet wordt nooit geblokkeerd (build 51)
+- **Wie kijkt er nu** (hoofdprofiel, *Mijn Bingr → Account → Watching now*): per apparaat het profiel, de titel, hoe lang al en sinds wanneer ingelogd, elke 30 s ververst (build 51)
+- **Kijkgeschiedenis van 7 dagen** voor het hele account (hoofdprofiel): per dag met tijd, titel, profiel, apparaat en minuten; een tik opent de film of serie als die in je bibliotheek staat (build 51)
 
 **Bronnen**
 - M3U/M3U8 + XMLTV-EPG, **Xtream Codes** (incl. catch-up), **Stalker/MAC-portal**
