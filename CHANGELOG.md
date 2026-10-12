@@ -2,150 +2,212 @@
 
 Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV en Fire TV. iPhone, iPad, Apple TV en Mac: [iptv-ios-appletv](https://github.com/LRvdLinden/iptv-ios-appletv/blob/main/CHANGELOG.md) · alles: [bingr.online/changelog](https://bingr.online/changelog/).
 
-Per build: **✨ Nieuw**, **⚡ Verbeterd** en **🛠 Opgelost**, met per punt de platforms waarvoor het geldt.
+Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
 ## Versie 1.0.0 · Build 51
 _12 oktober 2026_
 
-### ✨ Nieuw
+### Alle apps
 
-- Tegelijk kijken: met één account kijk je op maximaal 6 schermen tegelijk; zijn het er meer, dan zie je wie er kijkt `Alle apps`
-- Apparaten: je account werkt nu op maximaal 15 apparaten, met per apparaat sinds wanneer het is ingelogd `Alle apps`
-- Wie kijkt er nu (hoofdaccount): Mijn Bingr → Account toont welk apparaat en profiel wat kijkt, en hoe lang al `Alle apps`
-- Kijkgeschiedenis van 7 dagen (hoofdaccount): per dag wat er op welk apparaat en profiel gekeken is `Alle apps`
-- Collecties: maak je eigen rijen met naam en afbeelding, handmatig (Aan collectie toevoegen…) of slim met zoekwoorden `Alle apps`
-- Startscherm per profiel: zet rijen aan of uit en in je eigen volgorde (Mijn Bingr → Startscherm) `Alle apps`
-- Zappen: veeg in de live-speler omhoog of omlaag naar de volgende of vorige zender, met zenderbalk en instelbare zapvertraging `Alle apps`
-- Zendervoorbeeld: in Live TV en de tv-gids speelt de geselecteerde zender na een seconde zonder geluid mee `Alle apps`
-- Terugkijk-correctie per zender: verschuif het begin van terugkijken met −120 tot +120 minuten `Alle apps`
-- Beeldfrequentie aanpassen: de tv schakelt naar de beeldfrequentie van de stream (op Apple TV ook HDR/Dolby Vision) `tvOS` `Android TV`
-- Evenementzenders (PPV, events) in een eigen groep Evenementen, op begintijd met LIVE-label `Alle apps`
-- Zoeken: resultaten tonen de kleur van hun bron als je meerdere bronnen hebt `Alle apps`
-- Extern scherm: op een aangesloten monitor of tv speelt de video schermvullend, de bediening blijft op je telefoon of tablet `iOS` `iPadOS` `Android`
-- Na het wijzigen van je wachtwoord word je op al je apparaten automatisch uitgelogd `Alle apps` `Web`
+**Nieuw**
 
-### ⚡ Verbeterd
+- Tegelijk kijken: met één account kijk je op maximaal 6 schermen tegelijk; zijn het er meer, dan zie je wie er kijkt
+- Apparaten: je account werkt nu op maximaal 15 apparaten, met per apparaat sinds wanneer het is ingelogd
+- Wie kijkt er nu (hoofdaccount): Mijn Bingr → Account toont welk apparaat en profiel wat kijkt, en hoe lang al
+- Kijkgeschiedenis van 7 dagen (hoofdaccount): per dag wat er op welk apparaat en profiel gekeken is
+- Collecties: maak je eigen rijen met naam en afbeelding, handmatig (Aan collectie toevoegen…) of slim met zoekwoorden
+- Startscherm per profiel: zet rijen aan of uit en in je eigen volgorde (Mijn Bingr → Startscherm)
+- Zappen: veeg in de live-speler omhoog of omlaag naar de volgende of vorige zender, met zenderbalk en instelbare zapvertraging
+- Zendervoorbeeld: in Live TV en de tv-gids speelt de geselecteerde zender na een seconde zonder geluid mee
+- Terugkijk-correctie per zender: verschuif het begin van terugkijken met −120 tot +120 minuten
+- Evenementzenders (PPV, events) in een eigen groep Evenementen, op begintijd met LIVE-label
+- Zoeken: resultaten tonen de kleur van hun bron als je meerdere bronnen hebt
 
-- Direct laden: je bewaarde lijst staat meteen in beeld en wordt op de achtergrond bijgewerkt `Alle apps`
+**Verbeterd**
+
+- Direct laden: je bewaarde lijst staat meteen in beeld en wordt op de achtergrond bijgewerkt
+
+### Alle apps en de website
+
+**Nieuw**
+
+- Na het wijzigen van je wachtwoord word je op al je apparaten automatisch uitgelogd
+
+### iOS, iPadOS en Android
+
+**Nieuw**
+
+- Extern scherm: op een aangesloten monitor of tv speelt de video schermvullend, de bediening blijft op je telefoon of tablet
+
+### tvOS en Android TV
+
+**Nieuw**
+
+- Beeldfrequentie aanpassen: de tv schakelt naar de beeldfrequentie van de stream (op Apple TV ook HDR/Dolby Vision)
 
 ## Versie 1.0.0 · Build 50
 _12 oktober 2026_
 
-### ✨ Nieuw
+### Alle apps
 
-- Nieuw in Mijn Bingr: Bron controleren — zie precies hoeveel zenders, films en series je server aanbiedt en hoeveel Bingr inleest `Alle apps`
+**Nieuw**
 
-### ⚡ Verbeterd
+- Nieuw in Mijn Bingr: Bron controleren — zie precies hoeveel zenders, films en series je server aanbiedt en hoeveel Bingr inleest
 
-- Seriepagina opent standaard op het nieuwste seizoen (of op het seizoen waar je gebleven bent) `Alle apps`
+**Verbeterd**
+
+- Seriepagina opent standaard op het nieuwste seizoen (of op het seizoen waar je gebleven bent)
 
 ## Versie 1.0.0 · Build 49
 _12 oktober 2026_
 
-### ✨ Nieuw
+### Alle apps
 
-- Tik op een acteur of actrice voor een eigen pagina met foto, bio en alle films en series waarin die speelt — wat in je afspeellijst staat kijk je direct `Alle apps`
-- Zoeken op naam van een acteur of actrice toont ook personen `Alle apps`
+**Nieuw**
 
-### ⚡ Verbeterd
+- Tik op een acteur of actrice voor een eigen pagina met foto, bio en alle films en series waarin die speelt — wat in je afspeellijst staat kijk je direct
+- Zoeken op naam van een acteur of actrice toont ook personen
 
-- Copyright onderaan Mijn Bingr: © 2026 Bingr `Alle apps`
+**Verbeterd**
+
+- Copyright onderaan Mijn Bingr: © 2026 Bingr
 
 ## Versie 1.0.0 · Build 48
 _12 oktober 2026_
 
-### ⚡ Verbeterd
+### Alle apps
 
-- Lukt het ophalen van afleveringen even niet, dan probeert Bingr het de volgende keer opnieuw `Alle apps`
+**Verbeterd**
 
-### 🛠 Opgelost
+- Lukt het ophalen van afleveringen even niet, dan probeert Bingr het de volgende keer opnieuw
 
-- Series van Xtream-servers tonen weer alle seizoenen en afleveringen, ook als de server ze in een andere vorm stuurt `Alle apps`
+**Opgelost**
+
+- Series van Xtream-servers tonen weer alle seizoenen en afleveringen, ook als de server ze in een andere vorm stuurt
 
 ## Versie 1.0.0 · Build 47
 _12 oktober 2026_
 
-### ✨ Nieuw
+### Alle apps
 
-- Onderaan Mijn Bingr: app-icoon, versie- en buildnummer en copyright `Alle apps`
+**Nieuw**
+
+- Onderaan Mijn Bingr: app-icoon, versie- en buildnummer en copyright
 
 ## Versie 1.0.0 · Build 45
 _12 oktober 2026_
 
-### ✨ Nieuw
+### Alle apps
 
-- Gekoppelde apparaten een eigen naam geven of wijzigen, in de app en op bingr.online/account `Alle apps`
-- Google TV wordt als eigen apparaattype herkend `Android TV`
+**Nieuw**
 
-### ⚡ Verbeterd
+- Gekoppelde apparaten een eigen naam geven of wijzigen, in de app en op bingr.online/account
 
-- Geen deelknop meer op de detailpagina op Apple TV, Android TV, Google TV en Fire TV `tvOS` `Android TV`
+### tvOS en Android TV
+
+**Verbeterd**
+
+- Geen deelknop meer op de detailpagina op Apple TV, Android TV, Google TV en Fire TV
+
+### Android TV
+
+**Nieuw**
+
+- Google TV wordt als eigen apparaattype herkend
 
 ## Versie 1.0.0 · Build 44
 _12 oktober 2026_
 
-### ✨ Nieuw
+### Alle apps
 
-- Alles gaat mee met je account: Trakt- en OpenSubtitles-login, instellingen, Mijn lijst, Verder kijken, bekeken, kijkgeschiedenis, pincodes en herinneringen — na opnieuw installeren of op een nieuw apparaat staat alles weer klaar `Alle apps`
+**Nieuw**
+
+- Alles gaat mee met je account: Trakt- en OpenSubtitles-login, instellingen, Mijn lijst, Verder kijken, bekeken, kijkgeschiedenis, pincodes en herinneringen — na opnieuw installeren of op een nieuw apparaat staat alles weer klaar
 
 ## Versie 1.0.0 · Build 43
 _12 oktober 2026_
 
-### ✨ Nieuw
+### Alle apps
 
-- Servers en afspeellijsten worden versleuteld bij je Bingr-account bewaard: na updaten, opnieuw installeren of op een nieuw apparaat staat alles na inloggen weer klaar `Alle apps`
+**Nieuw**
+
+- Servers en afspeellijsten worden versleuteld bij je Bingr-account bewaard: na updaten, opnieuw installeren of op een nieuw apparaat staat alles na inloggen weer klaar
 
 ## Versie 1.0.0 · Build 42
 _12 oktober 2026_
 
-### 🛠 Opgelost
+### Alle apps
 
-- Trakt koppelen werkt weer: na 'Apparaat goedgekeurd' op trakt.tv logt Bingr nu meteen in, ook als de app even op de achtergrond stond `Alle apps`
+**Opgelost**
+
+- Trakt koppelen werkt weer: na 'Apparaat goedgekeurd' op trakt.tv logt Bingr nu meteen in, ook als de app even op de achtergrond stond
 
 ## Versie 1.0.0 · Build 41
 _12 oktober 2026_
 
-### ✨ Nieuw
+### Alle apps
 
-- Profielen toevoegen, wijzigen en verwijderen synchroniseert met al je apparaten `Alle apps`
+**Nieuw**
 
-### ⚡ Verbeterd
+- Profielen toevoegen, wijzigen en verwijderen synchroniseert met al je apparaten
 
-- Trakt en OpenSubtitles: gewoon inloggen, de sleutels komen veilig van de Bingr-server `Alle apps`
+**Verbeterd**
 
-### 🛠 Opgelost
+- Trakt en OpenSubtitles: gewoon inloggen, de sleutels komen veilig van de Bingr-server
 
-- Android: vaste ondertekensleutel, zodat je updates over de vorige versie heen installeert `Android` `Android TV`
+### Android en Android TV
+
+**Opgelost**
+
+- Android: vaste ondertekensleutel, zodat je updates over de vorige versie heen installeert
 
 ## Versie 1.0.0 · Build 40
 _12 oktober 2026_
 
-### ✨ Nieuw
+### Alle apps
 
-- Eigen profielfoto's worden via je Bingr-account gedeeld met al je apparaten, ook Android `Alle apps`
+**Nieuw**
+
+- Eigen profielfoto's worden via je Bingr-account gedeeld met al je apparaten, ook Android
 
 ## Versie 1.0.0 · Build 39
 _12 oktober 2026_
 
-### ✨ Nieuw
+### Alle apps
 
-- Maximaal 10 apparaten per account `Alle apps`
-- Apparaten beheren: gekoppeld op, laatst gebruikt en verwijderen (in de app en op bingr.online/account) `Alle apps`
-- Een verwijderd apparaat logt automatisch uit `Alle apps`
+**Nieuw**
+
+- Maximaal 10 apparaten per account
+- Apparaten beheren: gekoppeld op, laatst gebruikt en verwijderen (in de app en op bingr.online/account)
+- Een verwijderd apparaat logt automatisch uit
 
 ## Versie 1.0.0 · Build 38
 _12 oktober 2026_
 
-### ✨ Nieuw
+### Alle apps
 
-- Bingr-account: inloggen of account maken na de splash, in Netflix-stijl `Alle apps`
-- Apple TV, Android TV en Fire TV: inloggen met een QR-code via bingr.online/tv `tvOS` `Android TV` `Web`
-- Bestaande profielen worden aan je account gekoppeld en gedeeld met al je apparaten `Alle apps`
-- E-mails in Bingr-stijl (NL/EN), wachtwoord herstellen via bingr.online/reset `Alle apps` `Web`
+**Nieuw**
+
+- Bingr-account: inloggen of account maken na de splash, in Netflix-stijl
+- Bestaande profielen worden aan je account gekoppeld en gedeeld met al je apparaten
+
+### Alle apps en de website
+
+**Nieuw**
+
+- E-mails in Bingr-stijl (NL/EN), wachtwoord herstellen via bingr.online/reset
+
+### tvOS, Android TV en Web
+
+**Nieuw**
+
+- Apple TV, Android TV en Fire TV: inloggen met een QR-code via bingr.online/tv
 
 ## Versie 1.0.0 · Build 37
 _11 oktober 2026_
 
-### ✨ Nieuw
+### Android en Android TV
 
-- Eerste Android-versie: telefoon, tablet, Android TV en Fire TV `Android` `Android TV`
+**Nieuw**
+
+- Eerste Android-versie: telefoon, tablet, Android TV en Fire TV
