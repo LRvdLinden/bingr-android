@@ -27,4 +27,9 @@ object Secrets {
     val openSubtitlesReady get() = isSet(openSubtitlesAPIKey)
 
     fun isSet(v: String) = v.isNotBlank() && !v.startsWith("VUL_")
+
+    /** Bingr-account (Supabase): alleen uit BuildConfig, niet in de app aan te passen. */
+    val supabaseUrl: String get() = BuildConfig.SUPABASE_URL.trim().trimEnd('/')
+    val supabaseAnonKey: String get() = BuildConfig.SUPABASE_ANON_KEY.trim()
+    val accountsConfigured: Boolean get() = isSet(supabaseUrl) && isSet(supabaseAnonKey)
 }

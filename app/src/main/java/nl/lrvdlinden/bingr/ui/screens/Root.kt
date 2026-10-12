@@ -50,7 +50,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.withFrameMillis
 
-/** Splash → profielkeuze → hoofdscherm; speler en multiview volledig erboven. */
+/** Splash → inloggen (Bingr-account) → profielkeuze → hoofdscherm; speler en multiview volledig erboven. */
 @Composable
 fun BingrRoot() {
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
@@ -59,6 +59,7 @@ fun BingrRoot() {
             Crossfade(targetState = AppState.stage, animationSpec = tween(450), label = "stage") { stage ->
                 when (stage) {
                     AppState.Stage.SPLASH -> SplashScreen(onFinished = { AppState.splashFinished() })
+                    AppState.Stage.AUTH -> AuthScreen()
                     AppState.Stage.PICKER -> PlaylistPickerScreen()
                     AppState.Stage.MAIN -> MainScreen()
                 }

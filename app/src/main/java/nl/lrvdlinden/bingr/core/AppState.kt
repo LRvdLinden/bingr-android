@@ -14,7 +14,7 @@ val AppScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
 /** Globale navigatiestatus (tegenhanger van AppState op iOS). */
 object AppState {
-    enum class Stage { SPLASH, PICKER, MAIN }
+    enum class Stage { SPLASH, AUTH, PICKER, MAIN }
 
     lateinit var appContext: Context
     /** true op Android TV / Google TV / Fire TV (bediening met afstandsbediening) */
@@ -35,7 +35,28 @@ object AppState {
         get() = Prefs.string("lastPlaylistID")
         set(v) = Prefs.put("lastPlaylistID", v)
 
-    fun splashFinished() { stage = Stage.PICKER }
+    /** Build zonder Supabase-sleutels: "Continue without account" gekozen (alleen deze sessie). */
+    var skippedAccount by mutableStateOf(false)
+
+    /** Inloggen is verplicht: geen sessie → inlogscherm, anders "Wie kijkt er?" (en op de achtergrond vernieuwen). */
+    val needsAccount: Boolean get() = !Account.isSignedIn && !(skippedAccount && !Account.configured)
+
+    fun splashFinished() {
+        if (needsAccount) { stage = Stage.AUTH; return }
+        stage = Stage.PICKER
+        Account.refreshOnLaunch()
+    }
+
+    /** Na inloggen (of "Continue without account") → "Wie kijkt er?". */
+    fun signedIn() { stage = Stage.PICKER }
+
+    /** Uitgelogd, account verwijderd of sessie ongeldig → inlogscherm (speler dicht). */
+    fun signedOut() {
+        playing = null
+        showMultiview = false
+        if (!Account.configured && skippedAccount) return
+        stage = Stage.AUTH
+    }
 
     /**
      * Profiel gekozen ("Wie kijkt er?") → profiel actief maken en de server van het hoofdaccount openen.

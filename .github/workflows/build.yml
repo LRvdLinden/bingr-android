@@ -38,6 +38,8 @@ jobs:
           TMDB_ACCESS_TOKEN: ${{ secrets.TMDB_ACCESS_TOKEN }}
           OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: gradle --no-daemon --stacktrace assembleRelease 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
 
       - name: Foutmeldingen samenvatten

@@ -13,6 +13,7 @@ class BingrApplication : Application() {
         Prefs.init(this)
         Store.init(this)
         Localizer.init(this)
+        Account.init(this)
         val ui = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
         AppState.isTV = ui.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
             packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||

@@ -29,6 +29,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
@@ -110,6 +112,9 @@ fun SettingsScreen() {
     var setup by remember { mutableStateOf<String?>(null) }
     var pinMode by remember { mutableStateOf<S2PinMode?>(null) }
     var shareStatus by remember { mutableStateOf<String?>(null) }
+    var linkingTv by remember { mutableStateOf(false) }
+    var accountConfirm by remember { mutableStateOf<String?>(null) }
+    var accountError by remember { mutableStateOf<String?>(null) }
 
     // instellingen (Prefs) als Compose-state
     var startTab by remember { mutableIntStateOf(Prefs.int("ui.startTab", 0)) }
@@ -182,6 +187,22 @@ fun SettingsScreen() {
                     S2Row(L("Edit profile"), icon = Icons.Default.Edit, onClick = { editingProfile = profile })
                 }
                 S2Row(L("Switch profile"), icon = Icons.Default.SwapHoriz, onClick = { AppState.switchPlaylist() })
+            }
+        }
+
+        // MARK: Bingr-account (hoofdaccount en alle profielen)
+        if (Account.isSignedIn) {
+            item {
+                S2Section(L("Account")) {
+                    S2Row(L("Signed in as %@", Account.email ?: ""), icon = Icons.Default.AccountCircle)
+                    if (!AppState.isTV) S2Row(L("Link a TV"), icon = Icons.Default.Tv, onClick = { linkingTv = true })
+                    S2Row(L("Sign out"), icon = Icons.AutoMirrored.Filled.Logout, onClick = { accountConfirm = "signout" })
+                    S2Row(L("Delete account"), icon = Icons.Default.Delete, tint = Theme.red, onClick = { accountConfirm = "delete" })
+                    if (Account.busy) S2Row("", leading = {
+                        CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    })
+                    accountError?.let { S2Row(it, tint = Theme.red) }
+                }
             }
         }
 
@@ -455,6 +476,28 @@ fun SettingsScreen() {
     }
 
     // MARK: dialogen
+    if (linkingTv) S2LinkTvScreen { linkingTv = false }
+    when (accountConfirm) {
+        "signout" -> S2ActionDialog(
+            L("Sign out of Bingr on this device?"),
+            listOf(S2Action(L("Sign out"), Icons.AutoMirrored.Filled.Logout, destructive = true) {
+                AppScope.launch { Account.signOut(); AppState.signedOut() }
+            }),
+            onDismiss = { accountConfirm = null }
+        )
+        "delete" -> S2ActionDialog(
+            L("Delete your Bingr account? This can't be undone."),
+            listOf(S2Action(L("Delete account"), Icons.Default.Delete, destructive = true) {
+                accountError = null
+                AppScope.launch {
+                    try { Account.deleteAccount(); AppState.signedOut() }
+                    catch (e: AccountException) { accountError = e.message }
+                    catch (e: Exception) { accountError = L("Something went wrong. Please try again.") }
+                }
+            }),
+            onDismiss = { accountConfirm = null }
+        )
+    }
     if (showTraktLogin) TraktLoginScreen { showTraktLogin = false }
     if (showOSLogin) OpenSubtitlesLoginScreen { showOSLogin = false }
     setup?.let { focus ->
@@ -638,5 +681,44 @@ private fun S2TraktStatus() {
             else -> Trakt.lastRefresh?.let { L("Trakt synced %@", s2Time(it)) } ?: L("Sync now")
         }
         Text(text, color = if (lit) Color.Black else Theme.secondary, fontSize = tsp(12), fontWeight = FontWeight.Medium, maxLines = 1)
+    }
+}
+
+/** Tv koppelen vanaf telefoon/tablet: code van de tv invoeren (hoofdletters, zonder streepje of spaties). */
+@Composable
+private fun S2LinkTvScreen(onClose: () -> Unit) {
+    var code by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var done by remember { mutableStateOf<String?>(null) }
+    S2FullDialog(onClose) {
+        S2Page(L("Link a TV"), onClose = onClose) {
+            item {
+                S2Section(footer = done?.let { L("%@ is now signed in.", it) }) {
+                    Column(Modifier.padding(12.dp)) {
+                        S2TextField(code, { v -> code = v.uppercase().filter { it.isLetterOrDigit() || it == '-' || it == ' ' }.take(9) },
+                            L("Enter the code shown on your TV"))
+                    }
+                }
+            }
+            error?.let { e -> item { Text(e, color = Theme.red, fontSize = tsp(13), modifier = Modifier.padding(16.dp)) } }
+            item {
+                Box(Modifier.fillMaxWidth().padding(horizontal = Theme.edge, vertical = 16.dp)) {
+                    if (Account.busy) CircularProgressIndicator(color = Theme.red, modifier = Modifier.align(Alignment.Center))
+                    else {
+                        val ok = Account.normalizeCode(code).length >= 6
+                        NetflixButton(L("Link"), kind = if (ok) NetflixKind.ACCENT else NetflixKind.SECONDARY,
+                            modifier = Modifier.fillMaxWidth()) {
+                            if (!ok) return@NetflixButton
+                            error = null; done = null
+                            AppScope.launch {
+                                try { done = Account.approveTv(code); code = "" }
+                                catch (e: AccountException) { error = e.message }
+                                catch (e: Exception) { error = L("Something went wrong. Please try again.") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

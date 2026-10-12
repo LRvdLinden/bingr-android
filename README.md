@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/LRvdLinden/bingr-android?label=APK)](https://github.com/LRvdLinden/bingr-android/releases/latest)
 
 Native IPTV- en mediaspeler voor **Android-telefoon, tablet en Android TV / Google TV / Fire TV** met de look & feel van Netflix.
-Kotlin · Jetpack Compose · Android 7.0+ · Media3 (ExoPlayer) én VLC · 11 talen · versie 1.0.0 (build 37).
+Kotlin · Jetpack Compose · Android 7.0+ · Media3 (ExoPlayer) én VLC · 11 talen · versie 1.0.0 (build 38).
 
 De versie voor iPhone, iPad, Apple TV en Mac staat in [iptv-ios-appletv](https://github.com/LRvdLinden/iptv-ios-appletv), de website in [bingr-website](https://github.com/LRvdLinden/bingr-website) ([bingr.online](https://bingr.online)).
 
@@ -45,6 +45,13 @@ Op **Android TV / Google TV / Fire TV**: installeer de app *Downloader*, sta onb
 Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/screenshots/en).
 
 ## Functies
+
+**Account**
+- **Bingr-account verplicht** (zoals Netflix): na de splash inloggen of een account maken, daarna "Wie kijkt er?"
+- Inloggen met e-mail en wachtwoord, **wachtwoord vergeten** via bingr.online/reset
+- **Android TV / Fire TV**: inloggen met je telefoon via **QR-code** of een code op **bingr.online/tv**, of met e-mail
+- **Tv koppelen** vanaf je telefoon of tablet (*Mijn Bingr → Account → Link a TV*), **uitloggen** en **account verwijderen**
+- De sessie staat alleen op dit apparaat; servers, profielen en voortgang blijven lokaal
 
 **Bronnen**
 - M3U/M3U8 + XMLTV-EPG, **Xtream Codes** (incl. catch-up), **Stalker/MAC-portal**
@@ -96,15 +103,17 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
    TMDB_API_KEY=...
    OMDB_API_KEY=...
    OPENSUBTITLES_API_KEY=...
+   SUPABASE_URL=https://xxxx.supabase.co
+   SUPABASE_ANON_KEY=...
    # TRAKT_CLIENT_SECRET=...   (optioneel: Trakt-koppeling werkt met PKCE zonder secret)
    # TMDB_ACCESS_TOKEN=...     (in plaats van TMDB_API_KEY)
    ```
-   Zonder sleutels werkt de app ook; dan kun je ze in de app instellen via *Mijn Bingr → Koppelingen instellen*.
+   Zonder sleutels werkt de app ook; dan kun je ze in de app instellen via *Mijn Bingr → Koppelingen instellen*. `SUPABASE_URL` en `SUPABASE_ANON_KEY` (Bingr-account) worden alleen ingebouwd; zonder deze twee toont het inlogscherm "Continue without account".
 3. *Build → Build App Bundle(s) / APK(s) → Build APK(s)*, of druk op ▶ voor een toestel of Android TV-emulator.
 
 Een eigen release-sleutel stel je in met `BINGR_KEYSTORE`, `BINGR_KEYSTORE_PASSWORD`, `BINGR_KEY_ALIAS` en `BINGR_KEY_PASSWORD` in `local.properties` (of als secrets); zonder sleutel wordt met de debug-sleutel getekend.
 
-**Automatisch bouwen:** de workflow `Build` bouwt bij elke push naar `main` een APK en zet die bij [Releases](https://github.com/LRvdLinden/bingr-android/releases) (`v1.0.0-build37`). Zet de sleutels als repository-secrets bij *Settings → Secrets and variables → Actions*. Het build-log staat op de branch `ci-logs`.
+**Automatisch bouwen:** de workflow `Build` bouwt bij elke push naar `main` een APK en zet die bij [Releases](https://github.com/LRvdLinden/bingr-android/releases) (`v1.0.0-build38`). Zet de sleutels (ook `SUPABASE_URL` en `SUPABASE_ANON_KEY`) als repository-secrets bij *Settings → Secrets and variables → Actions*. Het build-log staat op de branch `ci-logs`.
 
 Versie blijft 1.0.0; het buildnummer (`BINGR_BUILD` in `gradle.properties`) loopt gelijk met de iOS-app.
 
