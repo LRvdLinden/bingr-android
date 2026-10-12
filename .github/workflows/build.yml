@@ -155,6 +155,10 @@ jobs:
           test -x "$T"
           "$T" version || true
           KS="$RUNNER_TEMP/keys"; mkdir -p "$KS"
+          # pad voor de security-profielen instellen (bestaat nog niet op een schone runner)
+          mkdir -p "$HOME/tizen-studio-data/profile"
+          "$T" cli-config "default.profiles.path=$HOME/tizen-studio-data/profile/profiles.xml" || true
+          "$T" cli-config -l || true
           if [ -n "$AUTHOR_P12" ] && [ -n "$DIST_P12" ]; then
             echo "$AUTHOR_P12" | base64 -d > "$KS/author.p12"
             echo "$DIST_P12" | base64 -d > "$KS/distributor.p12"
@@ -184,6 +188,7 @@ jobs:
           s = re.sub(r'<profileitem\b[^>]*/>', fix, s)
           open(p, 'w', encoding='utf-8').write(s)
           PY
+          sed -E 's/password="[^"]*"/password="***"/g' "$PROFILES" || true
           "$T" security-profiles list || true
           echo "TIZEN_CLI=$T" >> "$GITHUB_ENV"
           echo "TIZEN_PROFILE=bingr" >> "$GITHUB_ENV"
