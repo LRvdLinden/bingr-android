@@ -318,7 +318,7 @@ fun SettingsScreen() {
                         S2Row(L("Sign out of Trakt"), icon = Icons.AutoMirrored.Filled.Logout, tint = Theme.red, onClick = { Trakt.logout() })
                     } else {
                         S2Row(L("Connect Trakt"), icon = Icons.Default.Link, onClick = {
-                            if (Secrets.traktReady) showTraktLogin = true else setup = "trakt"
+                            s2WithServerKeys({ Secrets.traktReady }, { showTraktLogin = true }, { setup = "trakt" })
                         })
                     }
                     Trakt.lastError?.let { S2Row(it, tint = Theme.red) }
@@ -340,7 +340,7 @@ fun SettingsScreen() {
                     }
                 } else if (isMain) {
                     S2Row(L("Sign in to OpenSubtitles"), icon = Icons.Default.Subtitles, onClick = {
-                        if (Secrets.openSubtitlesReady) showOSLogin = true else setup = "opensubtitles"
+                        s2WithServerKeys({ Secrets.openSubtitlesReady }, { showOSLogin = true }, { setup = "opensubtitles" })
                     })
                 }
                 S2Dropdown(L("Default language"),
@@ -460,13 +460,6 @@ fun SettingsScreen() {
                     shareStatus?.let { S2Row(it, tint = Theme.secondary) }
                 }
             }
-
-            // MARK: koppelingen
-            item {
-                S2Section(footer = L("Trakt and OpenSubtitles require a one-time app registration. Saved on this device; use Export to take them along.")) {
-                    S2Row(L("Set up connections"), icon = Icons.Default.Key, onClick = { setup = "all" })
-                }
-            }
         }
 
         // MARK: over
@@ -474,6 +467,15 @@ fun SettingsScreen() {
             S2Section(L("About")) {
                 S2Row(L("Version"), value = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                 S2Row(L("IMDb data"), value = if (Secrets.isSet(Secrets.omdbAPIKey)) L("Active (OMDb)") else L("No OMDb key"))
+            }
+        }
+
+        // MARK: koppelingen (geavanceerd, onderaan): de sleutels komen normaal van de Bingr-server
+        if (isMain) {
+            item {
+                S2Section(footer = L("Trakt and OpenSubtitles require a one-time app registration. Saved on this device; use Export to take them along.")) {
+                    S2Row(L("Set up connections"), icon = Icons.Default.Key, onClick = { setup = "all" })
+                }
             }
         }
     }
@@ -724,5 +726,18 @@ private fun S2LinkTvScreen(onClose: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+/**
+ * Inloggen bij Trakt/OpenSubtitles: is de sleutel er (zelf ingevuld, van de server of ingebouwd), dan gewoon inloggen.
+ * Ontbreekt hij, dan eerst de config van de Bingr-server ophalen; pas als hij dan nog ontbreekt "Koppelingen instellen".
+ */
+internal fun s2WithServerKeys(ready: () -> Boolean, login: () -> Unit, setup: () -> Unit) {
+    if (ready()) { login(); return }
+    if (!Account.isSignedIn || !Account.configured) { setup(); return }
+    AppScope.launch {
+        try { Account.fetchConfig() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { }
+        if (ready()) login() else setup()
     }
 }

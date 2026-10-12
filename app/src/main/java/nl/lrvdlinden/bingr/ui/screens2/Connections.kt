@@ -65,17 +65,19 @@ internal fun s2Copy(ctx: Context, text: String) {
 }
 
 /**
+ * Geavanceerd (build 41): de sleutels komen normaal van de Bingr-server. Hier kun je eigen sleutels invullen;
+ * die gaan voor (velden tonen alleen wat je zelf hebt ingevuld, leeg = sleutel van de server of ingebouwd).
  * Eenmalig instellen: de app-sleutels die Trakt en OpenSubtitles vereisen (en optioneel OMDb/TMDB).
  * [focus] = "trakt" | "opensubtitles" | "all".
  */
 @Composable
 fun ConnectionsSetupScreen(focus: String, onClose: () -> Unit) {
     val ctx = LocalContext.current
-    var traktID by remember { mutableStateOf(Secrets.traktClientID) }
-    var traktSecret by remember { mutableStateOf(Secrets.traktClientSecret) }
-    var osKey by remember { mutableStateOf(Secrets.openSubtitlesAPIKey) }
-    var omdb by remember { mutableStateOf(Secrets.omdbAPIKey) }
-    var tmdb by remember { mutableStateOf(Secrets.tmdbAPIKey) }
+    var traktID by remember { mutableStateOf(Secrets.userValue(Secrets.Key.TRAKT_CLIENT_ID)) }
+    var traktSecret by remember { mutableStateOf(Secrets.userValue(Secrets.Key.TRAKT_CLIENT_SECRET)) }
+    var osKey by remember { mutableStateOf(Secrets.userValue(Secrets.Key.OPENSUBTITLES_API_KEY)) }
+    var omdb by remember { mutableStateOf(Secrets.userValue(Secrets.Key.OMDB_API_KEY)) }
+    var tmdb by remember { mutableStateOf(Secrets.userValue(Secrets.Key.TMDB_API_KEY)) }
 
     fun save() {
         Secrets.set(Secrets.Key.TRAKT_CLIENT_ID, traktID)

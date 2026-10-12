@@ -28,6 +28,10 @@ import java.util.TimeZone
  * Daarna gaat elke wijziging (hele lijst) na ~2 s naar de server. Pincodes gaan nooit mee.
  * Eigen profielfoto's (build 40, "Profielfoto's delen"): JPEG in de Storage-bucket `avatars`, met per profiel
  * het veld `photo` ({path, updated} of null). Lokaal per profiel de *photoVersion* (= `updated` van de foto op dit apparaat).
+ * Volledig synchroniseren (build 41, "Profielen volledig synchroniseren"): `account_data.profiles` is de bron van waarheid
+ * voor toevoegen, wijzigen en verwijderen. Per profiel `updatedAt`; lokaal per profiel de *localUpdatedAt*;
+ * verwijderen = tombstone (`deleted`, `deletedAt`). Bij elke lezing (login, starten, voorgrond, heartbeat) wordt
+ * samengevoegd volgens [merge]. Pincodes blijven lokaal.
  * Fouten zijn stil: synchroniseren blokkeert de app nooit.
  */
 object ProfileSync {
@@ -61,6 +65,63 @@ object ProfileSync {
 
     private val active: Boolean get() = Account.isSignedIn && Account.configured
 
+    // MARK: volledige sync (build 41): localUpdatedAt en tombstones
+
+    /** Privé: per profiel (kleine letters id) de `updatedAt` van de versie op dit apparaat; "tomb.<id>" = lokale tombstone. */
+    private val syncPrefs get() = AppState.appContext.getSharedPreferences("bingr.profilesync", android.content.Context.MODE_PRIVATE)
+    private fun localUpdatedAt(key: String): String? = runCatching { syncPrefs.getString("upd.$key", null) }.getOrNull()
+    private fun setLocalUpdatedAt(key: String, v: String?) {
+        runCatching { syncPrefs.edit().apply { if (v == null) remove("upd.$key") else putString("upd.$key", v) }.apply() }
+    }
+
+    /** Lokale tombstones: kleine letters id → (oorspronkelijke id, deletedAt). */
+    private fun localTombstones(): Map<String, Pair<String, String>> = runCatching {
+        syncPrefs.all.mapNotNull { (k, v) ->
+            if (!k.startsWith("tomb.") || v !is String) return@mapNotNull null
+            val parts = v.split('|', limit = 2)
+            if (parts.size != 2) null else k.removePrefix("tomb.") to (parts[0] to parts[1])
+        }.toMap()
+    }.getOrDefault(emptyMap())
+
+    private const val EPOCH = "1970-01-01T00:00:00.000Z"
+    private const val TOMBSTONE_DAYS = 90L
+
+    private fun isTombstone(o: JsonObject) = o.jB("deleted") == true
+
+    /** Tombstones ouder dan 90 dagen weg (lokaal; bij het uploaden worden ze ook niet meer meegestuurd). */
+    private fun tooOld(deletedAt: String?): Boolean {
+        val ms = isoMillis(deletedAt) ?: return false
+        return System.currentTimeMillis() - ms > TOMBSTONE_DAYS * 24 * 3_600_000L
+    }
+
+    private fun pruneTombstones() {
+        val old = localTombstones().filter { tooOld(it.value.second) }.keys
+        if (old.isEmpty()) return
+        runCatching { syncPrefs.edit().apply { old.forEach { remove("tomb.$it") } }.apply() }
+    }
+
+    /** Aangeroepen door [Store] bij aanmaken of wijzigen van naam, avatar, kinderprofiel, leeftijdsgrens of volgorde. */
+    fun profileEdited(id: String) {
+        setLocalUpdatedAt(idKey(id), isoNow())
+    }
+
+    /**
+     * Aangeroepen door [Store.deleteProfile] (vóór het verwijderen): tombstone zetten en de foto uit Storage
+     * verwijderen (DELETE, fouten negeren). De lijst wordt daarna geüpload via [profilesChanged].
+     */
+    fun profileDeleted(id: String) {
+        val key = idKey(id)
+        val now = isoNow()
+        runCatching { syncPrefs.edit().putString("tomb.$key", "$id|$now").remove("upd.$key").apply() }
+        photoJobs.remove(key)?.cancel()
+        photoOverrides.remove(key)
+        setPhotoVersion(key, null)
+        if (!active) return
+        val serverPath = (serverObjects[key]?.get("photo") as? JsonObject)?.jS("path")?.takeIf { it.isNotBlank() }
+        val path = serverPath ?: Account.photoPath(id)
+        if (path != null) AppScope.launch { quietly { Account.deletePhoto(path) } }
+    }
+
     /** Uitgelogd / account weg: alles vergeten. */
     fun reset() {
         syncJob?.cancel(); syncJob = null
@@ -72,8 +133,9 @@ object ProfileSync {
         refreshJob?.cancel(); refreshJob = null
         photoJobs.values.forEach { it.cancel() }; photoJobs.clear()
         photoOverrides.clear()
-        // photoVersions horen bij dit account
+        // photoVersions, localUpdatedAt en tombstones horen bij dit account
         runCatching { photoPrefs.edit().clear().apply() }
+        runCatching { syncPrefs.edit().clear().apply() }
     }
 
     /** Aangeroepen door [Store] bij elke wijziging in de profielen. */
@@ -138,16 +200,22 @@ object ProfileSync {
 
     private fun idKey(id: String) = id.lowercase()
 
-    private suspend fun sync() {
-        val r = call("/rest/v1/account_data?select=profiles,updated_at", "GET") ?: return
-        if (!r.ok) return
-        val rows = Http.json.parseToJsonElement(r.body.ifBlank { "[]" }) as? JsonArray ?: return
-        val server = rows.firstOrNull().jList("profiles")
+    /** `account_data.profiles` lezen (ook tombstones); null = mislukt. */
+    private suspend fun readServer(): List<JsonObject>? {
+        val r = call("/rest/v1/account_data?select=profiles,updated_at", "GET") ?: return null
+        if (!r.ok) return null
+        val rows = Http.json.parseToJsonElement(r.body.ifBlank { "[]" }) as? JsonArray ?: return null
+        return rows.firstOrNull().jList("profiles")
             .mapNotNull { it as? JsonObject }
             .filter { !it.jS("id").isNullOrBlank() }
             .sortedBy { it.jI("order") ?: Int.MAX_VALUE }
+    }
+
+    private suspend fun sync() {
+        val all = readServer() ?: return
         if (!active) return
-        serverObjects = server.associateBy { idKey(it.jS("id")!!) }
+        serverObjects = all.associateBy { idKey(it.jS("id")!!) }
+        val server = all.filter { !isTombstone(it) }
 
         val local = Store.profiles
         val serverIDs = serverObjects.keys
@@ -157,19 +225,17 @@ object ProfileSync {
         var uploadNeeded = false
         when {
             server.isEmpty() && local.isEmpty() -> {}
-            server.isEmpty() -> uploadNeeded = true                         // migreren
+            server.isEmpty() -> uploadNeeded = merge(all)                   // migreren (en tombstones bewaren)
             localNone -> {                                                  // importeren
-                val list = server.map(::toProfile)
+                val list = server.map { toProfile(it) }
                 val main = server.firstOrNull { it.jB("isMain") == true }?.jS("id") ?: list.first().id
+                server.forEach { o -> setLocalUpdatedAt(idKey(o.jS("id")!!), o.jS("updatedAt") ?: EPOCH) }
                 withoutUpload { Store.applyAccountProfiles(list, main, adoptFrom = local.firstOrNull()?.id) }
                 lastUploaded = payload()
+                // lokale tombstones die nog niet op de server staan
+                uploadNeeded = merge(all)
             }
-            else -> {                                                       // samenvoegen
-                val localIDs = local.map { idKey(it.id) }.toSet()
-                val extra = server.filter { idKey(it.jS("id")!!) !in localIDs }.map(::toProfile)
-                if (extra.isNotEmpty()) withoutUpload { Store.applyAccountProfiles(local + extra, Store.mainProfileID) }
-                uploadNeeded = true
-            }
+            else -> uploadNeeded = merge(all)                               // samenvoegen
         }
         synced = true
         if (applyPhotos()) uploadNeeded = true
@@ -177,8 +243,67 @@ object ProfileSync {
     }
 
     /**
-     * Bij het starten en bij elke heartbeat: account_data opnieuw lezen en de fotoregels toepassen
-     * (zo verschijnt een nieuwe foto ook op apparaten die al open staan). Het profielenlijstje zelf blijft zoals het is.
+     * Server toepassen volgens "Profielen volledig synchroniseren" (per id):
+     * - server-tombstone en lokaal aanwezig → lokaal verwijderen (nooit het hoofdprofiel; actief → "Wie kijkt er?");
+     * - server actief en lokaal ontbreekt (en niet lokaal verwijderd) → toevoegen, zonder pincode;
+     * - allebei actief → is de server nieuwer dan *localUpdatedAt*: naam, avatar, kids, ageLimit en order overnemen;
+     * - lokaal actief en niet op de server → houden en uploaden.
+     * Sortering op `order`. true = er moet geüpload worden (lokaal nieuwer, ontbreekt op de server, of lokale tombstones).
+     */
+    private fun merge(all: List<JsonObject>): Boolean {
+        pruneTombstones()
+        val byKey = all.associateBy { idKey(it.jS("id")!!) }
+        val tombs = localTombstones()
+        val mainKey = Store.mainProfileID?.let(::idKey)
+        var needUpload = false
+
+        val local = Store.profiles
+        val removed = mutableListOf<String>()
+        val merged = mutableListOf<Pair<ViewerProfile, Int>>()
+        local.forEachIndexed { i, p ->
+            val key = idKey(p.id)
+            val o = byKey[key]
+            when {
+                o == null -> { needUpload = true; merged += p to i }
+                isTombstone(o) -> {
+                    if (key == mainKey) { needUpload = true; merged += p to i }   // hoofdprofiel nooit verwijderen
+                    else removed += p.id
+                }
+                else -> {
+                    val su = o.jS("updatedAt")?.takeIf { it.isNotBlank() } ?: EPOCH
+                    val lu = localUpdatedAt(key) ?: EPOCH
+                    if (newerStrict(su, lu)) {
+                        merged += toProfile(o, existing = p) to (o.jI("order") ?: i)
+                        setLocalUpdatedAt(key, su)
+                    } else {
+                        if (newerStrict(lu, su)) needUpload = true
+                        merged += p to i
+                    }
+                }
+            }
+        }
+        val present = local.map { idKey(it.id) }.toSet()
+        for (o in all) {
+            val key = idKey(o.jS("id")!!)
+            if (isTombstone(o) || key in present) continue
+            if (key in tombs) { needUpload = true; continue }               // hier verwijderd, server weet het nog niet
+            val su = o.jS("updatedAt")?.takeIf { it.isNotBlank() } ?: EPOCH
+            merged += toProfile(o) to (o.jI("order") ?: Int.MAX_VALUE)
+            setLocalUpdatedAt(key, su)
+        }
+        // lokale tombstones die nog niet als tombstone op de server staan
+        if (tombs.keys.any { k -> byKey[k]?.let { !isTombstone(it) } ?: true }) needUpload = true
+
+        val list = merged.withIndex().sortedWith(compareBy<IndexedValue<Pair<ViewerProfile, Int>>>({ it.value.second }, { it.index })).map { it.value.first }
+        if (list.isNotEmpty() && (list != local || removed.isNotEmpty())) {
+            withoutUpload { Store.applySyncedProfiles(list, removed) }
+        }
+        return needUpload
+    }
+
+    /**
+     * Bij het starten, bij terugkeer naar de voorgrond en bij elke heartbeat: account_data opnieuw lezen en
+     * samenvoegen (tombstones voorkomen dat verwijderde profielen terugkomen) en de fotoregels toepassen.
      */
     fun refreshFromServer() {
         if (!active) return
@@ -186,13 +311,14 @@ object ProfileSync {
         if (syncJob?.isActive == true || refreshJob?.isActive == true) return
         refreshJob = AppScope.launch {
             quietly {
-                val r = call("/rest/v1/account_data?select=profiles,updated_at", "GET") ?: return@quietly
-                if (!r.ok) return@quietly
-                val rows = Http.json.parseToJsonElement(r.body.ifBlank { "[]" }) as? JsonArray ?: return@quietly
-                val server = rows.firstOrNull().jList("profiles").mapNotNull { it as? JsonObject }.filter { !it.jS("id").isNullOrBlank() }
-                if (!active || server.isEmpty()) return@quietly
-                serverObjects = server.associateBy { idKey(it.jS("id")!!) }
-                if (applyPhotos()) scheduleUpload()
+                val all = readServer() ?: return@quietly
+                if (!active) return@quietly
+                serverObjects = all.associateBy { idKey(it.jS("id")!!) }
+                // lokale wijziging die nog op upload wacht: die gaat eerst
+                if (uploadJob?.isActive == true) { if (applyPhotos()) scheduleUpload(); return@quietly }
+                var needUpload = merge(all)
+                if (applyPhotos()) needUpload = true
+                if (needUpload) upload()
             }
         }
     }
@@ -200,6 +326,19 @@ object ProfileSync {
     // MARK: foto's synchroniseren
 
     private fun isoMillis(s: String?): Long? = Net.parseISODate(s)
+
+    /** Is [a] strikt nieuwer dan [b] (ISO-8601)? */
+    private fun newerStrict(a: String, b: String): Boolean = preciseMillis(a) > preciseMillis(b)
+
+    /** ISO-8601 → milliseconden, inclusief de fractie van de seconde (Net.parseISODate rondt af op seconden). */
+    private fun preciseMillis(s: String): Long {
+        val base = isoMillis(s) ?: return 0L
+        val dot = s.indexOf('.')
+        if (dot < 0) return base
+        val digits = s.substring(dot + 1).takeWhile { it.isDigit() }
+        val ms = (digits + "000").take(3).toIntOrNull() ?: 0
+        return base + ms
+    }
 
     /** Is [a] nieuwer dan [b] (ISO-8601)? */
     private fun newer(a: String, b: String?): Boolean {
@@ -265,6 +404,8 @@ object ProfileSync {
         val isProfile = Store.profiles.any { idKey(it.id) == key }
         // foto's van servers (afspeellijsten) horen niet bij het account
         if (!isProfile && serverObjects[key] == null && photoVersion(key) == null) return
+        // verwijderd profiel: de foto is al door [profileDeleted] verwijderd
+        if (!isProfile && key in localTombstones()) return
         photoJobs[key]?.cancel()
         val job = AppScope.launch {
             try {
@@ -300,20 +441,21 @@ object ProfileSync {
         try { block() } finally { applying = false }
     }
 
-    /** Serverprofiel → lokaal profiel (zelfde id, zonder pincode of foto). */
-    private fun toProfile(o: JsonObject): ViewerProfile {
+    /**
+     * Serverprofiel → lokaal profiel (zelfde id, zonder pincode of foto). Met [existing]: alleen naam, avatar,
+     * kids en ageLimit overnemen; de kijkvoorkeuren van dit apparaat blijven.
+     */
+    private fun toProfile(o: JsonObject, existing: ViewerProfile? = null): ViewerProfile {
         val kids = o.jB("kids") ?: false
-        return ViewerProfile(
-            id = o.jS("id")!!,
-            name = o.jS("name")?.takeIf { it.isNotBlank() } ?: L("Profile"),
-            avatar = avatar(o["avatar"], kids),
-            ageLimit = o.jI("ageLimit"),
-            isKids = if (kids) true else null,
-        )
+        val name = o.jS("name")?.takeIf { it.isNotBlank() } ?: existing?.name ?: L("Profile")
+        val av = avatar(o["avatar"], kids, existing?.avatar)
+        val age = if (o.containsKey("ageLimit")) o.jI("ageLimit") else existing?.ageLimit
+        if (existing != null) return existing.copy(name = name, avatar = av, ageLimit = age, isKids = if (kids) true else null)
+        return ViewerProfile(id = o.jS("id")!!, name = name, avatar = av, ageLimit = age, isKids = if (kids) true else null)
     }
 
-    private fun avatar(e: JsonElement?, kids: Boolean): PlaylistAvatar {
-        val fallback = if (kids) PlaylistAvatar.randomIllustration() else PlaylistAvatar.random()
+    private fun avatar(e: JsonElement?, kids: Boolean, current: PlaylistAvatar? = null): PlaylistAvatar {
+        val fallback = current ?: if (kids) PlaylistAvatar.randomIllustration() else PlaylistAvatar.random()
         val palettes = PlaylistAvatar.palettes.size
         return when (e) {
             is JsonObject -> {
@@ -336,12 +478,20 @@ object ProfileSync {
 
     // MARK: uploaden
 
-    /** De hele profiellijst zoals hij naar de server gaat (extra serververvelden blijven bewaard). */
+    /**
+     * De hele profiellijst zoals hij naar de server gaat (extra serververvelden blijven bewaard), met `updatedAt`
+     * en daarna de tombstones (van de server en van dit apparaat; ouder dan 90 dagen gaan weg).
+     */
     private fun profilesJson(): JsonArray {
         val mainID = Store.mainProfileID
-        return JsonArray(Store.profiles.mapIndexed { i, p ->
-            val base = serverObjects[idKey(p.id)] ?: JsonObject(emptyMap())
+        val activeList = Store.profiles.mapIndexed { i, p ->
+            val key = idKey(p.id)
+            val base = (serverObjects[key] ?: JsonObject(emptyMap())).let { b ->
+                if (isTombstone(b)) JsonObject(b - setOf("deleted", "deletedAt")) else b
+            }
+            val upd = localUpdatedAt(key) ?: base.jS("updatedAt")?.takeIf { it.isNotBlank() } ?: EPOCH
             JsonObject(base + mapOf(
+                "updatedAt" to JsonPrimitive(upd),
                 "id" to JsonPrimitive(p.id),
                 "name" to JsonPrimitive(p.name),
                 // alleen emoji/figuur + kleur; een eigen foto gaat nooit mee
@@ -355,7 +505,22 @@ object ProfileSync {
                 "order" to JsonPrimitive(i),
                 "photo" to photoField(p.id, base),
             ))
-        })
+        }
+        val activeKeys = Store.profiles.map { idKey(it.id) }.toSet()
+        val tombs = linkedMapOf<String, JsonObject>()
+        for ((key, o) in serverObjects) {
+            if (key in activeKeys || !isTombstone(o) || tooOld(o.jS("deletedAt"))) continue
+            tombs[key] = tombstone(o.jS("id")!!, o.jS("deletedAt") ?: EPOCH, o.jS("updatedAt") ?: o.jS("deletedAt") ?: EPOCH)
+        }
+        for ((key, v) in localTombstones()) {
+            if (key in activeKeys || key in tombs || tooOld(v.second)) continue
+            tombs[key] = tombstone(v.first, v.second, v.second)
+        }
+        return JsonArray(activeList + tombs.values)
+    }
+
+    private fun tombstone(id: String, deletedAt: String, updatedAt: String) = buildJsonObject {
+        put("id", id); put("deleted", true); put("deletedAt", deletedAt); put("updatedAt", updatedAt)
     }
 
     /** `photo` voor de upload: lokale wijziging, anders wat de server had, anders null. */

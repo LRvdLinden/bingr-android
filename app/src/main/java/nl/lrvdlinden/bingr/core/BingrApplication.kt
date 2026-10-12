@@ -11,6 +11,7 @@ class BingrApplication : Application() {
         super.onCreate()
         AppState.appContext = applicationContext
         Prefs.init(this)
+        Secrets.init(this)
         Store.init(this)
         Localizer.init(this)
         Account.init(this)

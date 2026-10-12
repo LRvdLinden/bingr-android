@@ -606,6 +606,38 @@ object Account {
         data
     }.getOrNull()
 
+    // MARK: app-sleutels van de server (build 41)
+
+    /**
+     * device-auth `{"action":"config"}`: Trakt-, OpenSubtitles-, OMDb- en TMDB-sleutels van de Bingr-server.
+     * Alleen lokaal bewaard (privé-instellingen, zie [Secrets.storeServerKeys]); blijven staan na uitloggen.
+     * true = opgehaald en opgeslagen.
+     */
+    suspend fun fetchConfig(): Boolean {
+        if (!isSignedIn || !configured) return false
+        val token = validAccessToken()
+        val r = post("/functions/v1/device-auth", buildJsonObject { put("action", "config") }, bearer = token)
+        val obj = r.json.jObj ?: return false
+        if (!r.ok) return false
+        val values = Secrets.Key.entries.mapNotNull { k ->
+            if (!obj.containsKey(k.serverField)) null else k to (obj.jS(k.serverField) ?: "")
+        }.toMap()
+        if (values.isEmpty()) return false
+        Secrets.storeServerKeys(values)
+        return true
+    }
+
+    private var configJob: kotlinx.coroutines.Job? = null
+
+    /** Config op de achtergrond ophalen (na elke login en bij het starten met een geldige sessie); fouten zijn stil. */
+    fun launchConfigFetch() {
+        if (!isSignedIn || !configured) return
+        if (configJob?.isActive == true) return
+        configJob = AppScope.launch {
+            try { fetchConfig() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { }
+        }
+    }
+
     // MARK: bij het starten
 
     /** Achtergrond-vernieuwing bij het starten; ongeldig → terug naar het inlogscherm. */
@@ -613,6 +645,8 @@ object Account {
         if (!isSignedIn || !configured) return
         AppScope.launch {
             if (refresh() == RefreshResult.INVALID) { AppState.signedOut(); return@launch }
+            // app-sleutels (Trakt, OpenSubtitles, OMDb, TMDB) van de server
+            launchConfigFetch()
             // apparaat: heartbeat, of registreren als dat nog niet gebeurd is
             deviceCheck()
             // profielen van het account ophalen/samenvoegen (stil, ook offline geen probleem)

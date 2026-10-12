@@ -243,6 +243,11 @@ object Store {
     }
 
     fun upsertProfile(p: ViewerProfile) {
+        val old = profiles.firstOrNull { it.id == p.id }
+        // updatedAt (build 41): alleen bij naam, avatar, kinderprofiel of leeftijdsgrens (niet bij kijkvoorkeuren)
+        if (old == null || old.name != p.name || old.avatar != p.avatar || old.kids != p.kids || old.ageLimit != p.ageLimit) {
+            ProfileSync.profileEdited(p.id)
+        }
         profiles = if (profiles.any { it.id == p.id }) profiles.map { if (it.id == p.id) p else it } else profiles + p
         write("profiles", profiles)
         if (mainProfileIDStored == null) { mainProfileIDStored = profiles.first().id; saveMeta() }
@@ -287,13 +292,46 @@ object Store {
         }
     }
 
+    /**
+     * Profielen uit de volledige sync (build 41, zie [ProfileSync]): nieuwe lijst (al gesorteerd op `order`) en
+     * profielen die elders verwijderd zijn (tombstone). Die gaan hier weg met foto, pincode en gegevens; was het
+     * het actieve profiel, dan terug naar "Wie kijkt er?". Het hoofdprofiel wordt nooit verwijderd.
+     */
+    fun applySyncedProfiles(list: List<ViewerProfile>, removed: List<String>) {
+        val main = mainProfileID
+        val gone = removed.filter { it != main }
+        val newList = list.filter { it.id !in gone }
+        if (newList.isEmpty()) return
+        for (id in gone) {
+            runCatching { photoFile(id).delete() }
+            setSecret("profile.$id.pin", null)
+            runCatching { File(dir, "profile-$id").deleteRecursively() }
+        }
+        if (gone.isNotEmpty()) photoVersion++
+        profiles = newList
+        write("profiles", profiles)
+        if (mainProfileIDStored == null || newList.none { it.id == mainProfileIDStored }) {
+            mainProfileIDStored = main?.takeIf { id -> newList.any { it.id == id } } ?: newList.first().id
+            saveMeta()
+        }
+        val act = activeProfileID
+        if (act != null && newList.none { it.id == act }) {
+            activeProfileID = null
+            Prefs.put("activeProfileID", null)
+            loadProfileData()
+            AppState.profileRemoved()
+        }
+    }
+
     /** Profiel met al zijn gegevens verwijderen. Het hoofdaccount kan niet verwijderd worden. */
     fun deleteProfile(p: ViewerProfile) {
         if (isMain(p)) return
+        // tombstone (build 41): andere apparaten verwijderen het ook; ook de foto gaat uit Storage
+        ProfileSync.profileDeleted(p.id)
         profiles = profiles.filterNot { it.id == p.id }
         write("profiles", profiles)
         ProfileSync.profilesChanged()
-        setPhoto(p.id, null)
+        setPhoto(p.id, null, fromSync = true)
         setSecret("profile.${p.id}.pin", null)
         runCatching { File(dir, "profile-${p.id}").deleteRecursively() }
         if (activeProfileID == p.id) {

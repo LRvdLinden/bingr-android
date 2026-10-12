@@ -58,6 +58,8 @@ object AppState {
             // limiet: het scherm "Too many devices" roept na een geslaagde registratie opnieuw signedIn() aan
             if (Account.ensureRegistered() == Account.RegisterResult.LIMIT) return@launch
             if (!Account.isSignedIn) return@launch
+            // app-sleutels van de server ophalen (op de achtergrond)
+            Account.launchConfigFetch()
             // even wachten op de profielen van het account (nooit langer dan een paar seconden; fouten zijn stil)
             withTimeoutOrNull(6_000) { ProfileSync.syncNow() }
             if (stage == Stage.AUTH && Account.isSignedIn) stage = Stage.PICKER
@@ -99,6 +101,13 @@ object AppState {
         pendingItemID = thenShow
         stage = Stage.MAIN
         AppScope.launch { Playlists.select(p) }
+    }
+
+    /** Het actieve profiel is op een ander apparaat verwijderd: speler dicht en terug naar "Wie kijkt er?". */
+    fun profileRemoved() {
+        playing = null
+        showMultiview = false
+        if (stage == Stage.MAIN) stage = Stage.PICKER
     }
 
     /** Terug naar "Wie kijkt er?" (profiel wisselen). */
