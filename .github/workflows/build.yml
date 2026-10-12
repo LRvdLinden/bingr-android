@@ -85,7 +85,7 @@ jobs:
           TAG="v$V-build$B"; APK="Bingr-$V-build$B.apk"
           cp app/build/outputs/apk/release/*.apk "$APK"
           # release-notities uit CHANGELOG.md (sectie van dit buildnummer)
-          awk -v b="## Build $B " 'index($0,b)==1{f=1;next} /^## /{f=0} f' CHANGELOG.md > notes.md
+          awk -v b="Build $B" '/^## /{f=($0 ~ (b "$"))?1:0; next} f && !/^_[0-9-]+_$/' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "Bingr voor Android $V, build $B." > notes.md
           printf '\nInstalleer de APK over de vorige versie heen; je gegevens blijven bewaard. Alle versies: https://bingr.online/changelog/?p=android\n' >> notes.md
           if gh release view "$TAG" >/dev/null 2>&1; then gh release edit "$TAG" --notes-file notes.md; else gh release create "$TAG" --title "Bingr $V (build $B)" --notes-file notes.md --latest; fi
