@@ -4,6 +4,26 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 56
+_12 oktober 2026_
+
+### iOS, iPadOS, tvOS, macOS, Android en Android TV
+
+**Verbeterd**
+
+- Soepeler scrollen: collecties en leeftijdsclassificaties worden op de achtergrond bijgewerkt, alleen als er echt iets veranderd is, zonder dat lijsten haperen of verspringen
+- Live TV: het zendervoorbeeld start pas als je even op een zender blijft staan en hapert niet meer bij snel scrollen; de tv-gids reageert sneller
+
+### Android
+
+**Verbeterd**
+
+- Chromecast toont titel, poster en aflevering, gaat verder op de juiste plek en neemt de volgende aflevering of zender automatisch mee
+
+**Opgelost**
+
+- Casten naar Chromecast werkt nu ook voor live-zenders, films en series: Bingr kiest automatisch een formaat dat de Chromecast kan afspelen en probeert bij een fout eerst een ander formaat
+
 ## Versie 1.0.0 · Build 55
 _12 oktober 2026_
 
