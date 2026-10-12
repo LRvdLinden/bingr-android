@@ -47,15 +47,6 @@ jobs:
           grep -E "^e: " build.log | head -40 | while IFS= read -r l; do echo "::error::${l:0:400}"; done || true
           echo '```' >> $GITHUB_STEP_SUMMARY; head -150 errors.txt >> $GITHUB_STEP_SUMMARY; echo '```' >> $GITHUB_STEP_SUMMARY
 
-      - name: Log op branch ci-logs zetten
-        if: always()
-        run: |
-          mkdir -p /tmp/logs && cp build.log /tmp/logs/ && cp errors.txt /tmp/logs/ 2>/dev/null || true
-          echo "${{ job.status }} $(git rev-parse --short HEAD)" > /tmp/logs/status.txt
-          git config user.name "github-actions" && git config user.email "actions@github.com"
-          git checkout --orphan ci-logs && git rm -rfq . && cp /tmp/logs/* . && git add -f build.log status.txt errors.txt 2>/dev/null; git add -f build.log status.txt
-          git commit -qm "CI-log $(cat status.txt)" && git push -qf origin ci-logs
-
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -67,3 +58,24 @@ jobs:
         with:
           name: Bingr-Android-apk
           path: app/build/outputs/apk/release/*.apk
+
+      - name: APK als GitHub-release publiceren
+        if: success() && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
+          TAG="v$V-build$B"; APK="Bingr-$V-build$B.apk"
+          cp app/build/outputs/apk/release/*.apk "$APK"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Bingr $V (build $B)" --notes "Bingr voor Android $V, build $B. Installeer de APK op je telefoon, tablet of Android TV." --latest
+          gh release upload "$TAG" "$APK" --clobber
+
+      - name: Log op branch ci-logs zetten
+        if: always()
+        run: |
+          set +e
+          mkdir -p /tmp/logs; cp build.log /tmp/logs/ 2>/dev/null; cp errors.txt /tmp/logs/ 2>/dev/null
+          echo "${{ job.status }} $(git rev-parse --short HEAD)" > /tmp/logs/status.txt
+          cd /tmp/logs && git init -q -b ci-logs && git add -A
+          git -c user.name=github-actions -c user.email=actions@github.com commit -qm "CI-log $(cat status.txt)"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs
