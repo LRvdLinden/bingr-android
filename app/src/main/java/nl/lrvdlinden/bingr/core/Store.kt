@@ -356,9 +356,15 @@ object Store {
 
     fun photoFile(id: String) = File(dir, "photo-$id.jpg")
     fun photo(id: String): Bitmap? = photoFile(id).takeIf { it.exists() }?.let { BitmapFactory.decodeFile(it.path) }
-    fun setPhoto(id: String, jpeg: ByteArray?) {
-        if (jpeg == null) photoFile(id).delete() else photoFile(id).writeBytes(jpeg)
+    /**
+     * Foto zetten of wissen. Bij een profiel (niet [fromSync]) gaat de wijziging ook naar het Bingr-account
+     * (zie [ProfileSync.photoChanged]); [fromSync] = komt uit de sync, niet terugsturen.
+     */
+    fun setPhoto(id: String, jpeg: ByteArray?, fromSync: Boolean = false) {
+        val existed = photoFile(id).exists()
+        if (jpeg == null) photoFile(id).delete() else runCatching { photoFile(id).writeBytes(jpeg) }
         photoVersion++
+        if (!fromSync && (jpeg != null || existed)) ProfileSync.photoChanged(id, jpeg != null)
     }
 
     // MARK: favorieten / mijn lijst (per profiel)

@@ -14,6 +14,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.IOException
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 
 /** Fout van het Bingr-account; [message] is al vertaald en kan direct getoond worden. */
 class AccountException(message: String) : Exception(message)
@@ -421,6 +423,8 @@ object Account {
                 }
                 // vernieuwen mislukt met 400/401 tijdens de aanroep → sessie is al gewist
                 if (!isSignedIn) AppState.signedOut()
+                // account_data opnieuw lezen (o.a. nieuwe profielfoto's van andere apparaten)
+                else ProfileSync.refreshFromServer()
             } finally {
                 checking = false
             }
@@ -508,6 +512,99 @@ object Account {
             onCode(null)
         }
     }
+
+    // MARK: profielfoto's (Storage-bucket `avatars`, build 40)
+
+    /** Pad van de foto van dit profiel: `<user_id>/<profiel_id>.jpg`. */
+    fun photoPath(profileId: String): String? = userId?.let { "$it/$profileId.jpg" }
+
+    /**
+     * Storage-aanvraag met `apikey` en `Authorization`; bij 401 één keer vernieuwen en opnieuw proberen.
+     * Geeft (statuscode, body-bytes) terug, of null bij een netwerkfout of ongeldige sessie.
+     */
+    private suspend fun storage(method: String, path: String, body: ByteArray? = null, extra: Map<String, String> = emptyMap()): Pair<Int, ByteArray>? {
+        if (!configured || !isSignedIn) return null
+        var token = runCatching { validAccessToken() }.getOrNull() ?: return null
+        repeat(2) { attempt ->
+            val result = runCatching {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val b = okhttp3.Request.Builder()
+                        .url(Secrets.supabaseUrl + path)
+                        .header("User-Agent", Http.USER_AGENT)
+                        .header("apikey", Secrets.supabaseAnonKey)
+                        .header("Authorization", "Bearer $token")
+                    extra.forEach { (k, v) -> b.header(k, v) }
+                    when {
+                        body != null -> b.method(method, body.toRequestBody("image/jpeg".toMediaType()))
+                        method != "GET" -> b.method(method, ByteArray(0).toRequestBody(null))
+                    }
+                    Http.client.newCall(b.build()).execute().use { r -> r.code to (r.body?.bytes() ?: ByteArray(0)) }
+                }
+            }.getOrNull() ?: return null
+            if (result.first != 401 || attempt == 1) return result
+            if (refresh() != RefreshResult.OK) return null
+            token = accessToken ?: return null
+        }
+        return null
+    }
+
+    /** Pad in de bucket zonder spaties of vreemde tekens in de URL. */
+    private fun encodePath(path: String): String = path.split('/').joinToString("/") { Http.enc(it) }
+
+    /**
+     * Foto van een profiel uploaden of vervangen (vierkant bijgesneden, max. 512×512, JPEG-kwaliteit 80).
+     * Geeft het pad in de bucket terug, of null als het mislukt.
+     */
+    suspend fun uploadPhoto(profileId: String, jpegBytes: ByteArray): String? {
+        val path = photoPath(profileId) ?: return null
+        val jpeg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { squareJpeg(jpegBytes) } ?: return null
+        val r = storage("POST", "/storage/v1/object/avatars/" + encodePath(path), jpeg, mapOf("Content-Type" to "image/jpeg", "x-upsert" to "true"))
+            ?: return null
+        return if (r.first in 200..299) path else null
+    }
+
+    /** Foto downloaden (pad uit `photo.path`); null bij een fout. */
+    suspend fun downloadPhoto(path: String): ByteArray? {
+        val r = storage("GET", "/storage/v1/object/authenticated/avatars/" + encodePath(path)) ?: return null
+        if (r.first !in 200..299 || r.second.isEmpty()) return null
+        // alleen echte afbeeldingen bewaren
+        val ok = runCatching {
+            val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(r.second, 0, r.second.size, o)
+            o.outWidth > 0 && o.outHeight > 0
+        }.getOrDefault(false)
+        return if (ok) r.second else null
+    }
+
+    /** Foto verwijderen; fouten worden genegeerd. */
+    suspend fun deletePhoto(path: String) {
+        runCatching { storage("DELETE", "/storage/v1/object/avatars/" + encodePath(path)) }
+    }
+
+    /** Vierkant uit het midden, hooguit 512×512, JPEG-kwaliteit 80 (max. 1 MB). */
+    internal fun squareJpeg(bytes: ByteArray): ByteArray? = runCatching {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 512) sample *= 2
+        val src = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
+            android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+        val side = minOf(src.width, src.height)
+        val cropped = android.graphics.Bitmap.createBitmap(src, (src.width - side) / 2, (src.height - side) / 2, side, side)
+        val target = minOf(side, 512)
+        val scaled = if (target == side) cropped else android.graphics.Bitmap.createScaledBitmap(cropped, target, target, true)
+        // JPEG heeft geen transparantie: op wit tekenen
+        val out = android.graphics.Bitmap.createBitmap(target, target, android.graphics.Bitmap.Config.ARGB_8888)
+        android.graphics.Canvas(out).apply { drawColor(android.graphics.Color.WHITE); drawBitmap(scaled, 0f, 0f, null) }
+        var quality = 80
+        var data: ByteArray
+        do {
+            data = java.io.ByteArrayOutputStream().use { s -> out.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, s); s.toByteArray() }
+            quality -= 10
+        } while (data.size > 1_000_000 && quality >= 30)
+        data
+    }.getOrNull()
 
     // MARK: bij het starten
 

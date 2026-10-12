@@ -25,7 +25,9 @@ import java.util.TimeZone
  * - server leeg, lokaal profielen → migreren (uploaden)
  * - lokaal geen profielen (alleen het automatische hoofdprofiel of niets), server wel → importeren (zelfde id, zonder pincode)
  * - allebei → samenvoegen op id (lokaal blijft, alleen-op-server wordt toegevoegd) en uploaden
- * Daarna gaat elke wijziging (hele lijst) na ~2 s naar de server. Pincodes en eigen foto's gaan nooit mee.
+ * Daarna gaat elke wijziging (hele lijst) na ~2 s naar de server. Pincodes gaan nooit mee.
+ * Eigen profielfoto's (build 40, "Profielfoto's delen"): JPEG in de Storage-bucket `avatars`, met per profiel
+ * het veld `photo` ({path, updated} of null). Lokaal per profiel de *photoVersion* (= `updated` van de foto op dit apparaat).
  * Fouten zijn stil: synchroniseren blokkeert de app nooit.
  */
 object ProfileSync {
@@ -42,6 +44,20 @@ object ProfileSync {
     private var uploadJob: Job? = null
     /** Tijdens het overnemen van serverprofielen geen upload starten. */
     private var applying = false
+    private var refreshJob: Job? = null
+
+    // MARK: foto's: lokale stand
+
+    /** Lokale wijzigingen van `photo` die nog niet in een geüploade lijst zitten (kleine letters id → object of JsonNull). */
+    private val photoOverrides = mutableMapOf<String, JsonElement>()
+    /** Lopende foto-upload/-verwijdering per profiel (kleine letters id). */
+    private val photoJobs = mutableMapOf<String, Job>()
+
+    private val photoPrefs get() = AppState.appContext.getSharedPreferences("bingr.photosync", android.content.Context.MODE_PRIVATE)
+    private fun photoVersion(key: String): String? = runCatching { photoPrefs.getString(key, null) }.getOrNull()
+    private fun setPhotoVersion(key: String, v: String?) {
+        runCatching { photoPrefs.edit().apply { if (v == null) remove(key) else putString(key, v) }.apply() }
+    }
 
     private val active: Boolean get() = Account.isSignedIn && Account.configured
 
@@ -53,12 +69,22 @@ object ProfileSync {
         serverObjects = emptyMap()
         lastUploaded = null
         syncing = false
+        refreshJob?.cancel(); refreshJob = null
+        photoJobs.values.forEach { it.cancel() }; photoJobs.clear()
+        photoOverrides.clear()
+        // photoVersions horen bij dit account
+        runCatching { photoPrefs.edit().clear().apply() }
     }
 
     /** Aangeroepen door [Store] bij elke wijziging in de profielen. */
     fun profilesChanged() {
         if (applying || !active) return
         if (!synced) { launchSync(); return }
+        scheduleUpload()
+    }
+
+    private fun scheduleUpload() {
+        if (!active || !synced) return
         uploadJob?.cancel()
         uploadJob = AppScope.launch {
             delay(2_000)
@@ -128,9 +154,10 @@ object ProfileSync {
         // "lokaal geen profielen": niets, of alleen het automatische hoofdprofiel (dat nog niet op de server staat)
         val localNone = local.isEmpty() || (local.size == 1 && idKey(local[0].id) !in serverIDs)
 
+        var uploadNeeded = false
         when {
             server.isEmpty() && local.isEmpty() -> {}
-            server.isEmpty() -> { synced = true; upload() }                 // migreren
+            server.isEmpty() -> uploadNeeded = true                         // migreren
             localNone -> {                                                  // importeren
                 val list = server.map(::toProfile)
                 val main = server.firstOrNull { it.jB("isMain") == true }?.jS("id") ?: list.first().id
@@ -141,11 +168,131 @@ object ProfileSync {
                 val localIDs = local.map { idKey(it.id) }.toSet()
                 val extra = server.filter { idKey(it.jS("id")!!) !in localIDs }.map(::toProfile)
                 if (extra.isNotEmpty()) withoutUpload { Store.applyAccountProfiles(local + extra, Store.mainProfileID) }
-                synced = true
-                upload()
+                uploadNeeded = true
             }
         }
         synced = true
+        if (applyPhotos()) uploadNeeded = true
+        if (uploadNeeded) upload()
+    }
+
+    /**
+     * Bij het starten en bij elke heartbeat: account_data opnieuw lezen en de fotoregels toepassen
+     * (zo verschijnt een nieuwe foto ook op apparaten die al open staan). Het profielenlijstje zelf blijft zoals het is.
+     */
+    fun refreshFromServer() {
+        if (!active) return
+        if (!synced) { launchSync(); return }
+        if (syncJob?.isActive == true || refreshJob?.isActive == true) return
+        refreshJob = AppScope.launch {
+            quietly {
+                val r = call("/rest/v1/account_data?select=profiles,updated_at", "GET") ?: return@quietly
+                if (!r.ok) return@quietly
+                val rows = Http.json.parseToJsonElement(r.body.ifBlank { "[]" }) as? JsonArray ?: return@quietly
+                val server = rows.firstOrNull().jList("profiles").mapNotNull { it as? JsonObject }.filter { !it.jS("id").isNullOrBlank() }
+                if (!active || server.isEmpty()) return@quietly
+                serverObjects = server.associateBy { idKey(it.jS("id")!!) }
+                if (applyPhotos()) scheduleUpload()
+            }
+        }
+    }
+
+    // MARK: foto's synchroniseren
+
+    private fun isoMillis(s: String?): Long? = Net.parseISODate(s)
+
+    /** Is [a] nieuwer dan [b] (ISO-8601)? */
+    private fun newer(a: String, b: String?): Boolean {
+        if (b == null) return true
+        val ma = isoMillis(a); val mb = isoMillis(b)
+        return if (ma != null && mb != null) ma > mb else a > b
+    }
+
+    private fun photoObject(path: String, updated: String) = buildJsonObject { put("path", path); put("updated", updated) }
+
+    /**
+     * Regels uit ACCOUNT.md toepassen op alle lokale profielen (tegen [serverObjects]).
+     * true = er is een `photo` gewijzigd en de lijst moet opnieuw geüpload worden.
+     */
+    private suspend fun applyPhotos(): Boolean {
+        var changed = false
+        for (p in Store.profiles.toList()) {
+            if (!active) return false
+            val key = idKey(p.id)
+            if (photoJobs[key]?.isActive == true || key in photoOverrides) continue // lokale wijziging gaat voor
+            val photo = serverObjects[key]?.get("photo")
+            val path = (photo as? JsonObject)?.jS("path")?.takeIf { it.isNotBlank() }
+            val updated = (photo as? JsonObject)?.jS("updated")?.takeIf { it.isNotBlank() }
+            val version = photoVersion(key)
+            val hasLocal = Store.photoFile(p.id).exists()
+            try {
+                when {
+                    path != null && updated != null -> {
+                        if (!hasLocal || newer(updated, version)) {
+                            val bytes = Account.downloadPhoto(path) ?: continue
+                            if (!active || photoJobs[key]?.isActive == true || key in photoOverrides) continue
+                            Store.setPhoto(p.id, bytes, fromSync = true)
+                            setPhotoVersion(key, updated)
+                        } else if (version == null) setPhotoVersion(key, updated)
+                    }
+                    photo is JsonNull && version != null -> {
+                        // foto kwam uit de sync en is elders verwijderd
+                        if (hasLocal) Store.setPhoto(p.id, null, fromSync = true)
+                        setPhotoVersion(key, null)
+                    }
+                    version == null && hasLocal -> {
+                        // migratie: lokale foto, op de server (nog) niet
+                        val bytes = runCatching { Store.photoFile(p.id).readBytes() }.getOrNull() ?: continue
+                        val up = Account.uploadPhoto(p.id, bytes) ?: continue
+                        val now = isoNow()
+                        setPhotoVersion(key, now)
+                        photoOverrides[key] = photoObject(up, now)
+                        changed = true
+                    }
+                }
+            } catch (e: CancellationException) { throw e } catch (_: Exception) { }
+        }
+        return changed
+    }
+
+    /**
+     * Aangeroepen door [Store.setPhoto] als de gebruiker op dit apparaat een foto kiest, wijzigt of verwijdert
+     * (ook bij het verwijderen van een profiel). Uploaden/verwijderen gebeurt op de achtergrond, fouten zijn stil.
+     */
+    fun photoChanged(id: String, hasPhoto: Boolean) {
+        if (!active) return
+        val key = idKey(id)
+        val isProfile = Store.profiles.any { idKey(it.id) == key }
+        // foto's van servers (afspeellijsten) horen niet bij het account
+        if (!isProfile && serverObjects[key] == null && photoVersion(key) == null) return
+        photoJobs[key]?.cancel()
+        val job = AppScope.launch {
+            try {
+                quietly {
+                    if (!synced) launchSync()?.join()
+                    if (!synced || !active) return@quietly
+                    val stillProfile = Store.profiles.any { idKey(it.id) == key }
+                    val file = Store.photoFile(id)
+                    if (hasPhoto && stillProfile && file.exists()) {
+                        val bytes = runCatching { file.readBytes() }.getOrNull() ?: return@quietly
+                        val path = Account.uploadPhoto(id, bytes) ?: return@quietly
+                        val now = isoNow()
+                        setPhotoVersion(key, now)
+                        photoOverrides[key] = photoObject(path, now)
+                    } else if (!file.exists()) {
+                        val serverPath = (serverObjects[key]?.get("photo") as? JsonObject)?.jS("path")?.takeIf { it.isNotBlank() }
+                        val path = serverPath ?: Account.photoPath(id)
+                        if (path != null) Account.deletePhoto(path)
+                        setPhotoVersion(key, null)
+                        photoOverrides[key] = JsonNull
+                    } else return@quietly
+                    scheduleUpload()
+                }
+            } finally {
+                if (photoJobs[key] === coroutineContext[Job]) photoJobs.remove(key)
+            }
+        }
+        if (job.isActive) photoJobs[key] = job
     }
 
     private inline fun withoutUpload(block: () -> Unit) {
@@ -206,8 +353,20 @@ object ProfileSync {
                 "ageLimit" to (p.ageLimit?.let { JsonPrimitive(it) } ?: JsonNull),
                 "isMain" to JsonPrimitive(p.id == mainID),
                 "order" to JsonPrimitive(i),
+                "photo" to photoField(p.id, base),
             ))
         })
+    }
+
+    /** `photo` voor de upload: lokale wijziging, anders wat de server had, anders null. */
+    private fun photoField(id: String, base: JsonObject): JsonElement {
+        val key = idKey(id)
+        photoOverrides[key]?.let { return it }
+        base["photo"]?.let { if (it is JsonObject || it is JsonNull) return it }
+        val version = photoVersion(key)
+        val path = Account.photoPath(id)
+        if (version != null && path != null && Store.photoFile(id).exists()) return photoObject(path, version)
+        return JsonNull
     }
 
     private fun payload(): String = profilesJson().toString()
@@ -227,6 +386,9 @@ object ProfileSync {
         val r = call("/rest/v1/account_data", "POST", body, mapOf("Prefer" to "resolution=merge-duplicates,return=minimal")) ?: return
         if (r.ok) {
             lastUploaded = key
+            // lokale foto-wijzigingen die in deze lijst zaten zijn nu op de server
+            val sent = profiles.mapNotNull { it as? JsonObject }.associate { idKey(it.jS("id") ?: "") to it["photo"] }
+            photoOverrides.entries.removeAll { (k, v) -> k !in sent || sent[k] == v }
             serverObjects = profiles.mapNotNull { it as? JsonObject }.associateBy { idKey(it.jS("id") ?: "") }
         }
     }
