@@ -50,6 +50,52 @@ import java.util.Date
 
 // Tegelijk kijken, wie kijkt er nu en kijkgeschiedenis van 7 dagen (build 51), zie docs/ACCOUNT.md in de iOS-repo.
 
+// MARK: profielavatar per regel (build 57)
+
+/** Profielfoto's voor de lijsten, per profiel-id + photoVersion, zodat elke foto maar één keer wordt ingelezen. */
+private val rowPhotoCache = android.util.LruCache<String, android.graphics.Bitmap>(24)
+
+/** Profiel van het account bij een regel: eerst op profile_id, anders (oudere regels) op profile_name. */
+private fun rowProfile(profileId: String, profileName: String): ViewerProfile? {
+    val profiles = Store.profiles
+    if (profileId.isNotBlank()) profiles.firstOrNull { it.id.equals(profileId, ignoreCase = true) }?.let { return it }
+    val name = profileName.trim()
+    if (name.isEmpty()) return null
+    return profiles.firstOrNull { it.name.trim().equals(name, ignoreCase = true) }
+}
+
+/**
+ * Kleine ronde avatar vóór een regel in "Wie kijkt er nu" en de kijkgeschiedenis: zelfde weergave als bij
+ * "Wie kijkt er?" (foto uit de bucket `avatars`, figuurtje of emoji). Onbekend profiel: eerste letter in een gekleurde cirkel.
+ */
+@Composable
+private fun RowProfileAvatar(profileId: String, profileName: String, size: androidx.compose.ui.unit.Dp = tvs(30)) {
+    val v = Store.photoVersion
+    val profile = remember(profileId, profileName, Store.profiles) { rowProfile(profileId, profileName) }
+    if (profile != null) {
+        val key = profile.id + ":" + v
+        var photo by remember(key) { mutableStateOf(rowPhotoCache.get(key)) }
+        LaunchedEffect(key) {
+            if (photo == null) {
+                photo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Store.photo(profile.id) }
+                    ?.also { rowPhotoCache.put(key, it) }
+            }
+        }
+        AvatarView(profile.avatar, photo, size)
+        return
+    }
+    val name = profileName.trim()
+    val pal = PlaylistAvatar.palettes[Math.floorMod(name.lowercase().hashCode(), PlaylistAvatar.palettes.size)]
+    Box(
+        Modifier.size(size).clip(CircleShape)
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(pal.first), Color(pal.second)))),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(name.take(1).uppercase().ifEmpty { "?" }, color = Color.White, fontWeight = FontWeight.Bold,
+            fontSize = androidx.compose.ui.unit.TextUnit(size.value * 0.45f, androidx.compose.ui.unit.TextUnitType.Sp))
+    }
+}
+
 /** "42 min" vanaf het begin van de stream. */
 private fun streamDuration(startedAt: Long?): String? {
     val s = startedAt ?: return null
@@ -67,7 +113,9 @@ private fun StreamRow(s: Account.StreamInfo, details: Boolean) {
         Box(Modifier.size(tvs(42)).clip(CircleShape).background(Theme.elevated), contentAlignment = Alignment.Center) {
             Icon(deviceIcon(s.platform), null, tint = Color.White, modifier = Modifier.size(tvs(22)))
         }
-        Spacer(Modifier.width(tvs(14)))
+        Spacer(Modifier.width(tvs(12)))
+        RowProfileAvatar(s.profileId, s.profileName)
+        Spacer(Modifier.width(tvs(12)))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(s.deviceName, color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1,
@@ -260,8 +308,12 @@ fun WatchLogScreen(onClose: () -> Unit) {
                             subtitle = listOf(e.profileName, e.deviceName).filter { it.isNotBlank() }.joinToString(" · "),
                             onClick = target?.let { t -> { detail = t } },
                             leading = {
-                                Text(s2Time(e.startedAt), color = Theme.secondary, fontSize = tsp(13),
-                                    modifier = Modifier.widthIn(min = tvs(44)))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(s2Time(e.startedAt), color = Theme.secondary, fontSize = tsp(13),
+                                        modifier = Modifier.widthIn(min = tvs(44)))
+                                    Spacer(Modifier.width(tvs(8)))
+                                    RowProfileAvatar(e.profileId, e.profileName)
+                                }
                             },
                             trailing = {
                                 Column(horizontalAlignment = Alignment.End) {

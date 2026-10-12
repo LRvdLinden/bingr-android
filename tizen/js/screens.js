@@ -178,6 +178,26 @@
     return el;
   };
 
+  /**
+   * Kleine ronde avatar voor een regel in "Wie kijkt er nu" en de kijkgeschiedenis (build 57): profiel op profile_id,
+   * anders op naam (oudere regels zonder profile_id), anders de eerste letter in een gekleurde cirkel.
+   */
+  S.rowAvatar = function (profileId, profileName) {
+    var p = (profileId && D.profileById(profileId)) || null;
+    if (!p && profileName) {
+      var n = String(profileName).trim().toLowerCase();
+      for (var i = 0; i < D.profiles.length && !p; i++) if (String(D.profiles[i].name || '').trim().toLowerCase() === n) p = D.profiles[i];
+    }
+    if (p) return S.avatar(p, 'mini');
+    var name = String(profileName || '').trim();
+    var hash = 0;
+    for (var j = 0; j < name.length; j++) hash = (hash * 31 + name.charCodeAt(j)) | 0;
+    var pal = D.palettes[((hash % D.palettes.length) + D.palettes.length) % D.palettes.length];
+    var el = h('div.avatar.mini.letter', name ? name.charAt(0).toUpperCase() : '?');
+    el.style.backgroundImage = 'linear-gradient(135deg,' + pal[0] + ',' + pal[1] + ')';
+    return el;
+  };
+
   // MARK: Wie kijkt er?
 
   S.profiles = function (onPick) {
@@ -1179,7 +1199,7 @@
       return A.listStreams().then(function (r) { return { items: r.streams, header: L('%d of %d watching now', r.streams.length, r.limit) }; });
     }, function (s) {
       var mins = s.startedAt ? Math.round((Date.now() - s.startedAt) / 60000) : 0;
-      return h('div.st-row.f', [U.icon(platformIcon(s.platform)), h('div.st-label', [h('div', s.title), h('div.dim', s.deviceName + '  ·  ' + s.profileName + '  ·  ' + mins + ' min')])]);
+      return h('div.st-row.f', [U.icon(platformIcon(s.platform)), S.rowAvatar(s.profileId, s.profileName), h('div.st-label', [h('div', s.title), h('div.dim', s.deviceName + '  ·  ' + s.profileName + '  ·  ' + mins + ' min')])]);
     }, L('Nobody is watching right now.'));
   };
   S.watchLog = function () {
@@ -1188,7 +1208,7 @@
     }, function (e) {
       var d = new Date(e.startedAt);
       return h('div.st-row.f', [h('div.wl-time', d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) + '  ' + B.fmtTime(e.startedAt)),
-        h('div.st-label', [h('div', e.title), h('div.dim', e.profileName + '  ·  ' + e.deviceName + '  ·  ' + e.minutes + ' min')])]);
+        S.rowAvatar(e.profileId, e.profileName), h('div.st-label', [h('div', e.title), h('div.dim', e.profileName + '  ·  ' + e.deviceName + '  ·  ' + e.minutes + ' min')])]);
     }, L('No history yet'));
   };
 })();

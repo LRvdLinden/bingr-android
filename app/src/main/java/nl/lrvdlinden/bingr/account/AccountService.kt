@@ -783,6 +783,8 @@ object Account {
     /** Eén lopende stream uit list_streams of het 403-antwoord van stream_start. */
     data class StreamInfo(
         val deviceId: String, val deviceName: String, val platform: String, val profileName: String,
+        /** profile_id (build 57); oudere regels hebben hem niet: dan "" */
+        val profileId: String = "",
         val title: String, val kind: String, val startedAt: Long?, val lastPing: Long?, val signedInAt: Long?,
     ) {
         val current: Boolean get() = deviceId == Account.deviceId
@@ -794,6 +796,8 @@ object Account {
     data class WatchEntry(
         val deviceName: String, val platform: String, val profileName: String, val title: String, val kind: String,
         val startedAt: Long, val endedAt: Long?, val minutes: Int,
+        /** profile_id (build 57); oudere regels hebben hem niet: dan "" */
+        val profileId: String = "",
     )
 
     sealed class StreamStart {
@@ -813,6 +817,7 @@ object Account {
             deviceName = s.jS("device_name")?.takeIf { it.isNotBlank() } ?: platform.ifEmpty { "?" },
             platform = platform,
             profileName = s.jS("profile_name") ?: "",
+            profileId = s.jS("profile_id") ?: "",
             title = s.jS("title") ?: "",
             kind = s.jS("kind") ?: "",
             startedAt = Net.parseISODate(s.jS("started_at")),
@@ -872,6 +877,7 @@ object Account {
                 startedAt = start,
                 endedAt = Net.parseISODate(e.jS("ended_at")),
                 minutes = e.jI("minutes") ?: 0,
+                profileId = e.jS("profile_id") ?: "",
             )
         }.sortedByDescending { it.startedAt }
     }

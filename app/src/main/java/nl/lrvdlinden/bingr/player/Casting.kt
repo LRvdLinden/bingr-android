@@ -43,6 +43,8 @@ import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
 import com.google.android.gms.cast.MediaMetadata
 import com.google.android.gms.cast.MediaStatus
+import com.google.android.gms.cast.MediaTrack as CastTrack
+import com.google.android.gms.cast.TextTrackStyle
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastOptions
 import com.google.android.gms.cast.framework.CastSession
@@ -53,6 +55,7 @@ import com.google.android.gms.cast.framework.media.RemoteMediaClient
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.common.images.WebImage
+import java.io.File
 import java.util.Locale
 
 /** Chromecast: standaard media-ontvanger (CC1AD845). Staat in AndroidManifest als OPTIONS_PROVIDER_CLASS_NAME. */
@@ -74,6 +77,10 @@ class CastOptionsProvider : OptionsProvider {
  * dus altijd geweigerd: "Deze stream kan niet op Chromecast worden afgespeeld". Nu proberen we per stream een rijtje
  * pogingen ([Attempt]): eerst het formaat dat de ontvanger kan (bijv. .m3u8), dan via het doorgeefluik op de telefoon
  * ([CastRelay], voor servers zonder CORS), en pas als alles faalt de melding.
+ *
+ * Build 57: ondertitels. Een ingeladen bestand (OpenSubtitles, SRT/VTT) gaat als WebVTT-tekstspoor mee via
+ * [CastRelay.subtitleUrl]; een gekozen spoor uit de stream wordt bij HLS gezocht tussen de ondertitels die de ontvanger
+ * zelf in de playlist vindt (op taal, naam of volgorde) en aangezet. Wisselen tijdens het casten gaat mee.
  */
 object Casting {
     var connected by mutableStateOf(false); private set
@@ -84,6 +91,26 @@ object Casting {
     private var initialized = false
     private var client: RemoteMediaClient? = null
     private val main = Handler(Looper.getMainLooper())
+
+    /** Ondertitel die op de Chromecast moet (zie [PlayerController.castSubtitle]). */
+    sealed class CastSubtitle {
+        /** Ingeladen bestand; [shift] = vertraging in seconden op het moment van laden. */
+        data class External(val file: File, val lang: String?, val name: String, val shift: Double) : CastSubtitle()
+        /** Spoor [index] van [count] uit de stream. */
+        data class Embedded(val track: MediaTrack, val index: Int, val count: Int) : CastSubtitle()
+    }
+
+    /** Id van ons eigen tekstspoor; hoog, zodat het niet botst met de sporen die de ontvanger zelf uit HLS haalt. */
+    private const val EXTERNAL_TRACK_ID = 9_001L
+
+    /** Gewenste ondertitel en wat daarvan op de ontvanger staat. */
+    private var wantedSub: CastSubtitle? = null
+    /** Bestand dat als tekstspoor in de huidige MediaInfo zit (null = geen). */
+    private var loadedExternal: File? = null
+    /** Spoor uit de stream is aangezet of opgegeven; false = nog zoeken bij de volgende statusupdate. */
+    private var embeddedDone = true
+    /** Poging die nu speelt (voor opnieuw laden met een nieuw ondertitelbestand). */
+    private var currentAttempt: Attempt? = null
 
     /** Eén poging: adres + contentType (+ HLS-segmenthint), eventueel via het doorgeefluik. */
     internal data class Attempt(val url: String, val contentType: String, val relay: Boolean = false, val tsHint: Boolean = true)
@@ -160,7 +187,7 @@ object Casting {
         val p = PlayerController.current ?: return false
         val u = p.url ?: return false
         if (p.isStopped) return false
-        val ok = cast(p.item, u, (p.currentTime * 1000).toLong())
+        val ok = cast(p.item, u, (p.currentTime * 1000).toLong(), p.castSubtitle())
         if (ok) p.pause()
         return ok
     }
@@ -170,6 +197,7 @@ object Casting {
         client = null
         main.removeCallbacksAndMessages(null)
         attempts = emptyList(); pendingItem = null; awaitingResult = false
+        wantedSub = null; loadedExternal = null; embeddedDone = true; currentAttempt = null
         CastRelay.stop()
         connected = false; deviceName = null; isPlaying = false; status = ""
     }
@@ -183,6 +211,7 @@ object Casting {
         if (failed && !awaitingResult && !started && pendingItem != null) {
             if (next(c)) return
         }
+        if (!failed && !awaitingResult) applyEmbedded(c)
         status = when {
             failed -> L("This stream can't be played on Chromecast.")
             c.isPlaying -> L("Playing on Chromecast")
@@ -258,10 +287,11 @@ object Casting {
 
     private const val HLS = "application/x-mpegurl"
 
-    /** Zet [item] op de verbonden Chromecast. false = geen sessie of niets te proberen. */
-    fun cast(item: PlayableItem, url: String, positionMs: Long): Boolean {
+    /** Zet [item] op de verbonden Chromecast, met ondertitel [sub]. false = geen sessie of niets te proberen. */
+    fun cast(item: PlayableItem, url: String, positionMs: Long, sub: CastSubtitle? = null): Boolean {
         val c = client ?: castContext(AppState.appContext)?.sessionManager?.currentCastSession?.remoteMediaClient ?: return false
         pendingItem = item; pendingPosMs = positionMs
+        wantedSub = sub
         attempts = castAttempts(url, item.type == MediaType.LIVE); tried = 0
         return next(c)
     }
@@ -295,11 +325,20 @@ object Casting {
             b.setHlsSegmentFormat(HlsSegmentFormat.TS)
             b.setHlsVideoSegmentFormat(HlsVideoSegmentFormat.MPEG2_TS)
         }
-        val req = MediaLoadRequestData.Builder()
+        // ondertitel: een bestand als WebVTT via het doorgeefluik (ook als de stream zelf rechtstreeks gaat)
+        b.setTextTrackStyle(textStyle())
+        val ext = wantedSub as? CastSubtitle.External
+        val extTrack = ext?.let { externalTrack(it) }
+        if (extTrack != null) b.setMediaTracks(listOf(extTrack))
+        loadedExternal = if (extTrack != null) ext?.file else null
+        embeddedDone = wantedSub !is CastSubtitle.Embedded
+        val rb = MediaLoadRequestData.Builder()
             .setMediaInfo(b.build())
             .setAutoplay(true)
             .setCurrentTime(if (live) 0L else positionMs.coerceAtLeast(0))
-            .build()
+        if (extTrack != null) rb.setActiveTrackIds(longArrayOf(EXTERNAL_TRACK_ID))
+        val req = rb.build()
+        currentAttempt = a
         val no = ++attemptNo
         awaitingResult = true; started = false
         val pending = runCatching { c.load(req) }.getOrNull() ?: run { awaitingResult = false; return false }
@@ -320,6 +359,121 @@ object Casting {
     }
 
     fun togglePause() { client?.togglePlayback() }
+
+    // MARK: ondertitels (build 57)
+
+    /** Goed leesbaar op een tv: witte letters met zwarte rand op een half doorzichtige balk; grootte uit de instellingen. */
+    private fun textStyle(): TextTrackStyle = TextTrackStyle().apply {
+        fontScale = when (SubtitleSize.current) { SubtitleSize.SMALL -> 1.0f; SubtitleSize.MEDIUM -> 1.2f; SubtitleSize.LARGE -> 1.45f }
+        foregroundColor = 0xFFFFFFFF.toInt()
+        backgroundColor = 0x80000000.toInt()
+        edgeType = TextTrackStyle.EDGE_TYPE_OUTLINE
+        edgeColor = 0xFF000000.toInt()
+        windowType = TextTrackStyle.WINDOW_TYPE_NONE
+        fontGenericFamily = TextTrackStyle.FONT_FAMILY_SANS_SERIF
+    }
+
+    /** Tekstspoor voor een ingeladen bestand (WebVTT via het doorgeefluik); null = geen lokaal netwerkadres. */
+    private fun externalTrack(sub: CastSubtitle.External): CastTrack? {
+        val url = CastRelay.subtitleUrl(file = sub.file, shiftSeconds = sub.shift) ?: return null
+        val lang = sub.lang?.trim()?.replace('_', '-')?.takeIf { it.isNotEmpty() } ?: "und"
+        return CastTrack.Builder(EXTERNAL_TRACK_ID, CastTrack.TYPE_TEXT)
+            .setSubtype(CastTrack.SUBTYPE_SUBTITLES)
+            .setContentId(url)
+            .setContentType("text/vtt")
+            .setName(sub.name.ifBlank { L("Subtitles") })
+            .setLanguage(lang)
+            .build()
+    }
+
+    /** "nld", "dut", "nl-NL" → "nl". */
+    private fun baseLang(code: String?): String? {
+        val c = code?.lowercase(Locale.ROOT)?.split('-', '_')?.firstOrNull()?.takeIf { it.isNotEmpty() && it != "und" } ?: return null
+        if (c.length == 3) TrackPreferences.languages.firstOrNull { c in it.second }?.let { return it.first }
+        return c
+    }
+
+    /** Tekstsporen die de ontvanger zelf in de stream vond (bij HLS: de ondertitels uit de playlist). */
+    private fun receiverTextTracks(c: RemoteMediaClient): List<CastTrack> =
+        c.mediaInfo?.mediaTracks.orEmpty().filter { it.type == CastTrack.TYPE_TEXT && it.id != EXTERNAL_TRACK_ID }
+
+    /** Spoor op de ontvanger dat past bij het gekozen spoor uit de stream: op taal, dan op naam, dan op volgorde. */
+    private fun matchEmbedded(sub: CastSubtitle.Embedded, tracks: List<CastTrack>): CastTrack? {
+        if (tracks.isEmpty()) return null
+        val name = sub.track.name.trim()
+        tracks.firstOrNull { it.name?.trim()?.equals(name, ignoreCase = true) == true }?.let { return it }
+        val lang = baseLang(sub.track.lang)
+        if (lang != null) {
+            val sameLang = tracks.filter { baseLang(it.language) == lang }
+            if (sameLang.isNotEmpty()) return sameLang.first()
+        }
+        // VLC kent geen taalcode: naam als "Nederlands" / "Dutch - [Nederlands]"
+        tracks.firstOrNull { t -> baseLang(t.language)?.let { TrackPreferences.matches(sub.track, it) } == true }?.let { return it }
+        return if (tracks.size == sub.count) tracks.getOrNull(sub.index) else null
+    }
+
+    /** Spoor uit de stream aanzetten zodra de ontvanger zijn sporen kent; lukt het niet, één keer een melding. */
+    private fun applyEmbedded(c: RemoteMediaClient) {
+        if (embeddedDone) return
+        val sub = wantedSub
+        if (sub !is CastSubtitle.Embedded) { embeddedDone = true; return }
+        if (c.mediaInfo == null || !(c.isPlaying || c.isPaused)) return
+        val tracks = receiverTextTracks(c)
+        val match = matchEmbedded(sub, tracks)
+        if (match != null) {
+            embeddedDone = true
+            runCatching { c.setActiveMediaTracks(longArrayOf(match.id)) }
+            return
+        }
+        // speelt al een paar seconden en nog geen passend spoor: deze ondertitels kan de Chromecast niet tonen
+        if (tracks.isEmpty() && !embeddedGiveUpPosted) {
+            embeddedGiveUpPosted = true
+            val no = attemptNo
+            main.postDelayed({
+                embeddedGiveUpPosted = false
+                if (no != attemptNo || embeddedDone || wantedSub !== sub) return@postDelayed
+                val cl = client ?: return@postDelayed
+                val again = matchEmbedded(sub, receiverTextTracks(cl))
+                embeddedDone = true
+                if (again != null) runCatching { cl.setActiveMediaTracks(longArrayOf(again.id)) }
+                else PlayerController.current?.notice = L("These subtitles can't be shown on Chromecast.")
+            }, 6_000)
+        } else if (tracks.isNotEmpty()) {
+            embeddedDone = true
+            PlayerController.current?.notice = L("These subtitles can't be shown on Chromecast.")
+        }
+    }
+    private var embeddedGiveUpPosted = false
+
+    /**
+     * De kijker koos tijdens het casten een andere ondertitel (of zette hem uit). Spoor uit de stream of uit: alleen de
+     * actieve sporen wisselen. Nieuw bestand: opnieuw laden op dezelfde plek, want een tekstspoor toevoegen aan media
+     * die al speelt kan de standaard-ontvanger niet.
+     */
+    fun subtitlesChanged(player: PlayerController) {
+        val c = client ?: return
+        if (!connected || PlayerController.current !== player || pendingItem?.id != player.item.id) return
+        val sub = player.castSubtitle()
+        wantedSub = sub
+        main.post {
+            if (client !== c) return@post
+            when (sub) {
+                null -> { embeddedDone = true; runCatching { c.setActiveMediaTracks(longArrayOf()) } }
+                is CastSubtitle.Embedded -> { embeddedDone = false; applyEmbedded(c) }
+                is CastSubtitle.External -> {
+                    if (loadedExternal == sub.file) { embeddedDone = true; runCatching { c.setActiveMediaTracks(longArrayOf(EXTERNAL_TRACK_ID)) } }
+                    else {
+                        val item = pendingItem ?: return@post
+                        val a = currentAttempt ?: return@post
+                        val live = item.type == MediaType.LIVE
+                        val pos = if (live) 0L else runCatching { c.approximateStreamPosition }.getOrDefault(pendingPosMs)
+                        pendingPosMs = pos
+                        load(c, item, a, pos)
+                    }
+                }
+            }
+        }
+    }
 
     fun stop() {
         runCatching { castContext(AppState.appContext)?.sessionManager?.endCurrentSession(true) }

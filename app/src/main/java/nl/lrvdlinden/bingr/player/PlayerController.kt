@@ -604,10 +604,32 @@ class PlayerController(item: PlayableItem) {
     fun selectAudio(t: MediaTrack) { engine.selectAudio(t); tracksVersion++ }
     fun selectSubtitle(t: MediaTrack?) {
         externalCues = emptyList(); subtitleText = null; externalSubtitleName = null
+        externalSubtitleFile = null; externalSubtitleLang = null
         engine.selectSubtitle(t); tracksVersion++
+        Casting.subtitlesChanged(this)
     }
 
-    fun addSubtitle(file: File, name: String? = null) {
+    /** Ingeladen ondertitelbestand (UTF-8) en de taal ervan, ook voor de Chromecast (build 57). */
+    private var externalSubtitleFile: File? = null
+    private var externalSubtitleLang: String? = null
+
+    /**
+     * Welke ondertitel er ook op de Chromecast moet (build 57): een ingeladen bestand gaat voor,
+     * anders het gekozen spoor uit de stream, anders uit (null).
+     */
+    fun castSubtitle(): Casting.CastSubtitle? {
+        externalSubtitleFile?.let { f ->
+            return Casting.CastSubtitle.External(f, externalSubtitleLang, externalSubtitleName ?: f.nameWithoutExtension, subtitleDelay)
+        }
+        val id = engine.currentSubtitle ?: return null
+        val tracks = engine.subtitleTracks
+        val i = tracks.indexOfFirst { it.id == id }
+        if (i < 0) return null
+        return Casting.CastSubtitle.Embedded(tracks[i], i, tracks.size)
+    }
+
+    /** [lang]: taalcode van het bestand (bijv. van OpenSubtitles), voor het tekstspoor op de Chromecast. */
+    fun addSubtitle(file: File, name: String? = null, lang: String? = null) {
         // altijd als UTF-8 aanbieden (OpenSubtitles levert soms Windows-1252/Latin-1 → rare tekens)
         val utf8 = SRT.normalizedFile(file) ?: file
         if (engine.supportsExternalSubtitles) {
@@ -621,8 +643,10 @@ class PlayerController(item: PlayableItem) {
             }
         }
         externalSubtitleName = name ?: file.nameWithoutExtension
+        externalSubtitleFile = utf8; externalSubtitleLang = lang
         engine.setSubtitleDelay(subtitleDelay)
         tracksVersion++
+        Casting.subtitlesChanged(this)
     }
 
     companion object {

@@ -260,7 +260,7 @@ fun OpenSubtitlesPanel(player: PlayerController, onDismiss: () -> Unit) {
         scope.launch {
             try {
                 val file = OpenSubtitles.download(s)
-                player.addSubtitle(file, "${TrackPreferences.flag(s.language)} ${s.release}")
+                player.addSubtitle(file, "${TrackPreferences.flag(s.language)} ${s.release}", s.language)
                 onDismiss()
             } catch (e: Exception) {
                 error = e.message ?: e.toString()

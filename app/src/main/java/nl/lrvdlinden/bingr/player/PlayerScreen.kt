@@ -193,7 +193,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             val best = found.firstOrNull() ?: return
             if (player.item.id != itm.id || player.isStopped) return
             val file = OpenSubtitles.download(best)
-            player.addSubtitle(file, "${TrackPreferences.flag(best.language)} ${best.release}")
+            player.addSubtitle(file, "${TrackPreferences.flag(best.language)} ${best.release}", best.language)
             flash(L("Subtitles: %@", "${TrackPreferences.label(lang)} · OpenSubtitles"))
         } catch (e: Exception) {}
     }

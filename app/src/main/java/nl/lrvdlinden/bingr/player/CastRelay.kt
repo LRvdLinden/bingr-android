@@ -4,6 +4,7 @@ import android.util.Base64
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import java.io.BufferedInputStream
+import java.io.File
 import java.io.OutputStream
 import java.net.Inet4Address
 import java.net.InetAddress
@@ -13,7 +14,9 @@ import java.net.Socket
 import java.net.SocketTimeoutException
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Doorgeefluik op de telefoon voor Chromecast (build 56), alleen als terugval.
@@ -24,6 +27,10 @@ import java.util.concurrent.Executors
  * telefoon de stream op (met de user-agent van de app) en geeft hem in het lokale netwerk door met CORS-headers;
  * adressen in HLS-playlists worden herschreven zodat ook de segmenten via de telefoon lopen.
  *
+ * Build 57: ook ondertitels. De Chromecast toont alleen WebVTT en haalt het bestand met XHR op, dus met CORS-headers.
+ * Een gekozen ondertitel (OpenSubtitles-download of ander bestand, of een los SRT/VTT-adres) staat hier als
+ * `/<token>/sub/<n>.vtt`, omgezet naar WebVTT ([WebVTT]). Dat werkt ook als de stream zelf rechtstreeks gaat.
+ *
  * Alleen bereikbaar met een willekeurig token in het pad, en alleen zolang er een Cast-sessie is.
  */
 object CastRelay {
@@ -32,19 +39,42 @@ object CastRelay {
     private val pool = Executors.newCachedThreadPool { r -> Thread(r, "cast-relay").apply { isDaemon = true } }
     @Volatile private var host: String? = null
 
-    /** Lokaal adres waarop de Chromecast [upstream] via de telefoon kan ophalen; null = geen wifi-adres. */
+    /** Ondertitel die de Chromecast kan ophalen: een lokaal bestand of een los adres (SRT/VTT), met vertraging in seconden. */
+    private class SubSource(val file: File?, val remote: String?, val shift: Double)
+    private val subs = ConcurrentHashMap<String, SubSource>()
+    private val subCounter = AtomicInteger(0)
+
+    /** Begin van elk adres ("http://ip:poort/token"); start de server als dat nodig is. null = geen wifi-adres. */
     @Synchronized
-    fun url(upstream: String, ext: String): String? {
+    private fun base(): String? {
         val ip = localIPv4() ?: return null
         val s = server ?: runCatching { start() }.getOrNull() ?: return null
         host = "$ip:${s.localPort}"
-        return "http://$host/$token/${encode(upstream)}/s.$ext"
+        return "http://$host/$token"
+    }
+
+    /** Lokaal adres waarop de Chromecast [upstream] via de telefoon kan ophalen; null = geen wifi-adres. */
+    fun url(upstream: String, ext: String): String? = base()?.let { "$it/${encode(upstream)}/s.$ext" }
+
+    /**
+     * Adres van een ondertitel als WebVTT voor de Chromecast: [file] (lokaal) of [remote] (http(s), SRT of VTT).
+     * Elk aanroep geeft een nieuw adres, zodat de ontvanger nooit een oude versie uit zijn cache haalt.
+     */
+    fun subtitleUrl(file: File? = null, remote: String? = null, shiftSeconds: Double = 0.0): String? {
+        if (file == null && remote.isNullOrBlank()) return null
+        val b = base() ?: return null
+        val id = subCounter.incrementAndGet().toString()
+        // alleen de laatste paar bewaren
+        if (subs.size > 8) subs.keys.mapNotNull { it.toIntOrNull() }.sorted().dropLast(4).forEach { subs.remove(it.toString()) }
+        subs[id] = SubSource(file, remote, shiftSeconds)
+        return "$b/sub/$id.vtt"
     }
 
     @Synchronized
     fun stop() {
         runCatching { server?.close() }
         server = null
+        subs.clear()
     }
 
     private fun start(): ServerSocket {
@@ -89,6 +119,7 @@ object CastRelay {
         if (method == "OPTIONS") { writeHead(out, 204, "No Content", emptyMap()); return }
         val segs = path.substringBefore('?').split('/').filter { it.isNotEmpty() }
         if (segs.size < 2 || segs[0] != token) { writeHead(out, 404, "Not Found", emptyMap()); return }
+        if (segs[1] == "sub") { serveSubtitle(out, method, segs.getOrNull(2)?.substringBefore('.')); return }
         val upstream = decode(segs[1])?.takeIf { it.startsWith("http", true) } ?: run { writeHead(out, 400, "Bad Request", emptyMap()); return }
 
         val rb = Request.Builder().url(upstream).header("User-Agent", Http.USER_AGENT)
@@ -133,6 +164,27 @@ object CastRelay {
                 // Chromecast heeft de verbinding gesloten (zappen/stoppen): normaal
             }
         }
+    }
+
+    /** Ondertitel als WebVTT (UTF-8) met CORS-headers; de ontvanger weigert tekstsporen zonder Access-Control-Allow-Origin. */
+    private fun serveSubtitle(out: OutputStream, method: String, id: String?) {
+        val src = id?.let { subs[it] } ?: run { writeHead(out, 404, "Not Found", emptyMap()); return }
+        val raw: ByteArray? = when {
+            src.file != null -> runCatching { src.file.readBytes() }.getOrNull()
+            src.remote != null -> runCatching {
+                Http.client.newCall(Request.Builder().url(src.remote).header("User-Agent", Http.USER_AGENT).build()).execute()
+                    .use { r -> if (r.isSuccessful) r.body?.bytes() else null }
+            }.getOrNull()
+            else -> null
+        }
+        if (raw == null) { writeHead(out, 502, "Bad Gateway", emptyMap()); return }
+        val body = WebVTT.from(SRT.decode(raw), src.shift).toByteArray(Charsets.UTF_8)
+        writeHead(out, 200, "OK", mapOf(
+            "Content-Type" to "text/vtt; charset=utf-8",
+            "Content-Length" to body.size.toString(),
+            "Cache-Control" to "no-cache",
+        ))
+        if (method != "HEAD") { out.write(body); out.flush() }
     }
 
     /** Elk adres in een HLS-playlist (regels en URI="…") omzetten naar een adres via het doorgeefluik. */

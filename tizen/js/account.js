@@ -343,7 +343,7 @@
     return (list || []).filter(function (s) { return s && s.device_id; }).map(function (s) {
       return {
         deviceId: s.device_id, deviceName: s.device_name || s.platform || '?', platform: s.platform || '',
-        profileName: s.profile_name || '', title: s.title || '', kind: s.kind || '',
+        profileId: s.profile_id || '', profileName: s.profile_name || '', title: s.title || '', kind: s.kind || '',
         startedAt: B.parseISO(s.started_at), current: s.device_id === A.deviceId()
       };
     });
@@ -382,7 +382,7 @@
       if (!r || !r.ok) throw generic();
       return (r.json.entries || []).map(function (e) {
         return {
-          deviceName: e.device_name || e.platform || '?', platform: e.platform || '', profileName: e.profile_name || '',
+          deviceName: e.device_name || e.platform || '?', platform: e.platform || '', profileId: e.profile_id || '', profileName: e.profile_name || '',
           title: e.title || '', kind: e.kind || '', startedAt: B.parseISO(e.started_at), minutes: e.minutes || 0
         };
       }).filter(function (e) { return e.startedAt; }).sort(function (a, b) { return b.startedAt - a.startedAt; });
