@@ -170,11 +170,19 @@ object ProfileSync {
         val palettes = PlaylistAvatar.palettes.size
         return when (e) {
             is JsonObject -> {
-                val symbol = (e.jS("symbol") ?: e.jS("emoji") ?: e.jS("figure"))?.takeIf { it.isNotBlank() } ?: fallback.symbol
+                val sym = (e.jS("symbol") ?: e.jS("figure"))?.takeIf { it.isNotBlank() }
+                // gedeeld formaat = iOS-symboolnaam; "emoji" is de exacte Android-keuze (alleen als die nog bij het symbool past)
+                val emoji = e.jS("emoji")?.takeIf { it.isNotBlank() && sym != null && AvatarMap.toShared(it) == sym }
+                val symbol = when {
+                    sym == null -> e.jS("emoji")?.takeIf { it.isNotBlank() } ?: fallback.symbol
+                    sym.startsWith("kid") -> sym
+                    emoji != null -> emoji
+                    else -> AvatarMap.toEmoji(sym) ?: (if (sym in PlaylistAvatar.symbols) sym else fallback.symbol)
+                }
                 val color = (e.jI("colorIndex") ?: e.jI("color") ?: fallback.colorIndex).let { ((it % palettes) + palettes) % palettes }
                 PlaylistAvatar(symbol, color)
             }
-            is JsonPrimitive -> if (e is JsonNull || e.content.isBlank()) fallback else fallback.copy(symbol = e.content)
+            is JsonPrimitive -> if (e is JsonNull || e.content.isBlank()) fallback else fallback.copy(symbol = AvatarMap.toEmoji(e.content) ?: e.content)
             else -> fallback
         }
     }
@@ -190,7 +198,10 @@ object ProfileSync {
                 "id" to JsonPrimitive(p.id),
                 "name" to JsonPrimitive(p.name),
                 // alleen emoji/figuur + kleur; een eigen foto gaat nooit mee
-                "avatar" to buildJsonObject { put("symbol", p.avatar.symbol); put("colorIndex", p.avatar.colorIndex) },
+                "avatar" to buildJsonObject {
+                    put("symbol", AvatarMap.toShared(p.avatar.symbol)); put("colorIndex", p.avatar.colorIndex)
+                    if (!p.avatar.isIllustration) put("emoji", p.avatar.symbol)
+                },
                 "kids" to JsonPrimitive(p.kids),
                 "ageLimit" to (p.ageLimit?.let { JsonPrimitive(it) } ?: JsonNull),
                 "isMain" to JsonPrimitive(p.id == mainID),
@@ -222,4 +233,27 @@ object ProfileSync {
 
     private fun isoNow(): String =
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date())
+}
+
+/**
+ * Profielicoon tussen platforms: de server bewaart de iOS-symboolnaam (SF Symbol) of kidNN;
+ * Android toont emoji. Beide kanten gebruiken dezelfde kleurindex.
+ */
+internal object AvatarMap {
+    private val sfToEmoji = linkedMapOf(
+        "tv" to "📺", "globe" to "🌐", "sportscourt" to "⚽", "crown" to "👑", "flame" to "🔥", "film" to "🎬",
+        "popcorn" to "🍿", "star" to "⭐", "gamecontroller" to "🎮", "moon.stars" to "🌙", "bolt" to "⚡", "heart" to "❤️",
+        "waveform.path.ecg" to "🎧", "hare" to "🐰", "forward" to "🚀", "sparkle" to "🌈", "link" to "🔗",
+        "bubble.left" to "💬", "wifi" to "📶", "umbrella" to "☂️", "play" to "▶️", "book.closed" to "📕",
+        "person" to "🧸", "paintbrush" to "🎭",
+    )
+    private val emojiToSf: Map<String, String> = sfToEmoji.entries.associate { (k, v) -> v to k } + mapOf(
+        "🎵" to "waveform.path.ecg", "🏆" to "crown", "🦁" to "hare", "🦄" to "sparkle", "🐼" to "hare", "☕" to "heart",
+    )
+    fun toEmoji(sf: String): String? = sfToEmoji[sf]
+    fun toShared(symbol: String): String = when {
+        symbol.startsWith("kid") -> symbol
+        symbol in sfToEmoji -> symbol
+        else -> emojiToSf[symbol] ?: "tv"
+    }
 }
