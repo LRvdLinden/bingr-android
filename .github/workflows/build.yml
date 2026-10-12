@@ -157,6 +157,7 @@ jobs:
           KS="$RUNNER_TEMP/keys"; mkdir -p "$KS"
           # pad voor de security-profielen instellen (bestaat nog niet op een schone runner)
           mkdir -p "$HOME/tizen-studio-data/profile"
+          [ -f "$HOME/tizen-studio-data/profile/profiles.xml" ] || printf '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n<profiles active="" version="3.1"/>\n' > "$HOME/tizen-studio-data/profile/profiles.xml"
           "$T" cli-config "default.profiles.path=$HOME/tizen-studio-data/profile/profiles.xml" || true
           "$T" cli-config -l || true
           if [ -n "$AUTHOR_P12" ] && [ -n "$DIST_P12" ]; then
