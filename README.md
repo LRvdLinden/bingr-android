@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/LRvdLinden/bingr-android?label=APK)](https://github.com/LRvdLinden/bingr-android/releases/latest)
 
 Native IPTV- en mediaspeler voor **Android-telefoon, tablet en Android TV / Google TV / Fire TV** met de look & feel van Netflix.
-Kotlin · Jetpack Compose · Android 7.0+ · Media3 (ExoPlayer) én VLC · 11 talen · versie 1.0.0 (build 41).
+Kotlin · Jetpack Compose · Android 7.0+ · Media3 (ExoPlayer) én VLC · 11 talen · versie 1.0.0 (build 42).
 
 De versie voor iPhone, iPad, Apple TV en Mac staat in [iptv-ios-appletv](https://github.com/LRvdLinden/iptv-ios-appletv), de website in [bingr-website](https://github.com/LRvdLinden/bingr-website) ([bingr.online](https://bingr.online)).
 

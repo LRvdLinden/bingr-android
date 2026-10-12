@@ -2,6 +2,10 @@
 
 Alle versies van Bingr voor Android, Android TV en Fire TV (iPhone, iPad, Apple TV en Mac: [iptv-ios-appletv](https://github.com/LRvdLinden/iptv-ios-appletv/blob/main/CHANGELOG.md)). Versie 1.0.0; het buildnummer loopt gelijk over alle platforms.
 
+## Build 42 · 2026-10-12
+
+- Trakt koppelen werkt weer: na 'Apparaat goedgekeurd' op trakt.tv logt Bingr nu meteen in, ook als de app even op de achtergrond stond
+
 ## Build 41 · 2026-10-12
 
 - Trakt en OpenSubtitles: gewoon inloggen, de sleutels komen veilig van de Bingr-server

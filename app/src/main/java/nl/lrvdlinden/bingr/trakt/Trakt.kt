@@ -221,7 +221,10 @@ object Trakt {
         var interval = maxOf(c.interval, 5).toLong()
         while (System.currentTimeMillis() < deadline) {
             delay(interval * 1000)
-            val r = oauthPost("/oauth/device/token", oauthBody(mapOf("code" to c.deviceCode, "code_verifier" to verifier)))
+            // netwerkfout (bijv. app op de achtergrond terwijl je op trakt.tv/activate bent): gewoon opnieuw proberen
+            val r = try {
+                oauthPost("/oauth/device/token", oauthBody(mapOf("code" to c.deviceCode, "code_verifier" to verifier)))
+            } catch (e: java.io.IOException) { continue }
             when (r.code) {
                 200 -> {
                     var tok = parseTokens(r.body) ?: throw Net.decoding("token")
