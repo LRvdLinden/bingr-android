@@ -254,10 +254,12 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         // live-zender werkt niet (ook niet na een stille nieuwe poging): automatisch naar een andere server
         player.onLiveFailure = {
             scope.launch {
+                val forID = player.item.id
                 val hits = loadBackups()
                 var ok = false
                 for (h in hits.take(3)) { if (switchTo(h)) { ok = true; break } }
-                if (!ok && !player.dismissed) player.showFailure()
+                // intussen gezapt of gesloten: niets meer doen
+                if (!ok && !player.dismissed && player.item.id == forID) player.showFailure()
             }
         }
         val cid = itm.channelID
