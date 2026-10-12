@@ -165,6 +165,21 @@ fun MainScreen() {
             FullLayer { LoadingOverlay(Playlists.loadingText, source) }
         }
 
+        // verversen op de achtergrond (de lijst uit de cache staat er al): klein label "Updating…"
+        AnimatedVisibility(Playlists.updating && !Playlists.isLoading, enter = fadeIn(), exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = if (tv) 24.dp else 96.dp)) {
+            Row(
+                Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.8f))
+                    .border(0.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(50))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(12.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(L("Updating…"), color = Color.White, fontSize = tsp(12), fontWeight = FontWeight.Medium)
+            }
+        }
+
         ScreensStackHost()
     }
 

@@ -159,7 +159,7 @@ private fun S2GuideChannelCell(c: Channel, width: Dp, height: Dp, onClick: () ->
     var focused by remember { mutableStateOf(false) }
     Row(
         Modifier.width(width).height(height)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { focused = it.isFocused; if (it.isFocused && AppState.isTV) ChannelPreview.focus(c) }
             .focusLift(1.04f, onClick = onClick)
             .background(if (focused) Color.White else Theme.card)
             .padding(horizontal = 6.dp),
@@ -178,7 +178,7 @@ private fun S2GuideProgramCell(c: Channel, p: EPGProgram, x: Dp, width: Dp, heig
     val reminder = Store.hasReminder(s2ReminderID(c, p))
     Box(
         Modifier.offset(x = x + 1.dp, y = 2.dp).width(width).height(height)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { focused = it.isFocused; if (it.isFocused && AppState.isTV && p.isNow) ChannelPreview.focus(c) }
             .focusLift(1.03f, onClick = onClick)
             .clip(RoundedCornerShape(4.dp))
             .background(if (focused) Color.White else if (p.isNow) Color(0xFF3A1418) else Theme.elevated)
@@ -268,8 +268,17 @@ private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss:
     val rid = s2ReminderID(channel, program)
     val canCatchup = program.end < now && channel.catchupDays > 0 &&
         program.start > now - channel.catchupDays * 86_400_000L
-    val catchupURL = remember(channel.id, program.start) {
+    val pid = Playlists.source?.id ?: ""
+    var offsetOpen by remember { mutableStateOf(false) }
+    val offset = Store.catchupOffset(pid, channel.id)
+    val catchupURL = remember(channel.id, program.start, offset) {
         if (channel.catchupDays > 0) Playlists.catchupURL(channel.id, program.start, program.end) else null
+    }
+    // live-voorbeeld van deze zender in het programmavenster (build 51); eigen voorbeeld na sluiten weer weg
+    val previewHere = program.isNow
+    LaunchedEffect(channel.id, previewHere) { if (previewHere) ChannelPreview.focus(channel) }
+    androidx.compose.runtime.DisposableEffect(channel.id) {
+        onDispose { if (previewHere && !AppState.isTV) ChannelPreview.stop() }
     }
     fun playCatchup(u: String) {
         onPlayed()
@@ -294,6 +303,9 @@ private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss:
                     .padding(bottom = if (tv) 0.dp else 24.dp),
                 verticalArrangement = Arrangement.spacedBy(tvs(12))
             ) {
+                if (previewHere && ChannelPreview.channel?.id == channel.id) {
+                    ChannelPreviewView(Modifier.widthIn(max = 420.dp))
+                }
                 Text(channel.name, color = Theme.secondary, fontSize = tsp(13), fontWeight = FontWeight.SemiBold)
                 Text(program.title, color = Color.White, fontSize = tsp(24), fontWeight = FontWeight.Bold)
                 Text("${s2DateTime(program.start)} – ${s2Time(program.end)}", color = Theme.secondary, fontSize = tsp(14))
@@ -325,8 +337,14 @@ private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss:
                             modifier = firstMod()) { playCatchup(catchupURL) }
                     }
                 }
+                // terugkijk-correctie per zender (build 51)
+                if (channel.catchupDays > 0 && pid.isNotEmpty()) {
+                    NetflixButton(L("Catch-up offset") + catchupOffsetLabel(pid, channel), Icons.Default.History,
+                        kind = NetflixKind.SECONDARY) { offsetOpen = true }
+                }
             }
             LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
         }
     }
+    if (offsetOpen) CatchupOffsetDialog(pid, channel) { offsetOpen = false }
 }

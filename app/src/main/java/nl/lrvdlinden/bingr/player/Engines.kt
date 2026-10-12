@@ -110,9 +110,27 @@ class ExoEngine(ctx: Context) : PlaybackEngine {
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
             .setHandleAudioBecomingNoisy(true)
             .build()
+        // beeldfrequentie (build 51): op TV met "Match frame rate" regelt FrameRateMatcher het (API 31+: altijd)
+        runCatching {
+            player.setVideoChangeFrameRateStrategy(
+                if (AppState.isTV && (!PlayerSettings.matchFrameRate || android.os.Build.VERSION.SDK_INT >= 31)) C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
+                else C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS
+            )
+        }
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) { failed = true }
+            override fun onRenderedFirstFrame() { matchFrameRate() }
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) { matchFrameRate() }
         })
+    }
+
+    /** false bij multiview-tegels: die mogen het scherm niet omschakelen. */
+    var frameRateMatching = true
+
+    private fun matchFrameRate() {
+        if (released || !frameRateMatching || !FrameRateMatcher.enabled) return
+        val fps = player.videoFormat?.frameRate ?: return
+        if (fps > 1f) FrameRateMatcher.apply(fps, FrameRateMatcher.surfaceOf(view))
     }
 
     override val state: EngineState

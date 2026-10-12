@@ -49,6 +49,9 @@ import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.DesktopAccessDisabled
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
@@ -126,6 +129,11 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     var rootFocused by remember { mutableStateOf(false) }
     val swallowUp = remember { mutableSetOf<Int>() }
     val castAvailable = remember { Casting.isAvailable(ctx) }
+    /** Zenderbanner bij zappen (build 51) */
+    var zapBanner by remember { mutableStateOf<Channel?>(null) }
+    var zapBannerID by remember { mutableIntStateOf(0) }
+    var zapJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val externalTarget = ExternalDisplay.target
 
     fun flash(text: String) { toast = text; toastID++ }
     fun poke() { showControls = true; pokeID++ }
@@ -231,17 +239,27 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     }
     playNextRef = { n -> playNext(n) }
 
+    /**
+     * Zappen binnen de huidige groep (build 51): de zenderbanner volgt meteen; met "Zap delay" start de stream pas
+     * als er even niet meer gezapt is (snel doorzappen werkt dan alleen de banner bij).
+     */
     fun zap(step: Int) {
         val list = AppState.liveZapList
         if (!player.isLive || list.isEmpty()) return
-        val cur = player.item.channelID ?: player.item.id
+        val cur = zapBanner?.id ?: player.item.channelID ?: player.item.id
         val i = list.indexOfFirst { it.id == cur }
         if (i < 0) return
         val next = list[((i + step) % list.size + list.size) % list.size]
-        Playlists.source?.id?.let { Store.pushRecentChannel(it, next.id) }
-        val nextItem = livePlayable(next)
-        flash("${next.number?.let { n -> "$n  " } ?: ""}${next.name}")
-        scope.launch { player.stop(); start(nextItem) }
+        zapBanner = next
+        zapBannerID++
+        zapJob?.cancel()
+        val wait = PlayerSettings.zapDelay.toLong()
+        zapJob = scope.launch {
+            if (wait > 0) delay(wait)
+            Playlists.source?.id?.let { Store.pushRecentChannel(it, next.id) }
+            player.stop()
+            start(livePlayable(next))
+        }
     }
 
     fun openMultiview() {
@@ -263,6 +281,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     // MARK: levenscyclus
 
     LaunchedEffect(player) {
+        ChannelPreview.stop()
         Casting.init(ctx)
         start(item)
     }
@@ -279,7 +298,11 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             player.stop()
             if (PlayerController.current === player) PlayerController.current = null
             MainActivity.current?.keepScreenOn(false)
+            FrameRateMatcher.reset((player.engine as? ExoEngine)?.let { FrameRateMatcher.surfaceOf(it.view) })
         }
+    }
+    LaunchedEffect(zapBannerID) {
+        if (zapBanner != null) { delay(PlayerSettings.zapDelay.toLong() + 3_000); zapBanner = null }
     }
     LaunchedEffect(player.isPlaying) { MainActivity.current?.keepScreenOn(player.isPlaying) }
     LaunchedEffect(pokeID, panel, player.isPlaying, showControls) {
@@ -371,11 +394,30 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             .focusRequester(rootFocus)
             .focusable()
     ) {
-        EngineView(player, Modifier.fillMaxSize())
+        if (externalTarget != null && !inPiP) {
+            // video op het externe scherm, bediening hier
+            ExternalPresentation(player, externalTarget)
+            Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Filled.Tv, null, tint = Theme.secondary, modifier = Modifier.size(tvs(56)))
+                Spacer(Modifier.height(10.dp))
+                Text(externalTarget.name ?: L("Show on external display"), color = Theme.secondary, fontSize = tsp(14))
+            }
+        } else EngineView(player, Modifier.fillMaxSize())
 
         if (!inPiP && !isTV) {
+            // vegen omhoog/omlaag = zappen binnen de groep (live)
             Box(
                 Modifier.fillMaxSize().pointerInput(player) {
+                    var dy = 0f
+                    detectVerticalDragGestures(
+                        onDragStart = { dy = 0f },
+                        onDragEnd = {
+                            val min = 60.dp.toPx()
+                            if (player.isLive && kotlin.math.abs(dy) > min) zap(if (dy < 0) 1 else -1)
+                        },
+                        onVerticalDrag = { change, amount -> dy += amount; change.consume() }
+                    )
+                }.pointerInput(player) {
                     detectTapGestures(
                         onTap = { toggleControls() },
                         onDoubleTap = { off ->
@@ -463,6 +505,14 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                 NetflixButton(L("Next episode"), Icons.Filled.SkipNext) { nextUp?.let { playNext(it) } }
             }
 
+            // zenderbanner bij zappen
+            AnimatedVisibility(
+                zapBanner != null, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = tvs(if (showControls) 120 else 36))
+            ) {
+                zapBanner?.let { c -> ZapBanner(c, pending = c.id != (player.item.channelID ?: player.item.id)) }
+            }
+
             AnimatedVisibility(
                 toast != null, enter = fadeIn() + slideInVertically { -it }, exit = fadeOut() + slideOutVertically { -it },
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = tvs(40))
@@ -546,6 +596,10 @@ private fun PlayerControls(
                     }
                     if (PlayerController.pipSupported) {
                         PlayerRoundIcon(Icons.Filled.PictureInPictureAlt, L("Picture in Picture"), 22) { player.startPiP() }
+                    }
+                    if (ExternalDisplay.display != null) {
+                        PlayerRoundIcon(if (ExternalDisplay.enabled) Icons.Filled.Tv else Icons.Filled.DesktopAccessDisabled,
+                            L("Show on external display"), 22) { ExternalDisplay.setEnabled(!ExternalDisplay.enabled) }
                     }
                 }
                 if (live) {
@@ -690,6 +744,39 @@ private fun PlayerBarButton(icon: ImageVector, label: String, isTV: Boolean, mod
         if (isTV) {
             Spacer(Modifier.width(8.dp))
             Text(label, color = fg, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
+    }
+}
+
+/** Zenderbanner bij zappen: nummer, logo, naam, groep en wat er nu speelt. */
+@Composable
+private fun ZapBanner(c: Channel, pending: Boolean) {
+    val now = Playlists.library.nowPlaying(c)
+    Row(
+        Modifier.widthIn(max = 640.dp).padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.82f))
+            .padding(horizontal = tvs(16), vertical = tvs(10)),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        c.number?.let {
+            Text("$it", color = Color.White, fontSize = tsp(22), fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
+            Spacer(Modifier.width(tvs(12)))
+        }
+        RemoteImage(c.logo, Modifier.width(tvs(64)).height(tvs(40)).clip(RoundedCornerShape(4.dp)),
+            placeholder = c.name.take(3), fit = true)
+        Spacer(Modifier.width(tvs(12)))
+        Column(Modifier.weight(1f, fill = false)) {
+            Text(c.name, color = Color.White, fontSize = tsp(16), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val line = listOfNotNull(now?.let { "${s2Time(it.start)}  ${it.title}" }, c.group.takeIf { it.isNotBlank() }).firstOrNull()
+            if (line != null) Text(line, color = Theme.secondary, fontSize = tsp(12), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (now != null) {
+                Spacer(Modifier.height(4.dp))
+                Box(Modifier.width(tvs(200)).clip(RoundedCornerShape(2.dp))) { ProgressBar(now.progress) }
+            }
+        }
+        if (pending) {
+            Spacer(Modifier.width(tvs(12)))
+            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(tvs(16)))
         }
     }
 }

@@ -48,13 +48,17 @@ object StateSync {
         "app.language", "player.engine", "subtitle.size", "player.audioLanguage", "player.subtitleLanguage",
         "autoSubtitles", "os.language", "os.languages", "ui.startTab", "ui.showLive", "ui.showMovies", "ui.showSeries",
         "playlist.refresh", "category.sort", "trakt.scrobble", "trakt.askRating",
+        // build 51
+        "player.zapDelay", "player.channelPreview", "player.matchFrameRate", "player.externalDisplay",
     )
-    private val boolKeys = setOf("autoSubtitles", "ui.showLive", "ui.showMovies", "ui.showSeries", "trakt.scrobble", "trakt.askRating")
-    private val intKeys = setOf("subtitle.size", "ui.startTab")
+    private val boolKeys = setOf("autoSubtitles", "ui.showLive", "ui.showMovies", "ui.showSeries", "trakt.scrobble", "trakt.askRating",
+        "player.channelPreview", "player.matchFrameRate", "player.externalDisplay")
+    private val intKeys = setOf("subtitle.size", "ui.startTab", "player.zapDelay")
 
     private const val CONNECTIONS = "connections"
     private const val SETTINGS = "settings"
     private const val REMINDERS = "reminders"
+    private const val COLLECTIONS = "collections"
     private const val PROFILE = "profile."
     private const val UPLOAD_DELAY = 3_000L
     private const val PROGRESS_INTERVAL = 30_000L
@@ -85,6 +89,8 @@ object StateSync {
     private var serverSettings: JsonObject? = null
     private var serverConnections: JsonObject? = null
     private var serverReminders: JsonObject? = null
+    /** Collecties zoals de server ze kent (kleine letters id → object), voor velden die deze app niet kent. */
+    private var serverCollectionItems = mapOf<String, JsonObject>()
     /** Sectienaam op de server per profiel (kleine letters id → naam), want iOS gebruikt hoofdletters. */
     private val sectionNames = mutableMapOf<String, String>()
 
@@ -188,6 +194,12 @@ object StateSync {
         schedule(wait)
     }
 
+    /** Een collectie is toegevoegd, gewijzigd of verwijderd (build 51). */
+    fun collectionsChanged() {
+        if (applying > 0) return
+        markDirty(COLLECTIONS)
+    }
+
     fun remindersChanged() {
         if (applying > 0) return
         setLocalAt(REMINDERS, System.currentTimeMillis())
@@ -242,6 +254,7 @@ object StateSync {
         refreshJob?.cancel(); refreshJob = null
         synced = false
         serverSettings = null; serverConnections = null; serverReminders = null
+        serverCollectionItems = emptyMap()
         sectionNames.clear()
     }
 
@@ -299,6 +312,7 @@ object StateSync {
             mergeConnections(all[CONNECTIONS])
             mergeSettings(all[SETTINGS])
             mergeReminders(all[REMINDERS])
+            mergeCollections(all[COLLECTIONS], all.containsKey(COLLECTIONS))
             mergeProfiles(all)
             synced = true
         }
@@ -315,7 +329,11 @@ object StateSync {
                 val failed = mutableListOf<String>()
                 for (k in keys) {
                     val ok = try {
-                        if (k.startsWith("profile:")) uploadProfile(k.removePrefix("profile:")) else uploadSimple(k)
+                        when {
+                            k.startsWith("profile:") -> uploadProfile(k.removePrefix("profile:"))
+                            k == COLLECTIONS -> uploadCollections()
+                            else -> uploadSimple(k)
+                        }
                     } catch (e: CancellationException) { dirty += keys; throw e } catch (_: Exception) { false }
                     if (!ok) failed += k
                     if (k.startsWith("profile:")) lastProgressUpload = System.currentTimeMillis()
@@ -696,6 +714,99 @@ object StateSync {
         }
     }
 
+    // MARK: collecties (build 51)
+
+    /** Collecties uploaden: eerst de serverversie lezen en per item samenvoegen. */
+    private suspend fun uploadCollections(): Boolean {
+        val got = Account.getState(listOf(COLLECTIONS)) ?: return false
+        return mergeCollections(got[COLLECTIONS], got.containsKey(COLLECTIONS))
+    }
+
+    private fun collectionFrom(o: JsonObject): BingrCollection? {
+        val id = o.jS("id")?.takeIf { it.isNotBlank() } ?: return null
+        val deleted = o.jB("deleted") == true
+        val img = o["image"] as? JsonObject
+        val url = img.jS("url")?.takeIf { it.isNotBlank() }
+        val av = if (img != null && url == null) ProfileSync.avatar(img, false, PlaylistAvatar("⭐", 0)) else PlaylistAvatar("⭐", 0)
+        val items = (o["items"] as? JsonArray)?.mapNotNull { e ->
+            val r = e as? JsonObject ?: return@mapNotNull null
+            val t = r.jS("type")?.lowercase() ?: return@mapNotNull null
+            val iid = r.jS("id")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            CollectionRef(t, iid)
+        } ?: emptyList()
+        val types = (o["types"] as? JsonArray)?.mapNotNull { it.jFlex?.lowercase() } ?: BingrCollection.ALL_TYPES
+        return BingrCollection(
+            id = id,
+            name = o.jS("name") ?: "",
+            image = CollectionImage(av.symbol, av.colorIndex, url),
+            kind = if (o.jS("kind")?.lowercase() == BingrCollection.SMART) BingrCollection.SMART else BingrCollection.MANUAL,
+            items = items,
+            query = o.jS("query") ?: "",
+            types = types,
+            group = o.jS("group")?.takeIf { it.isNotEmpty() },
+            sourceID = o.jS("sourceID")?.takeIf { it.isNotEmpty() },
+            order = o.jI("order") ?: 0,
+            updatedAt = time(o["updatedAt"]) ?: 0L,
+            deleted = deleted,
+            deletedAt = if (deleted) time(o["deletedAt"]) ?: time(o["updatedAt"]) else null,
+        )
+    }
+
+    private fun collectionJson(c: BingrCollection): JsonObject {
+        val base = serverCollectionItems[c.id.lowercase()] ?: JsonObject(emptyMap())
+        val m = base.toMutableMap()
+        m["id"] = JsonPrimitive(c.id)
+        m["name"] = JsonPrimitive(c.name)
+        m["image"] = c.image.url?.let { JsonObject(mapOf("url" to JsonPrimitive(it))) } ?: JsonObject(buildMap {
+            put("symbol", JsonPrimitive(AvatarMap.toShared(c.image.symbol)))
+            put("colorIndex", JsonPrimitive(c.image.colorIndex))
+            if (!c.image.avatar.isIllustration) put("emoji", JsonPrimitive(c.image.symbol))
+        })
+        m["kind"] = JsonPrimitive(c.kind)
+        m["items"] = JsonArray(c.items.map { JsonObject(mapOf("type" to JsonPrimitive(it.type), "id" to JsonPrimitive(it.id))) })
+        m["query"] = JsonPrimitive(c.query)
+        m["types"] = JsonArray(c.types.map { JsonPrimitive(it) })
+        m["group"] = c.group?.let { JsonPrimitive(it) } ?: JsonNull
+        m["sourceID"] = c.sourceID?.let { JsonPrimitive(it) } ?: JsonNull
+        m["order"] = JsonPrimitive(c.order)
+        m["updatedAt"] = JsonPrimitive(iso(c.updatedAt))
+        if (c.deleted) {
+            m["deleted"] = JsonPrimitive(true)
+            m["deletedAt"] = JsonPrimitive(iso(c.deletedAt ?: c.updatedAt))
+        } else { m.remove("deleted"); m.remove("deletedAt") }
+        return JsonObject(m)
+    }
+
+    /**
+     * Per collectie wint de nieuwste `updatedAt` (ook tombstones); tombstones ouder dan 90 dagen vervallen.
+     * Lokaal toepassen en uploaden als het resultaat afwijkt van de server. true = gelukt.
+     */
+    private suspend fun mergeCollections(sec: Account.StateSection?, present: Boolean): Boolean {
+        val data = sec?.data as? JsonObject
+        val serverObjs = ((data?.get("items") as? JsonArray) ?: JsonArray(emptyList()))
+            .mapNotNull { it as? JsonObject }.filter { it.jS("id") != null }
+        serverCollectionItems = serverObjs.associateBy { it.jS("id")!!.lowercase() }
+        val server = serverObjs.mapNotNull { collectionFrom(it) }.associateBy { it.id.lowercase() }
+        val local = withContext(Dispatchers.Main) { Collections.ensureLoaded(); Collections.all }
+        val out = LinkedHashMap<String, BingrCollection>()
+        for (c in local) out[c.id.lowercase()] = c
+        for ((k, c) in server) { val l = out[k]; if (l == null || c.updatedAt > l.updatedAt) out[k] = c }
+        val cutoff = System.currentTimeMillis() - REMOVED_DAYS * 24 * 3_600_000L
+        val merged = out.values.filter { !it.deleted || (it.deletedAt ?: it.updatedAt) >= cutoff }
+        if (merged != local) withContext(Dispatchers.Main) { applyingChanges { Collections.applySynced(merged) } }
+        val serverList = server.values.filter { !it.deleted || (it.deletedAt ?: it.updatedAt) >= cutoff }
+        val same = serverList.size == merged.size && merged.all { m -> server[m.id.lowercase()] == m }
+        if (same && (present || merged.isEmpty())) return true
+        if (!present && merged.isEmpty()) return true
+        val json = JsonObject((data ?: JsonObject(emptyMap())) + mapOf(
+            "items" to JsonArray(merged.map { collectionJson(it) }),
+            "updatedAt" to JsonPrimitive(iso(merged.maxOfOrNull { it.updatedAt } ?: System.currentTimeMillis())),
+        ))
+        val ok = Account.putState(COLLECTIONS, json) != null
+        if (ok) serverCollectionItems = merged.associate { it.id.lowercase() to collectionJson(it) }
+        return ok
+    }
+
     // MARK: per profiel
 
     /** Eén item met wanneer het (het laatst) gezet is; [value] null = verwijderd. */
@@ -711,6 +822,8 @@ object StateSync {
         val history: Map<String, Item<HistoryEntry>>,
         val prefs: Item<KijkPrefs>?,
         val pin: Item<String>?,
+        /** Startscherm (build 51): het hele object wint op updatedAt */
+        val home: Item<HomeLayout>? = null,
     )
 
     /** Huidige lokale stand van een profiel vergelijken met het metabestand en verschillen vastleggen (met tijd). */
@@ -778,7 +891,20 @@ object StateSync {
             stored != null -> Item(-1L, stored)
             else -> null
         }
-        return PState(sets, progress, history, prefs, pin)
+        val hl = Store.homeLayout(id)
+        val home = if (hl.rows.isEmpty() && hl.updatedAt == 0L) null else Item(hl.updatedAt, hl)
+        return PState(sets, progress, history, prefs, pin, home)
+    }
+
+    private fun parseHomeLayout(e: JsonElement?): Item<HomeLayout>? {
+        val o = e as? JsonObject ?: return null
+        val rows = (o["rows"] as? JsonArray)?.mapNotNull { r ->
+            val ro = r as? JsonObject ?: return@mapNotNull null
+            val key = ro.jS("key")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            HomeRow(key, ro.jB("visible") ?: true)
+        } ?: return null
+        val at = time(o["updatedAt"]) ?: 0L
+        return Item(at, HomeLayout(rows, at))
     }
 
     private fun parseSetField(e: JsonElement?, removed: JsonObject?): Map<String, Item<Boolean>> {
@@ -883,7 +1009,7 @@ object StateSync {
             val at = time(o["pinUpdatedAt"]) ?: (v as? JsonObject)?.let { time(it["updatedAt"]) } ?: 0L
             Item(at, value)
         }
-        return PState(sets, progress, history, prefs, pin)
+        return PState(sets, progress, history, prefs, pin, parseHomeLayout(o["homeLayout"]))
     }
 
     private fun <T> mergeItems(local: Map<String, Item<T>>, server: Map<String, Item<T>>): Map<String, Item<T>> {
@@ -974,6 +1100,12 @@ object StateSync {
             out["pin"] = p.value?.let { JsonPrimitive(it) } ?: JsonNull
             out["pinUpdatedAt"] = JsonPrimitive(iso(p.at))
         }
+        s.home?.value?.let { h ->
+            out["homeLayout"] = JsonObject(mapOf(
+                "rows" to JsonArray(h.rows.map { r -> JsonObject(mapOf("key" to JsonPrimitive(r.key), "visible" to JsonPrimitive(r.visible))) }),
+                "updatedAt" to JsonPrimitive(iso(h.updatedAt)),
+            ))
+        }
         out["updatedAt"] = JsonPrimitive(iso(now))
         return JsonObject(out)
     }
@@ -1012,7 +1144,7 @@ object StateSync {
                 PState(
                     setFields.associateWith { f -> mergeItems(a.sets[f] ?: emptyMap(), s.sets[f] ?: emptyMap()) },
                     mergeItems(a.progress, s.progress), mergeItems(a.history, s.history),
-                    newest(a.prefs, s.prefs), newest(a.pin, s.pin),
+                    newest(a.prefs, s.prefs), newest(a.pin, s.pin), newest(a.home, s.home),
                 )
             } ?: s
         }
@@ -1021,7 +1153,7 @@ object StateSync {
             setFields.associateWith { f -> mergeItems(local.sets[f] ?: emptyMap(), srv?.sets?.get(f) ?: emptyMap()) },
             mergeItems(local.progress, srv?.progress ?: emptyMap()),
             mergeItems(local.history, srv?.history ?: emptyMap()),
-            newest(local.prefs, srv?.prefs), newest(local.pin, srv?.pin),
+            newest(local.prefs, srv?.prefs), newest(local.pin, srv?.pin), newest(local.home, srv?.home),
         )
         // van vóór build 44 (tijd -1) en de server heeft niets: nu stempelen
         val now = System.currentTimeMillis()
@@ -1058,6 +1190,7 @@ object StateSync {
                     Store.applySyncedPrefs(id, mp.autoSubtitles, mp.subtitleLanguage, mp.audioLanguage, mp.streamSubtitleLanguage)
                 }
                 merged.pin?.let { p -> if (ParentalControl.storedPIN(id) != p.value) ParentalControl.applySyncedPIN(p.value, id) }
+                merged.home?.value?.let { h -> Store.applySyncedHomeLayout(id, h) }
                 Unit
             }
         }
@@ -1074,7 +1207,7 @@ object StateSync {
         ))
 
         val empty = merged.sets.values.all { it.isEmpty() } && merged.progress.isEmpty() && merged.history.isEmpty() &&
-            merged.prefs == null && merged.pin == null
+            merged.prefs == null && merged.pin == null && merged.home == null
         if (srv == null && empty) return true
         if (srv == merged) return true
         val json = profileJson(base, merged)

@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Theaters
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -110,6 +111,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
     var ageGate by remember { mutableStateOf(false) }
     var afterPIN by remember { mutableStateOf<(() -> Unit)?>(null) }
     var seasonMenu by remember { mutableStateOf(false) }
+    var addToCollection by remember { mutableStateOf(false) }
     var recMatches by remember(target.id) { mutableStateOf(mapOf<String, DetailTarget>()) }
 
     val pid = Playlists.source?.id
@@ -388,6 +390,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                             if (inMyList) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             tint = if (inMyList) Theme.red else Color.White
                         ) { toggleMyList() }
+                        DetailCircleButton(Icons.AutoMirrored.Filled.PlaylistAdd) { addToCollection = true }
                         if (trailerID != null) DetailCircleButton(Icons.Default.Theaters) { Trailer.open(ctx, trailerID) }
                         if (isMovie) DetailCircleButton(if (isWatchedTitle) Icons.Default.CheckCircle else Icons.Default.Check) { toggleWatchedMovie() }
                         // geen deelknop op Android TV, Google TV en Fire TV (zie docs/ACCOUNT.md, build 45)
@@ -641,6 +644,10 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                     else { ScreensNav.clear(); AppState.open(h.playlist, thenShow = h.itemID) }
                 }
             )
+        }
+
+        if (addToCollection) {
+            AddToCollectionDialog(Collections.ref(target), target.title, target.poster) { addToCollection = false }
         }
 
         if (ageGate) {

@@ -46,6 +46,8 @@ object Store {
     var reminders by mutableStateOf(listOf<ProgramReminder>()); private set
     /** Kijkgeschiedenis van het actieve profiel */
     var history by mutableStateOf(listOf<HistoryEntry>()); private set
+    /** Startscherm (build 51) van het actieve profiel */
+    var activeHomeLayout by mutableStateOf(HomeLayout()); private set
     var nasServers by mutableStateOf(listOf<NASServer>()); private set
     /** verandert als een profielfoto wijzigt (zodat afbeeldingen opnieuw laden) */
     var photoVersion by mutableStateOf(0); private set
@@ -150,6 +152,7 @@ object Store {
         localWatched = readIn(d, "watched", emptySet())
         recentChannels = readIn(d, "recent", emptyList())
         history = readIn(d, "history", emptyList())
+        activeHomeLayout = readIn(d, "homelayout", HomeLayout())
     }
 
     private fun saveMeta() = write("profilemeta", ProfileMeta(mainSourceID, mainProfileIDStored))
@@ -510,6 +513,38 @@ object Store {
         if (jpeg == null) photoFile(id).delete() else runCatching { photoFile(id).writeBytes(jpeg) }
         photoVersion++
         if (!fromSync && (jpeg != null || existed)) ProfileSync.photoChanged(id, jpeg != null)
+    }
+
+    // MARK: startscherm (per profiel, build 51)
+
+    /** Startscherm van een profiel (leeg = standaard). */
+    fun homeLayout(id: String): HomeLayout =
+        if (id == activeProfileID) activeHomeLayout else readIn(profileDir(id), "homelayout", HomeLayout())
+
+    fun setHomeLayout(id: String, layout: HomeLayout) {
+        writeIn(profileDir(id), "homelayout", layout)
+        if (id == activeProfileID) activeHomeLayout = layout
+        StateSync.profileDataChanged(id)
+    }
+
+    /** Startscherm uit het account; roept geen sync-hooks aan. */
+    fun applySyncedHomeLayout(id: String, layout: HomeLayout) {
+        if (homeLayout(id) == layout) return
+        writeIn(profileDir(id), "homelayout", layout)
+        if (id == activeProfileID) activeHomeLayout = layout
+    }
+
+    // MARK: terugkijk-correctie per zender (build 51, gedeeld veld catchupOffsets van de bron)
+
+    fun catchupOffset(sourceID: String?, channelID: String): Int =
+        playlists.firstOrNull { it.id == sourceID }?.catchupOffsets?.get(channelID) ?: 0
+
+    fun setCatchupOffset(sourceID: String, channelID: String, minutes: Int) {
+        val p = playlists.firstOrNull { it.id == sourceID } ?: return
+        val m = minutes.coerceIn(-120, 120)
+        val offsets = if (m == 0) p.catchupOffsets - channelID else p.catchupOffsets + (channelID to m)
+        if (offsets == p.catchupOffsets) return
+        upsert(p.copy(catchupOffsets = offsets))
     }
 
     // MARK: favorieten / mijn lijst (per profiel)

@@ -60,6 +60,8 @@ object Playlists {
     var loadingText by mutableStateOf(""); private set
     var error by mutableStateOf<String?>(null)
     var refreshingAll by mutableStateOf(false); private set
+    /** Bezig met verversen op de achtergrond terwijl de lijst uit de cache al zichtbaar is ("Updating…") */
+    var updating by mutableStateOf(false); private set
     var episodeCache by mutableStateOf(mapOf<String, List<Episode>>()); private set
     /**
      * Bezig met filteren op de achtergrond (grote lijsten). Bij een profiel met leeftijdsgrens is [library]
@@ -129,6 +131,8 @@ object Playlists {
 
     suspend fun refresh(s: PlaylistSource, showSpinner: Boolean) {
         if (showSpinner) isLoading = true
+        val background = !showSpinner && source?.id == s.id
+        if (background) updating = true
         try {
             val password = Store.secret(s.passwordKey) ?: ""
             var lib: Library
@@ -193,6 +197,7 @@ object Playlists {
             if (source?.id == s.id && rawLibrary.isEmpty) error = Net.message(e)
         } finally {
             isLoading = false; loadingText = ""
+            if (background) updating = false
         }
     }
 
@@ -423,13 +428,17 @@ object Playlists {
 
     fun catchupURL(c: Channel, p: EPGProgram): String? = catchupURL(c.id, p.start, p.end)
 
-    /** Terugkijken / timeshift vanaf een willekeurig moment (Xtream). */
+    /**
+     * Terugkijken / timeshift vanaf een willekeurig moment (Xtream). De terugkijk-correctie van de zender
+     * (catchupOffsets, build 51) verschuift het begintijdstip (en het eind) met dat aantal minuten.
+     */
     fun catchupURL(channelID: String, start: Long, end: Long): String? {
         val s = source ?: return null
         if (s.kind != PlaylistKind.XTREAM) return null
         val ch = rawLibrary.channels.firstOrNull { it.id == channelID } ?: return null
         if (ch.catchupDays <= 0) return null
-        return XtreamClient(s, Store.secret(s.passwordKey) ?: "").catchupURL(ch, start, end)
+        val shift = (Store.playlists.firstOrNull { it.id == s.id }?.catchupOffsets?.get(channelID) ?: 0) * 60_000L
+        return XtreamClient(s, Store.secret(s.passwordKey) ?: "").catchupURL(ch, start + shift, end + shift)
     }
 
     suspend fun shortEPG(c: Channel): List<EPGProgram> {

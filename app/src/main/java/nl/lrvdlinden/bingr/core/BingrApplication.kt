@@ -13,6 +13,7 @@ class BingrApplication : Application() {
         Prefs.init(this)
         Secrets.init(this)
         Store.init(this)
+        Collections.ensureLoaded()
         Localizer.init(this)
         Account.init(this)
         val ui = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
@@ -20,5 +21,6 @@ class BingrApplication : Application() {
             packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
             !packageManager.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
         Reminders.createChannel(this)
+        ExternalDisplay.init(this)
     }
 }

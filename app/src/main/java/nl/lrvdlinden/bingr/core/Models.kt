@@ -90,6 +90,8 @@ data class PlaylistSource(
     val ageLimit: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
+    /** Terugkijk-correctie per zender in minuten (−120…120), gedeeld met iOS en de website (build 51). */
+    val catchupOffsets: Map<String, Int> = emptyMap(),
 ) {
     val passwordKey: String get() = "playlist.$id.password"
 }

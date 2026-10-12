@@ -48,9 +48,12 @@ fun PosterCard(
     progress: Double? = null,
     badge: String? = null,
     rating: Double? = null,
+    /** Kleur van de bron (build 51), als er meerdere bronnen door elkaar staan */
+    accent: Color? = null,
 ) {
     Box(modifier.width(width).height(width * 1.5f).clip(RoundedCornerShape(4.dp))) {
         RemoteImage(poster, Modifier.matchParentSize(), placeholder = title)
+        if (accent != null) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(tvs(4)).background(accent))
         if (watched) {
             Box(Modifier.align(Alignment.TopEnd).padding(6.dp).size(tvs(20)).clip(CircleShape).background(Theme.red),
                 contentAlignment = Alignment.Center) { Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(tvs(13))) }
@@ -126,8 +129,9 @@ fun MediaRow(
 
 /** Zenderkaart (logo + wat er nu speelt). */
 @Composable
-fun ChannelCard(channel: Channel, now: EPGProgram?, favorite: Boolean = false, modifier: Modifier = Modifier) {
-    Column(modifier.width(tvs(180)).clip(RoundedCornerShape(6.dp)).background(Theme.card).padding(10.dp)) {
+fun ChannelCard(channel: Channel, now: EPGProgram?, favorite: Boolean = false, modifier: Modifier = Modifier, accent: Color? = null) {
+    Column(modifier.width(tvs(180)).clip(RoundedCornerShape(6.dp)).background(Theme.card)
+        .then(if (accent != null) Modifier.border(2.dp, accent, RoundedCornerShape(6.dp)) else Modifier).padding(10.dp)) {
         Box(Modifier.fillMaxWidth().height(tvs(60))) {
             RemoteImage(channel.logo, Modifier.matchParentSize(), placeholder = channel.name.take(3), fit = true)
             if (favorite) Icon(Icons.Default.Star, null, tint = Theme.imdb, modifier = Modifier.align(Alignment.TopEnd).size(14.dp))
@@ -230,4 +234,25 @@ fun ProfileAvatar(
     val v = Store.photoVersion
     val photo = remember(profile.id, v) { Store.photo(profile.id) }
     AvatarView(profile.avatar, photo, size, ring = ring, editing = editing, badge = badge)
+}
+
+/** Kleur van een bron uit het avatar-palet (avatar.colorIndex), voor badges en accenten (build 51). */
+fun sourceColor(p: PlaylistSource): Color {
+    val pal = PlaylistAvatar.palettes[Math.floorMod(p.avatar.colorIndex, PlaylistAvatar.palettes.size)]
+    return Color(pal.first)
+}
+
+/** Klein label met de naam en kleur van een bron. */
+@Composable
+fun SourceBadge(p: PlaylistSource) {
+    val c = sourceColor(p)
+    Row(
+        Modifier.clip(RoundedCornerShape(50)).background(c.copy(alpha = 0.22f)).border(1.dp, c, RoundedCornerShape(50))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(tvs(7)).clip(CircleShape).background(c))
+        Spacer(Modifier.width(5.dp))
+        Text(p.name, color = Color.White, fontSize = tsp(10), fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
 }

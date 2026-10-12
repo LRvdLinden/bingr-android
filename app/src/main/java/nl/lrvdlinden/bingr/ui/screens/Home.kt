@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -26,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Movie
@@ -516,6 +518,12 @@ fun HomeScreen(filter: Filter) {
     val favChannels = remember(favorites, index, pid) {
         if (pid == null) emptyList<Channel>() else favorites.mapNotNull { index.channel(it, pid) }
     }
+    val recentChannels = Store.recentChannels
+    val liveChannels = remember(favChannels, recentChannels, index, pid) {
+        favChannels.ifEmpty { if (pid == null) emptyList() else recentChannels.mapNotNull { index.channel(it, pid) } }
+    }
+    val collections = Collections.visible
+    val layoutRows = remember(Store.activeHomeLayout, collections) { HomeLayouts.effective(Store.activeHomeLayout, collections) }
 
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         LazyColumn(
@@ -533,60 +541,95 @@ fun HomeScreen(filter: Filter) {
                 }
             }
 
-            // Verder kijken
-            item(key = "continue") { ContinueRow(continueList, index) }
-
-            // Mijn lijst
-            item(key = "mylist") {
-                when (filter) {
-                    Filter.ALL -> {
-                        val mine = remember(myMovies, mySeries) {
-                            val a: List<DetailTarget> = myMovies.map { DetailTarget.MovieT(it) }
-                            val b: List<DetailTarget> = mySeries.map { DetailTarget.SeriesT(it) }
-                            a + b
+            fun LazyListScope.section(key: String) {
+                when (key) {
+                    // Verder kijken
+                    "continue" -> item(key = "continue") { ContinueRow(continueList, index) }
+                    // Mijn lijst
+                    "mylist" -> item(key = "mylist") {
+                        when (filter) {
+                            Filter.ALL -> {
+                                val mine = remember(myMovies, mySeries) {
+                                    val a: List<DetailTarget> = myMovies.map { DetailTarget.MovieT(it) }
+                                    val b: List<DetailTarget> = mySeries.map { DetailTarget.SeriesT(it) }
+                                    a + b
+                                }
+                                if (mine.isNotEmpty()) TargetRow(L("My List"), mine, pid)
+                            }
+                            Filter.MOVIES -> if (myMovies.isNotEmpty()) MovieRow(L("My List"), myMovies, myMovies, pid)
+                            Filter.SERIES -> if (mySeries.isNotEmpty()) SeriesRow(L("My List"), mySeries, mySeries)
                         }
-                        if (mine.isNotEmpty()) TargetRow(L("My List"), mine, pid)
                     }
-                    Filter.MOVIES -> if (myMovies.isNotEmpty()) MovieRow(L("My List"), myMovies, myMovies, pid)
-                    Filter.SERIES -> if (mySeries.isNotEmpty()) SeriesRow(L("My List"), mySeries, mySeries)
+                    // Onlangs toegevoegd
+                    "recent" -> if (filter != Filter.SERIES) item(key = "recent") {
+                        val all = index.recent
+                        if (all.isNotEmpty()) MovieRow(L("Recently added"), all.take(30), all, pid)
+                    }
+                    // Voor jou
+                    "foryou" -> item(key = "foryou") { ForYouRow(filter, model.forYou) }
+                    // Top 10 (Home: eerst series, dan films)
+                    "top10" -> {
+                        if (filter != Filter.MOVIES) item(key = "top10s") {
+                            val list = model.trendingSeries
+                            if (list.isNotEmpty()) Top10SeriesRow(if (kids) L("Top 10 kids series") else L("Top 10 series today"), list)
+                        }
+                        if (filter != Filter.SERIES) item(key = "top10m") {
+                            val list = model.trendingMovies
+                            if (list.isNotEmpty()) Top10MoviesRow(if (kids) L("Top 10 kids movies") else L("Top 10 movies today"), list)
+                        }
+                    }
+                    // favoriete zenders (anders de laatst bekeken zenders)
+                    "live" -> if (filter == Filter.ALL && liveChannels.isNotEmpty()) item(key = "favs") {
+                        MediaRow(if (favChannels.isNotEmpty()) L("Favorite channels") else L("Live TV")) {
+                            items(liveChannels) { c ->
+                                val now = lib.nowPlaying(c)
+                                ChannelCard(
+                                    c, now, favorite = favChannels.isNotEmpty(),
+                                    modifier = Modifier.focusLift { AppState.play(Playables.channel(c, now), liveChannels) }
+                                )
+                            }
+                        }
+                    }
+                    // alle films / series (Home)
+                    "movies" -> if (filter == Filter.ALL && lib.movies.isNotEmpty()) item(key = "allmovies") {
+                        MovieRow(L("Movies"), lib.movies.take(40), lib.movies, pid)
+                    }
+                    "series" -> if (filter == Filter.ALL && lib.series.isNotEmpty()) item(key = "allseries") {
+                        SeriesRow(L("Series"), lib.series.take(40), lib.series)
+                    }
+                    // categorieën
+                    "categories" -> {
+                        if (filter != Filter.SERIES) items(index.movieGroups.take(groupLimit), key = { "m|" + it.first }) { (g, all) ->
+                            if (all.isNotEmpty()) MovieRow(g, all.take(40), all, pid)
+                        }
+                        if (filter != Filter.MOVIES) items(index.seriesGroups.take(groupLimit), key = { "s|" + it.first }) { (g, all) ->
+                            if (all.isNotEmpty()) SeriesRow(g, all.take(40), all)
+                        }
+                    }
+                    // eigen collecties (build 51)
+                    else -> if (key.startsWith("collection:")) {
+                        val c = Collections.byID(key.removePrefix("collection:"))
+                        val fits = c != null && when (filter) {
+                            Filter.ALL -> true
+                            Filter.MOVIES -> Collections.mayHaveMovies(c)
+                            Filter.SERIES -> Collections.mayHaveSeries(c)
+                        }
+                        if (c != null && fits) item(key = "c|" + c.id + "|" + filter.name) {
+                            CollectionRow(c, only = when (filter) {
+                                Filter.ALL -> null; Filter.MOVIES -> BingrCollection.MOVIE; Filter.SERIES -> BingrCollection.SERIES
+                            })
+                        }
+                    }
                 }
             }
-            // Onlangs toegevoegd
-            if (filter != Filter.SERIES) item(key = "recent") {
-                val all = index.recent
-                if (all.isNotEmpty()) MovieRow(L("Recently added"), all.take(30), all, pid)
-            }
-            // Voor jou
-            item(key = "foryou") { ForYouRow(filter, model.forYou) }
-            // Top 10 (Home: eerst series, dan films)
-            if (filter != Filter.MOVIES) item(key = "top10s") {
-                val list = model.trendingSeries
-                if (list.isNotEmpty()) Top10SeriesRow(if (kids) L("Top 10 kids series") else L("Top 10 series today"), list)
-            }
-            if (filter != Filter.SERIES) item(key = "top10m") {
-                val list = model.trendingMovies
-                if (list.isNotEmpty()) Top10MoviesRow(if (kids) L("Top 10 kids movies") else L("Top 10 movies today"), list)
-            }
 
-            // favoriete zenders
-            if (filter == Filter.ALL && favChannels.isNotEmpty()) item(key = "favs") {
-                MediaRow(L("Favorite channels")) {
-                    items(favChannels) { c ->
-                        val now = lib.nowPlaying(c)
-                        ChannelCard(
-                            c, now, favorite = true,
-                            modifier = Modifier.focusLift { AppState.play(Playables.channel(c, now), favChannels) }
-                        )
-                    }
-                }
-            }
-
-            // categorieën
-            if (filter != Filter.SERIES) items(index.movieGroups.take(groupLimit), key = { "m|" + it.first }) { (g, all) ->
-                if (all.isNotEmpty()) MovieRow(g, all.take(40), all, pid)
-            }
-            if (filter != Filter.MOVIES) items(index.seriesGroups.take(groupLimit), key = { "s|" + it.first }) { (g, all) ->
-                if (all.isNotEmpty()) SeriesRow(g, all.take(40), all)
+            if (filter == Filter.ALL) {
+                // startscherm van dit profiel (Mijn Bingr → Home screen)
+                layoutRows.filter { it.visible }.forEach { section(it.key) }
+            } else {
+                listOf("continue", "mylist", "recent", "foryou", "top10").forEach { section(it) }
+                layoutRows.filter { it.visible && it.key.startsWith("collection:") }.forEach { section(it.key) }
+                section("categories")
             }
 
             if (lib.movies.isEmpty() && lib.series.isEmpty() && !Playlists.isLoading && !Playlists.isFiltering) item(key = "empty") {
@@ -655,11 +698,13 @@ private fun SeriesRow(title: String, items: List<Series>, all: List<Series>?) {
 @Composable
 private fun SeriesPoster(s: Series) {
     val count = watchedEpisodeCount(s)
+    var collect by remember { mutableStateOf(false) }
     PosterCard(
         s.title, s.poster,
-        modifier = Modifier.focusLift { openDetail(DetailTarget.SeriesT(s)) },
+        modifier = Modifier.focusLift(onLongClick = { collect = true }) { openDetail(DetailTarget.SeriesT(s)) },
         badge = if (count > 0) L("%d WATCHED", count) else null
     )
+    if (collect) AddToCollectionDialog(Collections.ref(DetailTarget.SeriesT(s)), s.title, s.poster) { collect = false }
 }
 
 /** Films én series in één rij (Mijn lijst op Home). */
@@ -679,6 +724,7 @@ private fun TargetRow(title: String, items: List<DetailTarget>, pid: String?) {
 @Composable
 private fun MoviePoster(m: Movie, pid: String?) {
     var menu by remember { mutableStateOf(false) }
+    var collect by remember { mutableStateOf(false) }
     val imdb = Trakt.imdb(m)
     val watched = Playables.isWatched(m, imdb)
     PosterCard(
@@ -700,9 +746,11 @@ private fun MoviePoster(m: Movie, pid: String?) {
                 add(S2Action(if (inList) L("Remove from My List") else L("Add to My List"),
                     if (inList) Icons.Default.Close else Icons.Default.Add) { Store.setMyList(pid, m.id, !inList) })
             }
+            add(S2Action(L("Add to collection…"), Icons.AutoMirrored.Filled.PlaylistAdd) { collect = true })
         }
         S2ActionDialog(m.title, actions, onDismiss = { menu = false })
     }
+    if (collect) AddToCollectionDialog(Collections.ref(DetailTarget.MovieT(m)), m.title, m.poster) { collect = false }
 }
 
 @Composable

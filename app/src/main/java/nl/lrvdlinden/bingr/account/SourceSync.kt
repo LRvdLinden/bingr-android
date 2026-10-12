@@ -174,6 +174,7 @@ object SourceSync {
         syncJob?.cancel(); uploadJob?.cancel(); refreshJob?.cancel()
         Store.playlists.forEach { Playlists.clearCache(it) }
         Playlists.unload()
+        Collections.wipe()
         StateSync.applyingChanges {
             Reminders.cancelAll()
             Store.wipeAccountData()
@@ -266,9 +267,13 @@ object SourceSync {
                         merged += toSource(o, p) ?: p
                         incoming[p.id] = o
                         setLocalUpdatedAt(key, su)
-                    } else {
-                        if (newerStrict(lu, su)) needUpload = true
+                    } else if (newerStrict(lu, su)) {
+                        needUpload = true
                         merged += p
+                    } else {
+                        // zelfde versie: velden die een oudere app-versie nog niet kende (catchupOffsets, build 51) overnemen
+                        val offsets = if (o.containsKey("catchupOffsets")) catchupOffsetsFrom(o["catchupOffsets"]) else p.catchupOffsets
+                        merged += if (offsets != p.catchupOffsets) p.copy(catchupOffsets = offsets) else p
                     }
                 }
             }
@@ -359,7 +364,17 @@ object SourceSync {
             ageLimit = existing?.ageLimit,
             createdAt = existing?.createdAt ?: System.currentTimeMillis(),
             updatedAt = preciseMillis(su).takeIf { it > 0 } ?: System.currentTimeMillis(),
+            catchupOffsets = if (o.containsKey("catchupOffsets")) catchupOffsetsFrom(o["catchupOffsets"]) else existing?.catchupOffsets ?: emptyMap(),
         )
+    }
+
+    /** `catchupOffsets: {"<channelID>": minuten}` (build 51), getallen tussen −120 en 120. */
+    private fun catchupOffsetsFrom(e: kotlinx.serialization.json.JsonElement?): Map<String, Int> {
+        val o = e as? JsonObject ?: return emptyMap()
+        return o.mapNotNull { (k, v) ->
+            val m = v.jFlex?.trim()?.let { it.toIntOrNull() ?: it.toDoubleOrNull()?.toInt() } ?: return@mapNotNull null
+            if (k.isBlank() || m == 0) null else k to m.coerceIn(-120, 120)
+        }.toMap()
     }
 
     private inline fun withoutUpload(block: () -> Unit) {
@@ -407,6 +422,7 @@ object SourceSync {
                 "macAddress" to JsonPrimitive(p.macAddress),
                 "preferHLS" to JsonPrimitive(p.preferHLS),
                 "secrets" to secretsOf(p.id),
+                "catchupOffsets" to JsonObject(p.catchupOffsets.toSortedMap().mapValues { JsonPrimitive(it.value) }),
                 "android" to androidBlock(p.id, base["android"] as? JsonObject),
                 "updatedAt" to JsonPrimitive(localVersion(p)),
             ))

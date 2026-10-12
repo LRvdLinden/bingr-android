@@ -108,6 +108,7 @@ class PlayerController(item: PlayableItem) {
     private var playingTicks = 0
     private var trackSignature = ""
     private var recordedHistory = false
+    private var vlcFrameRateDone = false
 
     val isLive: Boolean get() = item.type == MediaType.LIVE
     val canTimeshift: Boolean
@@ -117,8 +118,9 @@ class PlayerController(item: PlayableItem) {
 
     private fun makeEngine(exo: Boolean) {
         engine.release()
-        engine = if (exo) ExoEngine(ctx) else VlcEngine(ctx)
+        engine = if (exo) ExoEngine(ctx).also { it.frameRateMatching = !isPreview } else VlcEngine(ctx)
         usingExo = exo
+        vlcFrameRateDone = false
         engine.rate = rate
         engine.muted = muted
         engine.setAspect(aspect)
@@ -227,6 +229,14 @@ class PlayerController(item: PlayableItem) {
         val sig = "${engine.audioTracks.size}|${engine.subtitleTracks.size}|${engine.currentAudio}|${engine.currentSubtitle}"
         if (sig != trackSignature) { trackSignature = sig; tracksVersion++ }
 
+        // VLC: beeldfrequentie van het videospoor (Android TV, build 51)
+        if (!usingExo && !vlcFrameRateDone && !isPreview && st == EngineState.PLAYING && FrameRateMatcher.enabled) {
+            vlcFrameRateDone = true
+            runCatching {
+                val t = (engine as? VlcEngine)?.player?.currentVideoTrack
+                if (t != null && t.frameRateDen > 0 && t.frameRateNum > 0) FrameRateMatcher.apply(t.frameRateNum.toFloat() / t.frameRateDen, null)
+            }
+        }
         sleepAt?.let { if (System.currentTimeMillis() >= it) { sleepAt = null; pause() } }
         if (System.currentTimeMillis() - lastSaved > 15_000) saveProgress()
         if (!isLive && st == EngineState.ENDED) finish()

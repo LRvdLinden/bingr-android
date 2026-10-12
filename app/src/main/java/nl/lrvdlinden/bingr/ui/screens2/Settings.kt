@@ -34,6 +34,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.AccountCircle
@@ -107,7 +109,7 @@ private fun S2AppFooter() {
     }
 }
 
-private enum class S2SettingsSub { CATEGORIES, MANAGE, HISTORY, NAS, CHECK }
+private enum class S2SettingsSub { CATEGORIES, MANAGE, HISTORY, NAS, CHECK, COLLECTIONS, HOME_SCREEN }
 private enum class S2PinMode { SET, UNLOCK, DISABLE }
 
 private const val S2_FILE_AUTHORITY = "nl.lrvdlinden.bingr.files"
@@ -163,6 +165,9 @@ fun SettingsScreen() {
     var autoSubtitles by remember(profileKey) { mutableStateOf(Prefs.bool("autoSubtitles", false)) }
     var engine by remember { mutableStateOf(Prefs.string("player.engine") ?: "auto") }
     var refreshPolicy by remember { mutableStateOf(RefreshPolicy.current) }
+    var zapDelay by remember { mutableIntStateOf(PlayerSettings.zapDelay) }
+    var channelPreview by remember { mutableStateOf(PlayerSettings.channelPreview) }
+    var matchFrameRate by remember { mutableStateOf(PlayerSettings.matchFrameRate) }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -180,6 +185,8 @@ fun SettingsScreen() {
         S2SettingsSub.HISTORY -> { HistoryScreen { sub = null }; return }
         S2SettingsSub.NAS -> { NetworkBrowserScreen { sub = null }; return }
         S2SettingsSub.CHECK -> { SourceCheckScreen { sub = null }; return }
+        S2SettingsSub.COLLECTIONS -> { CollectionsScreen { sub = null }; return }
+        S2SettingsSub.HOME_SCREEN -> { HomeScreenSettings { sub = null }; return }
         null -> {}
     }
     val editingNow = editing
@@ -302,6 +309,9 @@ fun SettingsScreen() {
         item {
             S2Section(L("Library"), L("Watch history is kept per profile. Plex, Jellyfin and Emby can be added as a playlist.")) {
                 S2Row(L("Watch history"), icon = Icons.Default.History, onClick = { sub = S2SettingsSub.HISTORY })
+                S2Row(L("Collections"), icon = Icons.AutoMirrored.Filled.PlaylistAdd, value = Collections.visible.size.takeIf { it > 0 }?.toString(),
+                    onClick = { sub = S2SettingsSub.COLLECTIONS })
+                S2Row(L("Home screen"), icon = Icons.Default.Home, onClick = { sub = S2SettingsSub.HOME_SCREEN })
                 if (isMain) S2Row(L("NAS & network (SMB/DLNA)"), icon = Icons.Default.Lan, onClick = { sub = S2SettingsSub.NAS })
             }
         }
@@ -408,6 +418,15 @@ fun SettingsScreen() {
                     TrackPreferences.audio) { v ->
                     TrackPreferences.audio = v
                     Store.updateActivePreferences { it.copy(audioLanguage = v) }
+                }
+                S2Dropdown(L("Zap delay"), PlayerSettings.zapDelayOptions, zapDelay) {
+                    zapDelay = it; PlayerSettings.zapDelay = it
+                }
+                S2Toggle(L("Channel preview"), channelPreview) { channelPreview = it; PlayerSettings.channelPreview = it }
+                if (AppState.isTV) {
+                    S2Toggle(L("Match frame rate"), matchFrameRate) { matchFrameRate = it; PlayerSettings.matchFrameRate = it }
+                } else {
+                    S2Toggle(L("Show on external display"), ExternalDisplay.enabled) { ExternalDisplay.setEnabled(it) }
                 }
                 S2Dropdown(L("Default subtitle language"),
                     listOf("" to L("As in the stream"), "off" to L("Off")) + TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },

@@ -44,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -161,6 +162,8 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
 
     val lib = Playlists.library
     val edge = Theme.edge
+    // kleur van de bron als er meerdere bronnen zijn (build 51)
+    val accent = Playlists.source?.takeIf { Store.playlists.size > 1 }?.let { sourceColor(it) }
 
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         Column(Modifier.fillMaxSize().statusBarsPadding().blockFocus(program != null)) {
@@ -244,7 +247,8 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
                                 val now = lib.nowPlaying(c)
                                 ChannelCard(
                                     c, now,
-                                    modifier = Modifier.focusLift { AppState.play(Playables.channel(c, now), results.channels) }
+                                    modifier = Modifier.focusLift { AppState.play(Playables.channel(c, now), results.channels) },
+                                    accent = accent
                                 )
                             }
                         }
@@ -350,7 +354,8 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
                             PosterCard(
                                 m.title, m.poster,
                                 modifier = Modifier.focusLift { ScreensNav.detail(DetailTarget.MovieT(m)) },
-                                watched = Playables.isWatched(m, Trakt.imdb(m))
+                                watched = Playables.isWatched(m, Trakt.imdb(m)),
+                                accent = accent
                             )
                         }
                     }
@@ -363,7 +368,8 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                             PosterCard(
                                 s.title, s.poster,
-                                modifier = Modifier.focusLift { ScreensNav.detail(DetailTarget.SeriesT(s)) }
+                                modifier = Modifier.focusLift { ScreensNav.detail(DetailTarget.SeriesT(s)) },
+                                accent = accent
                             )
                         }
                     }
@@ -378,7 +384,9 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
                                 if (modal) onClose()
                                 ScreensNav.clear()
                                 AppState.open(h.playlist, thenShow = h.itemID)
-                            }.padding(vertical = 4.dp),
+                            }.drawBehind {
+                                drawRect(sourceColor(h.playlist), size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height))
+                            }.padding(start = 10.dp).padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
@@ -394,7 +402,7 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
                             }
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 AvatarCircle(h.playlist, tvs(22))
-                                Text(h.playlist.name, color = Theme.secondary, fontSize = tsp(11), maxLines = 1)
+                                SourceBadge(h.playlist)
                             }
                         }
                     }
