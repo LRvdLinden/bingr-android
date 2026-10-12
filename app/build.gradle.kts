@@ -35,8 +35,8 @@ android {
         buildConfigField("String", "OMDB_API_KEY", "\"${key("OMDB_API_KEY")}\"")
         buildConfigField("String", "TMDB_API_KEY", "\"${key("TMDB_API_KEY").ifEmpty { key("TMDB_ACCESS_TOKEN") }}\"")
         // Bingr-account (Supabase): alleen ingebouwd, niet in de app aan te passen
-        buildConfigField("String", "SUPABASE_URL", "\"${key("SUPABASE_URL")}\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${key("SUPABASE_ANON_KEY")}\"")
+        buildConfigField("String", "SUPABASE_URL", "\"${key("SUPABASE_URL").ifEmpty { "https://vjewsncmsxmhmhnoxwqx.supabase.co" }}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${key("SUPABASE_ANON_KEY").ifEmpty { "sb_publishable_lpIup6Omq5kW2k3oICGZ4g_HPGac5A3" }}\"")
     }
 
     // Eigen release-sleutel: BINGR_KEYSTORE (pad), BINGR_KEYSTORE_PASSWORD, BINGR_KEY_ALIAS, BINGR_KEY_PASSWORD
