@@ -4,6 +4,23 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 55
+_12 oktober 2026_
+
+### iOS, iPadOS, tvOS, macOS, Android, Android TV en Web
+
+**Verbeterd**
+
+- Samsung TV verschijnt met eigen icoon in je apparatenlijst, bij Wie kijkt er nu en in de kijkgeschiedenis
+
+### Samsung TV (Tizen)
+
+**Nieuw**
+
+- Bingr voor Samsung TV (Tizen, 2018 en nieuwer): inloggen met de QR-code, profielen met pincode en accentkleur, Home, Live TV met tv-gids, films, series, zoeken en instellingen. Alles synchroniseert met je account en blijft na updates bewaard
+- Speler met Samsung AVPlay: verder kijken, audio- en ondertitelsporen, zappen, intro overslaan, volgende aflevering, reservebron bij storing en maximaal 6 schermen tegelijk
+- Bij elke release staat naast de APK een .wgt-bestand voor Samsung TV
+
 ## Versie 1.0.0 · Build 54
 _12 oktober 2026_
 
