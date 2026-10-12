@@ -50,9 +50,15 @@ object StateSync {
         "playlist.refresh", "category.sort", "trakt.scrobble", "trakt.askRating",
         // build 51
         "player.zapDelay", "player.channelPreview", "player.matchFrameRate", "player.externalDisplay",
+        // build 52 (zelfde sleutels als iOS, in `shared`)
+        "accentColor", "deinterlace", "resumeLastChannel", IntroMarkers.PREF,
     )
+    /** Niet als ruwe Android-waarde meesturen (staat al in `shared`). */
+    private val sharedOnlyKeys = setOf(IntroMarkers.PREF)
+    /** Na het toepassen: lokale intro-markeringen die de server nog niet had → opnieuw uploaden. */
+    private var markersDiffer = false
     private val boolKeys = setOf("autoSubtitles", "ui.showLive", "ui.showMovies", "ui.showSeries", "trakt.scrobble", "trakt.askRating",
-        "player.channelPreview", "player.matchFrameRate", "player.externalDisplay")
+        "player.channelPreview", "player.matchFrameRate", "player.externalDisplay", "resumeLastChannel")
     private val intKeys = setOf("subtitle.size", "ui.startTab", "player.zapDelay")
 
     private const val CONNECTIONS = "connections"
@@ -273,6 +279,8 @@ object StateSync {
             Trakt.scrobbleEnabled = true
             Trakt.askRating = true
             settingKeys.forEach { Prefs.remove(it) }
+            Accent.reload()
+            IntroMarkers.reload()
         }
         runCatching { prefs.edit().clear().apply() }
         runCatching { metaDir.listFiles()?.forEach { it.delete() } }
@@ -536,13 +544,18 @@ object StateSync {
             "traktAskRating" to JsonPrimitive(Prefs.bool("trakt.askRating", true)),
             "parentalControl" to JsonPrimitive(Store.parental.enabled),
             "parentalAutoLockAdult" to JsonPrimitive(Store.parental.autoLockAdult),
+            // build 52
+            "accentColor" to JsonPrimitive(Accent.key),
+            "deinterlace" to JsonPrimitive(PlayerSettings.deinterlace),
+            "resumeLastChannel" to JsonPrimitive(PlayerSettings.resumeLastChannel),
+            "introMarkers" to IntroMarkers.toJson(IntroMarkers.all),
         )
     }
 
     private fun settingsJson(): JsonObject {
         val base = serverSettings ?: JsonObject(emptyMap())
         val shared = (base["shared"] as? JsonObject ?: JsonObject(emptyMap())) + sharedSettings()
-        val raw = settingKeys.mapNotNull { k -> rawJson(k)?.let { k to it } }.toMap()
+        val raw = settingKeys.filter { it !in sharedOnlyKeys }.mapNotNull { k -> rawJson(k)?.let { k to it } }.toMap()
         val android = (base["android"] as? JsonObject ?: JsonObject(emptyMap())) + mapOf("prefs" to JsonObject(raw))
         return JsonObject(base + mapOf(
             "shared" to JsonObject(shared),
@@ -558,7 +571,7 @@ object StateSync {
     private fun applySettings(o: JsonObject) {
         val values = linkedMapOf<String, Any>()
         (o.jO("android")?.get("prefs") as? JsonObject)?.forEach { (k, v) ->
-            if (k !in settingKeys) return@forEach
+            if (k !in settingKeys || k in sharedOnlyKeys) return@forEach
             val p = v as? JsonPrimitive ?: return@forEach
             if (p is JsonNull) return@forEach
             values[k] = when (k) {
@@ -598,6 +611,16 @@ object StateSync {
             str("categorySort")?.let { values["category.sort"] = it }
             bool("traktScrobble")?.let { values["trakt.scrobble"] = it }
             bool("traktAskRating")?.let { values["trakt.askRating"] = it }
+            // build 52
+            str("accentColor")?.let { v -> if (Accent.options.any { it.key == v }) values["accentColor"] = v }
+            str("deinterlace")?.let { v -> if (v in listOf("off", "auto", "on")) values["deinterlace"] = v }
+            bool("resumeLastChannel")?.let { values["resumeLastChannel"] = it }
+            (s["introMarkers"] as? JsonObject)?.let { o ->
+                val incoming = IntroMarkers.parse(o)
+                val merged = IntroMarkers.merged(incoming)
+                markersDiffer = merged != incoming
+                values[IntroMarkers.PREF] = IntroMarkers.toJson(merged).toString()
+            }
             val pc = bool("parentalControl")
             val lock = bool("parentalAutoLockAdult")
             if (pc != null || lock != null) {
@@ -631,6 +654,8 @@ object StateSync {
                     }
                 }
             }
+            Accent.reload()
+            IntroMarkers.reload()
             Unit
         }
     }
@@ -649,8 +674,11 @@ object StateSync {
         val at = sectionAt(data, sec.updatedAt)
         when {
             local == null || at > local -> {
+                markersDiffer = false
                 withContext(Dispatchers.Main) { applySettings(data) }
                 setLocalAt(SETTINGS, at)
+                // intro-markeringen die alleen hier stonden: meteen meesturen
+                if (markersDiffer) { markersDiffer = false; setLocalAt(SETTINGS, System.currentTimeMillis()); uploadSimple(SETTINGS) }
             }
             local > at -> uploadSimple(SETTINGS)
         }

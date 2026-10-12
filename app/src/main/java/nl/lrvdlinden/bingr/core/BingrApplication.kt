@@ -20,6 +20,11 @@ class BingrApplication : Application() {
         AppState.isTV = ui.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
             packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
             !packageManager.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)
+        // build 52: accentkleur, app-icoon en downloads (na isTV: op TV geen icoonkeuze en geen downloads)
+        Accent.reload()
+        IntroMarkers.reload()
+        AppIcon.init()
+        Downloads.init(this)
         Reminders.createChannel(this)
         ExternalDisplay.init(this)
     }

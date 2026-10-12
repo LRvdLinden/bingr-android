@@ -455,3 +455,84 @@ fun RatingPanel(item: PlayableItem, onDone: () -> Unit) {
     }
     LaunchedEffect(Unit) { if (AppState.isTV) { delay(150); runCatching { first.requestFocus() } } }
 }
+
+// MARK: - Intro en aftiteling (build 52) ---------------------------------------------------------
+
+/**
+ * Intro en aftiteling markeren voor de hele serie: op het juiste moment pauzeren en dan hier tikken.
+ * Geldt voor alle afleveringen en gaat via het account mee naar je andere apparaten.
+ */
+@Composable
+fun IntroMarkersPanel(player: PlayerController, key: String, onDismiss: () -> Unit) {
+    val m = IntroMarkers.all.entries.firstOrNull { it.key.equals(key, ignoreCase = true) }?.value ?: IntroMarkers.Marker()
+    val now = player.currentTime
+    fun t(v: Double?) = v?.let { PlayerController.format(it) } ?: "–"
+    PlayerSheet(L("Intro & credits"), onDismiss) {
+        item { PlayerSheetNote(L("Mark the intro and credits once; Bingr uses them for every episode of this series.")) }
+        item { PlayerSheetNote(L("Now: %@", PlayerController.format(now))) }
+        item { PlayerSheetHeader(L("Intro")) }
+        item {
+            PlayerSheetRow(L("Intro starts here") + "  ·  " + t(m.introStart)) {
+                IntroMarkers.update(key) { it.copy(introStart = now) }
+            }
+        }
+        item {
+            PlayerSheetRow(L("Intro ends here") + "  ·  " + t(m.introEnd)) {
+                IntroMarkers.update(key) { it.copy(introEnd = now, introStart = it.introStart?.takeIf { s -> s < now }) }
+            }
+        }
+        item { PlayerSheetHeader(L("Credits")) }
+        item {
+            PlayerSheetRow(L("Credits start here") + "  ·  " + t(m.creditsStart)) {
+                IntroMarkers.update(key) { it.copy(creditsStart = now) }
+                player.creditsStart = now
+            }
+        }
+        if (!m.isEmpty) {
+            item {
+                PlayerSheetRow(L("Clear markers"), destructive = true) {
+                    IntroMarkers.clear(key)
+                    player.creditsStart = null
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Andere bron (build 52) -----------------------------------------------------------------
+
+/** Dezelfde zender (of film) op je andere servers; kies er een als deze niet werkt. */
+@Composable
+fun BackupSourcesPanel(
+    hits: List<BackupSources.Hit>?,
+    loading: Boolean,
+    currentServer: String?,
+    onPick: (BackupSources.Hit) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    PlayerSheet(L("Other source"), onDismiss, doneLabel = L("Close")) {
+        currentServer?.let { item { PlayerSheetNote(L("Now playing from %@", it)) } }
+        when {
+            hits == null || loading -> item {
+                Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.Center) {
+                    CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(tvs(22)))
+                }
+            }
+            hits.isEmpty() -> item { PlayerSheetNote(L("Not found on your other servers.")) }
+            else -> {
+                for (h in hits) {
+                    item {
+                        PlayerSheetItem(onClick = { onPick(h) }) {
+                            Column(Modifier.weight(1f)) {
+                                Text(h.source.name, color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis)
+                                Text(h.name, color = Theme.secondary, fontSize = tsp(12), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Unit
+    }
+}

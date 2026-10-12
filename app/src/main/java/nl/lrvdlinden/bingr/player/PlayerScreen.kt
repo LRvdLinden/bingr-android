@@ -49,6 +49,10 @@ import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.SwitchVideo
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.DesktopAccessDisabled
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -93,7 +97,7 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
-private enum class PlayerPanel { AUDIO_SUBS, OPENSUBS, OPTIONS, CAST, SOURCES, RATE }
+private enum class PlayerPanel { AUDIO_SUBS, OPENSUBS, OPTIONS, CAST, SOURCES, RATE, INTRO, BACKUP }
 
 /** Zender → afspeelbaar item (zoals Playables.channel op iOS). */
 private fun livePlayable(c: Channel): PlayableItem = PlayableItem(
@@ -134,6 +138,14 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     var zapBannerID by remember { mutableIntStateOf(0) }
     var zapJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     val externalTarget = ExternalDisplay.target
+    /** Andere bronnen (build 52): zelfde zender/film op de andere servers; null = nog niet gezocht */
+    var backupHits by remember { mutableStateOf<List<BackupSources.Hit>?>(null) }
+    var backupFor by remember { mutableStateOf<String?>(null) }
+    var backupLoading by remember { mutableStateOf(false) }
+    /** Aftiteling: volgende-aflevering-kaart weggeklikt voor deze aflevering */
+    var creditsDismissedFor by remember { mutableStateOf<String?>(null) }
+    var countdown by remember { mutableIntStateOf(10) }
+    val skipFocus = remember { FocusRequester() }
 
     fun flash(text: String) { toast = text; toastID++ }
     fun poke() { showControls = true; pokeID++ }
@@ -200,6 +212,37 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         nextUp = Playables.episode(eps[i + 1], series, itm.imdbID).copy(seriesID = series.id)
     }
 
+    /** Andere bronnen voor wat nu speelt (één keer per zender/titel gezocht). */
+    suspend fun loadBackups(): List<BackupSources.Hit> {
+        val itm = player.item
+        if (backupFor == itm.id) backupHits?.let { return it }
+        backupLoading = true
+        val hits = try {
+            when {
+                itm.type == MediaType.LIVE -> {
+                    val c = Playlists.library.channels.firstOrNull { it.id == itm.channelID }
+                        ?: Playlists.rawLibrary.channels.firstOrNull { it.id == itm.channelID }
+                    if (c != null) BackupSources.channels(c) else emptyList()
+                }
+                itm.type == MediaType.MOVIE -> BackupSources.movies(itm.title, itm.subtitle?.toIntOrNull())
+                else -> emptyList()
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { emptyList() }
+        finally { backupLoading = false }
+        if (player.item.id == itm.id) { backupHits = hits; backupFor = itm.id }
+        return hits
+    }
+
+    /** Andere bron kiezen (automatisch bij een storing of met de hand). */
+    suspend fun switchTo(h: BackupSources.Hit): Boolean {
+        val itm = player.item
+        val u = BackupSources.resolve(h, live = itm.type == MediaType.LIVE) ?: return false
+        if (player.dismissed || player.item.id != itm.id) return false
+        player.playAlternative(u)
+        flash(L("Switched to %@", h.source.name))
+        return true
+    }
+
     suspend fun start(itm: PlayableItem) {
         if (player.dismissed) return
         player.prepareNew()
@@ -207,7 +250,21 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         PlayerController.current = player
         bind()
         nextUp = null
+        player.creditsStart = IntroMarkers.get(IntroMarkers.keyFor(itm))?.creditsStart
+        // live-zender werkt niet (ook niet na een stille nieuwe poging): automatisch naar een andere server
+        player.onLiveFailure = {
+            scope.launch {
+                val hits = loadBackups()
+                var ok = false
+                for (h in hits.take(3)) { if (switchTo(h)) { ok = true; break } }
+                if (!ok && !player.dismissed) player.showFailure()
+            }
+        }
         val cid = itm.channelID
+        // laatst bekeken zender van dit profiel (ook vanuit Home, de gids en zoeken; voor "Start bij laatste zender")
+        if (itm.type == MediaType.LIVE && cid != null && !itm.id.contains("-cu-")) {
+            Playlists.source?.id?.let { Store.pushRecentChannel(it, cid) }
+        }
         player.catchupProvider =
             if (itm.type == MediaType.LIVE && cid != null) ({ from: Long, to: Long -> Playlists.catchupURL(cid, from, to) }) else null
         if (itm.stremio != null) {
@@ -317,19 +374,42 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     LaunchedEffect(player.notice) {
         player.notice?.let { flash(it); player.notice = null }
     }
+    // intro en aftiteling (build 52)
+    val markerKey = IntroMarkers.keyFor(player.item)
+    val marker = IntroMarkers.get(markerKey)
+    val introRange = if (!player.isLive && player.errorText == null) marker?.intro else null
+    val showSkip = introRange != null && player.currentTime >= introRange.start && player.currentTime < introRange.endInclusive - 1 &&
+        !inPiP && panel == null
+    val creditsAt = marker?.creditsStart
+    val showCredits = creditsAt != null && nextUp != null && player.errorText == null && !player.isLive &&
+        player.currentTime >= creditsAt && creditsDismissedFor != player.item.id && !inPiP && panel == null
+    LaunchedEffect(markerKey, creditsAt) { player.creditsStart = creditsAt }
+
     // bediening tevoorschijn → focus op afspelen/pauze; weg → focus terug naar het scherm zelf (vangt de D-pad op).
     // Fout zonder bediening (TV) → focus op "Try again".
     val hasError = player.errorText != null
-    LaunchedEffect(showControls, panel, inPiP, hasError) {
+    val skipVisible = showSkip || showCredits
+    LaunchedEffect(showControls, panel, inPiP, hasError, skipVisible) {
         if (panel != null || inPiP) return@LaunchedEffect
         delay(60)
         runCatching {
             when {
                 isTV && showControls -> firstButton.requestFocus()
                 isTV && hasError -> retryButton.requestFocus()
+                isTV && skipVisible -> skipFocus.requestFocus()
                 else -> rootFocus.requestFocus()
             }
         }
+    }
+    // aftiteling: aftellen en dan de volgende aflevering
+    LaunchedEffect(showCredits, player.item.id) {
+        if (!showCredits) return@LaunchedEffect
+        countdown = 10
+        while (countdown > 0) {
+            delay(1000)
+            if (player.isPlaying) countdown--
+        }
+        nextUp?.let { playNext(it) }
     }
 
     BackHandler {
@@ -378,8 +458,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
 
     // MARK: opbouw
 
-    val showNext = nextUp != null && player.errorText == null && player.duration > 120 &&
-        player.duration - player.currentTime < 45
+    val showNext = nextUp != null && player.errorText == null && player.duration > 120 && !showCredits &&
+        (player.duration - player.currentTime < 45 || (creditsAt != null && player.currentTime >= creditsAt))
 
     Box(
         Modifier
@@ -467,8 +547,20 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Filled.Warning, null, tint = Theme.red, modifier = Modifier.size(tvs(40)))
                     Text(e, color = Color.White, fontSize = tsp(16), textAlign = TextAlign.Center)
-                    NetflixButton(L("Try again"), Icons.Filled.Refresh, modifier = Modifier.focusRequester(retryButton)) {
-                        scope.launch { start(player.item) }
+                    // slim foutherstel (build 52): opnieuw, andere bron of andere speler (positie blijft bewaard)
+                    Row(horizontalArrangement = Arrangement.spacedBy(tvs(12)), verticalAlignment = Alignment.CenterVertically) {
+                        NetflixButton(L("Retry"), Icons.Filled.Refresh, modifier = Modifier.focusRequester(retryButton)) {
+                            if (player.url != null) player.retry() else scope.launch { start(player.item) }
+                        }
+                        val itmType = player.item.type
+                        if (player.url != null && (itmType == MediaType.LIVE || itmType == MediaType.MOVIE || stremioChoices.size > 1)) {
+                            NetflixButton(L("Other source"), Icons.Filled.SwapHoriz, kind = NetflixKind.SECONDARY) {
+                                panel = if (itmType != MediaType.LIVE && stremioChoices.size > 1) PlayerPanel.SOURCES else PlayerPanel.BACKUP
+                            }
+                        }
+                        if (player.canSwitchEngine) {
+                            NetflixButton(L("Other player"), Icons.Filled.SwitchVideo, kind = NetflixKind.SECONDARY) { player.switchEngine() }
+                        }
                     }
                 }
             }
@@ -494,6 +586,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                     onZap = { zap(it) },
                     onPanel = { panel = it },
                     onMultiview = { openMultiview() },
+                    canMarkIntro = player.item.type == MediaType.EPISODE && markerKey != null,
                 )
             }
 
@@ -504,6 +597,39 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                     .padding(end = tvs(40), bottom = if (showControls) tvs(130) else tvs(50))
             ) {
                 NetflixButton(L("Next episode"), Icons.Filled.SkipNext) { nextUp?.let { playNext(it) } }
+            }
+
+            // intro overslaan (build 52)
+            AnimatedVisibility(
+                showSkip && !(isTV && showControls), enter = fadeIn(), exit = fadeOut(),
+                modifier = Modifier.align(Alignment.BottomEnd)
+                    .padding(end = tvs(40), bottom = if (showControls) tvs(130) else tvs(50))
+            ) {
+                NetflixButton(L("Skip intro"), Icons.Filled.FastForward, modifier = Modifier.focusRequester(skipFocus)) {
+                    introRange?.let { r -> player.seek(r.endInclusive - player.currentTime); poke() }
+                }
+            }
+
+            // aftiteling: volgende aflevering met aftellen (build 52)
+            AnimatedVisibility(
+                showCredits && !(isTV && showControls), enter = fadeIn() + slideInVertically { it }, exit = fadeOut(),
+                modifier = Modifier.align(Alignment.BottomEnd)
+                    .padding(end = tvs(40), bottom = if (showControls) tvs(130) else tvs(50))
+            ) {
+                Column(
+                    Modifier.widthIn(max = 420.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.85f))
+                        .padding(tvs(14)),
+                    verticalArrangement = Arrangement.spacedBy(tvs(10))
+                ) {
+                    Text(L("Next episode in %d s", countdown), color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.Bold)
+                    nextUp?.subtitle?.let { Text(it, color = Theme.secondary, fontSize = tsp(13), maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(tvs(10))) {
+                        NetflixButton(L("Play now"), Icons.Filled.SkipNext, modifier = Modifier.focusRequester(skipFocus)) {
+                            nextUp?.let { playNext(it) }
+                        }
+                        NetflixButton(L("Keep watching"), kind = NetflixKind.SECONDARY) { creditsDismissedFor = player.item.id }
+                    }
+                }
             }
 
             // zenderbanner bij zappen
@@ -550,6 +676,17 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             player.start(s.url)
         }, onDismiss = { panel = null })
         PlayerPanel.RATE -> RatingPanel(player.item) { panel = null; close() }
+        PlayerPanel.INTRO -> markerKey?.let { k -> IntroMarkersPanel(player, k) { panel = null } } ?: run { panel = null }
+        PlayerPanel.BACKUP -> {
+            LaunchedEffect(player.item.id) { loadBackups() }
+            BackupSourcesPanel(
+                hits = if (backupFor == player.item.id) backupHits else null,
+                loading = backupLoading,
+                currentServer = Playlists.source?.name,
+                onPick = { h -> panel = null; scope.launch { if (!switchTo(h)) flash(L("This stream can't be played right now.")) } },
+                onDismiss = { panel = null },
+            )
+        }
         null -> {}
     }
 }
@@ -574,6 +711,7 @@ private fun PlayerControls(
     onZap: (Int) -> Unit,
     onPanel: (PlayerPanel) -> Unit,
     onMultiview: () -> Unit,
+    canMarkIntro: Boolean = false,
 ) {
     val live = player.isLive
     val canSeek = !live || player.canTimeshift
@@ -684,6 +822,9 @@ private fun PlayerControls(
                     if (!live) buttons.add(Triple(Icons.Filled.ClosedCaption, "OpenSubtitles") { onPanel(PlayerPanel.OPENSUBS) })
                     if (hasSources) buttons.add(Triple(Icons.Filled.VideoLibrary, L("Sources")) { onPanel(PlayerPanel.SOURCES) })
                     if (live && Playlists.library.channels.isNotEmpty()) buttons.add(Triple(Icons.Filled.GridView, "Multiview") { onMultiview() })
+                    // build 52: andere bron (live) en intro/aftiteling markeren (afleveringen)
+                    if (live && Store.playlists.size > 1) buttons.add(Triple(Icons.Filled.SwapHoriz, L("Other source")) { onPanel(PlayerPanel.BACKUP) })
+                    if (canMarkIntro) buttons.add(Triple(Icons.Filled.Flag, L("Intro & credits")) { onPanel(PlayerPanel.INTRO) })
                     buttons.add(Triple(Icons.Filled.Tune, L("Options")) { onPanel(PlayerPanel.OPTIONS) })
                     buttons.forEachIndexed { i, (icon, label, action) ->
                         PlayerBarButton(icon, label, isTV, if (i == 0) Modifier.focusRequester(firstButton) else Modifier) {

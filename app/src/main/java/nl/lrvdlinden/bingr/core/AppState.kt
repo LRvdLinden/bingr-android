@@ -30,6 +30,8 @@ object AppState {
     var multiviewStart by mutableStateOf(listOf<Channel>())
     /** Na wisselen van afspeellijst (globaal zoeken / herinnering): dit item openen */
     var pendingItemID by mutableStateOf<String?>(null)
+    /** Na het kiezen van een profiel: laatst bekeken zender starten zodra de zenders er zijn (build 52) */
+    var pendingLastChannel by mutableStateOf(false)
     /** Beeld-in-beeld actief (Android PiP): spelerscherm toont dan alleen video */
     var inPiP by mutableStateOf(false)
 
@@ -91,6 +93,7 @@ object AppState {
      */
     fun open(profile: ViewerProfile) {
         Store.selectProfile(profile)
+        pendingLastChannel = PlayerSettings.resumeLastChannel
         val main = Store.isMain(profile)
         if (!main) ParentalControl.lock()   // ontgrendeling van het hoofdaccount niet meenemen
         Trakt.applyProfile(main)

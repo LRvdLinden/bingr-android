@@ -203,4 +203,15 @@ object PlayerSettings {
     var externalDisplay: Boolean
         get() = Prefs.bool("player.externalDisplay", true)
         set(v) = Prefs.put("player.externalDisplay", v)
+
+    /** Deinterlacing (build 52): "off", "auto" of "on"; gesynchroniseerd als `deinterlace` (zelfde als iOS). */
+    var deinterlace: String
+        get() = Prefs.string("deinterlace")?.takeIf { it in listOf("off", "auto", "on") } ?: "auto"
+        set(v) = Prefs.put("deinterlace", v)
+    val deinterlaceOptions: List<Pair<String, String>> get() = listOf("off" to L("Off"), "auto" to L("Automatic"), "on" to L("On"))
+
+    /** Na het kiezen van een profiel meteen de laatst bekeken zender van dat profiel spelen (build 52). */
+    var resumeLastChannel: Boolean
+        get() = Prefs.bool("resumeLastChannel", false)
+        set(v) = Prefs.put("resumeLastChannel", v)
 }

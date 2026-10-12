@@ -113,4 +113,7 @@ dependencies {
 
     // Profielfoto kiezen
     implementation("androidx.activity:activity-ktx:1.9.3")
+
+    // Downloads op de achtergrond (build 52): hervat na netwerkverlies en herstart
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 }

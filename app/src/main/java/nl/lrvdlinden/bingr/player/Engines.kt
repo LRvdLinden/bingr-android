@@ -374,6 +374,12 @@ class VlcEngine(ctx: Context) : PlaybackEngine {
         media.addOption(":network-caching=${if (live) 1500 else 3000}")
         media.addOption(":http-user-agent=${Http.USER_AGENT}")
         media.addOption(":http-reconnect")
+        // deinterlacen (build 52): Uit = 0, Automatisch = -1 (alleen bij geïnterlinieerd beeld), Aan = 1
+        when (PlayerSettings.deinterlace) {
+            "off" -> media.addOption(":deinterlace=0")
+            "on" -> { media.addOption(":deinterlace=1"); media.addOption(":deinterlace-mode=yadif2x") }
+            else -> { media.addOption(":deinterlace=-1"); media.addOption(":deinterlace-mode=yadif2x") }
+        }
         player.setMedia(media)
         media.release()
         vstate = EngineState.OPENING

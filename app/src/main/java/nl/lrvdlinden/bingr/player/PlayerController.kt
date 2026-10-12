@@ -89,6 +89,8 @@ class PlayerController(item: PlayableItem) {
     var url: String? = null; private set
     var catchupProvider: ((Long, Long) -> String?)? = null
     var onFinished: (() -> Unit)? = null
+    /** Begin van de aftiteling van deze serie in seconden (build 52): daarna telt de aflevering als gezien */
+    var creditsStart: Double? = null
     /** Multiview-tegels: geen voortgang/scrobble */
     var isPreview = false
     /** De gewone live-URL (om na timeshift terug te keren) */
@@ -100,6 +102,16 @@ class PlayerController(item: PlayableItem) {
     private var stallSince: Long? = null
     private var attempts = 0
     private var triedOtherEngine = false
+    /** Foutherstel (build 52): er staat al een stille nieuwe poging klaar. */
+    private var retryPending = false
+    /** Deze stream heeft al gespeeld (dan is een fout eerder een netwerkprobleem dan een formaatprobleem). */
+    private var everPlayed = false
+    /** Laatste positie (0…1) waarop het nog goed speelde, om na een fout daar verder te gaan. */
+    private var lastGoodPosition = 0.0
+    /** Live: na de stille poging één keer automatisch naar een andere server (reservebron) geprobeerd. */
+    var triedBackup = false
+    /** Live-zender kan niet spelen na de stille poging: PlayerScreen zoekt een reservebron (anders [showFailure]). */
+    var onLiveFailure: (() -> Unit)? = null
     private var pausedAt: Long? = null
     private var timeshiftStart: Long? = null        // begin van de catch-up-stream die nu speelt (epoch-ms)
     private var externalCues: List<SubtitleCue> = emptyList()
@@ -138,6 +150,7 @@ class PlayerController(item: PlayableItem) {
         timeshiftStart = null; behindLive = 0.0; pausedAt = null
         attempts = 0; triedOtherEngine = false; reconnecting = false; errorText = null; isBuffering = true
         stallSince = null
+        retryPending = false; everPlayed = false; lastGoodPosition = 0.0; triedBackup = false
     }
 
     /** Kan niet afspelen (geen stream gevonden): foutmelding met "Try again" in plaats van een eindeloze spinner. */
@@ -157,10 +170,13 @@ class PlayerController(item: PlayableItem) {
         errorText = null; didScrobbleStart = false; stallSince = null
         tracksApplied = false; playingTicks = 0
         if (stopped || timer == null) { watchedSeconds = 0.0; recordedHistory = false; attempts = 0; triedOtherEngine = false }
+        if (url != this.lastStartedURL) everPlayed = false
+        lastStartedURL = url
+        retryPending = false
         stopped = false
         // nieuwe titel of zender (ook zappen en de volgende aflevering): stream_start; herverbinden niet
         if (!isPreview && streamItemID != item.id) beginStream()
-        val exo = forceExo ?: prefersExo(url)
+        val exo = forceExo ?: prefersExo(url, live = isLive)
         if (exo != usingExo || timer == null) makeEngine(exo)
         engine.load(url, live = isLive && timeshiftStart == null, startFraction = startFraction())
         timer?.cancel()
@@ -171,6 +187,8 @@ class PlayerController(item: PlayableItem) {
             }
         }
     }
+
+    private var lastStartedURL: String? = null
 
     /** Hervatpunt (0 = vanaf het begin; bijna uitgekeken = ook vanaf het begin). */
     private fun startFraction(): Double? {
@@ -219,7 +237,8 @@ class PlayerController(item: PlayableItem) {
             if (stallSince == null) stallSince = now
             stallSince?.let { if (now - it > 15_000) reconnect() }
         } else if (st == EngineState.PLAYING) {
-            stallSince = null; attempts = 0; reconnecting = false
+            stallSince = null; attempts = 0; reconnecting = false; everPlayed = true
+            if (!isLive && duration > 0 && position > 0) lastGoodPosition = position
         }
 
         if (isPlaying && !didScrobbleStart && duration > 0 && !isPreview) {
@@ -249,36 +268,87 @@ class PlayerController(item: PlayableItem) {
         if (!isLive && st == EngineState.ENDED) finish()
     }
 
+    /**
+     * Slim foutherstel (build 52): eerst één stille nieuwe poging (met de andere engine als de stream nog nooit
+     * gespeeld heeft, want dan is het eerder een formaatprobleem). Lukt dat niet: bij live één keer automatisch
+     * naar dezelfde zender op een andere server ([onLiveFailure]), en anders de foutmelding met
+     * "Opnieuw", "Andere bron" en "Andere speler". Films en afleveringen gaan verder op de laatste goede positie.
+     */
     private fun reconnect() {
         val u = url ?: return
-        if (attempts >= 6) {
-            errorText = L("This stream can't be played right now."); reconnecting = false
-            timer?.cancel(); timer = null
-            return
-        }
-        // eerste fout: de andere engine proberen (VLC kan meer formaten aan, ExoPlayer soms HLS/DASH beter)
-        if (!triedOtherEngine && attempts == 0 && engine.state == EngineState.ERROR && (usingExo || canUseExo(u))) {
-            triedOtherEngine = true
-            attempts += 1
-            start(u, forceExo = !usingExo)
+        if (retryPending || errorText != null) return
+        if (attempts >= 1) {
+            val hook = onLiveFailure
+            if (isLive && !triedBackup && hook != null && !isPreview) {
+                triedBackup = true
+                reconnecting = true
+                hook()
+                return
+            }
+            showFailure()
             return
         }
         attempts += 1
         reconnecting = true
-        stallSince = System.currentTimeMillis() + attempts * 2000L  // backoff
-        val resume = position
-        val delayMs = (min(2.0.pow(attempts - 1), 8.0) * 1000).toLong()
-        scope.launch {
-            delay(delayMs)
-            if (stopped || dismissed) return@launch
-            if (!isLive) item = item.copy(resumeAt = resume)
-            engine.load(u, live = isLive && timeshiftStart == null, startFraction = if (isLive) null else resume)
+        val resume = if (isLive) null else lastGoodPosition.takeIf { it > 0.0 } ?: position.takeIf { it > 0.0 }
+        if (!isLive && resume != null) item = item.copy(resumeAt = resume)
+        val otherEngine = !everPlayed && !triedOtherEngine && engine.state == EngineState.ERROR && (usingExo || canUseExo(u))
+        if (otherEngine) {
+            triedOtherEngine = true
+            retryPending = true
+            scope.launch {
+                delay(500)
+                retryPending = false
+                if (stopped || dismissed) return@launch
+                start(u, forceExo = !usingExo)
+            }
+            return
         }
+        retryPending = true
+        stallSince = System.currentTimeMillis() + 4_000L
+        scope.launch {
+            delay(1_500)
+            retryPending = false
+            if (stopped || dismissed) return@launch
+            engine.load(u, live = isLive && timeshiftStart == null, startFraction = resume)
+        }
+    }
+
+    /** Foutmelding tonen (Opnieuw / Andere bron / Andere speler); de timer stopt. */
+    fun showFailure() {
+        errorText = L("This stream can't be played right now."); reconnecting = false; isBuffering = false
+        retryPending = false
+        if (!isLive) lastGoodPosition.takeIf { it > 0.0 }?.let { item = item.copy(resumeAt = it) }
+        timer?.cancel(); timer = null
+    }
+
+    /** Kan er met de andere engine geprobeerd worden ("Andere speler")? */
+    val canSwitchEngine: Boolean get() = url?.let { usingExo || canUseExo(it) } ?: false
+
+    /** "Andere speler": ExoPlayer ↔ VLC, op de laatste goede positie. */
+    fun switchEngine() {
+        val u = url ?: return
+        if (!canSwitchEngine) return
+        if (!isLive) item = item.copy(resumeAt = lastGoodPosition.takeIf { it > 0.0 } ?: position)
+        attempts = 0; triedOtherEngine = true; reconnecting = false
+        start(u, forceExo = !usingExo)
+    }
+
+    /**
+     * Andere bron afspelen (reservebron of handmatig gekozen): zelfde titel, andere URL. Bij live geen
+     * terugkijken meer (dat hoort bij de oorspronkelijke server).
+     */
+    fun playAlternative(u: String) {
+        if (!isLive) item = item.copy(resumeAt = lastGoodPosition.takeIf { it > 0.0 } ?: position)
+        else { catchupProvider = null; timeshiftStart = null; behindLive = 0.0; liveURL = u }
+        attempts = 0; triedOtherEngine = false; reconnecting = false
+        start(u)
     }
 
     /** Opnieuw proberen na een fout ("Try again"). */
     fun retry() {
         val u = url ?: return
+        if (!isLive && lastGoodPosition > 0.0) item = item.copy(resumeAt = lastGoodPosition)
         attempts = 0; triedOtherEngine = false; reconnecting = false
         start(u)
     }
@@ -458,7 +528,8 @@ class PlayerController(item: PlayableItem) {
         if (isPreview || it.type == MediaType.LIVE || it.channelID != null || it.id.contains("-cu-") || duration <= 60) return
         // gezien: bijna uitgekeken, of alleen de aftiteling nog over — per profiel, ook zonder Trakt
         val left = duration - currentTime
-        if (position >= 0.85 || (duration > 600 && left < 180 && position > 0.7)) {
+        val inCredits = creditsStart?.let { c -> c > 60 && currentTime >= c } == true
+        if (position >= 0.85 || (duration > 600 && left < 180 && position > 0.7) || inCredits) {
             Store.clearProgress(it.id)
             Store.setLocalWatched(it.id, true)
             val s = it.season; val e = it.episode
@@ -565,8 +636,10 @@ class PlayerController(item: PlayableItem) {
         /** ExoPlayer kan alleen http(s)/file/content openen; smb://, ftp://, rtmp:// enz. alleen VLC. */
         fun canUseExo(url: String): Boolean = scheme(url) in setOf("http", "https", "file", "content")
 
-        fun prefersExo(url: String): Boolean {
+        fun prefersExo(url: String, live: Boolean = false): Boolean {
             if (!canUseExo(url)) return false
+            // deinterlacen "Aan" (build 52): live-zenders bij Automatisch met VLC (ExoPlayer kan niet deinterlacen)
+            if (live && choice == EngineChoice.AUTO && PlayerSettings.deinterlace == "on") return false
             return when (choice) {
                 EngineChoice.APPLE -> true
                 EngineChoice.VLC -> false

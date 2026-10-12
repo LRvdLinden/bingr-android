@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
@@ -67,7 +68,7 @@ private data class MainTab(val id: Int, val title: String, val icon: ImageVector
 
 /**
  * Hoofdscherm (= MainTabView.swift). Telefoon: onderbalk; TV: bovenbalk met tabbladen zoals Netflix op TV.
- * Tabbladen: 0 Home, 1 Live TV, 2 Films, 3 Series, 4 Zoeken, 5 Mijn Bingr.
+ * Tabbladen: 0 Home, 1 Live TV, 2 Films, 3 Series, 4 Zoeken, 5 Mijn Bingr, 6 Downloads (build 52, niet op TV).
  */
 @Composable
 fun MainScreen() {
@@ -87,6 +88,7 @@ fun MainScreen() {
         if (showMovies) add(MainTab(2, L("Movies"), Icons.Default.Movie))
         if (showSeries) add(MainTab(3, L("Series"), Icons.Default.VideoLibrary))
         if (!isPhone) add(MainTab(4, L("Search"), Icons.Default.Search))
+        if (Downloads.supported) add(MainTab(6, L("Downloads"), Icons.Default.Download))
         add(MainTab(5, if (tv) Store.activeProfile?.name ?: L("My Bingr") else L("My Bingr"), Icons.Default.AccountCircle))
     }
     var tab by rememberSaveable {
@@ -114,6 +116,20 @@ fun MainScreen() {
         }
     }
 
+    // "Start bij laatste zender" (build 52): na het kiezen van een profiel meteen de laatst bekeken zender
+    LaunchedEffect(AppState.pendingLastChannel, lib.channels.size) {
+        if (!AppState.pendingLastChannel || lib.channels.isEmpty()) return@LaunchedEffect
+        AppState.pendingLastChannel = false
+        val pid = Playlists.source?.id ?: return@LaunchedEffect
+        val ch = Store.recentChannels.asSequence()
+            .mapNotNull { k -> k.split('|', limit = 2).takeIf { it.size == 2 && it[0] == pid }?.get(1) }
+            .mapNotNull { id -> lib.channels.firstOrNull { it.id == id } }
+            .firstOrNull() ?: return@LaunchedEffect
+        if (AppState.playing == null && AppState.pendingItemID == null) {
+            AppState.play(Playables.channel(ch, lib.nowPlaying(ch)), lib.channels.filter { it.group == ch.group })
+        }
+    }
+
     val holder = rememberSaveableStateHolder()
     val covered = ScreensNav.stack.isNotEmpty() || Playlists.isLoading
 
@@ -128,6 +144,7 @@ fun MainScreen() {
                         2 -> HomeScreen(Filter.MOVIES)
                         3 -> HomeScreen(Filter.SERIES)
                         4 -> SearchScreen(modal = false, onClose = {})
+                        6 -> Box(Modifier.fillMaxSize().statusBarsPadding()) { DownloadsScreen() }
                         else -> Box(Modifier.fillMaxSize().then(if (tv) Modifier else Modifier.statusBarsPadding())) { SettingsScreen() }
                     }
                 }

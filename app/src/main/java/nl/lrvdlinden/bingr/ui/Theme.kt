@@ -30,7 +30,8 @@ import androidx.compose.ui.unit.sp
 
 /** Netflix-kleuren en maten (zelfde als iOS Theme). */
 object Theme {
-    val red = Color(0xFFE50914)
+    /** Accentkleur van de app (build 52: instelbaar, zie [Accent]; standaard Netflix-rood) */
+    val red: Color get() = Accent.color
     val bg = Color.Black
     val card = Color(0xFF181818)
     val elevated = Color(0xFF232323)

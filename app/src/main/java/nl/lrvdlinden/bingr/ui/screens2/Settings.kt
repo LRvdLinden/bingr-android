@@ -169,6 +169,10 @@ fun SettingsScreen() {
     var zapDelay by remember { mutableIntStateOf(PlayerSettings.zapDelay) }
     var channelPreview by remember { mutableStateOf(PlayerSettings.channelPreview) }
     var matchFrameRate by remember { mutableStateOf(PlayerSettings.matchFrameRate) }
+    // build 52
+    var deinterlace by remember { mutableStateOf(PlayerSettings.deinterlace) }
+    var resumeLastChannel by remember { mutableStateOf(PlayerSettings.resumeLastChannel) }
+    var iconConfirm by remember { mutableStateOf<String?>(null) }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -225,6 +229,12 @@ fun SettingsScreen() {
     val profile = Store.activeProfile
     /** Hoofdaccount (of nog geen profielen): mag de server en alles instellen. */
     val isMain = Store.canManage
+
+    iconConfirm?.let { k ->
+        S2ActionDialog(L("Some launchers briefly close Bingr when the icon changes."), listOf(
+            S2Action(L("Change icon"), Icons.Default.Check) { AppIcon.set(k) },
+        ), onDismiss = { iconConfirm = null })
+    }
 
     S2Page(profile?.name ?: L("My Bingr"), onClose = null, state = listState) {
         // MARK: zoals "Mijn Netflix": profiel, Verder kijken, Mijn lijst, favoriete zenders
@@ -441,6 +451,13 @@ fun SettingsScreen() {
                     zapDelay = it; PlayerSettings.zapDelay = it
                 }
                 S2Toggle(L("Channel preview"), channelPreview) { channelPreview = it; PlayerSettings.channelPreview = it }
+                S2Toggle(L("Start with last channel"), resumeLastChannel,
+                    subtitle = L("After choosing a profile, the channel it watched last starts playing.")) {
+                    resumeLastChannel = it; PlayerSettings.resumeLastChannel = it
+                }
+                S2Dropdown(L("Deinterlacing"), PlayerSettings.deinterlaceOptions, deinterlace) {
+                    deinterlace = it; PlayerSettings.deinterlace = it
+                }
                 if (AppState.isTV) {
                     S2Toggle(L("Match frame rate"), matchFrameRate) { matchFrameRate = it; PlayerSettings.matchFrameRate = it }
                 } else {
@@ -505,6 +522,18 @@ fun SettingsScreen() {
                 S2Toggle(L("Show Movies"), showMovies) { showMovies = it; Prefs.put("ui.showMovies", it) }
                 S2Toggle(L("Show Series"), showSeries) { showSeries = it; Prefs.put("ui.showSeries", it) }
                 if (isMain) S2Row(L("Rename, hide and reorder"), icon = Icons.Default.Tune, onClick = { sub = S2SettingsSub.MANAGE })
+            }
+        }
+
+        // MARK: uiterlijk (build 52)
+        item {
+            S2Section(L("Appearance"), if (AppState.isTV) null else L("The app icon is only changed on this device.")) {
+                S2Dropdown(L("Accent color"), Accent.options.map { it.key to L(it.titleKey) }, Accent.key) { Accent.set(it) }
+                if (!AppState.isTV) {
+                    S2Dropdown(L("App icon"), AppIcon.options.map { it.key to L(it.titleKey) }, AppIcon.current) { k ->
+                        if (k != AppIcon.current) iconConfirm = k
+                    }
+                }
             }
         }
 

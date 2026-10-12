@@ -38,6 +38,9 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.Downloading
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -253,6 +256,17 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
         }
     }
 
+    /** Downloaden (build 52, telefoon/tablet): film of aflevering. */
+    fun download(item: PlayableItem, seriesTitle: String?) {
+        val existing = Downloads.find(pid, item.id)
+        if (existing?.isDone == true) { flash(L("Downloaded")); return }
+        if (existing != null && existing.status != Downloads.FAILED && existing.status != Downloads.PAUSED) { flash(L("Downloading…")); return }
+        scope.launch {
+            val err = Downloads.start(item, seriesTitle, target.poster)
+            flash(err ?: L("Download started"))
+        }
+    }
+
     fun toggleMyList() {
         val p = pid ?: return
         val on = !Store.inMyList(p, target.id)
@@ -393,6 +407,15 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                         if (!target.id.startsWith("rec-")) DetailCircleButton(Icons.AutoMirrored.Filled.PlaylistAdd) { addToCollection = true }
                         if (trailerID != null) DetailCircleButton(Icons.Default.Theaters) { Trailer.open(ctx, trailerID) }
                         if (isMovie) DetailCircleButton(if (isWatchedTitle) Icons.Default.CheckCircle else Icons.Default.Check) { toggleWatchedMovie() }
+                        // downloaden (build 52): niet op TV
+                        val movieItem = (target as? DetailTarget.MovieT)?.let { Playables.movie(it.movie, imdb) }
+                        if (movieItem != null && Downloads.canDownload(movieItem)) {
+                            val dl = Downloads.find(pid, movieItem.id)
+                            DetailCircleButton(
+                                when { dl?.isDone == true -> Icons.Default.DownloadDone; dl != null && dl.status != Downloads.FAILED -> Icons.Default.Downloading; else -> Icons.Default.Download },
+                                tint = if (dl?.isDone == true) Theme.red else Color.White
+                            ) { download(movieItem, null) }
+                        }
                         // geen deelknop op Android TV, Google TV en Fire TV (zie docs/ACCOUNT.md, build 45)
                         if (!tv) DetailCircleButton(Icons.Default.Share) { share() }
                         DetailCapsule(L("Other sources"), Modifier.weight(1f), busy = sourcesLoading) { openSources() }
@@ -487,7 +510,9 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                             EpisodeCard(
                                 e = e, s = s, info = info, imdb = imdb,
                                 fallbackStill = screensText(details?.backdrop) ?: s.poster,
-                                onPlay = { ageChecked { AppState.play(Playables.episode(e, s, imdb)) } }
+                                onPlay = { ageChecked { AppState.play(Playables.episode(e, s, imdb)) } },
+                                onDownload = Playables.episode(e, s, imdb).takeIf { Downloads.canDownload(it) }?.let { item -> { download(item, s.title) } },
+                                download = Downloads.find(pid, e.id),
                             )
                         }
                     }
@@ -742,6 +767,8 @@ private fun EpisodeCard(
     imdb: String?,
     fallbackStill: String?,
     onPlay: () -> Unit,
+    onDownload: (() -> Unit)? = null,
+    download: DownloadItem? = null,
 ) {
     val tv = AppState.isTV
     val w = if (tv) 300.dp else 290.dp
@@ -763,6 +790,19 @@ private fun EpisodeCard(
                             .fillMaxWidth().height(5.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.3f))
                     ) {
                         Box(Modifier.fillMaxWidth(progress.toFloat().coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(50)).background(Color.White))
+                    }
+                }
+                // downloaden per aflevering (build 52, telefoon/tablet)
+                if (onDownload != null) {
+                    Box(
+                        Modifier.align(Alignment.TopStart).padding(6.dp).size(34.dp).clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.6f)).focusLift(1.1f) { onDownload() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            when { download?.isDone == true -> Icons.Default.DownloadDone; download != null && download.status != Downloads.FAILED -> Icons.Default.Downloading; else -> Icons.Default.Download },
+                            L("Download"), tint = if (download?.isDone == true) Theme.red else Color.White, modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
                 if (watched) {
@@ -795,6 +835,7 @@ private fun EpisodeCard(
         if (menu) {
             S2ActionDialog(Playables.cleanEpisodeTitle(e), listOf(
                 S2Action(L("Play"), Icons.Default.PlayArrow) { onPlay() },
+                *(if (onDownload != null && download == null) arrayOf(S2Action(L("Download"), Icons.Default.Download) { onDownload() }) else emptyArray()),
                 S2Action(if (watched) L("Mark as unwatched") else L("Mark as watched"),
                     if (watched) Icons.Default.VisibilityOff else Icons.Default.CheckCircle) {
                     Store.setEpisodeWatched(e, !watched)
