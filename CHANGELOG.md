@@ -7,23 +7,31 @@ Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**
 ## Versie 1.0.0 · Build 60
 _13 oktober 2026_
 
-### Alle apps
+### Alle apps en de server
 
 **Verbeterd**
 
 - Het maximum van 6 schermen en 15 apparaten klopt nu ook als apparaten precies tegelijk starten of inloggen; kijkgeschiedenis ouder dan 8 dagen wordt altijd gewist
-- Audiotaal 'Zoals in de stream' en de ondertitelinstellingen werken op alle apps hetzelfde
 
 **Opgelost**
 
 - Je wordt niet meer onterecht uitgelogd als je sessie net verlopen is of de server even niet bereikbaar is
-- Wat je uit Verder kijken of je geschiedenis haalt, komt niet meer terug op je andere apparaten
 
-### Alle apps en de website
+### Alle apps, de website en de server
 
 **Opgelost**
 
 - Servers die je op een ander apparaat of op de website toevoegt, verdwijnen niet meer als een ander apparaat tegelijk een oudere lijst opslaat
+
+### Alle apps
+
+**Verbeterd**
+
+- Audiotaal 'Zoals in de stream' en de ondertitelinstellingen werken op alle apps hetzelfde
+
+**Opgelost**
+
+- Wat je uit Verder kijken of je geschiedenis haalt, komt niet meer terug op je andere apparaten
 
 ### iOS, iPadOS, tvOS, macOS, Android en Android TV
 
@@ -103,7 +111,7 @@ _12 oktober 2026_
 ## Versie 1.0.0 · Build 57
 _12 oktober 2026_
 
-### Alle apps en de website
+### Alle apps, de website en de server
 
 **Nieuw**
 
@@ -138,7 +146,7 @@ _12 oktober 2026_
 ## Versie 1.0.0 · Build 55
 _12 oktober 2026_
 
-### iOS, iPadOS, tvOS, macOS, Android, Android TV en Web
+### iOS, iPadOS, tvOS, macOS, Android, Android TV en Website
 
 **Verbeterd**
 
@@ -224,7 +232,7 @@ _12 oktober 2026_
 ## Versie 1.0.0 · Build 51
 _12 oktober 2026_
 
-### Alle apps
+### Alle apps en de server
 
 **Nieuw**
 
@@ -232,6 +240,11 @@ _12 oktober 2026_
 - Apparaten: je account werkt nu op maximaal 15 apparaten, met per apparaat sinds wanneer het is ingelogd
 - Wie kijkt er nu (hoofdaccount): Mijn Bingr → Account toont welk apparaat en profiel wat kijkt, en hoe lang al
 - Kijkgeschiedenis van 7 dagen (hoofdaccount): per dag wat er op welk apparaat en profiel gekeken is
+
+### Alle apps
+
+**Nieuw**
+
 - Collecties: maak je eigen rijen met naam en afbeelding, handmatig (Aan collectie toevoegen…) of slim met zoekwoorden
 - Startscherm per profiel: zet rijen aan of uit en in je eigen volgorde (Mijn Bingr → Startscherm)
 - Zappen: veeg in de live-speler omhoog of omlaag naar de volgende of vorige zender, met zenderbalk en instelbare zapvertraging
@@ -244,7 +257,7 @@ _12 oktober 2026_
 
 - Direct laden: je bewaarde lijst staat meteen in beeld en wordt op de achtergrond bijgewerkt
 
-### Alle apps en de website
+### Alle apps, de website en de server
 
 **Nieuw**
 
@@ -314,7 +327,7 @@ _12 oktober 2026_
 ## Versie 1.0.0 · Build 45
 _12 oktober 2026_
 
-### Alle apps
+### Alle apps en de server
 
 **Nieuw**
 
@@ -335,7 +348,7 @@ _12 oktober 2026_
 ## Versie 1.0.0 · Build 44
 _12 oktober 2026_
 
-### Alle apps
+### Alle apps en de server
 
 **Nieuw**
 
@@ -344,7 +357,7 @@ _12 oktober 2026_
 ## Versie 1.0.0 · Build 43
 _12 oktober 2026_
 
-### Alle apps
+### Alle apps en de server
 
 **Nieuw**
 
@@ -362,7 +375,7 @@ _12 oktober 2026_
 ## Versie 1.0.0 · Build 41
 _12 oktober 2026_
 
-### Alle apps
+### Alle apps en de server
 
 **Nieuw**
 
@@ -381,7 +394,7 @@ _12 oktober 2026_
 ## Versie 1.0.0 · Build 40
 _12 oktober 2026_
 
-### Alle apps
+### Alle apps en de server
 
 **Nieuw**
 
@@ -390,31 +403,36 @@ _12 oktober 2026_
 ## Versie 1.0.0 · Build 39
 _12 oktober 2026_
 
-### Alle apps
+### Alle apps en de server
 
 **Nieuw**
 
 - Maximaal 10 apparaten per account
 - Apparaten beheren: gekoppeld op, laatst gebruikt en verwijderen (in de app en op bingr.online/account)
+
+### Alle apps
+
+**Nieuw**
+
 - Een verwijderd apparaat logt automatisch uit
 
 ## Versie 1.0.0 · Build 38
 _12 oktober 2026_
 
-### Alle apps
+### Alle apps en de server
 
 **Nieuw**
 
 - Bingr-account: inloggen of account maken na de splash, in Netflix-stijl
 - Bestaande profielen worden aan je account gekoppeld en gedeeld met al je apparaten
 
-### Alle apps en de website
+### Alle apps, de website en de server
 
 **Nieuw**
 
 - E-mails in Bingr-stijl (NL/EN), wachtwoord herstellen via bingr.online/reset
 
-### tvOS, Android TV en Web
+### tvOS, Android TV en Website
 
 **Nieuw**
 
