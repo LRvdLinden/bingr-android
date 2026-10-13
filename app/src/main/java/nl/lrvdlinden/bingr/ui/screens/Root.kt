@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +79,14 @@ fun BingrRoot() {
         }
         if (limit != null) {
             FullLayer { TooManyDevicesScreen(limit) }
+        }
+        // mededelingen van de beheerder (build 62): pas in het hoofdscherm en niet over de speler heen
+        val announcement = Announcements.queue.firstOrNull()
+        if (announcement != null && !covered && AppState.stage == AppState.Stage.MAIN) {
+            key(announcement.id) { AnnouncementDialog(announcement) }
+        }
+        LaunchedEffect(AppState.stage) {
+            if (AppState.stage == AppState.Stage.MAIN) Announcements.check()
         }
         LaunchedEffect(limit != null) {
             if (limit != null) { AppState.playing = null; AppState.showMultiview = false }

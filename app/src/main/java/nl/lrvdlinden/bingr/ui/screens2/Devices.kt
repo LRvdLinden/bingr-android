@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.PhoneIphone
 import androidx.compose.material.icons.filled.Smartphone
@@ -71,11 +72,26 @@ import java.util.Date
 fun isTizenPlatform(platform: String): Boolean =
     platform.equals("tizen", ignoreCase = true) || platform.equals("Samsung TV", ignoreCase = true)
 
-/** Platformnaam onder de apparaatnaam (`tizen` wordt "Samsung TV"). */
-fun devicePlatformLabel(platform: String): String = if (isTizenPlatform(platform)) L("Samsung TV") else platform
+/** Webspeler op bingr.online (build 62) meldt zich met platform `browser`; naam zoals "Chrome op Mac". */
+fun isBrowserPlatform(platform: String): Boolean = platform.equals("browser", ignoreCase = true)
+
+/** Platformnaam onder de apparaatnaam (`tizen` wordt "Samsung TV", `browser` wordt "Browser"). */
+fun devicePlatformLabel(platform: String): String = when {
+    isTizenPlatform(platform) -> L("Samsung TV")
+    isBrowserPlatform(platform) -> L("Browser")
+    else -> platform
+}
+
+/** Apparaatnaam in Nu aan het kijken en de kijkgeschiedenis: bij de webspeler met "Browser" erachter ("Chrome op Mac · Browser"). */
+fun deviceNameWithLabel(name: String, platform: String): String {
+    if (!isBrowserPlatform(platform)) return name
+    val label = L("Browser")
+    return if (name.isBlank() || name.equals(platform, ignoreCase = true) || name.equals(label, ignoreCase = true)) label else "$name · $label"
+}
 
 /** Icoon per platform. */
-fun deviceIcon(platform: String): ImageVector = if (isTizenPlatform(platform)) Icons.Default.Tv else when (platform) {
+fun deviceIcon(platform: String): ImageVector = if (isTizenPlatform(platform)) Icons.Default.Tv
+else if (isBrowserPlatform(platform)) Icons.Default.Language else when (platform) {
     "iPhone" -> Icons.Default.PhoneIphone
     "iPad", "Android tablet" -> Icons.Default.Tablet
     "Apple TV", "Android TV", "Google TV", "Fire TV" -> Icons.Default.Tv

@@ -247,7 +247,10 @@ def device_auth(body, mode):
         devs = [{'device_id': 'd1', 'name': SAVED.get('rename', {}).get('d1', 'iPhone van Léon'), 'platform': 'iPhone',
                  'created_at': iso(now - timedelta(days=30)), 'last_seen_at': iso(now - timedelta(minutes=5))},
                 {'device_id': body.get('device_id'), 'name': SAVED.get('rename', {}).get(body.get('device_id'), 'Samsung TV (QE55Q80B)'),
-                 'platform': 'tizen', 'created_at': iso(now - timedelta(days=2)), 'last_seen_at': iso(now), 'current': True}]
+                 'platform': 'tizen', 'created_at': iso(now - timedelta(days=2)), 'last_seen_at': iso(now), 'current': True},
+                # webspeler (build 62)
+                {'device_id': 'd3', 'name': 'Chrome op Mac', 'platform': 'browser',
+                 'created_at': iso(now - timedelta(days=1)), 'last_seen_at': iso(now - timedelta(hours=2))}]
         return 200, {'limit': 15, 'devices': devs}
     if a == 'rename_device':
         SAVED.setdefault('rename', {})[body.get('device_id')] = body.get('name')
@@ -255,11 +258,28 @@ def device_auth(body, mode):
     if a == 'list_streams':
         now = datetime.now(timezone.utc)
         return 200, {'limit': 6, 'streams': [{'device_id': 'd1', 'device_name': 'iPhone van Léon', 'platform': 'iPhone', 'profile_name': 'Léon',
-                                              'title': 'NPO 1 · Journaal', 'kind': 'live', 'started_at': iso(now - timedelta(minutes=42))}]}
+                                              'title': 'NPO 1 · Journaal', 'kind': 'live', 'started_at': iso(now - timedelta(minutes=42))},
+                                             {'device_id': 'd3', 'device_name': 'Chrome op Mac', 'platform': 'browser', 'profile_name': 'Sam',
+                                              'title': 'Red Horizon', 'kind': 'movie', 'started_at': iso(now - timedelta(minutes=12))}]}
     if a == 'watch_log':
         now = datetime.now(timezone.utc)
         return 200, {'entries': [{'device_name': 'Samsung TV', 'platform': 'tizen', 'profile_name': 'Léon', 'title': 'Red Horizon',
-                                  'kind': 'movie', 'content_id': 'xv9', 'started_at': iso(now - timedelta(hours=3)), 'minutes': 45}]}
+                                  'kind': 'movie', 'content_id': 'xv9', 'started_at': iso(now - timedelta(hours=3)), 'minutes': 45},
+                                 {'device_name': 'Chrome op Mac', 'platform': 'browser', 'profile_name': 'Sam', 'title': 'NPO 1 · Journaal',
+                                  'kind': 'live', 'started_at': iso(now - timedelta(hours=5)), 'minutes': 20}]}
+    if a == 'announcements':
+        # mededelingen van de beheerder (build 62); andere scenario's: geen (oudere backend → onbekende actie)
+        if mode != 'announce':
+            return 400, {'error': 'unknown_action'}
+        now = datetime.now(timezone.utc)
+        nl = body.get('lang') == 'nl'
+        return 200, {'items': [
+            {'id': 'a2', 'title': 'Onderhoud vannacht' if nl else 'Maintenance tonight',
+             'body': 'Tussen 02:00 en 03:00 kan inloggen even niet lukken.' if nl else 'Signing in may not work between 02:00 and 03:00.',
+             'created_at': iso(now - timedelta(hours=1))},
+            {'id': 'a1', 'title': 'Welkom bij Bingr' if nl else 'Welcome to Bingr', 'body': 'Bedankt voor het testen!' if nl else 'Thanks for testing!',
+             'created_at': iso(now - timedelta(days=1))},
+            {'id': 'a0', 'title': 'Al gezien', 'body': 'Deze is al gelezen.', 'created_at': iso(now - timedelta(days=2))}]}
     return 400, {'error': 'unknown_action'}
 
 

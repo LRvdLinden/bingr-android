@@ -118,7 +118,7 @@ private fun StreamRow(s: Account.StreamInfo, details: Boolean) {
         Spacer(Modifier.width(tvs(12)))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(s.deviceName, color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1,
+                Text(deviceNameWithLabel(s.deviceName, s.platform), color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (s.current) {
                     Spacer(Modifier.width(8.dp))
@@ -306,7 +306,7 @@ fun WatchLogScreen(onClose: () -> Unit) {
                         val target = remember(e) { watchTarget(e) }
                         S2Row(
                             title = e.title.ifBlank { "—" },
-                            subtitle = listOf(e.profileName, e.deviceName).filter { it.isNotBlank() }.joinToString(" · "),
+                            subtitle = listOf(e.profileName, deviceNameWithLabel(e.deviceName, e.platform)).filter { it.isNotBlank() }.joinToString(" · "),
                             onClick = target?.let { t -> { detail = t } },
                             leading = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {

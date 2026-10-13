@@ -345,6 +345,7 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 .st-section { color: var(--accent); font-weight: 800; letter-spacing: 3px; font-size: 22px; text-transform: uppercase; margin: 34px 0 12px 18px; }
 .st-row { display: flex; align-items: center; min-height: 84px; padding: 10px 28px; border-radius: 10px; margin-bottom: 6px; background: #121212; }
 .st-row .ic { width: 46px; height: 46px; margin-right: 26px; color: var(--secondary); }
+.st-row .ic.trail { width: 34px; height: 34px; margin-right: 0; margin-left: 24px; } /* apparaat-icoon rechts in de kijkgeschiedenis (build 62) */
 .st-label { flex: 1; font-size: 29px; }
 .st-label .dim { font-size: 23px; margin-top: 4px; }
 .st-value { color: var(--secondary); font-size: 27px; margin-left: 30px; }

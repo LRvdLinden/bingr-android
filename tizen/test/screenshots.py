@@ -55,7 +55,7 @@ def run(page_setup, mode, steps):
             if u.netloc.endswith('supabase.co'):
                 if u.path.endswith('/functions/v1/device-auth'):
                     data = json.loads(req.post_data or '{}')
-                    if data.get('action') in ('put_state', 'stream_start', 'stream_stop', 'register_device', 'put_sources', 'rename_device', 'remove_device'):
+                    if data.get('action') in ('put_state', 'stream_start', 'stream_stop', 'register_device', 'put_sources', 'rename_device', 'remove_device', 'heartbeat', 'announcements'):
                         with open(os.path.join(OUT, 'requests.jsonl'), 'a') as f:
                             f.write(json.dumps(data, ensure_ascii=False) + '\n')
                     code, body = fb.device_auth(data, mode)
@@ -415,6 +415,27 @@ if __name__ == '__main__':
             ('eval', 'B.ui.top().show("settings", true) || 1'), ('wait', 600),
             ('eval', 'var r = Array.prototype.filter.call(document.querySelectorAll(".st-row"), function(r){return r.textContent.indexOf("Automatische") === 0})[0]; B.ui.focus(r); 1'), ('wait', 300), ('shot', '60-lang-settings'),
         ])
+    if which in ('all', 'announce'):
+        # mededelingen (build 62): na de profielkeuze één voor één (oudste eerst), OK en Terug sluiten; gelezen ids lokaal
+        seen = "localStorage.setItem('bingr.announcements.seen', JSON.stringify(['a0']));"
+        run(SIGNED_IN + seen, 'announce', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 6000), ('shot', '61-announcement'),
+            ('expect', 'B.ui.top().modal === true && document.querySelector(".modal-box h2").textContent === "Welkom bij Bingr"', 'oudste mededeling eerst'),
+            ('walk', 'Enter', 'mededeling: OK'), ('wait', 300),
+            ('expect', 'B.ui.top().modal === true && document.querySelector(".modal-box h2").textContent === "Onderhoud vannacht"', 'daarna de volgende'),
+            ('shot', '62-announcement-2'),
+            ('walk', '10009', 'mededeling: terug'), ('wait', 300),
+            ('expect', 'B.ui.top().el.classList.contains("main")', 'mededelingen dicht'),
+            ('expect', 'JSON.stringify(B.store.get("announcements.seen")) === JSON.stringify(["a0","a1","a2"])', 'gelezen ids bewaard'),
+            ('eval', 'JSON.stringify(B.account.appVersion()) + " " + JSON.stringify(B.account.osVersion())', 'versies'),
+        ])
+        with open(os.path.join(OUT, 'requests.jsonl')) as f:
+            reqs = [json.loads(l) for l in f if l.strip()]
+        hb = [r for r in reqs if r.get('action') == 'heartbeat']
+        ok = bool(hb) and all(r.get('app_version') and r.get('os_version', '').startswith('Tizen') for r in hb)
+        RESULTS.append(('heartbeat met app_version en os_version', ok, json.dumps(hb[:1], ensure_ascii=False)))
+        an = [r for r in reqs if r.get('action') == 'announcements']
+        RESULTS.append(('announcements één keer met lang', len(an) == 1 and an[0].get('lang') == 'nl', json.dumps(an, ensure_ascii=False)))
     if which in ('all', 'perf'):
         # prestaties met een grote bibliotheek: lange taken (> 50 ms) tijdens snel scrollen tellen
         LT = 'window.__lt = []; try { new PerformanceObserver(function (l) { l.getEntries().forEach(function (e) { window.__lt.push(Math.round(e.duration)); }); }).observe({entryTypes: ["longtask"]}); } catch (e) {} 1'
@@ -483,6 +504,7 @@ if __name__ == '__main__':
             ('eval', 'B.ui.push(B.screens.devices()) && 1'), ('wait', 1200),
             ('expect', 'document.querySelector(".listscreen").textContent.indexOf("Samsung TV") >= 0 && document.querySelector(".listscreen").textContent.indexOf("tizen") < 0', 'platform als Samsung TV'),
             ('expect', 'document.querySelector(".listscreen").textContent.indexOf("Gekoppeld") >= 0', 'Gekoppeld-datum'),
+            ('expect', 'document.querySelector(".listscreen").textContent.indexOf("Chrome op Mac") >= 0 && document.querySelector(".listscreen").textContent.indexOf("browser") < 0 && !!document.querySelector(".listscreen .ic path[d^=\\"M3 12h18\\"]")', 'webspeler: Browser met wereldbol'),
             ('walk', 'ArrowDown ArrowUp Enter', 'apparaten: menu'), ('walk', 'Enter', 'apparaten: hernoemen'),
             ('expect', 'B.ui.top().el.classList.contains("edit-text")', 'naam-toetsenbord open'),
             ('tv', '65376'), ('wait', 1500),

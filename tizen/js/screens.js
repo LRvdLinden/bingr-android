@@ -162,7 +162,7 @@
     function draw(devs) {
       U.clear(list);
       devs.forEach(function (d) {
-        var row = h('div.dev-row', [U.icon(platformIcon(d.platform)), h('div.dev-info', [h('div', d.name), h('div.dim', d.platform)])]);
+        var row = h('div.dev-row', [U.icon(platformIcon(d.platform)), h('div.dev-info', [h('div', d.name), h('div.dim', A.platformLabel(d.platform))])]);
         var rm = U.button(L('Remove'), function () {
           A.removeDevice(d.id).then(onRetry, function (e) { U.toast(e.message); });
         });
@@ -181,6 +181,7 @@
   };
   function platformIcon(p) {
     p = String(p || '');
+    if (/^browser$/i.test(p)) return 'globe'; // webspeler op bingr.online (build 62)
     if (/TV|tizen/i.test(p)) return 'tv';
     if (/Mac/.test(p)) return 'laptop';
     return 'phone';
@@ -1584,7 +1585,7 @@
       return A.listStreams().then(function (r) { return { items: r.streams, header: L('%d of %d watching now', r.streams.length, r.limit) }; });
     }, function (s) {
       var mins = s.startedAt ? Math.round((Date.now() - s.startedAt) / 60000) : 0;
-      return h('div.st-row.f', [U.icon(platformIcon(s.platform)), S.rowAvatar(s.profileId, s.profileName), h('div.st-label', [h('div', s.title), h('div.dim', s.deviceName + '  ·  ' + s.profileName + '  ·  ' + mins + ' min')])]);
+      return h('div.st-row.f', [U.icon(platformIcon(s.platform)), S.rowAvatar(s.profileId, s.profileName), h('div.st-label', [h('div', s.title), h('div.dim', A.deviceNameWithLabel(s.deviceName, s.platform) + '  ·  ' + s.profileName + '  ·  ' + mins + ' min')])]);
     }, L('Nobody is watching right now.'));
     // ververst elke 30 s zolang het scherm bovenaan staat (ACCOUNT.md, build 51)
     var timer = setInterval(function () { if (U.top() === scr) scr.refresh(true); }, 30000);
@@ -1597,7 +1598,8 @@
     }, function (e) {
       var d = new Date(e.startedAt);
       return h('div.st-row.f', [h('div.wl-time', d.toLocaleDateString(B.lang, { weekday: 'short', day: 'numeric', month: 'short' }) + '  ' + B.fmtTime(e.startedAt)),
-        S.rowAvatar(e.profileId, e.profileName), h('div.st-label', [h('div', e.title), h('div.dim', e.profileName + '  ·  ' + e.deviceName + '  ·  ' + e.minutes + ' min')])]);
+        S.rowAvatar(e.profileId, e.profileName), h('div.st-label', [h('div', e.title), h('div.dim', e.profileName + '  ·  ' + A.deviceNameWithLabel(e.deviceName, e.platform) + '  ·  ' + e.minutes + ' min')]),
+        U.icon(platformIcon(e.platform), 'trail')]);
     }, L('No history yet'));
   };
   S.relTime = relTime;

@@ -373,9 +373,40 @@ object Account {
         }, bearer = token)
     }
 
+    /** App-versie voor de beheerder: "1.0.0 (62)" (versionName + buildnummer). */
+    val appVersion: String get() = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+
+    /** Systeemversie voor de beheerder: "Android 14" of "Android TV 12". */
+    val osVersion: String get() = (if (AppState.isTV) "Android TV " else "Android ") + (Build.VERSION.RELEASE ?: "")
+
+    /** Extra velden bij register_device en heartbeat (build 62); oudere backends negeren ze. */
+    private fun versionFields(): Map<String, String> = mapOf("app_version" to appVersion, "os_version" to osVersion.trim())
+
+    data class Announcement(val id: String, val title: String, val body: String, val createdAt: Long?)
+
+    /** announcements {lang}: berichten van de beheerder; fouten → lege lijst (stil). */
+    suspend fun announcements(lang: String): List<Announcement> {
+        if (!isSignedIn || !configured) return emptyList()
+        val r = try {
+            deviceCall("announcements", deviceId, mapOf("lang" to lang))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return emptyList()
+        }
+        if (!r.ok) return emptyList()
+        return r.json.jList("items").mapNotNull { a ->
+            val id = a.jS("id")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val title = a.jS("title")?.trim().orEmpty()
+            val body = a.jS("body")?.trim().orEmpty()
+            if (title.isEmpty() && body.isEmpty()) return@mapNotNull null
+            Announcement(id, title, body, Net.parseISODate(a.jS("created_at")))
+        }
+    }
+
     /** register_device; 403 device_limit → [DeviceLimitException]. */
     suspend fun registerDevice() {
-        val r = deviceCall("register_device", deviceId, mapOf("name" to deviceDisplayName, "platform" to devicePlatform))
+        val r = deviceCall("register_device", deviceId, mapOf("name" to deviceDisplayName, "platform" to devicePlatform) + versionFields())
         if (r.code == 403 || r.errorCode == "device_limit") {
             if (r.errorCode == "device_limit" || r.json.jObj?.containsKey("devices") == true) {
                 throw DeviceLimitException(DeviceLimit(r.json.jI("limit") ?: DEFAULT_DEVICE_LIMIT, parseDevices(r.json.jList("devices"))))
@@ -387,7 +418,7 @@ object Account {
 
     /** heartbeat; false = dit apparaat is verwijderd (revoked). */
     suspend fun heartbeat(): Boolean {
-        val r = deviceCall("heartbeat", deviceId)
+        val r = deviceCall("heartbeat", deviceId, versionFields())
         if (r.json.jB("revoked") == true) return false
         if (!r.ok) throw generic()
         return true
@@ -468,6 +499,7 @@ object Account {
                     when (e) {
                         androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
                             deviceCheck()
+                            Announcements.check()
                             heartbeatJob?.cancel()
                             heartbeatJob = AppScope.launch {
                                 while (true) { delay(5 * 60_000L); deviceCheck() }

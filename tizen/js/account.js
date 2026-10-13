@@ -221,9 +221,44 @@
     return authed(body);
   }
 
+  // MARK: versies voor de beheerder (build 62); oudere backends negeren deze velden
+
+  function placeholder(v) { return !v || String(v).indexOf('__') === 0; }
+  /** "1.0.0 (62)": versie uit config.xml (via CI in core.js gezet) en het buildnummer. */
+  A.appVersion = function () {
+    var v = B.config.version, b = B.config.build;
+    if (placeholder(v)) {
+      try { v = tizen.application.getAppInfo().version; } catch (e) { v = null; }
+    }
+    return (placeholder(v) ? '1.0.0' : v) + ' (' + (placeholder(b) ? '0' : b) + ')';
+  };
+  /** "Tizen 6.5": platformversie van de tv, anders uit de user agent. */
+  A.osVersion = function () {
+    var v = null;
+    try {
+      if (window.tizen && tizen.systeminfo && tizen.systeminfo.getCapability) v = tizen.systeminfo.getCapability('http://tizen.org/feature/platform.version');
+    } catch (e) { v = null; }
+    if (!v) {
+      var m = /Tizen[ \/](\d+(?:\.\d+)?)/i.exec(navigator.userAgent || '');
+      if (m) v = m[1];
+    }
+    return v ? 'Tizen ' + String(v).split('.').slice(0, 2).join('.') : 'Tizen';
+  };
+  function versionFields() { return { app_version: A.appVersion(), os_version: A.osVersion() }; }
+
+  /** announcements {lang} → [{id, title, body, createdAt}]; fouten → lege lijst (stil). */
+  A.announcements = function (lang) {
+    return deviceCall('announcements', A.deviceId(), { lang: lang }).then(function (r) {
+      if (!r || !r.ok || !r.json) return [];
+      return (r.json.items || []).filter(function (a) { return a && a.id && (a.title || a.body); }).map(function (a) {
+        return { id: String(a.id), title: String(a.title || '').trim(), body: String(a.body || '').trim(), createdAt: B.parseISO(a.created_at) || 0 };
+      });
+    }, function () { return []; });
+  };
+
   /** register_device → 'ok' | {limit, devices} (te veel apparaten) | 'failed'. */
   A.registerDevice = function () {
-    return deviceCall('register_device', A.deviceId(), { name: A.deviceDisplayName(), platform: B.config.platform }).then(function (r) {
+    return deviceCall('register_device', A.deviceId(), B.assign({ name: A.deviceDisplayName(), platform: B.config.platform }, versionFields())).then(function (r) {
       if (!r) return 'failed';
       var j = r.json || {};
       if (r.status === 403 && (r.errorCode === 'device_limit' || j.devices)) return { limit: j.limit || 15, devices: parseDevices(j.devices) };
@@ -233,7 +268,7 @@
     });
   };
   A.heartbeat = function () {
-    return deviceCall('heartbeat', A.deviceId()).then(function (r) {
+    return deviceCall('heartbeat', A.deviceId(), versionFields()).then(function (r) {
       if (!r) return true; // netwerkfout: niet uitloggen
       if (r.json && r.json.revoked === true) return false;
       return true;
@@ -252,7 +287,19 @@
     return deviceCall('rename_device', id, { name: name }).then(function (r) { if (!r || !r.ok) throw generic(); });
   };
   /** Platformnaam voor mensen: "tizen" heet "Samsung TV" (ACCOUNT.md, build 45/55). */
-  A.platformLabel = function (p) { return String(p || '').toLowerCase() === 'tizen' ? L('Samsung TV') : String(p || ''); };
+  A.platformLabel = function (p) {
+    var l = String(p || '').toLowerCase();
+    if (l === 'tizen') return L('Samsung TV');
+    if (l === 'browser') return L('Browser'); // webspeler op bingr.online (build 62)
+    return String(p || '');
+  };
+  /** Apparaatnaam in Nu aan het kijken en de kijkgeschiedenis: bij de webspeler "Chrome op Mac · Browser". */
+  A.deviceNameWithLabel = function (name, p) {
+    if (String(p || '').toLowerCase() !== 'browser') return name;
+    var label = L('Browser');
+    var n = String(name || '');
+    return (!n || n === '?' || n.toLowerCase() === 'browser' || n === label) ? label : n + '  ·  ' + label;
+  };
   A.removeDevice = function (id) {
     return deviceCall('remove_device', id).then(function (r) { if (!r || !r.ok) throw generic(); });
   };
