@@ -4,6 +4,21 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 62
+_13 oktober 2026_
+
+### Alle apps, de website en de server
+
+**Nieuw**
+
+- Apparaten: de browser verschijnt als eigen apparaattype (bijv. "Chrome op Mac") met een browser-icoon
+
+### Server
+
+**Nieuw**
+
+- Servers zonder CORS werken ook in de browser via een beveiligde doorgifte, alleen voor https en alleen voor je eigen servers
+
 ## Versie 1.0.0 · Build 61
 _13 oktober 2026_
 
