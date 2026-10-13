@@ -554,7 +554,8 @@
    */
   Lib.collectionItems = function (c, limit) {
     limit = limit || 60;
-    var key = 'coll:' + c.id + '|' + (c.updatedAt || '') + '|' + limit + '|' + (Lib.source ? Lib.source.id : '');
+    var prof = B.app && B.app.profile ? B.app.profile.id : '';
+    var key = 'coll:' + prof + '|' + c.id + '|' + (c.updatedAt || '') + '|' + limit + '|' + (Lib.source ? Lib.source.id : '');
     return Lib.memo(key, function () { return collectionItems(c, limit); });
   };
   function collectionItems(c, limit) {

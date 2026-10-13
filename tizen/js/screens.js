@@ -179,13 +179,7 @@
     ])]);
     return { el: el, onBack: function () { onCancel(); return true; } };
   };
-  function platformIcon(p) {
-    p = String(p || '');
-    if (/^browser$/i.test(p)) return 'globe'; // webspeler op bingr.online (build 62)
-    if (/TV|tizen/i.test(p)) return 'tv';
-    if (/Mac/.test(p)) return 'laptop';
-    return 'phone';
-  }
+  function platformIcon(p) { return U.platformIcon(p); }
   S.platformIcon = platformIcon;
 
   // MARK: avatar

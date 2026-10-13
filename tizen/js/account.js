@@ -304,13 +304,14 @@
     return deviceCall('remove_device', id).then(function (r) { if (!r || !r.ok) throw generic(); });
   };
 
-  /** Uitloggen: eerst remove_device voor deze tv, dan logout, daarna altijd lokaal wissen. */
+  /** Uitloggen (alleen deze tv): eerst remove_device voor deze tv, dan logout, daarna altijd lokaal wissen. */
   A.signOut = function () {
     var token = session && session.access_token;
     var p = A.isSignedIn() ? A.removeDevice(A.deviceId()).catch(B.noop) : Promise.resolve();
     return p.then(function () {
       if (!token) return;
-      return post('/auth/v1/logout', {}, token).catch(B.noop);
+      // build 74: scope=local, alleen de sessie van deze tv (zonder scope logt Supabase overal uit)
+      return post('/auth/v1/logout?scope=local', {}, token).catch(B.noop);
     }).then(function () { clear(); });
   };
   /** Op een ander apparaat verwijderd (heartbeat: revoked): lokaal uitloggen zonder logout-aanroep. */

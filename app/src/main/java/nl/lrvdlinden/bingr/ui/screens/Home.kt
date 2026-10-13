@@ -763,14 +763,18 @@ private fun MoviePoster(m: Movie, pid: String?) {
 
 @Composable
 private fun ForYouRow(filter: Filter, all: List<DetailTarget>) {
+    // build 74: altijd alfabetisch op titel (zonder taallabels; hoofdletters en accenten tellen niet), films en series door elkaar
     val items = remember(all, filter) {
+        val collator = java.text.Collator.getInstance(Localizer.locale).apply { strength = java.text.Collator.PRIMARY }
         all.filter { t ->
             when (filter) {
                 Filter.MOVIES -> !t.isSeries
                 Filter.SERIES -> t.isSeries
                 Filter.ALL -> true
             }
-        }
+        }.map { ContentLanguage.displayTitle(it.title) to it }
+            .sortedWith { a, b -> collator.compare(a.first, b.first).takeIf { it != 0 } ?: collator.compare(a.second.title, b.second.title) }
+            .map { it.second }
     }
     if (items.isEmpty()) return
     val keys = rememberKeys(items) { (if (it.isSeries) "s:" else "m:") + it.id }
@@ -780,7 +784,8 @@ private fun ForYouRow(filter: Filter, all: List<DetailTarget>) {
                 t.title, t.poster,
                 modifier = Modifier.focusLift { openDetail(t) },
                 badge = if (t.isSeries) L("SERIES") else L("MOVIE"),
-                language = languageLabel(t)
+                language = languageLabel(t),
+                badgeTopStart = true
             )
         }
     }

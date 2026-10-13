@@ -34,6 +34,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -89,12 +91,33 @@ fun deviceNameWithLabel(name: String, platform: String): String {
     return if (name.isBlank() || name.equals(platform, ignoreCase = true) || name.equals(label, ignoreCase = true)) label else "$name · $label"
 }
 
+/** Is dit een Apple TV (iOS-app meldt zich met platform "Apple TV")? */
+fun isAppleTvPlatform(platform: String): Boolean =
+    platform.equals("Apple TV", ignoreCase = true) || platform.equals("AppleTV", ignoreCase = true) || platform.equals("tvOS", ignoreCase = true)
+
+/**
+ * Apple TV-icoon (build 74): het SF Symbol "appletv" (afgeronde rechthoek met appel-logo en "tv"), precies het
+ * pad uit de iOS-app. Kleur via de tint van [Icon] (huidige inhoudskleur).
+ */
+val AppleTvIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "AppleTv", defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 19.4976f, viewportHeight = 19.4314f,
+    ).apply {
+        addPath(addPathNodes(APPLE_TV_FRAME), fill = SolidColor(Color.Black))
+        addPath(addPathNodes(APPLE_TV_LOGO), fill = SolidColor(Color.Black))
+    }.build()
+}
+private const val APPLE_TV_FRAME = "M5.20687 19.4314L14.2907 19.4314C15.949 19.4314 17.3557 19.2815 18.3579 18.2793C19.3476 17.2792 19.4976 15.8974 19.4976 14.2246L19.4976 5.22355C19.4976 3.55067 19.3476 2.1668 18.3579 1.16882C17.3536 0.176964 15.949 0.0166814 14.2907 0.0166814L5.18577 0.0166814C3.55067 0.0166814 2.14188 0.179074 1.14179 1.17093C0.149932 2.17102 0 3.55489 0 5.1921L0 14.2246C0 15.8974 0.147822 17.2917 1.13968 18.2793C2.14188 19.2815 3.5361 19.4314 5.20687 19.4314ZM4.93695 17.8607C3.93656 17.8607 2.87758 17.7212 2.2877 17.1313C1.69781 16.5414 1.57069 15.497 1.57069 14.4945L1.57069 4.98508C1.57069 3.95535 1.69781 2.90461 2.28559 2.31473C2.87547 1.72274 3.94078 1.58737 4.9684 1.58737L14.5606 1.58737C15.561 1.58737 16.6179 1.72696 17.2078 2.31684C17.7997 2.90672 17.9269 3.95113 17.9269 4.95363L17.9269 14.4945C17.9269 15.497 17.7976 16.5414 17.2078 17.1313C16.6179 17.7233 15.561 17.8607 14.5606 17.8607Z"
+private const val APPLE_TV_LOGO = "M4.85163 12.6004C5.26284 12.6004 5.4373 12.3138 5.94819 12.3138C6.47155 12.3138 6.59616 12.6004 7.04476 12.6004C7.49335 12.6004 7.79241 12.1768 8.09148 11.7655C8.39054 11.3045 8.54007 10.8434 8.54007 10.8185C8.52761 10.8185 7.64288 10.4571 7.64288 9.46027C7.64288 8.61293 8.32823 8.22664 8.36562 8.18925C7.92948 7.56621 7.23167 7.54128 7.04476 7.54128C6.53386 7.54128 6.12265 7.82789 5.86097 7.82789C5.58683 7.82789 5.22546 7.56621 4.77687 7.56621C3.95444 7.56621 3.1071 8.2391 3.1071 9.53503C3.1071 10.345 3.40616 11.1923 3.79245 11.7406C4.14136 12.2141 4.42796 12.6004 4.85163 12.6004ZM5.89835 7.45406C6.5214 7.45406 7.16937 6.78117 7.15691 6.04597C7.16937 6.00859 7.15691 5.95875 7.14444 5.92136C6.48402 5.94628 5.81112 6.60671 5.81112 7.32945C5.81112 7.36683 5.81112 7.42914 5.82359 7.4416C5.83605 7.45406 5.86097 7.45406 5.89835 7.45406ZM11.0073 12.5755C11.2192 12.5755 11.4435 12.563 11.5556 12.5381L11.5805 12.5257L11.5805 11.7157L11.5432 11.7157C11.4809 11.7282 11.3313 11.7406 11.2316 11.7406C10.8578 11.7406 10.6958 11.5662 10.6958 11.1799L10.6958 8.60046L11.593 8.60046L11.593 7.77804L10.6958 7.77804L10.6958 6.65656L9.68648 6.65656L9.68648 7.77804L9.00112 7.77804L9.00112 8.60046L9.68648 8.60046L9.68648 11.292C9.68648 12.2017 10.0728 12.5755 11.0073 12.5755ZM13.6864 12.5381L14.7332 12.5381L16.4029 7.77804L15.3562 7.77804L14.2223 11.4914L13.0759 7.77804L11.9917 7.77804Z"
+
 /** Icoon per platform. */
 fun deviceIcon(platform: String): ImageVector = if (isTizenPlatform(platform)) Icons.Default.Tv
-else if (isBrowserPlatform(platform)) Icons.Default.Language else when (platform) {
+else if (isBrowserPlatform(platform)) Icons.Default.Language
+else if (isAppleTvPlatform(platform)) AppleTvIcon else when (platform) {
     "iPhone" -> Icons.Default.PhoneIphone
     "iPad", "Android tablet" -> Icons.Default.Tablet
-    "Apple TV", "Android TV", "Google TV", "Fire TV" -> Icons.Default.Tv
+    "Android TV", "Google TV", "Fire TV" -> Icons.Default.Tv
     "Mac" -> Icons.Default.Laptop
     else -> Icons.Default.Smartphone
 }

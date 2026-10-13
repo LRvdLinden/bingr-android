@@ -830,8 +830,9 @@ object StateSync {
      * `{version: 2, profiles: {"<profielID>": {items:[…], updatedAt}}, items:[oud], migratedAt, updatedAt}`; elk
      * item heeft het formaat van build 51. Onbekende velden en de oude `items`-lijst (build 51–53) blijven onaangeroerd.
      *
-     * - Migratie: is `version` < 2, dan krijgt elk bestaand profiel de oude collecties uit `items` (zelfde id, order en
-     *   updatedAt; wat het profiel al had blijft staan). Daarna `version: 2` en `migratedAt`.
+     * - Migratie: is `version` < 2, dan krijgt het hoofdprofiel de oude collecties uit `items` (zelfde id, order en
+     *   updatedAt; wat het profiel al had blijft staan). Daarna `version: 2` en `migratedAt`. (Tot build 73 kreeg elk
+     *   profiel een kopie; sinds build 74 worden kopieën in subprofielen tombstones, zie Collections.withoutSharedCopies.)
      *   (Een eerste versie van build 54 schreef `byProfile` en `migrated: true`; dat wordt ook gelezen en omgezet.)
      * - Per profiel en per collectie wint de nieuwste `updatedAt` (ook tombstones); tombstones ouder dan 90 dagen vervallen.
      * - Profielen die hier verwijderd zijn, gaan ook van de server. Profielen die alleen op de server staan, blijven daar.
@@ -859,10 +860,11 @@ object StateSync {
         val migrated = (data?.jI("version") ?: 0) >= 2 || data?.jB("migrated") == true || data?.get("profiles") is JsonObject
         val legacy = parseList(data?.get("items")).mapNotNull { collectionFrom(it) }
 
-        val (local, profiles) = withContext(Dispatchers.Main) {
+        val (local, profiles, mainID) = withContext(Dispatchers.Main) {
             Collections.ensureLoaded(); Collections.distributeLegacy()
-            Collections.snapshot() to Store.profiles.map { it.id }
+            Triple(Collections.snapshot(), Store.profiles.map { it.id }, Store.mainProfileID)
         }
+        val mainKey = mainID?.lowercase()
         val removed = local.removedProfiles.filterValues { it >= cutoff }
             .filterKeys { id -> profiles.none { it.equals(id, ignoreCase = true) } }
         val removedKeys = removed.keys.map { it.lowercase() }.toSet()
@@ -882,8 +884,8 @@ object StateSync {
                 val l = out[c.id.lowercase()]
                 if (l == null || c.updatedAt > l.updatedAt) out[c.id.lowercase()] = c
             }
-            // migratie van de collecties voor het hele account (alleen voor bestaande profielen)
-            if (!migrated && profiles.any { it.lowercase() == k }) {
+            // migratie van de collecties voor het hele account: alleen naar het hoofdprofiel (build 74; daarvoor elk profiel)
+            if (!migrated && k == mainKey) {
                 for (c in legacy) {
                     val l = out[c.id.lowercase()]
                     if (l == null || c.updatedAt > l.updatedAt) out[c.id.lowercase()] = c
@@ -892,6 +894,8 @@ object StateSync {
             val list = out.values.filter { alive(it) }
             if (list.isNotEmpty() || k in serverKeys || profiles.any { it.lowercase() == k }) merged[k] = list
         }
+        // build 74: kopieën van collecties van een ander profiel (migratie tot build 73) uit de subprofielen halen
+        Collections.withoutSharedCopies(merged, mainKey).let { if (it !== merged) { merged.clear(); merged.putAll(it) } }
 
         // lokaal: alleen profielen die op dit apparaat bestaan
         val localMap = merged.filterKeys { k -> profiles.any { it.lowercase() == k } }

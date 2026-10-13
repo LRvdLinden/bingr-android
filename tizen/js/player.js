@@ -809,7 +809,7 @@
       errorBox.appendChild(h('p', L('Your account can be used on up to %d screens at the same time.', r.limit)));
       var list = h('div.limit-list');
       r.streams.forEach(function (s) {
-        list.appendChild(h('div.limit-row', [U.icon(s.platform.indexOf('TV') >= 0 || s.platform === 'tizen' ? 'tv' : 'phone'),
+        list.appendChild(h('div.limit-row', [U.icon(U.platformIcon(s.platform)),
           h('div', [h('div', s.deviceName + ' · ' + s.profileName), h('div.dim', s.title)])]));
       });
       errorBox.appendChild(list);

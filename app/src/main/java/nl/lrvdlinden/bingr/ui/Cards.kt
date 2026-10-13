@@ -52,6 +52,8 @@ fun PosterCard(
     accent: Color? = null,
     /** Taal van deze versie (build 59), bijv. "NL", "EN · NL ondertitels" of "Multi" — zie [ContentLanguage] */
     language: String? = null,
+    /** Label [badge] linksboven in de hoek in plaats van midden onderaan (build 74, rij "Voor jou") */
+    badgeTopStart: Boolean = false,
 ) {
     Box(modifier.width(width).height(width * 1.5f).clip(RoundedCornerShape(4.dp))) {
         RemoteImage(poster, Modifier.matchParentSize(), placeholder = ContentLanguage.displayTitle(title))
@@ -68,7 +70,11 @@ fun PosterCard(
             }
         }
         if (language != null) LanguageStrip(language, Modifier.align(Alignment.BottomCenter))
-        if (badge != null) {
+        if (badge != null && badgeTopStart) {
+            Text(badge, color = Color.White, fontSize = tsp(9), fontWeight = FontWeight.Black,
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 6.dp, top = 6.dp + (if (accent != null) tvs(4) else 0.dp))
+                    .clip(RoundedCornerShape(2.dp)).background(Theme.red).padding(horizontal = 5.dp, vertical = 2.dp))
+        } else if (badge != null) {
             Text(badge, color = Color.White, fontSize = tsp(9), fontWeight = FontWeight.Black,
                 modifier = Modifier.align(Alignment.BottomCenter)
                     .padding(bottom = (if (progress == null) 6.dp else 10.dp) + (if (language != null) tvs(16) else 0.dp))

@@ -228,13 +228,15 @@ object Account {
     /**
      * Uitloggen: eerst dit apparaat uit de lijst halen (remove_device, mag mislukken),
      * dan de server op de hoogte brengen (mag mislukken), daarna altijd lokaal wissen.
+     * Alleen dit apparaat: andere apparaten met hetzelfde account blijven ingelogd.
      */
     suspend fun signOut() = working {
         if (configured && accessToken != null) {
             runCatching { deviceCall("remove_device", deviceId) }
         }
         val token = accessToken
-        if (token != null && configured) runCatching { post("/auth/v1/logout", buildJsonObject { }, bearer = token) }
+        // build 74: scope=local, alleen de sessie van dit apparaat (zonder scope logt Supabase overal uit)
+        if (token != null && configured) runCatching { post("/auth/v1/logout?scope=local", buildJsonObject { }, bearer = token) }
         clear()
     }
 

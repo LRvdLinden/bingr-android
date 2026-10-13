@@ -9,7 +9,8 @@ import java.util.UUID
 
 // Collecties en het startscherm per profiel (build 51), volgens "Build 51: collecties, startscherm,
 // terugkijk-correctie en webconsole" in docs/ACCOUNT.md van de iOS-repo. Sinds build 54 horen de collecties
-// zelf ook bij een profiel (zie [Collections]).
+// zelf ook bij een profiel (zie [Collections]); sinds build 74 ziet een subprofiel ook geen kopieën meer van
+// collecties van het hoofdprofiel of van andere subprofielen.
 
 /** Afbeelding van een collectie: symbool + kleur (zoals een avatar), of een eigen plaatje ([url]). */
 @Serializable
@@ -75,7 +76,8 @@ sealed class CollectionEntry {
  * "collections" (`byProfile`). Elk profiel (ook een kinderprofiel) maakt en beheert zijn eigen collecties;
  * de inhoud loopt altijd door de (leeftijds)gefilterde bibliotheek van het actieve profiel.
  * Migratie: de collecties van vóór build 54 (voor het hele account, files/store/collections.json) gaan naar
- * elk bestaand profiel, met dezelfde id's, zodat er niets verdwijnt.
+ * het hoofdprofiel, met dezelfde id's, zodat er niets verdwijnt (tot build 73 naar elk profiel; die kopieën in
+ * subprofielen ruimt de sync sinds build 74 op, zie [withoutSharedCopies]).
  */
 object Collections {
     /** Lokale stand: per profiel-id alle collecties (ook tombstones), en verwijderde profielen (id → tijd). */
@@ -109,17 +111,57 @@ object Collections {
     /** Alle collecties van het actieve profiel, ook tombstones. */
     val all: List<BingrCollection> get() = of(profileKey)
 
-    /** Zichtbare collecties van het actieve profiel in hun volgorde. */
+    /**
+     * Zichtbare collecties van het actieve profiel in hun volgorde. Build 74: een subprofiel ziet nooit een kopie
+     * van een collectie van een ander profiel (zie [sharedIDs]), ook niet voordat de sync die kopie heeft opgeruimd.
+     */
     val visible: List<BingrCollection>
         get() {
             // build 56: onthouden zolang de lijst (identiteit) gelijk blijft; dit wordt tijdens het tekenen vaak gelezen
             val src = all
-            visibleCache?.let { (s, v) -> if (s === src) return v }
-            val v = src.filter { !it.deleted }.sortedWith(compareBy({ it.order }, { it.name.lowercase() }))
-            visibleCache = src to v
+            val by = byProfile
+            val main = Store.mainProfileID
+            visibleCache?.let { c -> if (c.src === src && c.by === by && c.main == main) return c.list }
+            val hide = profileKey?.let { k -> if (main != null && k.equals(main, ignoreCase = true)) null else sharedIDs(by) }
+            val v = src.filter { !it.deleted && (hide == null || it.id.lowercase() !in hide) }
+                .sortedWith(compareBy({ it.order }, { it.name.lowercase() }))
+            visibleCache = VisibleCache(src, by, main, v)
             return v
         }
-    @Volatile private var visibleCache: Pair<List<BingrCollection>, List<BingrCollection>>? = null
+    private class VisibleCache(val src: List<BingrCollection>, val by: Map<String, List<BingrCollection>>, val main: String?, val list: List<BingrCollection>)
+    @Volatile private var visibleCache: VisibleCache? = null
+
+    /**
+     * Collectie-id's (kleine letters) die in meer dan één profiel staan (ook als tombstone). Nieuwe collecties krijgen
+     * altijd een eigen UUID; een gedeelde id is dus een kopie van een collectie van vóór build 54 (toen voor het hele
+     * account), die de migratie naar elk profiel kopieerde. Die horen bij het hoofdprofiel, niet bij subprofielen.
+     */
+    fun sharedIDs(map: Map<String, List<BingrCollection>>): Set<String> {
+        val count = HashMap<String, Int>()
+        for (list in map.values) for (id in list.map { it.id.lowercase() }.toSet()) count[id] = (count[id] ?: 0) + 1
+        return count.filterValues { it > 1 }.keys
+    }
+
+    /**
+     * Build 74: in subprofielen de kopieën van collecties die ook in een ander profiel staan ([sharedIDs]) als tombstone
+     * markeren, zodat ze ook op andere apparaten (iOS, web) uit dat subprofiel verdwijnen. Het hoofdprofiel houdt
+     * zijn versie. Sleutels worden hoofdletterongevoelig met [main] vergeleken. Geeft dezelfde map terug als er niets verandert.
+     */
+    fun withoutSharedCopies(map: Map<String, List<BingrCollection>>, main: String?): Map<String, List<BingrCollection>> {
+        if (main == null || map.keys.none { it.equals(main, ignoreCase = true) }) return map
+        val shared = sharedIDs(map)
+        if (shared.isEmpty()) return map
+        val now = System.currentTimeMillis()
+        var changed = false
+        val out = map.mapValues { (k, list) ->
+            if (k.equals(main, ignoreCase = true) || list.none { !it.deleted && it.id.lowercase() in shared }) list
+            else {
+                changed = true
+                list.map { c -> if (!c.deleted && c.id.lowercase() in shared) c.copy(deleted = true, deletedAt = now, updatedAt = now, items = emptyList()) else c }
+            }
+        }
+        return if (changed) out else map
+    }
 
     private val legacyFile: File get() = File(AppState.appContext.filesDir, "store/collections.json")
     private val file: File get() = File(AppState.appContext.filesDir, "store/collections-profiles.json")
@@ -140,16 +182,18 @@ object Collections {
         distributeLegacy()
     }
 
-    /** Oude collecties naar elk bestaand profiel (zodra er profielen zijn). Bestaande id's blijven staan. */
+    /**
+     * Oude collecties (voor het hele account) naar het hoofdprofiel (zodra er profielen zijn). Bestaande id's blijven
+     * staan. Build 74: alleen nog naar het hoofdprofiel; subprofielen zien geen collecties van een ander profiel.
+     */
     fun distributeLegacy() {
         if (legacy.isEmpty() || Store.profiles.isEmpty()) return
+        val main = Store.mainProfileID ?: return
         val out = byProfile.toMutableMap()
-        for (p in Store.profiles) {
-            val k = keyFor(p.id)
-            val cur = out[k] ?: emptyList()
-            val ids = cur.map { it.id.lowercase() }.toSet()
-            out[k] = cur + legacy.filter { it.id.lowercase() !in ids }
-        }
+        val k = keyFor(main)
+        val cur = out[k] ?: emptyList()
+        val ids = cur.map { it.id.lowercase() }.toSet()
+        out[k] = cur + legacy.filter { it.id.lowercase() !in ids }
         byProfile = out
         legacy = emptyList()
         save()

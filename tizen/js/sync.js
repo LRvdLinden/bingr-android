@@ -746,21 +746,31 @@
 
   // MARK: collecties (section `collections`, version 2: per profiel)
 
-  /** Collecties van een profiel (zonder tombstones), op volgorde. Ouder formaat: de oude lijst voor iedereen. */
+  /**
+   * Collecties van een profiel (zonder tombstones), op volgorde. Elk profiel ziet alleen zijn eigen collecties (build 74):
+   * - ouder formaat (nog niet gemigreerd): de oude lijst (voor het hele account) alleen voor het hoofdprofiel;
+   * - een subprofiel ziet geen collectie waarvan de id ook bij een ander profiel staat: dat is een kopie die de
+   *   migratie tot build 73 naar elk profiel zette (nieuwe collecties krijgen altijd een eigen id).
+   */
   D.collectionsFor = function (profileId) {
     var c = D.collections;
-    if (!c || typeof c !== 'object') return [];
-    var list = null;
+    if (!c || typeof c !== 'object' || !profileId) return [];
+    var main = D.mainProfile();
+    var isMain = !!main && lower(main.id) === lower(profileId);
+    var list = null, hide = {};
     // gemigreerd (contract): `version >= 2`, of `migrated: true` (vroege build 54), of er is al een object `profiles`
     var migrated = (B.int(c.version) || 0) >= 2 || c.migrated === true || (c.profiles && typeof c.profiles === 'object' && !Array.isArray(c.profiles));
     if (migrated && c.profiles && typeof c.profiles === 'object') {
-      var keys = Object.keys(c.profiles).filter(function (k) { return lower(k) === lower(profileId); });
       list = [];
-      keys.forEach(function (k) { list = list.concat((c.profiles[k] && c.profiles[k].items) || []); });
-    } else list = Array.isArray(c.items) ? c.items : [];
+      Object.keys(c.profiles).forEach(function (k) {
+        var items = (c.profiles[k] && c.profiles[k].items) || [];
+        if (lower(k) === lower(profileId)) { list = list.concat(items); return; }
+        if (!isMain && Array.isArray(items)) items.forEach(function (x) { if (x && x.id) hide[lower(x.id)] = true; });
+      });
+    } else list = isMain && Array.isArray(c.items) ? c.items : [];
     var byId = {};
     list.forEach(function (x) {
-      if (!x || !x.id) return;
+      if (!x || !x.id || hide[lower(x.id)]) return;
       var cur = byId[lower(x.id)];
       if (!cur || (time(x.updatedAt) || 0) > (time(cur.updatedAt) || 0)) byId[lower(x.id)] = x;
     });
