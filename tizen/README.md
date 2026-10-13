@@ -11,7 +11,7 @@ voortgang, collecties en instellingen er gewoon: alles komt uit je account en sy
 
 ## Wat erin zit
 
-- **Inloggen** met QR-code / code op bingr.online/tv (of e-mail met het schermtoetsenbord), sessie vernieuwen, uitloggen, limiet van 15 apparaten met het scherm *Te veel apparaten*
+- **Inloggen** met QR-code / code op bingr.online/koppelen (of e-mail met het schermtoetsenbord), sessie vernieuwen, uitloggen, limiet van 15 apparaten met het scherm *Te veel apparaten*
 - **Wie kijkt er?** met avatars (emoji, getekende figuurtjes en profielfoto's uit je account), kinderprofielen, pincode per profiel en accentkleur per profiel
 - **Home** in Netflix-stijl: billboard, Verder kijken, Mijn lijst, Top 10, Nu live, Onlangs toegevoegd, je eigen **collecties** (per profiel, slim en handmatig) en categorierijen, in de volgorde van je startscherm-indeling
 - **Live TV** met categorieën, favorieten, recente zenders, nu/straks uit de tv-gids, een **voorbeeld** van de zender waar je op staat en een **gids-raster** (tot 7 dagen terug)

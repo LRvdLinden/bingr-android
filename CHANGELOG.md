@@ -13,6 +13,10 @@ _13 oktober 2026_
 
 - Apparaten: de browser verschijnt als eigen apparaattype (bijv. "Chrome op Mac") met een browser-icoon
 
+**Verbeterd**
+
+- Apparaat koppelen gaat nu via bingr.online/koppelen (de QR-code en de code op je tv of computer wijzen daarheen); de oude link bingr.online/tv blijft werken
+
 ### Server
 
 **Nieuw**

@@ -523,7 +523,7 @@ object Account {
         val code = j.jS("code")
         if (!r.ok || code.isNullOrEmpty()) throw generic()
         return TvCode(
-            code = code, pollSecret = j.jS("poll_secret") ?: "", url = j.jS("url") ?: "https://bingr.online/tv?code=$code",
+            code = code, pollSecret = j.jS("poll_secret") ?: "", url = j.jS("url") ?: "https://bingr.online/koppelen?code=$code",
             expiresIn = j.jI("expires_in") ?: 600, interval = (j.jI("interval") ?: 3).coerceAtLeast(1),
         )
     }

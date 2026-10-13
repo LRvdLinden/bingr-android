@@ -205,7 +205,7 @@ def xmltv():
 def device_auth(body, mode):
     a = body.get('action')
     if a == 'start':
-        return 200, {'code': 'K7QM4X', 'poll_secret': 'x', 'url': 'https://bingr.online/tv?code=K7QM4X', 'expires_in': 600, 'interval': 3}
+        return 200, {'code': 'K7QM4X', 'poll_secret': 'x', 'url': 'https://bingr.online/koppelen?code=K7QM4X', 'expires_in': 600, 'interval': 3}
     if a == 'poll':
         if mode == 'approve':
             return 200, {'status': 'approved', 'token_hash': 'hash123', 'email': 'leon@example.com'}

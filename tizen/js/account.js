@@ -126,7 +126,7 @@
       var j = r.json || {};
       if (!r.ok || !j.code) throw generic();
       return {
-        code: j.code, pollSecret: j.poll_secret || '', url: j.url || ('https://bingr.online/tv?code=' + j.code),
+        code: j.code, pollSecret: j.poll_secret || '', url: j.url || ('https://bingr.online/koppelen?code=' + j.code),
         expiresIn: j.expires_in || 600, interval: Math.max(1, j.interval || 3)
       };
     });

@@ -347,7 +347,7 @@ private fun AuthTv() {
                     if (c != null) QrCodeImage(c.url, tvs(170))
                     else CircularProgressIndicator(color = Theme.red)
                 }
-                val host = c?.url?.substringAfter("://")?.substringBefore("?")?.trimEnd('/') ?: "bingr.online/tv"
+                val host = c?.url?.substringAfter("://")?.substringBefore("?")?.trimEnd('/') ?: "bingr.online/koppelen"
                 Text(
                     buildAnnotatedString {
                         append(L("Or go to")); append(" ")

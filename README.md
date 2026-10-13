@@ -55,7 +55,7 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
 **Account**
 - **Bingr-account verplicht** (zoals Netflix): na de splash inloggen of een account maken, daarna "Wie kijkt er?"
 - Inloggen met e-mail en wachtwoord, **wachtwoord vergeten** via bingr.online/reset
-- **Android TV / Fire TV**: inloggen met je telefoon via **QR-code** of een code op **bingr.online/tv**, of met e-mail
+- **Android TV / Fire TV**: inloggen met je telefoon via **QR-code** of een code op **bingr.online/koppelen**, of met e-mail
 - **Tv koppelen** vanaf je telefoon of tablet (*Mijn Bingr → Account → Link a TV*), **uitloggen** en **account verwijderen**
 - **Profielen in je account**: bij de eerste login worden je bestaande profielen aan je account gekoppeld en gedeeld met iPhone, iPad, Apple TV en Mac (naam, avatar, kinderprofiel). Eigen profielfoto's worden via je Bingr-account gedeeld met al je apparaten (ook iPhone/iPad/Apple TV/Mac)
 - **Profielen (toevoegen, wijzigen, verwijderen) synchroniseren met al je apparaten**

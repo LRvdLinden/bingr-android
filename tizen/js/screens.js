@@ -31,7 +31,7 @@
       h('h1', L('Sign in with your phone')),
       h('p.dim', L("Scan the QR code with your phone's camera")),
       qrBox,
-      h('p.login-or', [L('Or go to'), ' ', h('b', 'bingr.online/tv'), ' ', L('and enter this code:')]),
+      h('p.login-or', [L('Or go to'), ' ', h('b', 'bingr.online/koppelen'), ' ', L('and enter this code:')]),
       code, waiting, err
     ]);
     var emailBtn = U.button(L('Sign in with email'), function () { S.emailLogin(function () { finish(); }); }, { cls: 'wide' });
