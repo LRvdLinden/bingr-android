@@ -858,12 +858,21 @@ object Account {
         )
     }
 
-    /** stream_start; 403 stream_limit = [StreamStart.Limit]. */
-    suspend fun streamStart(profileId: String, profileName: String, title: String, kind: String, contentId: String): StreamStart {
+    /**
+     * stream_start; 403 stream_limit = [StreamStart.Limit].
+     * Build 68 (statistieken): bij een aflevering ook `series_id` en `series_title`, en altijd `tz` (tijdzone van het apparaat).
+     */
+    suspend fun streamStart(
+        profileId: String, profileName: String, title: String, kind: String, contentId: String,
+        seriesId: String? = null, seriesTitle: String? = null,
+    ): StreamStart {
         val r = authedDeviceAuth(buildJsonObject {
             put("action", "stream_start"); put("device_id", deviceId)
             put("profile_id", profileId); put("profile_name", profileName)
             put("title", title); put("kind", kind); put("content_id", contentId)
+            if (!seriesId.isNullOrBlank()) put("series_id", seriesId)
+            if (!seriesTitle.isNullOrBlank()) put("series_title", seriesTitle.take(200))
+            put("tz", timeZoneId())
         }) ?: return StreamStart.Failed
         if (r.code == 403 && (r.errorCode == "stream_limit" || r.json.jObj?.containsKey("streams") == true)) {
             return StreamStart.Limit(StreamList(r.json.jI("limit") ?: DEFAULT_STREAM_LIMIT, parseStreams(r.json.jList("streams"))))
@@ -912,5 +921,125 @@ object Account {
                 profileId = e.jS("profile_id") ?: "",
             )
         }.sortedByDescending { it.startedAt }
+    }
+
+    // MARK: kijkstatistieken (build 68), zie docs/ACCOUNT.md in de iOS-repo
+
+    /** IANA-tijdzone van het apparaat ("Europe/Amsterdam"). */
+    fun timeZoneId(): String = java.util.TimeZone.getDefault().id ?: "Europe/Amsterdam"
+
+    enum class StatsPeriod(val key: String) { WEEK("week"), MONTH("month"), YEAR("year") }
+
+    /** Eén staaf: dag ("yyyy-MM-dd") bij week/maand, maand ("yyyy-MM") bij jaar. */
+    data class StatsBucket(val key: String, val minutes: Double, val movieMinutes: Double, val episodeMinutes: Double, val liveMinutes: Double)
+
+    /** Eén titel in een toplijst; [itemKey] = series_id, content_id van de film of id van de zender (of "t:<titel>"). */
+    data class StatsTop(val title: String, val itemKey: String, val minutes: Double, val episodes: Int)
+
+    data class StatsProfile(val profileId: String, val profileName: String, val minutes: Double)
+
+    /** Antwoord van watch_stats; ontbrekende velden worden 0 of leeg. */
+    data class WatchStats(
+        val period: String = "",
+        val from: String? = null,
+        val to: String? = null,
+        val profileId: String? = null,
+        val totalMinutes: Double = 0.0,
+        val movieCount: Int = 0, val movieMinutes: Double = 0.0,
+        val seriesShows: Int = 0, val seriesEpisodes: Int = 0, val seriesMinutes: Double = 0.0,
+        val liveChannels: Int = 0, val liveMinutes: Double = 0.0,
+        val buckets: List<StatsBucket> = emptyList(),
+        val topSeries: List<StatsTop> = emptyList(),
+        val topMovies: List<StatsTop> = emptyList(),
+        val topChannels: List<StatsTop> = emptyList(),
+        val profiles: List<StatsProfile> = emptyList(),
+        val since: String? = null,
+    ) {
+        val isEmpty: Boolean get() = totalMinutes <= 0.0 && movieMinutes <= 0.0 && seriesMinutes <= 0.0 && liveMinutes <= 0.0 &&
+            buckets.none { it.minutes > 0.0 } && topSeries.isEmpty() && topMovies.isEmpty() && topChannels.isEmpty()
+    }
+
+    /** Oude backend zonder watch_stats: vriendelijke melding in plaats van een fout. */
+    class StatsUnavailable : Exception()
+
+    /** Getal uit JSON: nummer of tekst, nooit negatief; anders 0. */
+    private fun num(v: JsonElement?): Double {
+        val p = v as? JsonPrimitive ?: return 0.0
+        if (p is JsonNull) return 0.0
+        val d = p.content.trim().toDoubleOrNull() ?: return 0.0
+        return if (d.isNaN() || d < 0) 0.0 else d
+    }
+
+    private fun str(v: JsonElement?): String {
+        val p = v as? JsonPrimitive ?: return ""
+        if (p is JsonNull) return ""
+        return p.content
+    }
+
+    private fun isUnknownAction(r: Reply): Boolean =
+        r.code == 404 || r.json.jS("error") == "unknown_action" || r.errorCode == "unknown_action"
+
+    fun parseStats(j: JsonElement?): WatchStats {
+        val o = j.jObj ?: return WatchStats()
+        val totals = o["totals"] as? JsonObject
+        val movies = totals?.get("movies") as? JsonObject
+        val series = totals?.get("series") as? JsonObject
+        val live = totals?.get("live") as? JsonObject
+        val mvMin = num(movies?.get("minutes")); val epMin = num(series?.get("minutes")); val lvMin = num(live?.get("minutes"))
+        fun top(v: JsonElement?): List<StatsTop> = ((v as? JsonArray) ?: emptyList()).mapNotNull { e ->
+            val x = e as? JsonObject ?: return@mapNotNull null
+            val t = str(x["title"]); val k = str(x["item_key"])
+            if (t.isBlank() && k.isBlank()) null else StatsTop(t, k, num(x["minutes"]), num(x["episodes"]).toInt())
+        }
+        val topObj = o["top"] as? JsonObject
+        return WatchStats(
+            period = str(o["period"]),
+            from = str(o["from"]).takeIf { it.isNotBlank() },
+            to = str(o["to"]).takeIf { it.isNotBlank() },
+            profileId = str(o["profile_id"]).takeIf { it.isNotBlank() },
+            totalMinutes = if (totals?.get("minutes") != null) num(totals["minutes"]) else mvMin + epMin + lvMin,
+            movieCount = num(movies?.get("count")).toInt(), movieMinutes = mvMin,
+            seriesShows = num(series?.get("shows")).toInt(), seriesEpisodes = num(series?.get("episodes")).toInt(), seriesMinutes = epMin,
+            liveChannels = num(live?.get("channels")).toInt(), liveMinutes = lvMin,
+            buckets = ((o["by_bucket"] as? JsonArray) ?: emptyList()).mapNotNull { e ->
+                val b = e as? JsonObject ?: return@mapNotNull null
+                val key = str(b["key"]).takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val mv = num(b["movie_minutes"]); val ep = num(b["episode_minutes"]); val lv = num(b["live_minutes"])
+                StatsBucket(key, if (b["minutes"] != null) num(b["minutes"]) else mv + ep + lv, mv, ep, lv)
+            },
+            topSeries = top(topObj?.get("series")),
+            topMovies = top(topObj?.get("movies")),
+            topChannels = top(topObj?.get("channels")),
+            profiles = ((o["profiles"] as? JsonArray) ?: emptyList()).mapNotNull { e ->
+                val x = e as? JsonObject ?: return@mapNotNull null
+                StatsProfile(str(x["profile_id"]), str(x["profile_name"]), num(x["minutes"]))
+            },
+            since = str(o["since"]).takeIf { it.isNotBlank() },
+        )
+    }
+
+    /**
+     * watch_stats: kijkstatistieken van een week, maand of jaar ([offset] 0 = nu, -1 = vorige …).
+     * [profileId] null = alle profielen (alleen het hoofdprofiel). Oude backend → [StatsUnavailable].
+     */
+    suspend fun watchStats(period: StatsPeriod, offset: Int, profileId: String?): WatchStats {
+        val r = authedDeviceAuth(buildJsonObject {
+            put("action", "watch_stats"); put("period", period.key); put("offset", offset)
+            if (!profileId.isNullOrBlank()) put("profile_id", profileId)
+            put("tz", timeZoneId())
+        }) ?: throw AccountException(L("No internet connection."))
+        if (isUnknownAction(r)) throw StatsUnavailable()
+        if (!r.ok || r.json == null) throw generic()
+        return parseStats(r.json)
+    }
+
+    /** delete_watch_stats: statistieken wissen ([profileId] null = alle profielen). */
+    suspend fun deleteWatchStats(profileId: String?) {
+        val r = authedDeviceAuth(buildJsonObject {
+            put("action", "delete_watch_stats")
+            if (!profileId.isNullOrBlank()) put("profile_id", profileId)
+        }) ?: throw AccountException(L("No internet connection."))
+        if (isUnknownAction(r)) throw StatsUnavailable()
+        if (!r.ok || r.json.jB("ok") == false) throw generic()
     }
 }

@@ -69,7 +69,7 @@ private fun rowProfile(profileId: String, profileName: String): ViewerProfile? {
  * "Wie kijkt er?" (foto uit de bucket `avatars`, figuurtje of emoji). Onbekend profiel: eerste letter in een gekleurde cirkel.
  */
 @Composable
-private fun RowProfileAvatar(profileId: String, profileName: String, size: androidx.compose.ui.unit.Dp = tvs(30)) {
+internal fun RowProfileAvatar(profileId: String, profileName: String, size: androidx.compose.ui.unit.Dp = tvs(30)) {
     val v = Store.photoVersion
     val profile = remember(profileId, profileName, Store.profiles) { rowProfile(profileId, profileName) }
     if (profile != null) {

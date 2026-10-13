@@ -55,7 +55,8 @@ def run(page_setup, mode, steps):
             if u.netloc.endswith('supabase.co'):
                 if u.path.endswith('/functions/v1/device-auth'):
                     data = json.loads(req.post_data or '{}')
-                    if data.get('action') in ('put_state', 'stream_start', 'stream_stop', 'register_device', 'put_sources', 'rename_device', 'remove_device', 'heartbeat', 'announcements'):
+                    if data.get('action') in ('put_state', 'stream_start', 'stream_stop', 'register_device', 'put_sources', 'rename_device', 'remove_device', 'heartbeat', 'announcements',
+                                              'watch_stats', 'delete_watch_stats'):
                         with open(os.path.join(OUT, 'requests.jsonl'), 'a') as f:
                             f.write(json.dumps(data, ensure_ascii=False) + '\n')
                     code, body = fb.device_auth(data, mode)
@@ -622,6 +623,83 @@ if __name__ == '__main__':
         # te veel apparaten: Terug = annuleren = uitloggen
         run(SIGNED_IN.replace("'true'", "'false'"), 'limit', [('wait', 2500), ('walk', 'ArrowDown ArrowUp', 'limiet: rondlopen'), ('tv', '10009', 1500),
                                                               ('expect', 'B.ui.top().el.classList.contains("login") && !B.account.isSignedIn()', 'terug = uitgelogd')])
+
+    if which in ('all', 'stats'):
+        # kijkstatistieken (build 68): hoofdprofiel met filter, grafiek met links/rechts, toplijsten, jaar, wissen en terug
+        STATS = 'B.ui.top().el.classList.contains("stats")'
+        FOCUS = 'var r = Array.prototype.filter.call(document.querySelectorAll(".stats .f"), function (x) { return %s; })[0]; B.ui.focus(r); !!r'
+        run(SIGNED_IN + AVSTUB, 'normal', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 3000),
+            ('eval', 'B.ui.top().show("settings", true) || 1'), ('wait', 600),
+            ('expect', 'Array.prototype.some.call(document.querySelectorAll(".st-row"), function (r) { return r.textContent === B.L("Statistics"); })', 'instellingen: rij Statistieken'),
+            ('eval', 'B.ui.push(B.screens.stats()) && 1'), ('wait', 1500), ('shot', '70-stats-month'),
+            ('expect', 'B.ui.focused.classList.contains("stx-seg") && B.ui.focused.classList.contains("active")', 'focus op de gekozen periode (maand)'),
+            ('expect', 'document.querySelectorAll(".stats .stx-chip").length === 4', 'filter: alle profielen + 3 profielen'),
+            ('expect', 'document.querySelectorAll(".stats .stx-kpi").length === 4 && document.querySelectorAll(".stats .stx-col").length >= 28', 'tegels en staven per dag'),
+            ('expect', 'document.querySelector(".stats").textContent.indexOf(B.L("Per profile")) >= 0', 'per profiel bij alle profielen'),
+            ('walk', 'ArrowDown ArrowDown ArrowDown ArrowUp ArrowRight ArrowLeft ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowUp', 'statistieken: rondlopen'),
+            ('eval', FOCUS % 'x.classList.contains("stx-chart")'), ('wait', 200),
+            ('eval', 'window.__t0 = document.querySelector(".stx-chart-title").textContent; window.__t0', 'gekozen dag'),
+            ('walk', 'ArrowLeft ArrowLeft', 'grafiek: links'), ('shot', '71-stats-chart'),
+            ('expect', 'B.ui.focused.classList.contains("stx-chart") && document.querySelector(".stx-chart-title").textContent !== window.__t0 && document.querySelectorAll(".stx-col.sel").length === 1', 'links/rechts kiest een staaf'),
+            ('eval', FOCUS % 'x.textContent === B.L("Show more")'), ('walk', 'Enter', 'toplijst: meer'), ('wait', 300),
+            ('expect', 'document.querySelectorAll(".stats .stx-top").length === 8 + 5 + 5', 'series uitgeklapt tot 8'),
+            ('expect', 'B.ui.focused && B.ui.focused.textContent === B.L("Show less")', 'focus blijft op meer/minder'),
+            ('expect', 'document.querySelectorAll(".stats .stx-poster.loaded").length > 0 || document.querySelectorAll(".stats .stx-poster").length > 0', 'posters'),
+            ('shot', '72-stats-top'),
+            ('eval', FOCUS % 'x._fk === "seg-year"'), ('walk', 'Enter', 'jaar'), ('wait', 900), ('shot', '73-stats-year'),
+            ('expect', 'document.querySelectorAll(".stats .stx-col").length === 12 && B.ui.focused._fk === "seg-year"', 'jaar: 12 maanden, focus blijft'),
+            ('eval', FOCUS % 'x._fk === "prev"'), ('walk', 'Enter', 'vorig jaar'), ('wait', 900),
+            ('expect', 'document.querySelector(".stx-period").textContent === String(new Date().getFullYear() - 1)', 'vorig jaar'),
+            ('eval', FOCUS % ('x._fk === "chip-' + fb.SAM + '"')), ('walk', 'Enter', 'filter: Sam'), ('wait', 900),
+            ('expect', 'document.querySelector(".stats").textContent.indexOf(B.L("Per profile")) < 0 && document.querySelector(".stx-chip.active > span").textContent === "Sam"', 'Sam: geen verdeling per profiel'),
+            ('eval', FOCUS % 'x._fk === "clear"'), ('walk', 'Enter', 'wissen: vraag'),
+            ('expect', 'B.ui.top().modal === true && document.querySelector(".modal-text").textContent.indexOf("Sam") >= 0', 'bevestigen voor Sam'),
+            ('walk', '10009', 'wissen: annuleren'), ('expect', STATS, 'terug in statistieken'),
+            ('walk', '10009', 'statistieken: terug'), ('expect', 'B.ui.top().el.classList.contains("main")', 'statistieken dicht'),
+            # afspelen: aflevering (series_id, tz) en terugkijken (catchup, id van de zender)
+            ('eval', 'B.lib.episodes(B.lib.lib.byId["xs1"].item).then(function (r) { window.__ep = r.episodes[0]; return r.episodes.length; })'), ('wait', 600),
+            ('eval', 'B.player.playVOD(B.player.episodeItem(window.__ep, B.lib.lib.byId["xs1"].item), {resume: 0}) || 1'), ('wait', 2000),
+            ('eval', 'B.player.current.close() || 1'), ('wait', 400),
+            ('eval', 'var ch = B.lib.lib.channels[0]; B.player.playCatchup(ch, {title: "Journaal", start: Date.now() - 7200000, end: Date.now() - 5400000}, B.lib.lib.channels) && 1'), ('wait', 1500),
+            ('eval', 'B.player.current && B.player.current.close() || 1'), ('wait', 400),
+        ])
+        reqs = [json.loads(l) for l in open(os.path.join(OUT, 'requests.jsonl')).read().splitlines() if l.strip()] if os.path.exists(os.path.join(OUT, 'requests.jsonl')) else []
+        ws = [r for r in reqs if r.get('action') == 'watch_stats']
+        RESULTS.append(('watch_stats met tz, periode en offset', bool(ws) and all(r.get('tz') for r in ws) and any(r.get('period') == 'year' and r.get('offset') == -1 for r in ws), str(ws[-1] if ws else None)))
+        RESULTS.append(('watch_stats: alle profielen zonder profile_id, daarna Sam', any('profile_id' not in r for r in ws) and ws[-1].get('profile_id') == fb.SAM, str([r.get('profile_id') for r in ws])))
+        starts = [r for r in reqs if r.get('action') == 'stream_start']
+        ep = [r for r in starts if r.get('kind') == 'episode']
+        RESULTS.append(('stream_start aflevering: series_id, series_title, tz', bool(ep) and ep[0].get('series_id') == 'xs1' and bool(ep[0].get('series_title')) and bool(ep[0].get('tz')), str(ep[:1])))
+        cu = [r for r in starts if r.get('kind') == 'catchup']
+        RESULTS.append(('stream_start terugkijken: kind catchup, id van de zender', bool(cu) and '-cu-' not in cu[0].get('content_id', '-cu-'), str(cu[:1])))
+        # ander profiel (Kids, zonder pincode): alleen eigen statistieken, geen filter
+        run(SIGNED_IN, 'normal', [
+            ('wait', 2500), ('key', 'ArrowRight ArrowRight Enter', 400), ('wait', 3000),
+            ('expect', 'B.app.profile && B.app.profile.name === "Kids"', 'profiel Kids'),
+            ('eval', 'B.ui.push(B.screens.stats()) && 1'), ('wait', 1500), ('shot', '74-stats-kids'),
+            ('expect', 'document.querySelectorAll(".stats .stx-chip").length === 0 && document.querySelector(".stats").textContent.indexOf(B.L("Per profile")) < 0', 'Kids: geen filter en geen verdeling'),
+            ('eval', FOCUS % 'x._fk === "clear"'), ('walk', 'Enter', 'Kids: wissen'), ('walk', 'Enter', 'Kids: bevestigen'), ('wait', 1200),
+            ('expect', 'document.querySelector(".stats .state") && document.querySelector(".stats .state").textContent.indexOf("2026") >= 0', 'na wissen: lege staat'),
+            ('walk', '10009', 'Kids: terug'),
+        ])
+        reqs = [json.loads(l) for l in open(os.path.join(OUT, 'requests.jsonl')).read().splitlines() if l.strip()] if os.path.exists(os.path.join(OUT, 'requests.jsonl')) else []
+        ws = [r for r in reqs if r.get('action') == 'watch_stats']
+        dl = [r for r in reqs if r.get('action') == 'delete_watch_stats']
+        RESULTS.append(('Kids: watch_stats en wissen alleen met eigen profile_id', bool(ws) and all(r.get('profile_id') == fb.KIDS for r in ws) and bool(dl) and dl[0].get('profile_id') == fb.KIDS, str(ws[:1]) + str(dl)))
+        # oude backend en nog niets gekeken
+        run(SIGNED_IN, 'oldstats', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 2500),
+            ('eval', 'B.ui.push(B.screens.stats()) && 1'), ('wait', 1200), ('shot', '75-stats-old-backend'),
+            ('expect', 'document.querySelector(".stats").textContent.indexOf(B.L("Statistics are not available yet. Please try again later.")) >= 0', 'oude backend: nog niet beschikbaar'),
+            ('walk', 'ArrowDown ArrowRight 10009', 'oude backend: terug'),
+        ])
+        run(SIGNED_IN, 'nostats', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 2500),
+            ('eval', 'B.ui.push(B.screens.stats()) && 1'), ('wait', 1200), ('shot', '76-stats-empty'),
+            ('expect', 'document.querySelector(".stats .state").textContent.indexOf("2026") >= 0', 'lege staat met datum'),
+            ('walk', 'ArrowDown ArrowDown ArrowDown 10009', 'leeg: terug'),
+        ])
 
     if RESULTS or PAGEERRORS:
         print('\n== Samenvatting ==')

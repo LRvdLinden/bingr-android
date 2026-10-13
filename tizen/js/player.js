@@ -780,8 +780,12 @@
       if (isCatchup()) return item.subtitle + ' · ' + item.title;
       return item.subtitle ? item.title + ' · ' + item.subtitle : item.title;
     }
+    /** Soort, id en serie voor stream_start (build 68): terugkijken = 'catchup' bij de zender, aflevering met series_id. */
+    function streamKind() { return isCatchup() ? 'catchup' : item.type; }
+    function streamContentId() { return isCatchup() && item.channel ? item.channel.id : item.id; }
+    function streamExtra() { return item.type === 'episode' ? { seriesId: item.seriesID || null, seriesTitle: item.title || null } : null; }
     function streamStart() {
-      return A.streamStart(profile.id, profile.name, streamTitle(), isCatchup() ? 'live' : item.type, item.id).then(function (r) {
+      return A.streamStart(profile.id, profile.name, streamTitle(), streamKind(), streamContentId(), streamExtra()).then(function (r) {
         // speler intussen dicht of naar de achtergrond: geen ping-timer starten (die zou blijven lopen)
         if (closed || suspended) return true;
         if (r.limit) { showLimit(r); return false; }
@@ -789,7 +793,7 @@
         pingTimer = setInterval(function () {
           if (closed || suspended) { clearInterval(pingTimer); return; }
           A.streamPing(streamTitle()).then(function (alive) {
-            if (alive === false && !closed && !suspended) A.streamStart(profile.id, profile.name, streamTitle(), isCatchup() ? 'live' : item.type, item.id).then(function (r2) { if (r2.limit && !closed) { stopEngine(false); showLimit(r2); } });
+            if (alive === false && !closed && !suspended) A.streamStart(profile.id, profile.name, streamTitle(), streamKind(), streamContentId(), streamExtra()).then(function (r2) { if (r2.limit && !closed) { stopEngine(false); showLimit(r2); } });
           });
         }, 30000);
         return true;

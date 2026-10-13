@@ -1373,6 +1373,8 @@
       section(L('Account'));
       row(L('Signed in as %@', A.email() || ''), null, null);
       row(L('Devices'), null, function () { U.push(S.devices()); });
+      // kijkstatistieken (build 68): hoofdprofiel alle profielen, andere profielen alleen hun eigen
+      row(L('Statistics'), null, function () { U.push(S.stats()); });
       if (main) {
         row(L('Watching now'), null, function () { U.push(S.streams()); });
         row(L('Watch history (7 days)'), null, function () { U.push(S.watchLog()); });

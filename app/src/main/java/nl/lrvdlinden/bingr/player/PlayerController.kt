@@ -530,6 +530,12 @@ class PlayerController(item: PlayableItem) {
     /** Titel voor de server: bij live de zender plus het programma ("NPO 1 · Journaal"). */
     private fun streamInfo(): StreamSession.Info {
         val it = item
+        // terugkijken uit de gids (id "<zender>-cu-<start>", build 68): "Zender · Programma", telt bij de zender
+        if (it.id.contains("-cu-")) {
+            val channelId = it.channelID ?: it.id.substringBefore("-cu-")
+            val title = listOfNotNull(it.subtitle?.takeIf { s -> s.isNotBlank() }, it.title).joinToString(" · ")
+            return StreamSession.Info(title.take(200), "catchup", channelId)
+        }
         return when (it.type) {
             MediaType.LIVE -> {
                 val lib = Playlists.library
@@ -538,7 +544,8 @@ class PlayerController(item: PlayableItem) {
                 StreamSession.Info(listOfNotNull(it.title, prog?.takeIf { p -> p.isNotBlank() }).joinToString(" · "), "live", it.channelID ?: it.id)
             }
             MediaType.EPISODE -> StreamSession.Info(
-                listOfNotNull(it.title, it.subtitle?.takeIf { s -> s.isNotBlank() }).joinToString(" · "), "episode", it.id)
+                listOfNotNull(it.title, it.subtitle?.takeIf { s -> s.isNotBlank() }).joinToString(" · "), "episode", it.id,
+                seriesId = seriesID(it), seriesTitle = it.title.takeIf { t -> t.isNotBlank() })
             else -> StreamSession.Info(it.title, "movie", it.id)
         }
     }

@@ -38,6 +38,7 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Check
@@ -110,7 +111,7 @@ private fun S2AppFooter() {
     }
 }
 
-private enum class S2SettingsSub { CATEGORIES, MANAGE, HISTORY, NAS, CHECK, COLLECTIONS, HOME_SCREEN, WATCHING, WATCH_LOG }
+private enum class S2SettingsSub { CATEGORIES, MANAGE, HISTORY, NAS, CHECK, COLLECTIONS, HOME_SCREEN, WATCHING, WATCH_LOG, STATS }
 private enum class S2PinMode { SET, UNLOCK, DISABLE }
 
 private const val S2_FILE_AUTHORITY = "nl.lrvdlinden.bingr.files"
@@ -203,6 +204,7 @@ fun SettingsScreen() {
         S2SettingsSub.HOME_SCREEN -> { HomeScreenSettings { sub = null }; return }
         S2SettingsSub.WATCHING -> { WatchingNowScreen { sub = null }; return }
         S2SettingsSub.WATCH_LOG -> { WatchLogScreen { sub = null }; return }
+        S2SettingsSub.STATS -> { StatsScreen { sub = null }; return }
         null -> {}
     }
     val editingNow = editing
@@ -264,6 +266,8 @@ fun SettingsScreen() {
                     S2Row(L("Signed in as %@", Account.email ?: ""), icon = Icons.Default.AccountCircle)
                     if (!AppState.isTV) S2Row(L("Link a TV"), icon = Icons.Default.Tv, onClick = { linkingTv = true })
                     S2Row(L("Devices"), icon = Icons.Default.Devices, onClick = { showDevices = true })
+                    // kijkstatistieken (build 68): hoofdprofiel alle profielen, andere profielen alleen hun eigen
+                    S2Row(L("Statistics"), icon = Icons.Default.BarChart, onClick = { sub = S2SettingsSub.STATS })
                     if (isMain) {
                         S2Row(L("Watching now"), icon = Icons.Default.PlayCircle,
                             value = watching?.let { w -> L("%d of %d watching now", w.streams.size, w.limit) },

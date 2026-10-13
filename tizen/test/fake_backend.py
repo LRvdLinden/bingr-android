@@ -280,7 +280,71 @@ def device_auth(body, mode):
             {'id': 'a1', 'title': 'Welkom bij Bingr' if nl else 'Welcome to Bingr', 'body': 'Bedankt voor het testen!' if nl else 'Thanks for testing!',
              'created_at': iso(now - timedelta(days=1))},
             {'id': 'a0', 'title': 'Al gezien', 'body': 'Deze is al gelezen.', 'created_at': iso(now - timedelta(days=2))}]}
+    if a == 'watch_stats':
+        # kijkstatistieken (build 68); 'oldstats' = oude backend zonder watch_stats, 'nostats' = nog niets gekeken
+        if mode == 'oldstats':
+            return 400, {'error': 'unknown_action'}
+        return 200, watch_stats(body, mode)
+    if a == 'delete_watch_stats':
+        SAVED['stats_deleted'] = body.get('profile_id') or 'all'
+        return 200, {'ok': True}
     return 400, {'error': 'unknown_action'}
+
+
+def watch_stats(body, mode):
+    """Antwoord van watch_stats zoals docs/ACCOUNT.md: totalen, staven per dag/maand, toplijsten en per profiel."""
+    period = body.get('period') or 'month'
+    offset = int(body.get('offset') or 0)
+    pid = body.get('profile_id')
+    today = datetime.now().date()
+    if period == 'week':
+        start = today - timedelta(days=today.weekday()) + timedelta(days=7 * offset)
+        end = start + timedelta(days=6)
+    elif period == 'month':
+        y, m = today.year, today.month + offset
+        while m < 1:
+            m += 12; y -= 1
+        start = today.replace(year=y, month=m, day=1)
+        end = (start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+    else:
+        start = today.replace(year=today.year + offset, month=1, day=1)
+        end = start.replace(month=12, day=31)
+    out = {'period': period, 'from': start.isoformat(), 'to': end.isoformat(), 'profile_id': pid, 'since': '2026-10-13'}
+    if mode == 'nostats' or SAVED.get('stats_deleted'):
+        out.update({'totals': {'minutes': 0, 'movies': {'count': 0, 'minutes': 0}, 'series': {'shows': 0, 'episodes': 0, 'minutes': 0},
+                               'live': {'channels': 0, 'minutes': 0}}, 'by_bucket': [], 'top': {'series': [], 'movies': [], 'channels': []}, 'profiles': []})
+        return out
+    buckets = []
+    if period == 'year':
+        for mth in range(1, 13):
+            k = '%04d-%02d' % (start.year, mth)
+            buckets.append({'key': k, 'minutes': 0, 'movie_minutes': 300 + mth * 40, 'episode_minutes': 600 + (mth % 4) * 200, 'live_minutes': 200 + (mth % 3) * 90})
+    else:
+        d = start
+        i = 0
+        while d <= end:
+            if i % 3 != 2:
+                buckets.append({'key': d.isoformat(), 'movie_minutes': (i % 4) * 35, 'episode_minutes': 45 + (i % 5) * 30, 'live_minutes': (i % 2) * 50})
+            d += timedelta(days=1); i += 1
+        for b in buckets:
+            b['minutes'] = b['movie_minutes'] + b['episode_minutes'] + b['live_minutes']
+    if period == 'year':
+        for b in buckets:
+            b['minutes'] = b['movie_minutes'] + b['episode_minutes'] + b['live_minutes']
+    mv = sum(b['movie_minutes'] for b in buckets); ep = sum(b['episode_minutes'] for b in buckets); lv = sum(b['live_minutes'] for b in buckets)
+    out['totals'] = {'minutes': mv + ep + lv, 'movies': {'count': 7, 'minutes': mv}, 'series': {'shows': 4, 'episodes': 23, 'minutes': ep},
+                     'live': {'channels': 6, 'minutes': lv}}
+    out['by_bucket'] = buckets
+    out['top'] = {
+        'series': [{'title': TITLES[i], 'item_key': 'xs%d' % (i + 1), 'minutes': 600 - i * 90, 'episodes': 9 - i} for i in range(4)] +
+                  [{'title': 'Onbekende serie %d' % i, 'item_key': 't:onbekend %d' % i, 'minutes': 120 - i * 10, 'episodes': 2} for i in range(4)],
+        'movies': [{'title': TITLES[i], 'item_key': 'xv%d' % (i + 1), 'minutes': 140 - i * 9} for i in range(7)],
+        'channels': [{'title': n, 'item_key': 'x', 'minutes': 300 - i * 40} for i, (n, g) in enumerate(CHANNELS[:6])],
+    }
+    out['profiles'] = [] if pid else [{'profile_id': MAIN, 'profile_name': 'Léon', 'minutes': (mv + ep + lv) * 0.6},
+                                      {'profile_id': SAM, 'profile_name': 'Sam', 'minutes': (mv + ep + lv) * 0.3},
+                                      {'profile_id': KIDS, 'profile_name': 'Kids', 'minutes': (mv + ep + lv) * 0.1}]
+    return out
 
 
 def session():

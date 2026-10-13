@@ -419,12 +419,24 @@
       };
     });
   }
-  /** stream_start → {ok} | {limit, streams} | {failed} (netwerkfout: gewoon afspelen). */
-  A.streamStart = function (profileId, profileName, title, kind, contentId) {
-    return authed({
+  /** IANA-tijdzone van de tv ("Europe/Amsterdam"), voor de statistieken per lokale dag (build 68). */
+  A.timeZone = function () {
+    try { var z = Intl.DateTimeFormat().resolvedOptions().timeZone; if (z) return z; } catch (e) { /* oude tv */ }
+    try { if (window.tizen && tizen.time && tizen.time.getLocalTimezone) { var t = tizen.time.getLocalTimezone(); if (t) return t; } } catch (e2) { /* geen tizen.time */ }
+    return 'Europe/Amsterdam';
+  };
+  /**
+   * stream_start → {ok} | {limit, streams} | {failed} (netwerkfout: gewoon afspelen).
+   * Build 68: extra = {seriesId, seriesTitle} bij een aflevering (statistieken); tz gaat altijd mee.
+   */
+  A.streamStart = function (profileId, profileName, title, kind, contentId, extra) {
+    var body = {
       action: 'stream_start', device_id: A.deviceId(), profile_id: profileId, profile_name: profileName,
-      title: title, kind: kind, content_id: contentId
-    }).then(function (r) {
+      title: title, kind: kind, content_id: contentId, tz: A.timeZone()
+    };
+    if (extra && extra.seriesId) body.series_id = String(extra.seriesId);
+    if (extra && extra.seriesTitle) body.series_title = String(extra.seriesTitle).slice(0, 200);
+    return authed(body).then(function (r) {
       if (!r) return { failed: true };
       var j = r.json || {};
       if (r.status === 403 && (r.errorCode === 'stream_limit' || j.streams)) return { limit: j.limit || 6, streams: parseStreams(j.streams) };
@@ -457,6 +469,64 @@
           title: e.title || '', kind: e.kind || '', startedAt: B.parseISO(e.started_at), minutes: e.minutes || 0
         };
       }).filter(function (e) { return e.startedAt; }).sort(function (a, b) { return b.startedAt - a.startedAt; });
+    });
+  };
+
+  // MARK: kijkstatistieken (build 68), zie docs/ACCOUNT.md in de iOS-repo
+
+  function num(v) { var n = typeof v === 'number' ? v : parseFloat(v); return isFinite(n) && n > 0 ? n : 0; }
+  function str(v) { return v == null ? '' : String(v); }
+  function unknownAction(r) { return r.status === 404 || (r.json && r.json.error === 'unknown_action') || r.errorCode === 'unknown_action'; }
+  /** Fout als de server watch_stats nog niet kent (oude backend). */
+  function unavailable() { var e = new AccountError(L('Statistics are not available yet. Please try again later.'), 'unavailable'); e.unavailable = true; return e; }
+
+  /** Antwoord van watch_stats, tolerant: ontbrekende velden worden 0 of leeg. */
+  A.parseStats = function (j) {
+    j = j || {};
+    var t = j.totals || {}, mv = t.movies || {}, se = t.series || {}, lv = t.live || {};
+    function top(list) {
+      return (list || []).filter(function (x) { return x && (x.title || x.item_key); }).map(function (x) {
+        return { title: str(x.title), itemKey: str(x.item_key), minutes: num(x.minutes), episodes: Math.round(num(x.episodes)) };
+      });
+    }
+    var tp = j.top || {};
+    return {
+      period: str(j.period), from: str(j.from), to: str(j.to), profileId: j.profile_id ? str(j.profile_id) : null,
+      totalMinutes: t.minutes != null ? num(t.minutes) : num(mv.minutes) + num(se.minutes) + num(lv.minutes),
+      movieCount: Math.round(num(mv.count)), movieMinutes: num(mv.minutes),
+      seriesShows: Math.round(num(se.shows)), seriesEpisodes: Math.round(num(se.episodes)), seriesMinutes: num(se.minutes),
+      liveChannels: Math.round(num(lv.channels)), liveMinutes: num(lv.minutes),
+      buckets: (j.by_bucket || []).filter(function (b) { return b && b.key; }).map(function (b) {
+        var m = num(b.movie_minutes), e = num(b.episode_minutes), l = num(b.live_minutes);
+        return { key: str(b.key), minutes: b.minutes != null ? num(b.minutes) : m + e + l, movie: m, episode: e, live: l };
+      }),
+      topSeries: top(tp.series), topMovies: top(tp.movies), topChannels: top(tp.channels),
+      profiles: (j.profiles || []).filter(function (p) { return p; }).map(function (p) {
+        return { profileId: str(p.profile_id), profileName: str(p.profile_name), minutes: num(p.minutes) };
+      }),
+      since: str(j.since)
+    };
+  };
+  /** watch_stats: period 'week' | 'month' | 'year', offset 0 = nu, -1 = vorige…; profileId leeg = alle profielen. */
+  A.watchStats = function (period, offset, profileId) {
+    var body = { action: 'watch_stats', period: period, offset: offset || 0, tz: A.timeZone() };
+    if (profileId) body.profile_id = profileId;
+    return authed(body).then(function (r) {
+      if (!r) throw new AccountError(L('No internet connection.'), 'offline');
+      if (unknownAction(r)) throw unavailable();
+      if (!r.ok || !r.json) throw generic();
+      return A.parseStats(r.json);
+    });
+  };
+  /** delete_watch_stats; profileId leeg = alle profielen. */
+  A.deleteWatchStats = function (profileId) {
+    var body = { action: 'delete_watch_stats' };
+    if (profileId) body.profile_id = profileId;
+    return authed(body).then(function (r) {
+      if (!r) throw new AccountError(L('No internet connection.'), 'offline');
+      if (unknownAction(r)) throw unavailable();
+      if (!r.ok || (r.json && r.json.ok === false)) throw generic();
+      return true;
     });
   };
 })();

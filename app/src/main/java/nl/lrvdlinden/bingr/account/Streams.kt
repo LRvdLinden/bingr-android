@@ -14,7 +14,11 @@ import kotlinx.coroutines.launch
  * Alle aanvragen gaan op volgorde door één wachtrij, zodat stop en start bij zappen niet door elkaar lopen.
  */
 object StreamSession {
-    data class Info(val title: String, val kind: String, val contentId: String)
+    /** [seriesId]/[seriesTitle] (build 68, statistieken): bij een aflevering de serie waar hij bij hoort. */
+    data class Info(
+        val title: String, val kind: String, val contentId: String,
+        val seriesId: String? = null, val seriesTitle: String? = null,
+    )
 
     class Owner(val info: () -> Info, val onBlocked: (Account.StreamList) -> Unit)
 
@@ -58,7 +62,8 @@ object StreamSession {
     private suspend fun startNow(o: Owner, info: Info) {
         if (owner !== o || suspended) return
         val p = Store.activeProfile
-        val r = Account.streamStart(p?.id ?: Store.activeProfileID ?: "", p?.name ?: "", info.title, info.kind, info.contentId)
+        val r = Account.streamStart(p?.id ?: Store.activeProfileID ?: "", p?.name ?: "", info.title, info.kind, info.contentId,
+            info.seriesId, info.seriesTitle)
         if (r is Account.StreamStart.Limit && owner === o) {
             owner = null
             pingJob?.cancel(); pingJob = null
