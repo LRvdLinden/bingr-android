@@ -1,24 +1,19 @@
 # Bingr voor Android
 
 [![Build](https://github.com/LRvdLinden/bingr-android/actions/workflows/build.yml/badge.svg)](https://github.com/LRvdLinden/bingr-android/actions/workflows/build.yml)
-[![Release](https://img.shields.io/github/v/release/LRvdLinden/bingr-android?label=APK)](https://github.com/LRvdLinden/bingr-android/releases/latest)
 
 Native IPTV- en mediaspeler voor **Android-telefoon, tablet en Android TV / Google TV / Fire TV** met de look & feel van Netflix.
-Kotlin · Jetpack Compose · Android 7.0+ · Media3 (ExoPlayer) én VLC · 11 talen · versie 1.0.0 (build 51).
+Kotlin · Jetpack Compose · Android 7.0+ · Media3 (ExoPlayer) én VLC · 11 talen.
 
 De versie voor iPhone, iPad, Apple TV en Mac staat in [iptv-ios-appletv](https://github.com/LRvdLinden/iptv-ios-appletv), de website in [bingr-website](https://github.com/LRvdLinden/bingr-website) ([bingr.online](https://bingr.online)).
 
 Wat er nieuw is per build: [CHANGELOG.md](CHANGELOG.md) · [bingr.online/changelog](https://bingr.online/changelog/?p=android)
 
-## Downloaden
+## Samsung TV (Tizen)
 
-**[⬇ Download de nieuwste APK](https://github.com/LRvdLinden/bingr-android/releases/latest)**: tik onder *Assets* op `Bingr-…apk`, open hem en kies **Installeren**. Android vraagt één keer of de app waarmee je opent (Chrome, Bestanden, WhatsApp …) apps mag installeren: zet *Toestaan van deze bron* aan. Een nieuwe versie installeer je gewoon over de oude heen; je profielen en instellingen blijven bewaard.
+Bingr draait ook op **Samsung-smart-tv's** (2018 en nieuwer, Tizen). De tv-app staat in [`tizen/`](tizen/) en heeft dezelfde Netflix-look en dezelfde functies als de Android TV-app; meer uitleg in [tizen/README.md](tizen/README.md).
 
-Op **Android TV / Google TV / Fire TV**: installeer de app *Downloader*, sta onbekende bronnen toe en open daarin de link hierboven.
-
-### Samsung TV (Tizen)
-
-Bingr draait ook op **Samsung-smart-tv's** (2018 en nieuwer). De app staat in [`tizen/`](tizen/) en wordt bij elke build mee gebouwd: bij elke release staat naast de APK een `Bingr-…wgt`. Installeren gaat via de ontwikkelaarsmodus van de tv en een eigen Samsung-certificaat; de stappen staan in **[tizen/README.md](tizen/README.md)**. Inloggen met je telefoon (QR-code), daarna synchroniseert alles met je account.
+Downloaden en installeren (ook op Android TV, Google TV, Fire TV en Samsung TV): zie [bingr.online](https://bingr.online/#download) en de [hulppagina](https://bingr.online/support.html#installeren).
 
 ## Screenshots
 
@@ -63,11 +58,11 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
 - **Trakt en OpenSubtitles: gewoon inloggen**, de sleutels komen veilig van de Bingr-server
 - **Alles (Trakt, OpenSubtitles, instellingen, Mijn lijst, voortgang, bekeken, pincodes, herinneringen) gaat versleuteld mee met je account**: na opnieuw installeren of op een nieuw apparaat staat alles na het inloggen weer klaar
 - De sessie staat alleen op dit apparaat. Logt een ander account in, dan worden de servers, profielen en gegevens van het vorige account eerst van het apparaat gewist
-- **Max. 15 apparaten** per account (de limiet komt van de server, build 51): zit je aan de limiet, dan verwijder je bij het inloggen eerst een apparaat (*Too many devices*). Beheer al je apparaten via *Mijn Bingr → Account → Devices* (ook op tv); een verwijderd apparaat wordt **automatisch uitgelogd**
+- **Max. 15 apparaten** per account (de limiet komt van de server): zit je aan de limiet, dan verwijder je bij het inloggen eerst een apparaat (*Too many devices*). Beheer al je apparaten via *Mijn Bingr → Account → Devices* (ook op tv); een verwijderd apparaat wordt **automatisch uitgelogd**
 - **Apparaten hernoemen**: geef elk gekoppeld apparaat (ook dit apparaat) een eigen naam via *Mijn Bingr → Account → Devices → Rename*, ook op tv met het tv-toetsenbord en op bingr.online/account. Android-telefoon, -tablet, Android TV, **Google TV** en Fire TV worden elk als eigen apparaattype herkend
-- **Max. 6 schermen tegelijk**: elke stream (ook zappen, de volgende aflevering en multiview als één stream) meldt zich aan bij je account; zitten er al 6 te kijken, dan stopt het afspelen met *Too many people are watching*, met wie er kijkt en *Try again* / *Close*. Zonder internet wordt nooit geblokkeerd (build 51)
-- **Wie kijkt er nu** (hoofdprofiel, *Mijn Bingr → Account → Watching now*): per apparaat het profiel, de titel, hoe lang al en sinds wanneer ingelogd, elke 30 s ververst (build 51)
-- **Kijkgeschiedenis van 7 dagen** voor het hele account (hoofdprofiel): per dag met tijd, titel, profiel, apparaat en minuten; een tik opent de film of serie als die in je bibliotheek staat (build 51)
+- **Max. 6 schermen tegelijk**: elke stream (ook zappen, de volgende aflevering en multiview als één stream) meldt zich aan bij je account; zitten er al 6 te kijken, dan stopt het afspelen met *Too many people are watching*, met wie er kijkt en *Try again* / *Close*. Zonder internet wordt nooit geblokkeerd
+- **Wie kijkt er nu** (hoofdprofiel, *Mijn Bingr → Account → Watching now*): per apparaat het profiel, de titel, hoe lang al en sinds wanneer ingelogd, elke 30 s ververst
+- **Kijkgeschiedenis van 7 dagen** voor het hele account (hoofdprofiel): per dag met tijd, titel, profiel, apparaat en minuten; een tik opent de film of serie als die in je bibliotheek staat
 
 **Bronnen**
 - M3U/M3U8 + XMLTV-EPG, **Xtream Codes** (incl. catch-up), **Stalker/MAC-portal**
@@ -86,16 +81,16 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
 - **Multiview**: tot 4 streams tegelijk
 - **Ondertitelgrootte** (klein, middel, groot), audio- en ondertitelsporen, **OpenSubtitles** (zoeken op IMDb-ID of titel, taal kiezen tijdens het kijken), snelheid, beeldverhouding, slaaptimer, zappen
 - **Android TV-bediening** met de afstandsbediening: OK = bediening, ←/→ = 10 s spoelen, ↑/↓ = zappen
-- **Zappen met zenderbanner**: op telefoon en tablet omhoog/omlaag vegen in de live-speler, op tv ↑/↓; met **Zapvertraging** (uit, 0,5, 1 of 2 s) werkt snel doorzappen alleen de banner bij en start de stream pas daarna (build 51)
-- **Beeldfrequentie volgen** op Android TV / Google TV / Fire TV: het scherm schakelt naar 24, 25/50 of 30/60 Hz zoals de video (build 51)
-- **Extern scherm**: via HDMI, USB-C of Miracast gaat de video schermvullend naar het tweede scherm, de bediening blijft op je telefoon of tablet (build 51)
+- **Zappen met zenderbanner**: op telefoon en tablet omhoog/omlaag vegen in de live-speler, op tv ↑/↓; met **Zapvertraging** (uit, 0,5, 1 of 2 s) werkt snel doorzappen alleen de banner bij en start de stream pas daarna
+- **Beeldfrequentie volgen** op Android TV / Google TV / Fire TV: het scherm schakelt naar 24, 25/50 of 30/60 Hz zoals de video
+- **Extern scherm**: via HDMI, USB-C of Miracast gaat de video schermvullend naar het tweede scherm, de bediening blijft op je telefoon of tablet
 
 **Gids & beheer**
 - **Tv-gids als raster** met nu-lijn, programma-details, **terugkijken** en **herinneringen** (melding)
 - **Live TV** met favorieten, recent en alle groepen, en **zoeken door álle zenders** (naam, nummer, groep en wat er nu speelt)
-- **Live-voorbeeld**: in Live TV en de gids speelt de zender met focus na een seconde klein en zonder geluid (op een telefoon met mobiele data uit) (build 51)
-- **Evenementen**: PPV- en evenementzenders in een eigen groep, op begintijd, met de wedstrijd, de lokale begintijd en **LIVE** (build 51)
-- **Terugkijk-correctie per zender** (−120 tot +120 min) als de catch-up van een server verschoven is, gedeeld met al je apparaten (build 51)
+- **Live-voorbeeld**: in Live TV en de gids speelt de zender met focus na een seconde klein en zonder geluid (op een telefoon met mobiele data uit)
+- **Evenementen**: PPV- en evenementzenders in een eigen groep, op begintijd, met de wedstrijd, de lokale begintijd en **LIVE**
+- **Terugkijk-correctie per zender** (−120 tot +120 min) als de catch-up van een server verschoven is, gedeeld met al je apparaten
 - **Categorieën aan/uit** per Live TV, Films en Series, met snelknoppen per land/taal
 - **Beheren**: groepen en zenders hernoemen, herschikken en verbergen
 - **Pincode** per profiel en kinderslot: groepen op slot, volwassenengroepen automatisch, **leeftijdsgrens per profiel**, 30 min ontgrendelen
@@ -114,57 +109,12 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
 - **Top 10** (trending via TMDB en Trakt, gekoppeld aan jouw lijst)
 - **Verder kijken** met voortgangsbalk; aantikken geeft **Hervatten** of **Opnieuw kijken**
 - **Mijn lijst** per profiel, bij het hoofdaccount samen met de Trakt-watchlist
-- **Collecties**: eigen rijen met naam en afbeelding, met de hand gevuld (*Add to collection…* op kaarten en detailpagina's) of slim op zoekwoorden; op Home, Films, Series en als groep in Live TV, gedeeld met al je apparaten (build 51)
-- **Startscherm per profiel**: rijen aan/uit en in je eigen volgorde (*Mijn Bingr → Home screen*) (build 51)
-- **Direct starten**: de bibliotheek uit de cache staat er meteen, verversen gebeurt op de achtergrond met een klein "Updating…" (build 51)
-- **Kleur per bron** bij zoekresultaten als je meerdere bronnen hebt (build 51)
+- **Collecties**: eigen rijen met naam en afbeelding, met de hand gevuld (*Add to collection…* op kaarten en detailpagina's) of slim op zoekwoorden; op Home, Films, Series en als groep in Live TV, gedeeld met al je apparaten
+- **Startscherm per profiel**: rijen aan/uit en in je eigen volgorde (*Mijn Bingr → Home screen*)
+- **Direct starten**: de bibliotheek uit de cache staat er meteen, verversen gebeurt op de achtergrond met een klein "Updating…"
+- **Kleur per bron** bij zoekresultaten als je meerdere bronnen hebt
 - **Trakt, 2 kanten op** (hoofdaccount): koppelcode + QR, gezien-vinkjes uit Trakt, afvinken naar Trakt, scrobblen en watchlist
 - **11 talen**: Engels, Nederlands, Duits, Frans, Spaans, Italiaans, Portugees, Turks, Pools, Arabisch en Chinees (gedeeld met de iOS-app)
-
-## Bouwen
-
-1. Open deze map in **Android Studio** (*File → Open*). Gradle 8.10.2, AGP 8.7.3, Kotlin 2.1, JDK 17.
-2. Zet je sleutels in `local.properties` (staat niet in git):
-   ```
-   TRAKT_CLIENT_ID=...
-   TMDB_API_KEY=...
-   OMDB_API_KEY=...
-   OPENSUBTITLES_API_KEY=...
-   SUPABASE_URL=https://xxxx.supabase.co
-   SUPABASE_ANON_KEY=...
-   # TRAKT_CLIENT_SECRET=...   (optioneel: Trakt-koppeling werkt met PKCE zonder secret)
-   # TMDB_ACCESS_TOKEN=...     (in plaats van TMDB_API_KEY)
-   ```
-   Zonder sleutels werkt de app ook: na het inloggen haalt de app de Trakt-, OpenSubtitles-, OMDb- en TMDB-sleutels op bij de Bingr-server. Eigen sleutels kun je nog invullen via *Mijn Bingr → Koppelingen instellen* (onderaan). `SUPABASE_URL` en `SUPABASE_ANON_KEY` (Bingr-account) worden alleen ingebouwd; zonder deze twee toont het inlogscherm "Continue without account".
-3. *Build → Build App Bundle(s) / APK(s) → Build APK(s)*, of druk op ▶ voor een toestel of Android TV-emulator.
-
-**Ondertekening:** de CI tekent elke APK met dezelfde vaste sleutel (secrets `BINGR_KEYSTORE_BASE64` en `BINGR_KEYSTORE_PASSWORD`), zodat je een nieuwe versie gewoon over de oude heen installeert en alles bewaard blijft. Lokaal stel je een sleutel in met `BINGR_KEYSTORE`, `BINGR_KEYSTORE_PASSWORD`, `BINGR_KEY_ALIAS` en `BINGR_KEY_PASSWORD` in `local.properties` (of als secrets); zonder sleutel wordt met de debug-sleutel getekend.
-
-**Automatisch bouwen:** de workflow `Build` bouwt bij elke push naar `main` een APK en zet die bij [Releases](https://github.com/LRvdLinden/bingr-android/releases) (`v1.0.0-build38`). Zet de sleutels (ook `SUPABASE_URL` en `SUPABASE_ANON_KEY`) als repository-secrets bij *Settings → Secrets and variables → Actions*. Het build-log staat op de branch `ci-logs`.
-
-Versie blijft 1.0.0; het buildnummer (`BINGR_BUILD` in `gradle.properties`) loopt gelijk met de iOS-app.
-
-## Vertalingen
-
-Alle teksten staan in de code in het Engels (`L("Play")`) en worden vertaald via `app/src/main/assets/Translations.json`, een kopie van `Shared/Resources/Translations.json` uit de iOS-repo.
-
-## Structuur
-
-```
-app/src/main/java/nl/lrvdlinden/bingr/
-  core/        app-start, AppState, profielen en opslag (Store), instellingen, sleutels, taalsysteem (L())
-  providers/   M3U, XMLTV, Xtream, Stalker, Plex, Jellyfin/Emby, Stremio + cache
-  meta/        IMDb (OMDb), TMDB, titels opschonen en koppelen, trending
-  trakt/       login, sync, scrobble, watchlist
-  subs/        OpenSubtitles
-  player/      ExoPlayer/VLC-engines, Chromecast, multiview, panelen, ondertitels
-  parental/    pincode, kinderslot, herinneringen
-  ui/          Netflix-thema, kaarten, schermen (profielen, home, live, gids, detail, categorie, beheren, zoeken, instellingen)
-app/src/main/res/      iconen, profielfiguurtjes (drawable-nodpi/kid01–16)
-app/src/main/assets/   Translations.json
-docs/screenshots/      screenshots (NL en en/)
-CONTRACT.md            opzet van de code
-```
 
 ## Opmerking
 
