@@ -76,20 +76,21 @@ jobs:
           name: Bingr-Android-apk
           path: app/build/outputs/apk/release/*.apk
 
-      - name: APK als GitHub-release publiceren
+      - name: APK en notities klaarzetten voor bingr-beheer/versions
         if: success() && github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
-          TAG="v$V-build$B"; APK="Bingr-$V-build$B.apk"
-          cp app/build/outputs/apk/release/*.apk "$APK"
-          # release-notities uit CHANGELOG.md (sectie van dit buildnummer)
-          awk -v b="Build $B" '/^## /{f=($0 ~ (b "$"))?1:0; next} f && !/^_.*_$/' CHANGELOG.md > notes.md
-          [ -s notes.md ] || echo "Bingr voor Android $V, build $B." > notes.md
-          printf '\nInstalleer de APK over de vorige versie heen; je gegevens blijven bewaard. Alle versies: https://bingr.online/changelog/?p=android\n' >> notes.md
-          if gh release view "$TAG" >/dev/null 2>&1; then gh release edit "$TAG" --notes-file notes.md; else gh release create "$TAG" --title "Bingr $V (build $B)" --notes-file notes.md --latest; fi
-          gh release upload "$TAG" "$APK" --clobber
+          mkdir -p pkg; cp app/build/outputs/apk/release/*.apk "pkg/Bingr-$V-build$B.apk"
+          # notities uit CHANGELOG.md (sectie van dit buildnummer)
+          awk -v b="Build $B" '/^## /{f=($0 ~ (b "$"))?1:0; next} f && !/^_.*_$/' CHANGELOG.md > pkg/notes.md
+          [ -s pkg/notes.md ] || echo "Bingr $V, build $B." > pkg/notes.md
+          printf '\nAlle versies: https://bingr.online/changelog/?p=android\n' >> pkg/notes.md
+
+      - uses: actions/upload-artifact@v4
+        if: success() && github.event_name != 'pull_request'
+        with:
+          name: Bingr-Android-pkg
+          path: pkg/
 
       - name: Log op branch ci-logs zetten
         if: always()
@@ -240,49 +241,50 @@ jobs:
           git -c user.name=github-actions -c user.email=actions@github.com commit -qm "Tizen-log $(cat status.txt)"
           git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs-tizen
 
-  tizen-release:
+  # Pakketten gaan niet meer als GitHub-release, maar naar bingr-beheer/versions/<os>/<versie>-build<N>/.
+  # Nodig: secret BINGR_BEHEER_TOKEN (fine-grained token met Contents: Read and write op LRvdLinden/bingr-beheer).
+  versions:
     needs: [apk, tizen]
-    if: ${{ always() && needs.tizen.result == 'success' && github.event_name != 'pull_request' }}
+    if: ${{ always() && github.event_name != 'pull_request' && (needs.apk.result == 'success' || needs.tizen.result == 'success') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/download-artifact@v4
+        if: needs.apk.result == 'success'
+        with:
+          name: Bingr-Android-pkg
+          path: pkg
+
+      - uses: actions/download-artifact@v4
+        if: needs.tizen.result == 'success'
         with:
           name: Bingr-Tizen-wgt
           path: dist
 
-      - name: .wgt bij de GitHub-release zetten
+      - name: In bingr-beheer/versions zetten
         env:
-          GH_TOKEN: ${{ github.token }}
+          TOKEN: ${{ secrets.BINGR_BEHEER_TOKEN }}
         run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::Secret BINGR_BEHEER_TOKEN ontbreekt: pakketten niet in bingr-beheer/versions gezet (wel als artefact van deze run)."; exit 0
+          fi
           V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
-          TAG="v$V-build$B"
-          KIND=$(grep -o 'SIGN_KIND=.*' dist/signing.txt | cut -d= -f2)
-          # de APK-job maakt de release; bestaat hij nog niet (APK mislukt), dan hier maken
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "Bingr $V (build $B)" --notes "Bingr $V, build $B." --latest || gh release view "$TAG" >/dev/null
+          git clone -q --depth 1 "https://x-access-token:${TOKEN}@github.com/LRvdLinden/bingr-beheer.git" beheer
+          [ -f pkg/notes.md ] || { mkdir -p pkg; awk -v b="Build $B" '/^## /{f=($0 ~ (b "$"))?1:0; next} f && !/^_.*_$/' CHANGELOG.md > pkg/notes.md; }
+          # één pakket per build (een nieuwe versie krijgt een nieuw buildnummer); staat de build er al, dan alleen de notities bijwerken
+          A="beheer/versions/android/$V-build$B"; T="beheer/versions/tizen/$V-build$B"
+          if [ -d "$A" ]; then cp pkg/notes.md "$A/notes.md"
+          elif ls pkg/*.apk >/dev/null 2>&1; then python3 beheer/tools/add_version.py android "$B" pkg/Bingr-$V-build$B.apk --notes pkg/notes.md --version "$V"; fi
+          if [ -d "$T" ]; then cp pkg/notes.md "$T/notes.md"
+          elif [ -d dist ]; then
+            KIND=$(grep -o 'SIGN_KIND=.*' dist/signing.txt | cut -d= -f2 || true)
+            for w in dist/*.wgt; do python3 beheer/tools/add_version.py tizen "$B" "$w" --notes pkg/notes.md --version "$V"; done
+            [ "$KIND" = "samsung" ] || echo "::notice::Samsung TV: .wgt ondertekend als '$KIND' (geen Samsung-certificaat)."
           fi
-          case "$KIND" in
-            samsung) NOTE="Samsung TV (Tizen): installeer de .wgt met Tizen Studio of de tizen-CLI over de vorige versie heen; je gegevens blijven bewaard. Uitleg: https://github.com/${{ github.repository }}/blob/main/tizen/README.md" ;;
-            tizen) NOTE="Samsung TV (Tizen): deze .wgt is met een tijdelijk test-certificaat ondertekend (de Samsung-certificaat-secrets ontbreken) en installeert niet op een Samsung-tv. Uitleg: https://github.com/${{ github.repository }}/blob/main/tizen/README.md" ;;
-            *) NOTE="Samsung TV (Tizen): deze .wgt is niet ondertekend (de Tizen-CLI was niet beschikbaar). Uitleg: https://github.com/${{ github.repository }}/blob/main/tizen/README.md" ;;
-          esac
-          gh release view "$TAG" --json body -q .body > body.md || true
-          if ! grep -q "Samsung TV (Tizen)" body.md; then
-            printf '\n%s\n' "$NOTE" >> body.md
-          else
-            python3 - "$NOTE" <<'PY'
-          import sys
-          note = sys.argv[1]
-          lines = open('body.md', encoding='utf-8').read().split('\n')
-          lines = [note if l.startswith('Samsung TV (Tizen)') else l for l in lines]
-          open('body.md', 'w', encoding='utf-8').write('\n'.join(lines))
-          PY
-          fi
-          gh release edit "$TAG" --notes-file body.md
-          # oude .wgt-varianten van deze build weghalen, dan de nieuwe uploaden
-          for a in $(gh release view "$TAG" --json assets -q '.assets[].name' | grep '\.wgt$' || true); do
-            [ -f "dist/$a" ] || gh release delete-asset "$TAG" "$a" -y || true
-          done
-          gh release upload "$TAG" dist/*.wgt --clobber
+          cd beheer
+          git add -A versions
+          if git diff --cached --quiet; then echo "::notice::Niets nieuws voor versions/"; exit 0; fi
+          git -c user.name=github-actions -c user.email=actions@github.com commit -qm "Versies: Android en Samsung TV $V build $B"
+          for i in 1 2 3; do git push -q && break; git pull -q --rebase; done
+          echo "::notice::In bingr-beheer/versions gezet: $V build $B"
