@@ -1,0 +1,20 @@
+name: Tijdelijk pakket-export
+on: workflow_dispatch
+permissions:
+  contents: write
+  actions: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 38477598866
+          github-token: ${{ github.token }}
+          path: pkg
+      - run: |
+          mkdir out && find pkg -name 'Bingr-*.apk' -o -name '*.wgt' | xargs -I{} cp {} out/
+          ls -la out
+          cd out && git init -q -b tmp-pkg && git add -A
+          git -c user.name=github-actions -c user.email=actions@github.com commit -qm "tijdelijk"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" tmp-pkg
