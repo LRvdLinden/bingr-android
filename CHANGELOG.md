@@ -22,7 +22,6 @@ _13 oktober 2026_
 **Nieuw**
 
 - Servers zonder CORS werken ook in de browser via een beveiligde doorgifte, alleen voor je eigen servers
-- De doorgifte voor de webspeler ondersteunt ook http-servers en haalt live-tv, films en afbeeldingen veilig op, alleen voor de servers in je eigen account
 
 ## Versie 1.0.0 · Build 61
 _13 oktober 2026_
