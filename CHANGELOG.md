@@ -4,6 +4,15 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 61
+_13 oktober 2026_
+
+### iOS, iPadOS, tvOS, macOS, Android en Android TV
+
+**Verbeterd**
+
+- Apparaten: Naam wijzigen en Verwijderen staan nu naast elkaar onder de tekst, zodat naam en gegevens goed leesbaar zijn
+
 ## Versie 1.0.0 · Build 60
 _13 oktober 2026_
 

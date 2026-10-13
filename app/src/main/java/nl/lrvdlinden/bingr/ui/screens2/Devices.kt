@@ -111,7 +111,7 @@ private fun DeviceRow(
 ) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = tvs(12)),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
         Box(Modifier.size(tvs(42)).clip(CircleShape).background(Theme.elevated), contentAlignment = Alignment.Center) {
             Icon(deviceIcon(d.platform), null, tint = Color.White, modifier = Modifier.size(tvs(22)))
@@ -119,7 +119,7 @@ private fun DeviceRow(
         Spacer(Modifier.width(tvs(14)))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(d.name, color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1,
+                Text(d.name, color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 2,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (d.current) {
                     Spacer(Modifier.width(8.dp))
@@ -132,15 +132,18 @@ private fun DeviceRow(
                 (d.signedInAt ?: d.createdAt)?.let { L("Signed in since %@", deviceDate(it)) },
                 deviceLastUsed(d.lastSeenAt, d.current)?.let { L("Last used %@", it) },
             )
-            if (parts.isNotEmpty()) Text(parts.joinToString(" · "), color = Theme.secondary, fontSize = tsp(12), maxLines = 2,
+            if (parts.isNotEmpty()) Text(parts.joinToString(" · "), color = Theme.secondary, fontSize = tsp(12), maxLines = 3,
                 overflow = TextOverflow.Ellipsis)
+            // Knoppen onder de tekst, naast elkaar (build 61)
+            Spacer(Modifier.height(tvs(10)))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onRename != null) {
+                    DeviceSmallButton(L("Rename"), Color.White, null, enabled, onRename)
+                    Spacer(Modifier.width(tvs(8)))
+                }
+                DeviceSmallButton(L("Remove"), Theme.red, removeFocus, enabled, onRemove)
+            }
         }
-        Spacer(Modifier.width(tvs(10)))
-        if (onRename != null) {
-            DeviceSmallButton(L("Rename"), Color.White, null, enabled, onRename)
-            Spacer(Modifier.width(tvs(8)))
-        }
-        DeviceSmallButton(L("Remove"), Theme.red, removeFocus, enabled, onRemove)
     }
 }
 
