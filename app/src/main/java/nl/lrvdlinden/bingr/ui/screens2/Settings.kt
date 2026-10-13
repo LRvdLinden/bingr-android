@@ -31,6 +31,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -193,6 +199,12 @@ fun SettingsScreen() {
         }
     }
 
+    // sprong vanuit het profielmenu (build 72): open subschermen sluiten
+    LaunchedEffect(MyBingrNav.jumps) {
+        if (MyBingrNav.jumps == 0) return@LaunchedEffect
+        sub = null; editing = null; addingServer = false; editingProfile = null; addingProfile = false
+    }
+
     // volledige subschermen (vervangen de lijst, zodat de focus erin blijft)
     when (sub) {
         S2SettingsSub.CATEGORIES -> { CategoriesScreen { sub = null }; return }
@@ -238,10 +250,74 @@ fun SettingsScreen() {
         ), onDismiss = { iconConfirm = null })
     }
 
-    S2Page(profile?.name ?: L("My Bingr"), onClose = null, state = listState) {
+    // build 72: Mijn Bingr zoals op bingr.online: bovenaan je rijen, dan BIBLIOTHEEK en PROFIEL;
+    // al het andere staat onder Instellingen, Account en apparaten, Profielen beheren en Trakt
+    val page = when (val p = MyBingrNav.page) {
+        MyBingrPage.PROFILES, MyBingrPage.TRAKT -> if (isMain) p else MyBingrPage.ROOT
+        MyBingrPage.ACCOUNT -> if (Account.isSignedIn) p else MyBingrPage.ROOT
+        else -> p
+    }
+    val pageState = remember(page) { LazyListState() }
+    val title = when (page) {
+        MyBingrPage.ROOT -> profile?.name ?: L("My Bingr")
+        MyBingrPage.SETTINGS -> L("Settings")
+        MyBingrPage.PROFILES -> L("Manage profiles")
+        MyBingrPage.ACCOUNT -> L("Account & devices")
+        MyBingrPage.TRAKT -> "Trakt"
+    }
+
+    S2Page(title, onClose = if (page == MyBingrPage.ROOT) null else ({ MyBingrNav.page = MyBingrPage.ROOT }),
+        state = if (page == MyBingrPage.ROOT) listState else pageState) {
+      if (page == MyBingrPage.ROOT) {
         // MARK: zoals "Mijn Netflix": profiel, Verder kijken, Mijn lijst, favoriete zenders
         item { S2MyBingrHeader() }
 
+        // MARK: bibliotheek
+        item {
+            S2Section(L("Library")) {
+                val historyCount = Store.history(source?.id).size
+                S2NavRow(L("Watch history"), Icons.Default.History, value = historyCount.takeIf { it > 0 }?.toString()) {
+                    sub = S2SettingsSub.HISTORY
+                }
+                S2NavRow(L("Collections"), Icons.AutoMirrored.Filled.PlaylistAdd,
+                    value = Collections.visible.size.takeIf { it > 0 }?.toString()) { sub = S2SettingsSub.COLLECTIONS }
+                // kijkstatistieken (build 68): hoofdprofiel alle profielen, andere profielen alleen hun eigen
+                S2NavRow(L("Statistics"), Icons.Default.BarChart) { sub = S2SettingsSub.STATS }
+                if (isMain) {
+                    S2NavRow("Trakt",
+                        subtitle = if (Trakt.isLoggedIn) Trakt.username ?: Trakt.displayName else L("Connect Trakt"),
+                        value = if (Trakt.isLoggedIn) Trakt.lastRefresh?.let { L("Trakt synced %@", s2Time(it)) } else null,
+                        leading = {
+                            Box(Modifier.size(tvs(28)).clip(CircleShape).background(Theme.elevated), contentAlignment = Alignment.Center) {
+                                val a = Trakt.avatar
+                                if (Trakt.isLoggedIn && a != null) RemoteImage(a, Modifier.size(tvs(28)).clip(CircleShape))
+                                else Icon(Icons.Default.Sync, null, tint = Theme.red, modifier = Modifier.size(tvs(18)))
+                            }
+                        }) { MyBingrNav.page = MyBingrPage.TRAKT }
+                }
+            }
+        }
+
+        // MARK: profiel
+        item {
+            S2Section(L("Profile")) {
+                if (isMain) {
+                    S2NavRow(L("Manage profiles"), Icons.Default.People,
+                        value = Store.profiles.size.takeIf { it > 0 }?.toString()) { MyBingrNav.page = MyBingrPage.PROFILES }
+                }
+                S2NavRow(L("Home screen"), Icons.Default.ViewAgenda) { sub = S2SettingsSub.HOME_SCREEN }
+                S2NavRow(L("Settings"), Icons.Default.Settings) { MyBingrNav.page = MyBingrPage.SETTINGS }
+                if (Account.isSignedIn) {
+                    S2NavRow(L("Account & devices"), Icons.Default.AccountCircle) { MyBingrNav.page = MyBingrPage.ACCOUNT }
+                }
+            }
+        }
+
+        // MARK: onderaan: app-icoon, versie en copyright (op TV focusbaar, zodat het in beeld scrolt)
+        item { S2AppFooter() }
+      }
+
+      if (page == MyBingrPage.SETTINGS) {
         // MARK: profiel
         item {
             S2Section(L("Profile"), if (!isMain) L("The server and all settings are managed in the main account.") else null) {
@@ -259,6 +335,9 @@ fun SettingsScreen() {
             }
         }
 
+      }
+
+      if (page == MyBingrPage.ACCOUNT) {
         // MARK: Bingr-account (hoofdaccount en alle profielen)
         if (Account.isSignedIn) {
             item {
@@ -266,8 +345,6 @@ fun SettingsScreen() {
                     S2Row(L("Signed in as %@", Account.email ?: ""), icon = Icons.Default.AccountCircle)
                     if (!AppState.isTV) S2Row(L("Link a TV"), icon = Icons.Default.Tv, onClick = { linkingTv = true })
                     S2Row(L("Devices"), icon = Icons.Default.Devices, onClick = { showDevices = true })
-                    // kijkstatistieken (build 68): hoofdprofiel alle profielen, andere profielen alleen hun eigen
-                    S2Row(L("Statistics"), icon = Icons.Default.BarChart, onClick = { sub = S2SettingsSub.STATS })
                     if (isMain) {
                         S2Row(L("Watching now"), icon = Icons.Default.PlayCircle,
                             value = watching?.let { w -> L("%d of %d watching now", w.streams.size, w.limit) },
@@ -284,7 +361,9 @@ fun SettingsScreen() {
             }
         }
 
-        if (isMain) {
+      }
+
+      if (page == MyBingrPage.SETTINGS && isMain) {
             // MARK: server
             item {
                 S2Section(L("Server"), L("The server, Trakt and OpenSubtitles belong to the main account and are used by all profiles.")) {
@@ -316,6 +395,9 @@ fun SettingsScreen() {
                 }
             }
 
+      }
+
+      if (page == MyBingrPage.PROFILES) {
             // MARK: profielen
             item {
                 S2Section(L("Profiles"), L("Each profile uses the same server, with its own My List, Continue watching, favorites, history and age limit.")) {
@@ -337,18 +419,14 @@ fun SettingsScreen() {
             }
         }
 
-        // MARK: bibliotheek
-        item {
-            S2Section(L("Library"), L("Watch history is kept per profile. Plex, Jellyfin and Emby can be added as a playlist.")) {
-                S2Row(L("Watch history"), icon = Icons.Default.History, onClick = { sub = S2SettingsSub.HISTORY })
-                S2Row(L("Collections"), icon = Icons.AutoMirrored.Filled.PlaylistAdd, value = Collections.visible.size.takeIf { it > 0 }?.toString(),
-                    onClick = { sub = S2SettingsSub.COLLECTIONS })
-                S2Row(L("Home screen"), icon = Icons.Default.Home, onClick = { sub = S2SettingsSub.HOME_SCREEN })
-                if (isMain) S2Row(L("NAS & network (SMB/DLNA)"), icon = Icons.Default.Lan, onClick = { sub = S2SettingsSub.NAS })
+      if (page == MyBingrPage.SETTINGS && isMain) {
+            // MARK: NAS en netwerk (stond vroeger onder Bibliotheek)
+            item {
+                S2Section(L("Library"), L("Watch history is kept per profile. Plex, Jellyfin and Emby can be added as a playlist.")) {
+                    S2Row(L("NAS & network (SMB/DLNA)"), icon = Icons.Default.Lan, onClick = { sub = S2SettingsSub.NAS })
+                }
             }
-        }
 
-        if (isMain) {
             // MARK: afspeellijsten bijwerken
             item {
                 S2Section(L("Update playlists"), L("Channels, movies, series and the TV guide are refreshed in the background at this interval.")) {
@@ -362,6 +440,9 @@ fun SettingsScreen() {
                 }
             }
 
+      }
+
+      if (page == MyBingrPage.TRAKT) {
             // MARK: Trakt
             item {
                 S2Section("Trakt", L("What you watch in Bingr is scrobbled automatically. What you've watched on Trakt (or in another app) is checked off here.")) {
@@ -405,6 +486,7 @@ fun SettingsScreen() {
             }
         }
 
+      if (page == MyBingrPage.SETTINGS) {
         // MARK: OpenSubtitles
         item {
             S2Section("OpenSubtitles", L("While playing, choose OpenSubtitles to pick another subtitle or language. Automatically uses a subtitle track in the stream first; otherwise the best match from OpenSubtitles is loaded (requires sign-in).") +
@@ -601,8 +683,7 @@ fun SettingsScreen() {
             }
         }
 
-        // MARK: onderaan: app-icoon, versie en copyright (op TV focusbaar, zodat het in beeld scrolt)
-        item { S2AppFooter() }
+      }
     }
 
     // MARK: dialogen
@@ -727,9 +808,12 @@ private fun S2MyBingrHeader() {
             verticalArrangement = Arrangement.spacedBy(tvs(8))) {
             ProfileAvatar(profile, tvs(84))
             var focused by remember { mutableStateOf(false) }
+            // build 72: naam + pijltje opent het profielmenu (andere profielen, Wissel van profiel, …)
+            var menu by remember { mutableStateOf(false) }
+            Box {
             Row(
                 Modifier.onFocusChanged { focused = it.isFocused }
-                    .focusLift(1.06f) { AppState.switchPlaylist() }
+                    .focusLift(1.06f) { menu = true }
                     .clip(RoundedCornerShape(50))
                     .background(if (focused && AppState.isTV) Color.White else Color.Transparent)
                     .padding(horizontal = 12.dp, vertical = 4.dp),
@@ -739,6 +823,8 @@ private fun S2MyBingrHeader() {
                 Text(profile?.name ?: L("My Bingr"), color = fg, fontSize = tsp(20), fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(Modifier.width(6.dp))
                 Icon(Icons.Default.KeyboardArrowDown, L("Switch profile"), tint = fg, modifier = Modifier.size(tvs(18)))
+            }
+            ProfileMenu(menu) { menu = false }
             }
             if (Trakt.isLoggedIn) S2TraktStatus()
         }
@@ -865,4 +951,19 @@ internal fun s2WithServerKeys(ready: () -> Boolean, login: () -> Unit, setup: ()
         try { Account.fetchConfig() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { }
         if (ready()) login() else setup()
     }
+}
+
+/** Rij in Mijn Bingr die naar een andere pagina gaat: icoon, titel, aantal en een pijltje (zoals op bingr.online). */
+@Composable
+private fun S2NavRow(
+    title: String,
+    icon: ImageVector? = null,
+    value: String? = null,
+    subtitle: String? = null,
+    leading: (@Composable () -> Unit)? = null,
+    onClick: () -> Unit,
+) {
+    S2Row(title, icon = icon, value = value, subtitle = subtitle, leading = leading, onClick = onClick, trailing = {
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Theme.secondary, modifier = Modifier.size(tvs(20)))
+    })
 }

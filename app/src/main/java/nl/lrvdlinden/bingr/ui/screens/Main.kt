@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.AlertDialog
@@ -89,13 +90,25 @@ fun MainScreen() {
         if (showSeries) add(MainTab(3, L("Series"), Icons.Default.VideoLibrary))
         if (!isPhone) add(MainTab(4, L("Search"), Icons.Default.Search))
         if (Downloads.supported) add(MainTab(6, L("Downloads"), Icons.Default.Download))
-        add(MainTab(5, if (tv) Store.activeProfile?.name ?: L("My Bingr") else L("My Bingr"), Icons.Default.AccountCircle))
+        // build 72: het profiel zelf zit nu als avatar met menu rechtsboven (zoals op bingr.online)
+        add(MainTab(5, L("My Bingr"), Icons.Default.Person))
     }
     var tab by rememberSaveable {
         val start = Prefs.int("ui.startTab", 0)
         mutableIntStateOf(if (start in 0..3 && tabs.any { it.id == start }) start else 0)
     }
     val current = if (tabs.any { it.id == tab }) tab else 0
+    /** Tabblad kiezen; Mijn Bingr opent dan altijd op het overzicht. */
+    fun select(id: Int) {
+        if (id == 5) MyBingrNav.page = MyBingrPage.ROOT
+        tab = id
+    }
+    // profielmenu (build 72): naar Mijn Bingr / Instellingen / Account en apparaten / Profielen beheren
+    LaunchedEffect(MyBingrNav.tabRequest) {
+        val t = MyBingrNav.tabRequest ?: return@LaunchedEffect
+        MyBingrNav.tabRequest = null
+        tab = t
+    }
 
     // terug: eerst naar Home, dan naar de profielkeuze (lagen erboven hebben hun eigen terug-afhandeling)
     BackHandler(enabled = ScreensNav.stack.isEmpty()) {
@@ -135,7 +148,7 @@ fun MainScreen() {
 
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         Column(Modifier.fillMaxSize().blockFocus(covered)) {
-            if (tv) TvTabBar(tabs, current, focusEnabled = !covered) { tab = it }
+            if (tv) TvTabBar(tabs, current, focusEnabled = !covered) { select(it) }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 holder.SaveableStateProvider(current) {
                     when (current) {
@@ -154,17 +167,8 @@ fun MainScreen() {
                     tabs.forEach { t ->
                         NavigationBarItem(
                             selected = t.id == current,
-                            onClick = { tab = t.id },
-                            icon = {
-                                // Mijn Bingr: de profielfoto (rond), zoals bij Netflix
-                                if (t.id == 5 && Store.activeProfile != null) {
-                                    Box(
-                                        Modifier.size(26.dp).then(
-                                            if (t.id == current) Modifier.border(1.5.dp, Color.White, CircleShape) else Modifier
-                                        )
-                                    ) { ProfileAvatar(size = 26.dp) }
-                                } else Icon(t.icon, contentDescription = t.title)
-                            },
+                            onClick = { select(t.id) },
+                            icon = { Icon(t.icon, contentDescription = t.title) },
                             label = { Text(t.title, maxLines = 1, fontSize = tsp(10)) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = Color.White, selectedTextColor = Color.White,
@@ -258,7 +262,8 @@ private fun TvTabBar(tabs: List<MainTab>, current: Int, focusEnabled: Boolean, o
             }
         }
         Spacer(Modifier.weight(1f))
-        Box(Modifier.focusLift(1.12f) { AppState.switchPlaylist() }) { ProfileAvatar(size = 30.dp) }
+        // build 72: avatar van het actieve profiel opent het profielmenu
+        ProfileMenuButton(avatarSize = 30.dp)
     }
 }
 

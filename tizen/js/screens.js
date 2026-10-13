@@ -332,7 +332,16 @@
     var nav = h('div.nav.fm', { 'data-zone': 'nav' });
     var current = null;
     var pages = {};
-    var profileTile = h('div.nav-profile', [S.avatar(B.app.profile, 'small'), h('span.nav-label', B.app.profile.name)]);
+    // build 72: ronde avatar van het actieve profiel bovenaan het menu; OK opent het profielmenu (zoals op bingr.online)
+    var profileTile = h('div.nav-profile.f', [S.avatar(B.app.profile, 'small'), h('span.nav-label', B.app.profile.name),
+      h('span.nav-chevron', '\u25BE')]);
+    profileTile.onEnter = function () { S.profileMenu(function (key) { show(key, true); }); };
+    profileTile.onFocus = function () { nav.classList.add('open'); };
+    profileTile.onBlur = function () { setTimeout(function () { if (!nav.contains(U.focused)) nav.classList.remove('open'); }, 0); };
+    profileTile.onKey = function (name) {
+      if (name === 'right') { focusContent(); return true; }
+      return false;
+    };
     nav.appendChild(profileTile);
     var items = {};
     NAV.forEach(function (n) {
@@ -1094,6 +1103,51 @@
     pg.onData = render;
     render();
     return pg;
+  };
+
+  // MARK: profielmenu (build 72)
+
+  /**
+   * Profielmenu, geopend vanaf de avatar bovenaan het menu: de andere profielen (meteen wisselen, met pincode als dat
+   * profiel er een heeft), Wissel van profiel, Mijn lijst, Instellingen, Account en apparaten en Uitloggen.
+   * Profielen beheren kan op de tv niet (dat gaat in de andere apps of op bingr.online), dus dat item ontbreekt hier.
+   * go(pagina) toont een pagina van het hoofdscherm.
+   */
+  S.profileMenu = function (go) {
+    var list = h('div.pm-list.sy.fm', { 'data-pad': '40' });
+    var s = { modal: true, el: layer('modal.pm-layer', [h('div.modal-box.pm-box', [list])]) };
+    function item(icon, label, fn, cls) {
+      var el = h('div.choice.pm-item.f' + (cls || ''), [icon, h('span.pm-label', label)]);
+      el.onEnter = function () { U.pop(); fn(); };
+      list.appendChild(el);
+      return el;
+    }
+    function sep() { list.appendChild(h('div.pm-sep')); }
+    var cur = B.app.profile;
+    var others = D.profiles.filter(function (p) { return !cur || p.id !== cur.id; });
+    others.forEach(function (p) {
+      var el = item(S.avatar(p, 'mini'), p.name, function () {
+        var pin = D.pinFor(p);
+        if (pin) U.askPIN(L('PIN for %@', p.name), function (x) { return x === pin; }, function () { B.app.openProfile(p); });
+        else B.app.openProfile(p);
+      });
+      if (D.pinFor(p)) el.appendChild(U.icon('lock', 'pm-lock'));
+    });
+    if (others.length) sep();
+    item(U.icon('people'), L('Switch profile'), function () { B.app.switchProfile(); });
+    item(U.icon('list'), L('My List'), function () { go('mylist'); });
+    item(U.icon('gear'), L('Settings'), function () { go('settings'); });
+    if (A.isSignedIn()) {
+      item(U.icon('person'), L('Account & devices'), function () { U.push(S.devices()); });
+      sep();
+      item(U.icon('signout'), L('Sign out'), function () {
+        U.modal({ title: L('Sign out'), text: L('Sign out of Bingr on this device?'), buttons: [
+          { label: L('Sign out'), fn: function () { B.app.signOut(); } }, { label: L('Cancel') }] });
+      }, '.danger');
+    }
+    s.onBack = function () { U.pop(); };
+    U.push(s);
+    return s;
   };
 
   // MARK: Zoeken

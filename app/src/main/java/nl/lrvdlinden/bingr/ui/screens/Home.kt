@@ -669,7 +669,8 @@ fun HomeScreen(filter: Filter) {
                 Box(Modifier.size(34.dp).focusLift { ScreensNav.search() }, contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Search, L("Search"), tint = Color.White, modifier = Modifier.size(25.dp))
                 }
-                Box(Modifier.focusLift { AppState.switchPlaylist() }) { ProfileAvatar(size = 30.dp) }
+                // build 72: profielmenu (andere profielen, Mijn Bingr, Instellingen, Account, Uitloggen) zoals op bingr.online
+                ProfileMenuButton(avatarSize = 30.dp)
             }
         }
     }

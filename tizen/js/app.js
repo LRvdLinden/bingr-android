@@ -123,6 +123,16 @@
     showProfiles();
   };
 
+  /** Meteen naar een ander profiel vanuit het profielmenu (build 72); de pincode is dan al gecontroleerd. */
+  app.openProfile = function (p) {
+    if (B.player.current) B.player.current.close();
+    if (B.multiview.current) B.multiview.current.close();
+    B.preview.stop();
+    B.ageRatings.stop();
+    D.flush();
+    pickProfile(p);
+  };
+
   function pickProfile(p) {
     app.profile = p;
     B.store.set('lastProfile', p.id);
