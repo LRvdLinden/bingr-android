@@ -13,7 +13,7 @@ Wat er nieuw is per build: [CHANGELOG.md](CHANGELOG.md) · [bingr.online/changel
 
 Bingr draait ook op **Samsung-smart-tv's** (2018 en nieuwer, Tizen). De tv-app staat in [`tizen/`](tizen/) en heeft dezelfde Netflix-look en dezelfde functies als de Android TV-app; meer uitleg in [tizen/README.md](tizen/README.md).
 
-Downloaden en installeren (ook op Android TV, Google TV, Fire TV en Samsung TV): zie [bingr.online](https://bingr.online/#download) en de [hulppagina](https://bingr.online/support.html#installeren).
+Downloaden en installeren (ook op Android TV, Google TV, Fire TV en Samsung TV): zie [bingr.online](https://bingr.online/#download) en de [hulppagina](https://support.bingr.online/hulp/installeren/).
 
 ## Screenshots
 

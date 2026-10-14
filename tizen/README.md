@@ -4,7 +4,7 @@ Dezelfde Bingr als op Android TV en Apple TV, als app voor **Samsung-smart-tv's 
 Je logt in met je Bingr-account (QR-code met je telefoon of een code op [bingr.online/koppelen](https://bingr.online/koppelen/)), en daarna staan je profielen, servers, Mijn lijst,
 voortgang, collecties en instellingen er gewoon: alles komt uit je account en synchroniseert met je andere apparaten.
 
-Downloaden: [bingr.online](https://bingr.online/#download). Installeren en bijwerken (ontwikkelaarsmodus, Tizen Studio en een Samsung-certificaat): zie de [hulppagina](https://bingr.online/support.html#samsung).
+Downloaden: [bingr.online](https://bingr.online/#download). Installeren en bijwerken (ontwikkelaarsmodus, Tizen Studio en een Samsung-certificaat): zie de [hulppagina](https://support.bingr.online/hulp/samsung/).
 
 ## Wat erin zit
 
