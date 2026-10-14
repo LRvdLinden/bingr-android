@@ -169,6 +169,7 @@ fun SettingsScreen() {
     var showLive by remember { mutableStateOf(Prefs.bool("ui.showLive", true)) }
     var showMovies by remember { mutableStateOf(Prefs.bool("ui.showMovies", true)) }
     var showSeries by remember { mutableStateOf(Prefs.bool("ui.showSeries", true)) }
+    var autoplayTrailers by remember { mutableStateOf(HeroTrailer.enabled) }
     val profileKey = Store.activeProfileID
     // kijkvoorkeuren horen bij het profiel: opnieuw lezen na wisselen van profiel
     var autoSubtitles by remember(profileKey) { mutableStateOf(TrackPreferences.autoSubtitles) }
@@ -629,6 +630,10 @@ fun SettingsScreen() {
                 S2Toggle(L("Show Live TV"), showLive) { showLive = it; Prefs.put("ui.showLive", it) }
                 S2Toggle(L("Show Movies"), showMovies) { showMovies = it; Prefs.put("ui.showMovies", it) }
                 S2Toggle(L("Show Series"), showSeries) { showSeries = it; Prefs.put("ui.showSeries", it) }
+                // build 82: trailer zonder geluid in de kop van film- en seriepagina's
+                S2Toggle(L("Play trailers automatically"), autoplayTrailers,
+                    subtitle = if (autoplayTrailers) L("Muted, on movie and series pages. Not on metered connections or with animations off.") else null
+                ) { autoplayTrailers = it; HeroTrailer.enabled = it }
                 if (isMain) S2Row(L("Rename, hide and reorder"), icon = Icons.Default.Tune, onClick = { sub = S2SettingsSub.MANAGE })
             }
         }

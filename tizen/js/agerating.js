@@ -141,6 +141,39 @@
       });
     }).catch(function () { return null; });
   };
+  /**
+   * Build 82: YouTube-id van de trailer (TMDB-video's, = RichSources.kt): YouTube, Trailer vóór Teaser, de app-taal vóór
+   * Engels. Series: eerst die van seizoen `season` (het nieuwste), anders die van de serie. null = geen trailer.
+   */
+  var trailers = {};
+  function bestVideo(list, base) {
+    function typeRank(v) { return v.type === 'Trailer' ? 0 : v.type === 'Teaser' ? 1 : 9; }
+    function langRank(v) { return v.iso_639_1 === base ? 0 : v.iso_639_1 === 'en' ? 1 : 2; }
+    var ok = (list || []).filter(function (v) { return v && v.site === 'YouTube' && v.key && typeRank(v) < 9; });
+    ok.sort(function (a, b) { return typeRank(a) - typeRank(b) || langRank(a) - langRank(b) || (b.official === true ? 1 : 0) - (a.official === true ? 1 : 0); });
+    return ok.length ? String(ok[0].key) : null;
+  }
+  function videos(path, base) {
+    return tmdb(path, [['language', base], ['include_video_language', base + ',en,null']]).then(function (r) {
+      var list = (r && r.results) || [];
+      if (bestVideo(list, base) || base === 'en') return list;
+      // sommige antwoorden negeren include_video_language: dan nog een keer in het Engels
+      return tmdb(path, [['language', 'en-US']]).then(function (r2) { return list.concat((r2 && r2.results) || []); });
+    });
+  }
+  AR.trailer = function (x, isShow, season) {
+    var base = String(B.lang || 'en').slice(0, 2);
+    var ck = (isShow ? 's:' : 'm:') + (x.id || x.title) + ':' + (season || '') + ':' + base;
+    if (trailers[ck] !== undefined) return Promise.resolve(trailers[ck]);
+    return AR.lookup(x, isShow).then(function (r) {
+      if (!r || r.found === false || r.id == null) return null;
+      var own = isShow ? '/tv/' + r.id + '/videos' : '/movie/' + r.id + '/videos';
+      var first = isShow && season != null ? videos('/tv/' + r.id + '/season/' + season + '/videos', base).then(function (l) { return bestVideo(l, base); }) : Promise.resolve(null);
+      return first.then(function (k) {
+        return k || videos(own, base).then(function (l) { return bestVideo(l, base); });
+      });
+    }).then(function (k) { trailers[ck] = k || null; return trailers[ck]; }, function () { return null; });
+  };
   AR.lookup = function (x, isShow) { return AR.preload().then(function () { return fetchOne({ title: x.rawTitle || x.title, year: x.year, isShow: isShow, imdb: x.imdbID || null }); }); };
 
   var bump = B.debounce(function () { B.emit('ageRatings'); }, 2500);

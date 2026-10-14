@@ -58,7 +58,7 @@ fun ScreensStackHost() {
         key(item.id) {
             FullLayer(Modifier.blockFocus(i < items.size - 1)) {
                 when (val e = item.entry) {
-                    is ScreenEntry.Detail -> DetailScreen(e.target, onClose = { ScreensNav.close(item.id) })
+                    is ScreenEntry.Detail -> DetailScreen(e.target, onClose = { ScreensNav.close(item.id) }, isTop = i == items.size - 1)
                     is ScreenEntry.Category -> CategoryScreen(e.target, onClose = { ScreensNav.close(item.id) })
                     ScreenEntry.Search -> SearchScreen(modal = true, onClose = { ScreensNav.close(item.id) })
                     is ScreenEntry.Person -> PersonScreen(e.ref, onClose = { ScreensNav.close(item.id) })

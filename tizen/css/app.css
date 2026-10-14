@@ -339,6 +339,11 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 /* detail */
 .detail { background: #000; }
 .dt-bg { position: absolute; left: 0; top: 0; right: 0; height: 1080px; }
+/* build 82: trailer in de kop (YouTube-embed), 16:9 beeldvullend en iets ingezoomd; zichtbaar zodra hij speelt */
+.dt-bg { overflow: hidden; }
+.dt-trailer { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; border: 0; pointer-events: none; opacity: 0;
+  -webkit-transform: translate(-50%, -50%) scale(1.15); transform: translate(-50%, -50%) scale(1.15); -webkit-transition: opacity 0.7s; transition: opacity 0.7s; }
+.dt-trailer.on { opacity: 1; }
 .dt-shade { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: linear-gradient(90deg, #000 12%, rgba(0,0,0,0.82) 48%, rgba(0,0,0,0.25) 85%), linear-gradient(0deg, #000 5%, rgba(0,0,0,0) 45%); }
 .dt-poster { position: absolute; right: 120px; top: 100px; width: 360px; height: 540px; border-radius: 12px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,0.7); }
 .dt-body { position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; padding: 110px 0 0 120px; }

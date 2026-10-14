@@ -48,6 +48,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Theaters
 import androidx.compose.material.icons.filled.Translate
@@ -101,7 +103,7 @@ import kotlinx.coroutines.withContext
  * Mijn lijst, trailer, bekeken, andere bronnen, beschrijving, afleveringen, beoordelingen, cast en aanbevelingen.
  */
 @Composable
-fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
+fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = null) {
     val tv = AppState.isTV
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -148,6 +150,16 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
     // seizoenstrailer (build 53): trailer van het gekozen seizoen, anders die van de serie
     val seasonTrailer: String? = if (target is DetailTarget.SeriesT) seasonTrailers[season] else null
     val trailerToPlay = seasonTrailer ?: trailerID
+    // build 82: trailer automatisch in de kop; series: die van het nieuwste seizoen, anders die van de serie
+    val newestSeason: Int? = if (target is DetailTarget.SeriesT) episodes.maxOfOrNull { it.season } else null
+    val autoplayTrailer: String? = when {
+        loading -> null
+        target !is DetailTarget.SeriesT -> trailerID
+        newestSeason == null || screensInt(details?.tmdbID) == null -> trailerID
+        // nog aan het opzoeken: even wachten, anders begint eerst de trailer van de serie
+        !seasonTrailers.containsKey(newestSeason) -> null
+        else -> seasonTrailers[newestSeason] ?: trailerID
+    }
     val isMovie = target is DetailTarget.MovieT
     val seasons = remember(episodes) { episodes.map { it.season }.distinct().sorted() }
     val progress = Store.progress
@@ -216,6 +228,14 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
         val s = season
         val key = screensSafe { TMDB.seasonTrailer(tmdb, s) }
         seasonTrailers = seasonTrailers + (s to key)
+    }
+    // seizoenstrailer van het nieuwste seizoen (voor de trailer in de kop, build 82)
+    LaunchedEffect(newestSeason, details?.tmdbID) {
+        val n = newestSeason ?: return@LaunchedEffect
+        val tmdb = screensInt(details?.tmdbID) ?: return@LaunchedEffect
+        if (seasonTrailers.containsKey(n)) return@LaunchedEffect
+        val key = screensSafe { TMDB.seasonTrailer(tmdb, n) }
+        seasonTrailers = seasonTrailers + (n to key)
     }
     LaunchedEffect(target.id, System.identityHashCode(lib)) {
         versions = screensSafe { ContentLanguage.versions(target) } ?: emptyList()
@@ -345,6 +365,34 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
         lib.series.firstOrNull { it.id == id }?.let { ScreensNav.detail(DetailTarget.SeriesT(it)) }
     }
 
+    // MARK: trailer in de kop (build 82)
+    val heroTrailer = remember(target.id) { HeroTrailerState() }
+    var inForeground by remember { mutableStateOf(true) }
+    DisposableEffect(Unit) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            when (e) {
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> { inForeground = false; heroTrailer.stop() }
+                androidx.lifecycle.Lifecycle.Event.ON_START -> inForeground = true
+                else -> {}
+            }
+        }
+        val lc = androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle
+        lc.addObserver(obs)
+        onDispose { lc.removeObserver(obs); heroTrailer.stop() }
+    }
+    // alleen op de bovenste pagina, niet onder de speler, multiview, "Andere bronnen" of de pincode
+    val trailerBlocked = AppState.playing != null || AppState.showMultiview || showSources || ageGate ||
+        !inForeground || !(isTop ?: ScreensNav.stack.isEmpty())
+    LaunchedEffect(autoplayTrailer, trailerBlocked) {
+        if (trailerBlocked) { heroTrailer.stop(); return@LaunchedEffect }
+        val id = autoplayTrailer ?: return@LaunchedEffect
+        // één keer per pagina vanzelf (niet opnieuw na afspelen, het einde of terugkomen)
+        if (heroTrailer.startedID != null) return@LaunchedEffect
+        delay(1500)
+        if (!HeroTrailer.allowed(ctx)) return@LaunchedEffect
+        heroTrailer.start(id)
+    }
+
     BackHandler(enabled = !showSources && !ageGate) { onClose() }
     BackHandler(enabled = showSources) { showSources = false }
 
@@ -360,6 +408,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
             // MARK: kop
             Box(Modifier.fillMaxWidth().height(headerHeight)) {
                 RemoteImage(heroImage, Modifier.matchParentSize())
+                HeroTrailerView(heroTrailer, Modifier.matchParentSize())
                 Box(
                     Modifier.matchParentSize().background(
                         Brush.verticalGradient(0.35f to Color.Transparent, 0.75f to Color.Black.copy(alpha = 0.65f), 1f to Color.Black)
@@ -367,6 +416,20 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                 )
                 if (tv) {
                     Box(Modifier.matchParentSize().background(Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.85f), 0.5f to Color.Transparent)))
+                }
+                if (!tv && heroTrailer.visible) {
+                    Box(
+                        Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 56.dp, end = 16.dp)
+                            .size(40.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f))
+                            .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                            .focusLift(1.06f) { heroTrailer.toggleMute() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            if (heroTrailer.muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                            if (heroTrailer.muted) L("Sound on") else L("Sound off"), tint = Color.White, modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
                 Box(
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = Theme.edge).padding(bottom = tvs(8)),
@@ -462,7 +525,12 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit) {
                             tint = if (inMyList) Theme.red else Color.White
                         ) { toggleMyList() }
                         if (!target.id.startsWith("rec-")) DetailCircleButton(Icons.AutoMirrored.Filled.PlaylistAdd) { addToCollection = true }
-                        if (trailerToPlay != null) DetailCircleButton(Icons.Default.Theaters) { Trailer.open(ctx, trailerToPlay) }
+                        if (tv && heroTrailer.visible) {
+                            DetailCircleButton(if (heroTrailer.muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp) {
+                                heroTrailer.toggleMute()
+                            }
+                        }
+                        if (trailerToPlay != null) DetailCircleButton(Icons.Default.Theaters) { heroTrailer.stop(); Trailer.open(ctx, trailerToPlay) }
                         if (isMovie) DetailCircleButton(if (isWatchedTitle) Icons.Default.CheckCircle else Icons.Default.Check) { toggleWatchedMovie() }
                         // downloaden (build 52): niet op TV
                         val movieItem = (target as? DetailTarget.MovieT)?.let { Playables.movie(it.movie, imdb) }

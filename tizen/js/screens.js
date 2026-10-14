@@ -68,8 +68,10 @@
         if (flow) return;
         flow = A.runTvFlow({
           onCode: function (c) { code.textContent = c ? A.displayCode(c.code) : '···-···'; drawQR(c ? c.url : null); },
-          onError: function (m) { err.textContent = m || ''; }
+          // build 82: geblokkeerd account blijft staan, ook als een nieuwe code de fout wist
+          onError: function (m) { err.textContent = m || (A.blockedNotice() ? A.bannedMessage() : ''); }
         });
+        if (A.blockedNotice()) err.textContent = A.bannedMessage();
         flow.promise.then(function () { finish(); });
       },
       onBack: function () { B.app.exit(); return true; },
@@ -125,6 +127,8 @@
           return;
         }
         var codeErr = j.error_code || j.code || j.error;
+        // build 82: door de beheerder geblokkeerd
+        if (A.isBanned(r)) { err.textContent = A.bannedMessage(); return; }
         if (signup && r.status >= 200 && r.status < 300) {
           // account gemaakt, maar het e-mailadres moet eerst bevestigd worden
           err.textContent = L('Check your inbox to confirm your email address, then sign in.');
@@ -1254,10 +1258,97 @@
     var body = vScroller('.dt-body', { 'data-pad': '60' });
     body.track.appendChild(h('div.dt-info', [h('div.dt-kind', type === 'series' ? L('SERIES') : L('FILM')), h('h1.dt-title', x.title), meta, langEl, plot, buttons]));
     if (type === 'series') body.track.appendChild(h('div.dt-episodes', [seasonsEl, epsEl]));
-    var el = layer('detail', [h('div.dt-bg', [U.img(x.poster, 'hero-img', null, true)]), h('div.dt-shade'),
+    var bg = h('div.dt-bg', [U.img(x.poster, 'hero-img', null, true)]);
+    var el = layer('detail', [bg, h('div.dt-shade'),
       h('div.dt-poster', [U.img(x.poster, 'poster-img', x.title, true)]), body]);
     var episodes = [], season = null, currentEp = null;
     var stremio = Lib.source && Lib.source.kind === 'Stremio';
+
+    // MARK: trailer in de kop (build 82, = Android/iOS en bingr.online/movie/…)
+    // Na 1,5 s zonder geluid in de achtergrond (YouTube-embed, youtube-nocookie), pas zichtbaar als hij echt speelt.
+    // Series: trailer van het nieuwste seizoen, anders die van de serie. Stopt bij afspelen, een ander scherm,
+    // de app op de achtergrond en aan het einde; speelt hij niet binnen 10 s (embed geblokkeerd), dan blijft de afbeelding.
+    var tr = { frame: null, playing: false, muted: true, started: false, looking: false, wait: null, timeout: null, duration: 0 };
+    function trailerAllowed() {
+      if (D.local('autoplayTrailers', true) === false || document.hidden) return false;
+      try { if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false; } catch (e) { }
+      var top = U.top();
+      return !!top && top.el === el && !B.player.current;
+    }
+    function trailerSend(func, args) {
+      try { tr.frame.contentWindow.postMessage(JSON.stringify({ event: 'command', func: func, args: args || [], id: 1, channel: 'widget' }), '*'); } catch (e) { }
+    }
+    function onTrailerMessage(ev) {
+      if (!tr.frame || ev.source !== tr.frame.contentWindow) return;
+      var m = null;
+      try { m = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data; } catch (e) { return; }
+      if (!m) return;
+      var state = m.event === 'onStateChange' ? m.info : (m.event === 'infoDelivery' && m.info ? m.info.playerState : null);
+      if (m.event === 'onError') { stopTrailer(); return; }
+      if (state === 1 && !tr.playing) {
+        tr.playing = true;
+        clearTimeout(tr.timeout);
+        tr.frame.className = 'dt-trailer on';
+        drawButtonsKeepFocus();
+      } else if (state === 0) stopTrailer();
+      // net vóór het einde stoppen (geen eindscherm met andere video's)
+      if (m.event === 'infoDelivery' && m.info && m.info.currentTime != null && m.info.duration) tr.duration = m.info.duration;
+      if (m.event === 'infoDelivery' && m.info && m.info.currentTime != null && tr.duration && tr.duration - m.info.currentTime < 1.2) stopTrailer();
+    }
+    function startTrailer(key) {
+      if (tr.started || !key || !trailerAllowed()) return;
+      tr.started = true;
+      var id = String(key).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
+      var f = document.createElement('iframe');
+      f.className = 'dt-trailer';
+      f.setAttribute('tabindex', '-1');
+      f.setAttribute('allow', 'autoplay; encrypted-media');
+      f.setAttribute('frameborder', '0');
+      f.src = 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&mute=1&controls=0&playsinline=1&enablejsapi=1&rel=0' +
+        '&iv_load_policy=3&disablekb=1&fs=0&modestbranding=1&cc_load_policy=0';
+      f.onload = function () {
+        // de IFrame-API stuurt pas berichten na "listening"
+        try { f.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*'); } catch (e) { }
+        trailerSend('mute');
+        trailerSend('playVideo');
+      };
+      tr.frame = f;
+      tr.muted = true;
+      window.addEventListener('message', onTrailerMessage);
+      bg.appendChild(f);
+      tr.timeout = setTimeout(function () { if (!tr.playing) stopTrailer(); }, 10000);
+    }
+    function stopTrailer() {
+      clearTimeout(tr.wait); clearTimeout(tr.timeout);
+      tr.wait = null;
+      if (!tr.frame) return;
+      var f = tr.frame, was = tr.playing;
+      trailerSend('stopVideo');
+      window.removeEventListener('message', onTrailerMessage);
+      tr.frame = null; tr.playing = false;
+      f.className = 'dt-trailer';
+      setTimeout(function () { try { f.src = 'about:blank'; } catch (e) { } if (f.parentNode) f.parentNode.removeChild(f); }, 350);
+      if (was) drawButtonsKeepFocus();
+    }
+    /** Trailer opzoeken en na 1,5 s starten (één keer per pagina). */
+    function scheduleTrailer() {
+      if (tr.started || tr.looking || D.local('autoplayTrailers', true) === false) return;
+      var newest = null;
+      if (type === 'series') episodes.forEach(function (e) { if (newest == null || e.season > newest) newest = e.season; });
+      var t0 = Date.now();
+      tr.looking = true;
+      B.ageRatings.trailer(x, type === 'series', newest).then(function (key) {
+        if (!key || !document.body.contains(el)) return;
+        tr.wait = setTimeout(function () { tr.wait = null; startTrailer(key); }, Math.max(0, 1500 - (Date.now() - t0)));
+      });
+    }
+    function trailerToggleMute() {
+      tr.muted = !tr.muted;
+      if (tr.muted) trailerSend('mute'); else { trailerSend('unMute'); trailerSend('setVolume', [100]); }
+      drawButtonsKeepFocus();
+    }
+    function onTrailerVisibility() { if (document.hidden) stopTrailer(); }
+    document.addEventListener('visibilitychange', onTrailerVisibility);
 
     function metaText(extra) {
       var parts = [];
@@ -1328,9 +1419,9 @@
       if (type === 'movie') {
         var p = D.progress(x.id);
         var label = p && p.fraction > 0.02 ? L('Resume') : L('Play');
-        buttons.appendChild(U.button(label, function () { B.player.playVOD(B.player.movieItem(x), {}); }, { primary: true, icon: 'play', autofocus: true }));
+        buttons.appendChild(U.button(label, function () { stopTrailer(); B.player.playVOD(B.player.movieItem(x), {}); }, { primary: true, icon: 'play', autofocus: true }));
         if (p && p.fraction > 0.02) {
-          buttons.appendChild(U.button(L('Watch from the beginning'), function () { B.player.open(B.player.movieItem(x), { resume: 0 }); }, { icon: 'replay' }));
+          buttons.appendChild(U.button(L('Watch from the beginning'), function () { stopTrailer(); B.player.open(B.player.movieItem(x), { resume: 0 }); }, { icon: 'replay' }));
           buttons.appendChild(h('div.dt-progress', [h('div.card-progress.inline', [h('div', { style: { width: Math.round(p.fraction * 100) + '%' } })]),
             h('span.dim', L('%d min left', Math.max(1, Math.round((p.position / p.fraction - p.position) / 60))))]));
         }
@@ -1341,10 +1432,12 @@
         buttons.appendChild(U.button(lbl, function () { if (currentEp) playEpisode(currentEp); }, { primary: true, icon: 'play', autofocus: true }));
         if (stremio && ep) buttons.appendChild(U.button(L('Choose a source'), function () { if (currentEp) chooseStream(B.player.episodeItem(currentEp, x), { episodes: episodes, series: x }); }, { icon: 'layers' }));
       }
+      if (tr.playing) buttons.appendChild(U.button(tr.muted ? L('Sound on') : L('Sound off'), trailerToggleMute, { icon: tr.muted ? 'volumeOff' : 'volume' }));
       if (versions.length) buttons.appendChild(U.button(L('Other language'), chooseVersion, { icon: 'globe' }));
       buttons.appendChild(listButton());
     }
     function playEpisode(ep) {
+      stopTrailer();
       B.player.playVOD(B.player.episodeItem(ep, x), { episodes: episodes, series: x });
     }
     function epWatched(ep) {
@@ -1414,6 +1507,7 @@
         var info = r.info || {};
         if (info.plot && !x.plot) plot.textContent = info.plot;
         if (info.genre) metaText([info.genre]);
+        scheduleTrailer();
         if (!episodes.length) { U.clear(epsTrack); epsTrack.appendChild(h('div.state.dim', L('No episodes found'))); return; }
         currentEp = pickCurrent();
         season = currentEp ? currentEp.season : seasons()[0];
@@ -1452,10 +1546,13 @@
           }
         }
       },
-      onBack: function () { U.pop(); return true; }
+      onHide: function () { stopTrailer(); },
+      onBack: function () { U.pop(); return true; },
+      destroy: function () { stopTrailer(); document.removeEventListener('visibilitychange', onTrailerVisibility); }
     };
     loadEpisodes();
     loadMovieInfo();
+    if (type === 'movie') scheduleTrailer();
     return s;
   };
 
@@ -1565,6 +1662,11 @@
       section(L('Reminders'));
       var rem = B.reminders.list();
       row(L('Reminders'), String(rem.length), function () { U.push(S.remindersList()); });
+
+      // build 82: trailer zonder geluid in de kop van film- en seriepagina's (alleen op deze tv)
+      section(L('Interface'));
+      var autoTr = D.local('autoplayTrailers', true) !== false;
+      row(L('Play trailers automatically'), onOff(autoTr), function () { D.setLocal('autoplayTrailers', !autoTr); render(); });
 
       section(L('App'));
       var lang = D.shared('appLanguage', '') || '';

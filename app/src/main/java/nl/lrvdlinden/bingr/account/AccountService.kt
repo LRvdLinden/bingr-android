@@ -6,10 +6,12 @@ import android.os.Build
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -34,6 +36,11 @@ object Account {
         private set
     var email by mutableStateOf<String?>(null)
         private set
+    /**
+     * Build 82: het account is door de beheerder geblokkeerd (Supabase `user_banned`). Het inlogscherm toont dan
+     * [bannedMessage] tot er weer iemand inlogt.
+     */
+    var blockedNotice by mutableStateOf(false)
     /** Bezig met een aanvraag (knoppen uit, spinner). */
     var busy by mutableStateOf(false)
         private set
@@ -74,6 +81,7 @@ object Account {
         val mail = session.jO("user").jS("email")?.takeIf { it.isNotEmpty() } ?: fallbackEmail ?: email
         val uid = session.jO("user").jS("id")?.takeIf { it.isNotEmpty() } ?: jwtSubject(access) ?: storedUserId
         accessToken = access; refreshToken = refresh; expiresAt = exp; email = mail; storedUserId = uid
+        blockedNotice = false
         sp?.edit()?.apply {
             putString("access_token", access); putString("refresh_token", refresh)
             putLong("expires_at", exp); if (mail != null) putString("email", mail) else remove("email")
@@ -130,6 +138,29 @@ object Account {
 
     private fun generic() = AccountException(L("Something went wrong. Please try again."))
 
+    /** Melding bij een geblokkeerd account (build 82, = iOS). */
+    val bannedMessage: String
+        get() = L("Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.")
+
+    /**
+     * Geblokkeerd account? Supabase Auth: `error_code` `user_banned` (400/403; oudere versies "User is banned" in de tekst);
+     * eigen functies mogen `error: "user_banned"` of `banned: true` geven (= iOS).
+     */
+    private fun isBanned(r: Reply): Boolean {
+        if (r.json.jB("banned") == true) return true
+        if (r.ok) return false
+        val codes = listOf("error_code", "error", "code", "reason").mapNotNull { r.json.jS(it)?.lowercase() }
+        if (codes.any { it == "user_banned" || it == "banned" || it == "account_blocked" }) return true
+        val msg = (r.json.jS("msg") ?: r.json.jS("message") ?: r.json.jS("error_description") ?: "").lowercase()
+        return msg.contains("banned")
+    }
+
+    /** Geblokkeerd (inloggen of tv-koppeling): melding laten staan en een fout met de tekst geven. */
+    private fun banned(): AccountException {
+        blockedNotice = true
+        return AccountException(bannedMessage)
+    }
+
     private suspend fun <T> working(block: suspend () -> T): T {
         busy = true
         try { return block() } finally { busy = false }
@@ -177,6 +208,7 @@ object Account {
         validate(email, password)
         val r = post("/auth/v1/token?grant_type=password", creds(email, password))
         if (r.ok) { if (!store(r.json ?: throw generic(), email.trim())) throw generic(); return@working }
+        if (isBanned(r)) throw banned()
         throw when {
             r.errorCode == "email_not_confirmed" -> AccountException(L("Confirm your email address first. Check your inbox."))
             r.errorCode == "invalid_credentials" || r.errorCode == "invalid_grant" || r.code == 400 ->
@@ -201,6 +233,12 @@ object Account {
             return RefreshResult.OFFLINE
         }
         if (r.ok && r.json != null && store(r.json)) return RefreshResult.OK
+        // build 82: geblokkeerd → lokaal uitloggen (geen logout-aanroep, die mag toch niet meer) en de melding tonen
+        if (isBanned(r)) {
+            clear()
+            withContext(Dispatchers.Main) { blockedNotice = true; AppState.signedOut() }
+            return RefreshResult.INVALID
+        }
         if (r.code == 400 || r.code == 401) { clear(); return RefreshResult.INVALID }
         return RefreshResult.OFFLINE
     }
@@ -534,6 +572,7 @@ object Account {
         val r = post("/functions/v1/device-auth", buildJsonObject {
             put("action", "poll"); put("code", c.code); put("poll_secret", c.pollSecret)
         })
+        if (isBanned(r)) throw banned()
         if (!r.ok) throw generic()
         return when (r.json.jS("status")) {
             "approved" -> r.json.jS("token_hash")?.let { TvPoll.Approved(it, r.json.jS("email")) } ?: TvPoll.Expired
@@ -544,6 +583,7 @@ object Account {
 
     suspend fun verifyTv(tokenHash: String, email: String?) {
         val r = post("/auth/v1/verify", buildJsonObject { put("type", "magiclink"); put("token_hash", tokenHash) })
+        if (isBanned(r)) throw banned()
         if (!r.ok || r.json == null || !store(r.json, email)) throw generic()
     }
 

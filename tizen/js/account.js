@@ -45,6 +45,7 @@
       user_id: user.id || jwtSubject(j.access_token) || (session && session.user_id) || null
     };
     B.store.set('auth', session);
+    blocked = false;
     return true;
   }
 
@@ -72,6 +73,32 @@
   }
   function generic() { return new AccountError(L('Something went wrong. Please try again.')); }
 
+  // MARK: geblokkeerd account (build 82, = iOS en Android)
+  /** Melding bij een geblokkeerd account. */
+  A.bannedMessage = function () {
+    return L('Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.');
+  };
+  /**
+   * Geblokkeerd? Supabase Auth: error_code "user_banned" (400/403; oudere versies "User is banned" in de tekst);
+   * eigen functies mogen error: "user_banned" of banned: true geven. r = antwoord van B.http.
+   */
+  A.isBanned = function (r) {
+    var j = (r && r.json) || {};
+    if (j.banned === true) return true;
+    if (!r || (r.status >= 200 && r.status < 300)) return false;
+    var codes = [j.error_code, j.error, j.code, j.reason];
+    for (var i = 0; i < codes.length; i++) {
+      var c = typeof codes[i] === 'string' ? codes[i].toLowerCase() : '';
+      if (c === 'user_banned' || c === 'banned' || c === 'account_blocked') return true;
+    }
+    var msg = String(j.msg || j.message || j.error_description || '').toLowerCase();
+    return msg.indexOf('banned') >= 0;
+  };
+  /** Het inlogscherm toont de melding tot er weer iemand inlogt. */
+  var blocked = false;
+  A.blockedNotice = function () { return blocked; };
+  function banned() { blocked = true; return new AccountError(A.bannedMessage(), 'banned'); }
+
   /** Sessie vernieuwen: 'ok' | 'invalid' (uitgelogd) | 'offline'. Nooit twee tegelijk (refresh tokens zijn eenmalig). */
   A.refresh = function () {
     if (refreshing) return refreshing;
@@ -81,6 +108,8 @@
       // intussen uitgelogd of met een ander account ingelogd: dit antwoord hoort bij een oude sessie
       if (!session || session.refresh_token !== token) return session ? 'ok' : 'invalid';
       if (r.ok && storeSession(r.json)) return 'ok';
+      // build 82: geblokkeerd → lokaal uitloggen (geen logout-aanroep) en op het inlogscherm de melding tonen
+      if (A.isBanned(r)) { blocked = true; clear(); return 'invalid'; }
       if (r.status === 400 || r.status === 401) { clear(); return 'invalid'; }
       return 'offline';
     }, function () { return 'offline'; }).then(function (res) { refreshing = null; return res; });
@@ -133,6 +162,7 @@
   };
   A.pollTv = function (c) {
     return post('/functions/v1/device-auth', { action: 'poll', code: c.code, poll_secret: c.pollSecret }).then(function (r) {
+      if (A.isBanned(r)) throw banned();
       if (!r.ok) throw generic();
       var j = r.json || {};
       if (j.status === 'approved') return j.token_hash ? { status: 'approved', tokenHash: j.token_hash, email: j.email } : { status: 'expired' };
@@ -141,6 +171,7 @@
   };
   A.verifyTv = function (tokenHash, email) {
     return post('/auth/v1/verify', { type: 'magiclink', token_hash: tokenHash }).then(function (r) {
+      if (A.isBanned(r)) throw banned();
       if (!r.ok || !storeSession(r.json, email)) throw generic();
     });
   };

@@ -817,7 +817,12 @@
   "Statistics are not available yet. Please try again later.": "الإحصائيات غير متاحة بعد. يرجى المحاولة لاحقًا.",
   "Support": "الدعم",
   "Help": "مساعدة",
-  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "لديك أسئلة أو مشكلات؟ امسح رمز QR بكاميرا هاتفك لفتح صفحة دعم Bingr."
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "لديك أسئلة أو مشكلات؟ امسح رمز QR بكاميرا هاتفك لفتح صفحة دعم Bingr.",
+  "Sound on": "تشغيل الصوت",
+  "Sound off": "كتم الصوت",
+  "Play trailers automatically": "تشغيل الإعلانات تلقائيًا",
+  "Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.": "تم حظر حسابك. تلقيت رسالة بريد إلكتروني توضح السبب ومدة الحظر. أسئلة؟ تفضل بزيارة support.bingr.online.",
+  "Muted, on movie and series pages. Not on metered connections or with animations off.": "بدون صوت، في صفحات الأفلام والمسلسلات. ليس على الاتصالات المحدودة أو عند إيقاف الرسوم المتحركة."
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -1637,7 +1642,12 @@
   "Statistics are not available yet. Please try again later.": "Statistiken sind noch nicht verfügbar. Bitte versuche es später erneut.",
   "Support": "Support",
   "Help": "Hilfe",
-  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Fragen oder Probleme? Scanne den QR-Code mit der Kamera deines Handys, um die Support-Seite von Bingr zu öffnen."
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Fragen oder Probleme? Scanne den QR-Code mit der Kamera deines Handys, um die Support-Seite von Bingr zu öffnen.",
+  "Sound on": "Ton an",
+  "Sound off": "Ton aus",
+  "Play trailers automatically": "Trailer automatisch abspielen",
+  "Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.": "Dein Konto wurde gesperrt. Du hast eine E-Mail mit dem Grund und der Dauer erhalten. Fragen? Besuche support.bingr.online.",
+  "Muted, on movie and series pages. Not on metered connections or with animations off.": "Stumm, auf Film- und Serienseiten. Nicht bei getakteten Verbindungen oder ausgeschalteten Animationen."
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -2457,7 +2467,12 @@
   "Statistics are not available yet. Please try again later.": "Las estadísticas aún no están disponibles. Inténtalo más tarde.",
   "Support": "Soporte",
   "Help": "Ayuda",
-  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "¿Preguntas o problemas? Escanea el código QR con la cámara de tu móvil para abrir la página de soporte de Bingr."
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "¿Preguntas o problemas? Escanea el código QR con la cámara de tu móvil para abrir la página de soporte de Bingr.",
+  "Sound on": "Activar sonido",
+  "Sound off": "Silenciar",
+  "Play trailers automatically": "Reproducir tráileres automáticamente",
+  "Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.": "Tu cuenta ha sido bloqueada. Has recibido un correo con el motivo y hasta cuándo. ¿Preguntas? Visita support.bingr.online.",
+  "Muted, on movie and series pages. Not on metered connections or with animations off.": "Sin sonido, en las páginas de películas y series. No con conexiones de uso medido ni con las animaciones desactivadas."
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -3277,7 +3292,12 @@
   "Statistics are not available yet. Please try again later.": "Les statistiques ne sont pas encore disponibles. Réessayez plus tard.",
   "Support": "Assistance",
   "Help": "Aide",
-  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Des questions ou un problème ? Scannez le code QR avec l'appareil photo de votre téléphone pour ouvrir la page d'assistance de Bingr."
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Des questions ou un problème ? Scannez le code QR avec l'appareil photo de votre téléphone pour ouvrir la page d'assistance de Bingr.",
+  "Sound on": "Activer le son",
+  "Sound off": "Couper le son",
+  "Play trailers automatically": "Lire les bandes-annonces automatiquement",
+  "Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.": "Votre compte a été bloqué. Vous avez reçu un e-mail indiquant la raison et la durée. Des questions ? Rendez-vous sur support.bingr.online.",
+  "Muted, on movie and series pages. Not on metered connections or with animations off.": "Sans le son, sur les pages des films et séries. Pas sur une connexion limitée ni avec les animations désactivées."
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -4097,7 +4117,12 @@
   "Statistics are not available yet. Please try again later.": "Le statistiche non sono ancora disponibili. Riprova più tardi.",
   "Support": "Assistenza",
   "Help": "Aiuto",
-  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Domande o problemi? Scansiona il codice QR con la fotocamera del telefono per aprire la pagina di assistenza di Bingr."
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Domande o problemi? Scansiona il codice QR con la fotocamera del telefono per aprire la pagina di assistenza di Bingr.",
+  "Sound on": "Audio attivo",
+  "Sound off": "Audio disattivato",
+  "Play trailers automatically": "Riproduci trailer automaticamente",
+  "Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.": "Il tuo account è stato bloccato. Hai ricevuto un'email con il motivo e la durata. Domande? Vai su support.bingr.online.",
+  "Muted, on movie and series pages. Not on metered connections or with animations off.": "Senza audio, nelle pagine di film e serie. Non con connessioni a consumo o con le animazioni disattivate."
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -4917,7 +4942,12 @@
   "Statistics are not available yet. Please try again later.": "Statistieken zijn nog niet beschikbaar. Probeer het later opnieuw.",
   "Support": "Support",
   "Help": "Hulp",
-  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Vragen of problemen? Scan de QR-code met de camera van je telefoon om de supportpagina van Bingr te openen."
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Vragen of problemen? Scan de QR-code met de camera van je telefoon om de supportpagina van Bingr te openen.",
+  "Sound on": "Geluid aan",
+  "Sound off": "Geluid uit",
+  "Play trailers automatically": "Trailers automatisch afspelen",
+  "Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.": "Je account is geblokkeerd. Je hebt een e-mail gekregen met de reden en tot wanneer. Vragen? Ga naar support.bingr.online.",
+  "Muted, on movie and series pages. Not on metered connections or with animations off.": "Zonder geluid, op film- en seriepagina's. Niet bij een verbinding met datalimiet of als animaties uit staan."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -5737,7 +5767,12 @@
   "Statistics are not available yet. Please try again later.": "Statystyki nie są jeszcze dostępne. Spróbuj ponownie później.",
   "Support": "Pomoc techniczna",
   "Help": "Pomoc",
-  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Pytania lub problemy? Zeskanuj kod QR aparatem telefonu, aby otworzyć stronę pomocy Bingr."
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Pytania lub problemy? Zeskanuj kod QR aparatem telefonu, aby otworzyć stronę pomocy Bingr.",
+  "Sound on": "Włącz dźwięk",
+  "Sound off": "Wyłącz dźwięk",
+  "Play trailers automatically": "Automatycznie odtwarzaj zwiastuny",
+  "Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.": "Twoje konto zostało zablokowane. Otrzymałeś e-mail z powodem i datą zakończenia blokady. Pytania? Wejdź na support.bingr.online.",
+  "Muted, on movie and series pages. Not on metered connections or with animations off.": "Bez dźwięku, na stronach filmów i seriali. Nie przy połączeniu taryfowym ani przy wyłączonych animacjach."
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -6557,7 +6592,12 @@
   "Statistics are not available yet. Please try again later.": "As estatísticas ainda não estão disponíveis. Tente novamente mais tarde.",
   "Support": "Suporte",
   "Help": "Ajuda",
-  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Dúvidas ou problemas? Lê o código QR com a câmara do telemóvel para abrir a página de suporte do Bingr."
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Dúvidas ou problemas? Lê o código QR com a câmara do telemóvel para abrir a página de suporte do Bingr.",
+  "Sound on": "Ligar som",
+  "Sound off": "Desligar som",
+  "Play trailers automatically": "Reproduzir trailers automaticamente",
+  "Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.": "A tua conta foi bloqueada. Recebeste um e-mail com o motivo e até quando. Dúvidas? Vai a support.bingr.online.",
+  "Muted, on movie and series pages. Not on metered connections or with animations off.": "Sem som, nas páginas de filmes e séries. Não em ligações limitadas nem com as animações desativadas."
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -7377,7 +7417,12 @@
   "Statistics are not available yet. Please try again later.": "İstatistikler henüz kullanılamıyor. Lütfen daha sonra tekrar deneyin.",
   "Support": "Destek",
   "Help": "Yardım",
-  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Soruların veya sorunların mı var? Bingr destek sayfasını açmak için QR kodunu telefonunun kamerasıyla tara."
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Soruların veya sorunların mı var? Bingr destek sayfasını açmak için QR kodunu telefonunun kamerasıyla tara.",
+  "Sound on": "Sesi aç",
+  "Sound off": "Sesi kapat",
+  "Play trailers automatically": "Fragmanları otomatik oynat",
+  "Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.": "Hesabın engellendi. Nedenini ve ne zamana kadar sürdüğünü içeren bir e-posta aldın. Sorun mu var? support.bingr.online adresine git.",
+  "Muted, on movie and series pages. Not on metered connections or with animations off.": "Sessiz, film ve dizi sayfalarında. Sınırlı bağlantılarda veya animasyonlar kapalıyken değil."
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -8197,6 +8242,11 @@
   "Statistics are not available yet. Please try again later.": "统计暂不可用，请稍后再试。",
   "Support": "支持",
   "Help": "帮助",
-  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "有问题？用手机相机扫描二维码，打开 Bingr 支持页面。"
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "有问题？用手机相机扫描二维码，打开 Bingr 支持页面。",
+  "Sound on": "打开声音",
+  "Sound off": "关闭声音",
+  "Play trailers automatically": "自动播放预告片",
+  "Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.": "你的账户已被封禁。你已收到一封说明原因和封禁期限的电子邮件。有疑问？请访问 support.bingr.online。",
+  "Muted, on movie and series pages. Not on metered connections or with animations off.": "静音播放，在电影和剧集页面。按流量计费的网络或关闭动画时不播放。"
  }
 }

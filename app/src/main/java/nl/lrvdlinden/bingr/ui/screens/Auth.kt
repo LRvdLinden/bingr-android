@@ -218,7 +218,8 @@ private fun AuthEmailCard(onBack: (() -> Unit)?) {
                 }
             )
         }
-        error?.let { Text(it, color = AuthError, fontSize = tsp(14)) }
+        // build 82: geblokkeerd account (ook na uitloggen door een blokkade tijdens een sessie)
+        (error ?: Account.bannedMessage.takeIf { Account.blockedNotice })?.let { Text(it, color = AuthError, fontSize = tsp(14)) }
         info?.let { Text(it, color = Theme.green, fontSize = tsp(14)) }
         AuthRedButton(
             when (mode) { AuthMode.SIGN_IN -> L("Sign In"); AuthMode.SIGN_UP -> L("Create account"); AuthMode.RESET -> L("Send reset link") },
@@ -364,7 +365,9 @@ private fun AuthTv() {
                     Spacer(Modifier.width(10.dp))
                     Text(L("Waiting for confirmation…"), color = Theme.secondary, fontSize = tsp(13))
                 }
-                tvError?.let { Text(it, color = AuthError, fontSize = tsp(13), textAlign = TextAlign.Center) }
+                (Account.bannedMessage.takeIf { Account.blockedNotice } ?: tvError)?.let {
+                    Text(it, color = AuthError, fontSize = tsp(13), textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 520.dp))
+                }
             }
             // OR
             Column(Modifier.fillMaxHeight().padding(horizontal = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
