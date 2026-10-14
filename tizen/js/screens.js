@@ -379,7 +379,8 @@
 
   var NAV = [
     ['search', 'search', 'Search'], ['home', 'home', 'Home'], ['live', 'live', 'Live TV'], ['movies', 'movies', 'Movies'],
-    ['series', 'series', 'Series'], ['categories', 'grid', 'Categories'], ['mylist', 'list', 'My List'],
+    // build 86: Categorieën zit niet meer in het menu, maar in het profielmenu en als rij op Home
+    ['series', 'series', 'Series'], ['mylist', 'list', 'My List'],
     ['settings', 'gear', 'Settings']
   ];
   S.main = function () {
@@ -421,7 +422,9 @@
       if (list.length) { U.focus(list[0]); return true; }
       return false;
     }
+    var previous = null;
     function show(key, focusIn) {
+      if (current && current !== key) previous = current;
       if (current && pages[current] && pages[current].onHide) pages[current].onHide();
       Object.keys(items).forEach(function (k) { items[k].classList.toggle('active', k === key); });
       current = key;
@@ -454,6 +457,8 @@
         }
         var pg = pages[current];
         if (pg && pg.onBack && pg.onBack()) return true;
+        // pagina zonder menu-item (Categorieën, build 86): terug naar waar je vandaan kwam
+        if (!items[current]) { show(previous && items[previous] ? previous : 'home', true); return true; }
         U.focus(items[current] || items.home);
         return true;
       },
@@ -474,9 +479,11 @@
         var pg = pages[current];
         if (pg && pg.refresh) pg.refresh();
         var lost = !U.focused || !document.body.contains(U.focused);
-        if ((wantContent || lost) && U.top() === screen) { if (focusContent()) wantContent = false; else if (lost) U.focus(items[current]); }
+        if ((wantContent || lost) && U.top() === screen) { if (focusContent()) wantContent = false; else if (lost) U.focus(items[current] || items.home); }
       }
     };
+    // build 86: pagina's (Categorieën) openen vanuit de inhoud, zoals de rij op Home
+    S.goPage = function (key) { if (el.parentNode) show(key, true); };
     // nieuwe bibliotheek: pas tekenen als de afstandsbediening even stil is (scrollen gaat voor)
     var libPending = false;
     var offs = [];
@@ -660,6 +667,8 @@
           return out;
         }
       };
+      // build 86: ankerpunt "Nu live" voor de rij Categorieën (ook als de rij Nu live uit staat of leeg is)
+      b['@live'] = function () { return h('div.live-anchor'); };
       D.collectionsFor(B.app.profile.id).forEach(function (c) {
         b['collection:' + c.id] = function () {
           var items = Lib.collectionItems(c, 40);
@@ -676,11 +685,61 @@
       if (layout) {
         var known = {};
         o = [];
-        layout.forEach(function (r) { if (r && r.key && b[r.key]) { known[r.key] = true; if (r.visible !== false) o.push(r.key); } });
+        layout.forEach(function (r) {
+          if (!r || !r.key || !b[r.key] || r.key === '@live') return;
+          known[r.key] = true;
+          if (r.visible !== false) o.push(r.key);
+          if (r.key === 'live') o.push('@live');
+        });
         colls.forEach(function (k) { if (!known[k]) o.push(k); });
         if (!known.categories && o.indexOf('categories') < 0) o.push('categories');
-      }
+        if (!known.live) {
+          // geen "live" in de indeling: op de standaardplek (na Verder kijken, Mijn lijst en Top 10)
+          var at = 0;
+          ['continue', 'mylist', 'top10'].forEach(function (k) { var j = o.indexOf(k); if (j >= at) at = j + 1; });
+          o.splice(at, 0, '@live');
+        }
+      } else o.splice(o.indexOf('live') + 1, 0, '@live');
       return o;
+    }
+    /** Rij "Categorieën" (build 86) aan? Per profiel in de startscherm-indeling (sleutel categorytiles), standaard aan. */
+    function tilesOn() {
+      var layout = D.homeLayout(), on = true;
+      if (layout) layout.forEach(function (r) { if (r && r.key === 'categorytiles' && r.visible === false) on = false; });
+      return on;
+    }
+    /**
+     * De rij "Categorieën" precies vijf getoonde rijen onder "Nu live" zetten; zijn er daarna minder, dan onderaan.
+     * Telt de rijen zoals ze in de pagina staan (Top 10 = twee rijen, lege rijen tellen niet).
+     */
+    function positionCats() {
+      var cat = blocks.categorytiles && blocks.categorytiles[0];
+      if (!cat) return;
+      var end = track.querySelector('.page-end');
+      var anchor = track.querySelector('.live-anchor');
+      var ref = end, n = 0;
+      if (anchor) {
+        for (var x = anchor.nextSibling; x && x !== end; x = x.nextSibling) {
+          if (x === cat || !x.classList || !x.classList.contains('row-block') || x.classList.contains('hero')) continue;
+          if (++n === 5) { ref = x.nextSibling; break; }
+        }
+      }
+      if (ref !== cat && cat.nextSibling !== ref) track.insertBefore(cat, ref);
+    }
+    function buildCats() {
+      var old = blocks.categorytiles || [];
+      var f = U.focused, fKey = f && old.some(function (o) { return o.contains(f); }) ? f._key : null;
+      old.forEach(function (o) { if (o.parentNode) o.parentNode.removeChild(o); });
+      var row = tilesOn() && S.categoriesRow ? S.categoriesRow() : null;
+      blocks.categorytiles = row ? [row] : [];
+      if (!row) return;
+      row._row = 'categorytiles';
+      track.insertBefore(row, track.querySelector('.page-end'));
+      positionCats();
+      if (fKey) {
+        var c = row.querySelectorAll('.f');
+        for (var i = 0; i < c.length; i++) if (c[i]._key === fKey) { U.focus(c[i], true); break; }
+      }
     }
     function nodesOf(r) { return r == null ? [] : (Array.isArray(r) ? r : [r]); }
     /** Alles opnieuw: de bovenste rijen meteen, de rest in stukjes (scrollen blijft vloeiend). */
@@ -708,6 +767,7 @@
           holder.forEach(function (n) { n._row = k; track.insertBefore(n, end); });
         }
         if (i < keys.length) B.idle(step, 300);
+        else buildCats();
       }
       step();
     }
@@ -736,7 +796,19 @@
           if (hit) U.focus(hit, true);
         }
       });
+      positionCats();
     }
+    // nieuwe genres binnen (TMDB): de rij Categorieën opnieuw als de afstandsbediening stil is
+    var catPending = false;
+    var offCats = B.on('ageRatings', function () {
+      if (catPending || !blocks.categorytiles) return;
+      catPending = true;
+      B.whenQuiet(function () {
+        catPending = false;
+        if (document.body.contains(scroller) && blocks.categorytiles) buildCats();
+      }, 2500);
+    });
+    pg.destroy = function () { offCats(); };
     pg.refresh = render;
     pg.onData = function () { pg.stale = false; refreshRows(['continue', 'mylist', 'live']); };
     pg.onEpg = function () { refreshRows(['live']); };
@@ -1192,6 +1264,9 @@
     if (others.length) sep();
     item(U.icon('people'), L('Switch profile'), function () { B.app.switchProfile(); });
     item(U.icon('list'), L('My List'), function () { go('mylist'); });
+    // build 86: Categorieën (eerst een menu-item links)
+    var lib = Lib.lib;
+    if (lib.movies.length || lib.series.length) item(U.icon('grid'), L('Categories'), function () { go('categories'); });
     item(U.icon('gear'), L('Settings'), function () { go('settings'); });
     if (A.isSignedIn()) {
       item(U.icon('person'), L('Account & devices'), function () { U.push(S.devices()); });

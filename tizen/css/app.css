@@ -656,3 +656,18 @@ html.mv-hole .layer.multiview { background: transparent; }
 .cp-gridbox .vgrid { height: 740px; }
 .cp-gridbox .vlist-track { margin: 20px 0 0 16px; }
 .cp-gridbox .state { width: 100%; padding-top: 40px; }
+
+/* build 86: rij "Categorieën" op Home — kleinere tegels, als laatste "Alle categorieën" */
+.cat-row .row-track { align-items: flex-start; }
+.cat-row .cat-tile { flex: 0 0 auto; width: 320px; height: 180px; margin: 0 22px 0 0; border-radius: 10px; }
+.cat-row .cat-fan-img { top: 26px; width: 92px; height: 138px; border-radius: 6px; }
+.cat-row .cat-fan-img.p0 { right: 12px; }
+.cat-row .cat-fan-img.p1 { right: 60px; }
+.cat-row .cat-fan-img.p2 { right: 108px; }
+.cat-row .cat-text { left: 18px; bottom: 14px; width: 200px; }
+.cat-row .cat-name { font-size: 26px; max-height: 58px; }
+.cat-row .cat-count { font-size: 19px; margin-top: 4px; }
+.cat-all { background: linear-gradient(135deg, #3a3a3a 0%, #141414 100%); box-shadow: inset 0 0 0 2px rgba(255,255,255,0.18); }
+.cat-all-in { position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; text-align: center; }
+.cat-all-icon { width: 40px; height: 40px; margin-bottom: 8px; color: #fff; }

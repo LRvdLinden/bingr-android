@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -157,9 +158,34 @@ class CategoryMembers(val movies: List<Movie>, val series: List<Series>) {
     }
 }
 
+/** Eén tegel in de rij op Home. */
+class CategoryTileData(val ref: CategoryRef, val title: String, val members: CategoryMembers, val colors: List<Color>) {
+    val key: String get() = ref.genre?.let { "g|$it" } ?: ("s|" + (ref.server ?: ""))
+}
+
 class CategoryIndex(val genres: Map<String, CategoryMembers>, val server: List<Pair<String, CategoryMembers>>) {
     fun members(ref: CategoryRef): CategoryMembers? =
         ref.genre?.let { genres[it] } ?: ref.server?.let { s -> server.firstOrNull { it.first == s }?.second }
+
+    /** Aantal categorieën in het overzicht (Alles): genres en servercategorieën met minstens één titel. */
+    fun visibleCount(): Int = genres.values.count { it.count(Filter.ALL) > 0 } + server.count { it.second.count(Filter.ALL) > 0 }
+
+    /**
+     * Build 86: tegels voor de rij "Categorieën" op Home: de best gevulde genres eerst, aangevuld met de grootste
+     * categorieën van de server als er minder dan [limit] genres zijn.
+     */
+    fun topTiles(limit: Int): List<CategoryTileData> {
+        val out = ArrayList<CategoryTileData>()
+        Genres.all.mapNotNull { g -> genres[g.slug]?.takeIf { it.count(Filter.ALL) > 0 }?.let { g to it } }
+            .sortedByDescending { it.second.count(Filter.ALL) }
+            .take(limit)
+            .forEach { (g, m) -> out.add(CategoryTileData(CategoryRef(g.slug, null), L(g.name), m, g.colors)) }
+        if (out.size < limit) server.filter { it.second.count(Filter.ALL) > 0 }
+            .sortedByDescending { it.second.count(Filter.ALL) }
+            .take(limit - out.size)
+            .forEach { (name, m) -> out.add(CategoryTileData(CategoryRef(null, name), ContentLanguage.displayTitle(name), m, Genres.serverColors(name))) }
+        return out
+    }
 
     companion object {
         fun build(lib: Library): CategoryIndex {
@@ -244,8 +270,8 @@ fun rememberCategoryIndex(): CategoryIndex? {
 // MARK: overzicht
 
 /**
- * Overzicht "Categorieën". [asTab] = tabblad op tv (geen terugknop); anders een scherm boven Home/Films/Series
- * (telefoon/tablet: chip "Categorieën" in de kop).
+ * Overzicht "Categorieën". [asTab] = tabblad (niet meer gebruikt sinds build 86); anders een scherm erboven,
+ * geopend via Mijn Bingr → Categorieën of de rij "Categorieën" op Home.
  */
 @Composable
 fun CategoriesScreen(initial: Filter, asTab: Boolean = false, onClose: () -> Unit = {}) {
@@ -352,11 +378,14 @@ private fun Pill(label: String, selected: Boolean, focus: androidx.compose.ui.fo
 
 /** Tegel: kleurverloop per genre, een waaier van posters rechts, naam en aantal linksonder. Op tv groter met witte rand. */
 @Composable
-private fun CategoryTile(title: String, count: Int, posters: List<String>, colors: List<Color>, onClick: () -> Unit) {
+private fun CategoryTile(
+    title: String, count: Int, posters: List<String>, colors: List<Color>,
+    modifier: Modifier = Modifier.fillMaxWidth(), compact: Boolean = false, onClick: () -> Unit,
+) {
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(tvs(10))
+    val shape = RoundedCornerShape(tvs(if (compact) 8 else 10))
     BoxWithConstraints(
-        Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+        modifier.aspectRatio(16f / 9f)
             .onFocusChanged { focused = it.isFocused }
             .focusLift(1.06f) { onClick() }
             .clip(shape)
@@ -383,12 +412,12 @@ private fun CategoryTile(title: String, count: Int, posters: List<String>, color
                 Brush.horizontalGradient(0f to colors.first().copy(alpha = 0.92f), 0.55f to colors.first().copy(alpha = 0.35f), 0.8f to Color.Transparent)
             )
         )
-        Column(Modifier.align(Alignment.BottomStart).zIndex(11f).padding(tvs(12))) {
+        Column(Modifier.align(Alignment.BottomStart).zIndex(11f).padding(tvs(if (compact) 10 else 12))) {
             Text(
-                title, color = Color.White, fontSize = tsp(17), fontWeight = FontWeight.Black, maxLines = 2,
-                overflow = TextOverflow.Ellipsis, lineHeight = tsp(19), modifier = Modifier.fillMaxWidth(0.62f)
+                title, color = Color.White, fontSize = tsp(if (compact) 15 else 17), fontWeight = FontWeight.Black, maxLines = 2,
+                overflow = TextOverflow.Ellipsis, lineHeight = tsp(if (compact) 17 else 19), modifier = Modifier.fillMaxWidth(0.62f)
             )
-            Text(countText(count), color = Color.White.copy(alpha = 0.8f), fontSize = tsp(12), fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(countText(count), color = Color.White.copy(alpha = 0.8f), fontSize = tsp(if (compact) 11 else 12), fontWeight = FontWeight.Medium, maxLines = 1)
         }
     }
 }
@@ -551,14 +580,52 @@ private fun CategoryPoster(t: DetailTarget) {
     if (collect) AddToCollectionDialog(Collections.ref(t), t.title, t.poster) { collect = false }
 }
 
-/** Chip "Categorieën" in de kop van Home/Films/Series (telefoon en tablet). */
+// MARK: rij op Home (build 86)
+
+/**
+ * Rij "Categorieën" op Home (build 86): kleinere tegels (kleurverloop, waaier van posters, naam en aantal) voor de
+ * best gevulde categorieën, als laatste tegel "Alle categorieën" naar het overzicht. Staat vijf rijen onder "Nu live"
+ * (zie HomeScreen); aan/uit per profiel via Mijn Bingr → Startscherm (sleutel [HomeLayouts.CATEGORY_TILES]).
+ */
 @Composable
-fun CategoriesChip(kind: Filter) {
-    val shape = RoundedCornerShape(50)
-    Text(
-        L("Categories"), color = Color.White, fontSize = tsp(13), fontWeight = FontWeight.SemiBold, maxLines = 1,
-        modifier = Modifier.focusLift(1.05f) { ScreensNav.push(ScreenEntry.Categories(kind)) }
-            .clip(shape).border(1.dp, Color.White.copy(alpha = 0.6f), shape)
-            .padding(horizontal = 12.dp, vertical = 5.dp)
-    )
+fun CategoriesHomeRow() {
+    val index = rememberCategoryIndex() ?: return
+    val tiles = remember(index) { index.topTiles(10) }
+    if (tiles.isEmpty()) return
+    val total = remember(index) { index.visibleCount() }
+    val openAll = { ScreensNav.push(ScreenEntry.Categories(Filter.ALL)) }
+    val width = tvs(if (AppState.isTV) 190 else 200)
+    MediaRow(L("Categories"), onSeeAll = openAll) {
+        items(tiles, key = { it.key }) { t ->
+            CategoryTile(t.title, t.members.count(Filter.ALL), t.members.posters(Filter.ALL), t.colors, Modifier.width(width), compact = true) {
+                ScreensNav.push(ScreenEntry.CategoryPage(t.ref, Filter.ALL))
+            }
+        }
+        item(key = "all") { AllCategoriesTile(total, Modifier.width(width), onClick = openAll) }
+    }
+}
+
+/** Laatste tegel van de rij: "Alle categorieën" met het aantal, naar het overzicht. */
+@Composable
+private fun AllCategoriesTile(count: Int, modifier: Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(tvs(8))
+    Box(
+        modifier.aspectRatio(16f / 9f)
+            .onFocusChanged { focused = it.isFocused }
+            .focusLift(1.06f) { onClick() }
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(Color(0xFF3A3A3A), Color(0xFF141414))))
+            .border(if (focused) 2.5.dp else 1.dp, if (focused) Color.White else Color.White.copy(alpha = 0.18f), shape),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(tvs(4))) {
+            Icon(Icons.Default.GridView, null, tint = Color.White, modifier = Modifier.size(tvs(26)))
+            Text(L("All categories"), color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.Black, maxLines = 1)
+            if (count > 0) Text(
+                if (count == 1) L("1 category") else L("%d categories", count),
+                color = Color.White.copy(alpha = 0.7f), fontSize = tsp(11), maxLines = 1
+            )
+        }
+    }
 }

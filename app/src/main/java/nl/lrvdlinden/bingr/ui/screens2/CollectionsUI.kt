@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
@@ -429,8 +430,15 @@ fun CollectionEditScreen(existing: BingrCollection?, onClose: () -> Unit, initia
 @Composable
 fun HomeScreenSettings(onClose: () -> Unit) {
     val tv = AppState.isTV
-    var rows by remember { mutableStateOf(HomeLayouts.effective(Store.activeHomeLayout)) }
-    fun commit(n: List<HomeRow>) { rows = n; HomeLayouts.save(n) }
+    // build 86: de rij "Categorieën" staat altijd vijf rijen onder "Nu live": alleen aan/uit, apart van de volgorde
+    val initial = remember { HomeLayouts.effective(Store.activeHomeLayout) }
+    var rows by remember { mutableStateOf(initial.filter { it.key != HomeLayouts.CATEGORY_TILES }) }
+    var tiles by remember { mutableStateOf(initial.firstOrNull { it.key == HomeLayouts.CATEGORY_TILES } ?: HomeRow(HomeLayouts.CATEGORY_TILES)) }
+    fun saveAll(n: List<HomeRow>) {
+        val i = n.indexOfFirst { it.key == "live" }
+        HomeLayouts.save(if (i < 0) n + tiles else n.take(i + 1) + tiles + n.drop(i + 1))
+    }
+    fun commit(n: List<HomeRow>) { rows = n; saveAll(n) }
     fun move(i: Int, step: Int) {
         val j = i + step
         if (i !in rows.indices || j !in rows.indices) return
@@ -463,7 +471,7 @@ fun HomeScreenSettings(onClose: () -> Unit) {
                                     modifier = Modifier.size(tvs(22)).pointerInput(rows.size) {
                                         detectDragGestures(
                                             onDragStart = { dragIndex = i; dragOffset = 0f },
-                                            onDragEnd = { if (dragIndex >= 0) HomeLayouts.save(rows); dragIndex = -1; dragOffset = 0f },
+                                            onDragEnd = { if (dragIndex >= 0) saveAll(rows); dragIndex = -1; dragOffset = 0f },
                                             onDragCancel = { dragIndex = -1; dragOffset = 0f },
                                             onDrag = { change, amount ->
                                                 change.consume()
@@ -493,6 +501,18 @@ fun HomeScreenSettings(onClose: () -> Unit) {
                     }
                     if (i < rows.size - 1) S2Divider()
                 }
+            }
+        }
+        item {
+            S2Section(footer = L("Always 5 rows below the Live TV row.")) {
+                S2Row(HomeLayouts.title(HomeLayouts.CATEGORY_TILES),
+                    icon = Icons.Default.GridView,
+                    tint = if (tiles.visible) Color.White else Theme.secondary,
+                    onClick = { tiles = tiles.copy(visible = !tiles.visible); saveAll(rows) },
+                    trailing = {
+                        Icon(if (tiles.visible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null,
+                            tint = if (tiles.visible) Theme.red else Theme.secondary, modifier = Modifier.size(tvs(20)))
+                    })
             }
         }
     }

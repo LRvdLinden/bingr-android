@@ -851,7 +851,10 @@
   "Soap": "مسلسل درامي",
   "Thriller": "إثارة",
   "War": "حرب",
-  "Western": "غربي"
+  "Western": "غربي",
+  "1 category": "فئة واحدة",
+  "%d categories": "%d فئة",
+  "Always 5 rows below the Live TV row.": "دائمًا بعد خمسة صفوف أسفل صف البث المباشر."
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -1705,7 +1708,10 @@
   "Soap": "Soap",
   "Thriller": "Thriller",
   "War": "Krieg",
-  "Western": "Western"
+  "Western": "Western",
+  "1 category": "1 Kategorie",
+  "%d categories": "%d Kategorien",
+  "Always 5 rows below the Live TV row.": "Immer 5 Reihen unter der Live-TV-Reihe."
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -2559,7 +2565,10 @@
   "Soap": "Telenovela",
   "Thriller": "Suspense",
   "War": "Bélica",
-  "Western": "Western"
+  "Western": "Western",
+  "1 category": "1 categoría",
+  "%d categories": "%d categorías",
+  "Always 5 rows below the Live TV row.": "Siempre 5 filas debajo de la fila de TV en directo."
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -3413,7 +3422,10 @@
   "Soap": "Feuilleton",
   "Thriller": "Thriller",
   "War": "Guerre",
-  "Western": "Western"
+  "Western": "Western",
+  "1 category": "1 catégorie",
+  "%d categories": "%d catégories",
+  "Always 5 rows below the Live TV row.": "Toujours 5 rangées sous la rangée TV en direct."
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -4267,7 +4279,10 @@
   "Soap": "Soap opera",
   "Thriller": "Thriller",
   "War": "Guerra",
-  "Western": "Western"
+  "Western": "Western",
+  "1 category": "1 categoria",
+  "%d categories": "%d categorie",
+  "Always 5 rows below the Live TV row.": "Sempre 5 file sotto la fila TV in diretta."
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -5121,7 +5136,10 @@
   "Soap": "Soap",
   "Thriller": "Thriller",
   "War": "Oorlog",
-  "Western": "Western"
+  "Western": "Western",
+  "1 category": "1 categorie",
+  "%d categories": "%d categorieën",
+  "Always 5 rows below the Live TV row.": "Altijd 5 rijen onder de rij Live TV."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -5975,7 +5993,10 @@
   "Soap": "Telenowela",
   "Thriller": "Thriller",
   "War": "Wojenny",
-  "Western": "Western"
+  "Western": "Western",
+  "1 category": "1 kategoria",
+  "%d categories": "%d kategorii",
+  "Always 5 rows below the Live TV row.": "Zawsze 5 rzędów pod rzędem TV na żywo."
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -6829,7 +6850,10 @@
   "Soap": "Novela",
   "Thriller": "Suspense",
   "War": "Guerra",
-  "Western": "Faroeste"
+  "Western": "Faroeste",
+  "1 category": "1 categoria",
+  "%d categories": "%d categorias",
+  "Always 5 rows below the Live TV row.": "Sempre 5 linhas abaixo da linha de TV ao vivo."
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -7683,7 +7707,10 @@
   "Soap": "Pembe dizi",
   "Thriller": "Gerilim",
   "War": "Savaş",
-  "Western": "Western"
+  "Western": "Western",
+  "1 category": "1 kategori",
+  "%d categories": "%d kategori",
+  "Always 5 rows below the Live TV row.": "Her zaman Canlı TV satırının 5 satır altında."
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -8537,6 +8564,9 @@
   "Soap": "肥皂剧",
   "Thriller": "惊悚",
   "War": "战争",
-  "Western": "西部"
+  "Western": "西部",
+  "1 category": "1 个分类",
+  "%d categories": "%d 个分类",
+  "Always 5 rows below the Live TV row.": "始终位于直播电视行下方第 5 行。"
  }
 }

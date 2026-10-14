@@ -344,8 +344,14 @@ data class HomeRow(val key: String, val visible: Boolean = true)
 data class HomeLayout(val rows: List<HomeRow> = emptyList(), val updatedAt: Long = 0L)
 
 object HomeLayouts {
+    /**
+     * Build 86: rij "Categorieën" met tegels (genres en servercategorieën). Alleen aan/uit; de plek is vast:
+     * vijf rijen onder "Nu live" (zie HomeScreen), dus de volgorde in de lijst telt voor deze rij niet.
+     */
+    const val CATEGORY_TILES = "categorytiles"
+
     /** Vaste rij-sleutels in de standaardvolgorde. */
-    val fixedKeys = listOf("continue", "mylist", "top10", "foryou", "recent", "live", "movies", "series", "categories")
+    val fixedKeys = listOf("continue", "mylist", "top10", "foryou", "recent", "live", CATEGORY_TILES, "movies", "series", "categories")
 
     fun title(key: String): String = when (key) {
         "continue" -> L("Continue watching")
@@ -356,7 +362,8 @@ object HomeLayouts {
         "live" -> L("Live TV")
         "movies" -> L("Movies")
         "series" -> L("Series")
-        "categories" -> L("Categories")
+        "categories" -> L("Rows per category")
+        CATEGORY_TILES -> L("Categories")
         else -> if (key.startsWith("collection:")) Collections.byID(key.removePrefix("collection:"))?.name ?: key else key
     }
 

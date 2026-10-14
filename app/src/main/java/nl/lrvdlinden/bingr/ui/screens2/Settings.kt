@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Check
@@ -283,6 +284,14 @@ fun SettingsScreen() {
                 }
                 S2NavRow(L("Collections"), Icons.AutoMirrored.Filled.PlaylistAdd,
                     value = Collections.visible.size.takeIf { it > 0 }?.toString()) { sub = S2SettingsSub.COLLECTIONS }
+                // build 86: Categorieën (overzicht met genres en de categorieën van je server), eerst een chip/tabblad
+                val catLib = Playlists.library
+                if (catLib.movies.isNotEmpty() || catLib.series.isNotEmpty()) {
+                    val catIndex = rememberCategoryIndex()
+                    S2NavRow(L("Categories"), Icons.Default.GridView, value = catIndex?.visibleCount()?.takeIf { it > 0 }?.toString()) {
+                        ScreensNav.push(ScreenEntry.Categories(Filter.ALL))
+                    }
+                }
                 // kijkstatistieken (build 68): hoofdprofiel alle profielen, andere profielen alleen hun eigen
                 S2NavRow(L("Statistics"), Icons.Default.BarChart) { sub = S2SettingsSub.STATS }
                 if (isMain) {

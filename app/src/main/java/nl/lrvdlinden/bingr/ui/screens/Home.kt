@@ -542,10 +542,28 @@ fun HomeScreen(filter: Filter) {
                 }
             }
 
+            // build 86: rij "Categorieën" (tegels) precies vijf getoonde rijen onder "Nu live"; zijn er daarna minder
+            // rijen, dan onderaan. Staat "Nu live" uit of is die rij leeg, dan telt de plek waar hij zou staan.
+            val tilesOn = filter == Filter.ALL && (lib.movies.isNotEmpty() || lib.series.isNotEmpty()) &&
+                layoutRows.any { it.key == HomeLayouts.CATEGORY_TILES && it.visible }
+            var sinceLive = -1
+            var tilesPlaced = false
+            fun LazyListScope.placeTiles() {
+                if (!tilesOn || tilesPlaced) return
+                tilesPlaced = true
+                item(key = "categorytiles") { CategoriesHomeRow() }
+            }
+            /** Na elke getoonde rij: tellen vanaf "Nu live" en de categorierij na de vijfde plaatsen. */
+            fun LazyListScope.shown(visible: Boolean = true) {
+                if (!visible || sinceLive < 0) return
+                sinceLive++
+                if (sinceLive == 5) placeTiles()
+            }
+
             fun LazyListScope.section(key: String) {
                 when (key) {
                     // Verder kijken
-                    "continue" -> item(key = "continue") { ContinueRow(continueList, index) }
+                    "continue" -> { item(key = "continue") { ContinueRow(continueList, index) }; shown(continueList.isNotEmpty()) }
                     // Mijn lijst
                     "mylist" -> item(key = "mylist") {
                         when (filter) {
@@ -560,27 +578,27 @@ fun HomeScreen(filter: Filter) {
                             Filter.MOVIES -> if (myMovies.isNotEmpty()) MovieRow(L("My List"), myMovies, myMovies, pid)
                             Filter.SERIES -> if (mySeries.isNotEmpty()) SeriesRow(L("My List"), mySeries, mySeries)
                         }
-                    }
+                    }.also { shown(myMovies.isNotEmpty() || mySeries.isNotEmpty()) }
                     // Onlangs toegevoegd
                     "recent" -> if (filter != Filter.SERIES) item(key = "recent") {
                         val all = index.recent
                         if (all.isNotEmpty()) MovieRow(L("Recently added"), all.take(30), all, pid)
-                    }
+                    }.also { shown(index.recent.isNotEmpty()) }
                     // Voor jou
-                    "foryou" -> item(key = "foryou") { ForYouRow(filter, model.forYou) }
+                    "foryou" -> { item(key = "foryou") { ForYouRow(filter, model.forYou) }; shown(model.forYou.isNotEmpty()) }
                     // Top 10 (Home: eerst series, dan films)
                     "top10" -> {
                         if (filter != Filter.MOVIES) item(key = "top10s") {
                             val list = model.trendingSeries
                             if (list.isNotEmpty()) Top10SeriesRow(if (kids) L("Top 10 kids series") else L("Top 10 series today"), list)
-                        }
+                        }.also { shown(model.trendingSeries.isNotEmpty()) }
                         if (filter != Filter.SERIES) item(key = "top10m") {
                             val list = model.trendingMovies
                             if (list.isNotEmpty()) Top10MoviesRow(if (kids) L("Top 10 kids movies") else L("Top 10 movies today"), list)
-                        }
+                        }.also { shown(model.trendingMovies.isNotEmpty()) }
                     }
                     // favoriete zenders (anders de laatst bekeken zenders)
-                    "live" -> if (filter == Filter.ALL && liveChannels.isNotEmpty()) item(key = "favs") {
+                    "live" -> { if (filter == Filter.ALL && liveChannels.isNotEmpty()) item(key = "favs") {
                         val keys = rememberKeys(liveChannels) { it.id }
                         MediaRow(if (favChannels.isNotEmpty()) L("Favorite channels") else L("Live TV")) {
                             keyedItems(liveChannels, keys) { c ->
@@ -592,20 +610,26 @@ fun HomeScreen(filter: Filter) {
                             }
                         }
                     }
+                        // ankerpunt "Nu live", ook als de rij leeg is (dan telt de plek waar hij zou staan)
+                        if (sinceLive < 0) sinceLive = 0
+                    }
                     // alle films / series (Home)
                     "movies" -> if (filter == Filter.ALL && lib.movies.isNotEmpty()) item(key = "allmovies") {
                         MovieRow(L("Movies"), lib.movies.take(40), lib.movies, pid)
-                    }
+                    }.also { shown(lib.movies.isNotEmpty()) }
                     "series" -> if (filter == Filter.ALL && lib.series.isNotEmpty()) item(key = "allseries") {
                         SeriesRow(L("Series"), lib.series.take(40), lib.series)
-                    }
+                    }.also { shown(lib.series.isNotEmpty()) }
                     // categorieën
                     "categories" -> {
-                        if (filter != Filter.SERIES) items(index.movieGroups.take(groupLimit), key = { "m|" + it.first }) { (g, all) ->
-                            if (all.isNotEmpty()) MovieRow(g, all.take(40), all, pid)
+                        // per groep één item, zodat de categorierij er ook tussen kan staan (vijf rijen onder "Nu live")
+                        if (filter != Filter.SERIES) for ((g, all) in index.movieGroups.take(groupLimit)) {
+                            item(key = "m|$g") { if (all.isNotEmpty()) MovieRow(g, all.take(40), all, pid) }
+                            shown(all.isNotEmpty())
                         }
-                        if (filter != Filter.MOVIES) items(index.seriesGroups.take(groupLimit), key = { "s|" + it.first }) { (g, all) ->
-                            if (all.isNotEmpty()) SeriesRow(g, all.take(40), all)
+                        if (filter != Filter.MOVIES) for ((g, all) in index.seriesGroups.take(groupLimit)) {
+                            item(key = "s|$g") { if (all.isNotEmpty()) SeriesRow(g, all.take(40), all) }
+                            shown(all.isNotEmpty())
                         }
                     }
                     // eigen collecties (build 51)
@@ -621,13 +645,22 @@ fun HomeScreen(filter: Filter) {
                                 Filter.ALL -> null; Filter.MOVIES -> BingrCollection.MOVIE; Filter.SERIES -> BingrCollection.SERIES
                             })
                         }
+                        shown(c != null && fits)
                     }
                 }
             }
 
             if (filter == Filter.ALL) {
-                // startscherm van dit profiel (Mijn Bingr → Home screen)
-                layoutRows.filter { it.visible }.forEach { section(it.key) }
+                // startscherm van dit profiel (Mijn Bingr → Home screen); uitgezette rijen tellen niet, maar
+                // "Nu live" blijft ook uitgezet het ankerpunt voor de categorierij
+                layoutRows.forEach { r ->
+                    when {
+                        r.key == HomeLayouts.CATEGORY_TILES -> Unit
+                        r.visible -> section(r.key)
+                        r.key == "live" && sinceLive < 0 -> { sinceLive = 0 }
+                    }
+                }
+                placeTiles()
             } else {
                 listOf("continue", "mylist", "recent", "foryou", "top10").forEach { section(it) }
                 layoutRows.filter { it.visible && it.key.startsWith("collection:") }.forEach { section(it.key) }
@@ -665,8 +698,7 @@ fun HomeScreen(filter: Filter) {
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 BingrLogo(26.sp)
-                // build 85: Categorieën (Netflix-stijl), voor Home alles, op Films/Series alleen die soort
-                if (lib.movies.isNotEmpty() || lib.series.isNotEmpty()) CategoriesChip(filter)
+                // build 86: Categorieën via Mijn Bingr en de rij op Home (de chip uit build 85 is weg)
                 Spacer(Modifier.weight(1f))
                 Box(Modifier.size(34.dp).focusLift { ScreensNav.search() }, contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Search, L("Search"), tint = Color.White, modifier = Modifier.size(25.dp))

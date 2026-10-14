@@ -1,6 +1,6 @@
 /*
  * Categorieën (build 85), Netflix-stijl, = Android, bingr.online en de Apple-apps.
- * Menu-item "Categorieën": tegels (naam, aantal, collage van posters op een kleurverloop per genre) in twee secties,
+ * Overzicht "Categorieën" (sinds build 86 via het profielmenu en de rij op Home, eerst een menu-item): tegels (naam, aantal, collage van posters op een kleurverloop per genre) in twee secties,
  * "Genres" (TMDB-genres, films en series samen) en "Van je server" (de VOD-/seriecategorieën van de bron, zoals ze na
  * verbergen en kinderslot/leeftijdsgrens van dit profiel in Lib.lib staan). OK op een tegel opent de categoriepagina:
  * kop met aantal, Alles/Films/Series, sorteren (Populair, Nieuwste, A–Z, Beoordeling) en een virtueel raster.
@@ -226,6 +226,60 @@
     pg.destroy = function () { off(); };
     render();
     return pg;
+  };
+
+  // MARK: rij op Home (build 86)
+
+  /** Best gevulde categorieën voor de rij op Home: genres eerst, aangevuld met de grootste van de server. */
+  function topTiles(idx, limit) {
+    var out = [];
+    GENRES.map(function (g) { return { g: g, m: idx.genres[g.slug] }; })
+      .filter(function (x) { return x.m && x.m.count('all'); })
+      .sort(function (a, b) { return b.m.count('all') - a.m.count('all'); })
+      .slice(0, limit)
+      .forEach(function (x) { out.push({ ref: { genre: x.g.slug }, title: L(x.g.name), m: x.m, c: x.g.c }); });
+    if (out.length < limit) {
+      idx.server.filter(function (x) { return x.m.count('all'); })
+        .sort(function (a, b) { return b.m.count('all') - a.m.count('all'); })
+        .slice(0, limit - out.length)
+        .forEach(function (x) { out.push({ ref: { server: x.name }, title: x.name, m: x.m, c: serverColors(x.name) }); });
+    }
+    return out;
+  }
+  function visibleCount(idx) {
+    var n = 0;
+    Object.keys(idx.genres).forEach(function (k) { if (idx.genres[k].count('all')) n++; });
+    idx.server.forEach(function (x) { if (x.m.count('all')) n++; });
+    return n;
+  }
+
+  /**
+   * Rij "Categorieën" op Home (build 86): kleinere tegels voor de ~10 best gevulde categorieën, als laatste
+   * "Alle categorieën" (naar het overzicht). De plek (vijf rijen onder "Nu live") regelt Home; null als er niets is.
+   */
+  S.categoriesRow = function () {
+    var lib = Lib.lib;
+    if (!lib.movies.length && !lib.series.length) return null;
+    warm();
+    var idx = index();
+    var tiles = topTiles(idx, 10).map(function (t) {
+      return tile(t.title, t.m.count('all'), t.m.posters('all', 3), t.c, function () { U.push(S.categoryPage(t.ref, 'all')); });
+    });
+    if (!tiles.length) return null;
+    var n = visibleCount(idx);
+    var all = h('div.cat-tile.cat-all.f', [
+      h('div.cat-all-in', [U.icon('grid', 'cat-all-icon'), h('div.cat-name', L('All categories')),
+        n ? h('div.cat-count', n === 1 ? L('1 category') : L('%d categories', n)) : null])
+    ]);
+    all.onEnter = function () { S.openCategories(); };
+    all._key = 'cat:*all';
+    tiles.push(all);
+    return S.rowBlock(L('Categories'), tiles, 'cat-row');
+  };
+
+  /** Overzicht openen (pagina in het hoofdscherm, sinds build 86 via het profielmenu en de rij op Home). */
+  S.openCategories = function () {
+    if (S.goPage) S.goPage('categories');
   };
 
   // MARK: categoriepagina
