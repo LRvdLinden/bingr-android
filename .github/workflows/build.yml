@@ -274,7 +274,7 @@ jobs:
           V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
           git clone -q --depth 1 "https://x-access-token:${TOKEN}@github.com/LRvdLinden/bingr-beheer.git" beheer
           # schrijfrechten van het token meteen controleren (ook als er niets nieuws is)
-          git -C beheer push --dry-run -q origin HEAD:main 2>/dev/null && echo "::notice::BINGR_BEHEER_TOKEN: schrijven naar bingr-beheer werkt" || { echo "::error::BINGR_BEHEER_TOKEN mag niet schrijven naar bingr-beheer (Contents: Read and write nodig)"; exit 1; }
+          git -C beheer push --dry-run -q origin HEAD:main 2>dry.err && echo "::notice::BINGR_BEHEER_TOKEN: schrijven naar bingr-beheer werkt" || { echo "::error::BINGR_BEHEER_TOKEN mag niet schrijven naar bingr-beheer: $(tr '\n' ' ' < dry.err | sed 's#x-access-token:[^@]*@#***@#g' | head -c 300)"; exit 1; }
           [ -f pkg/notes.md ] || { mkdir -p pkg; awk -v b="Build $B" '/^## /{f=($0 ~ (b "$"))?1:0; next} f && !/^_.*_$/' CHANGELOG.md > pkg/notes.md; }
           # per platform alleen de nieuwste build (versions/Android/v<versie>/, versions/Samsung TV/v<versie>/);
           # staat deze build er al, dan alleen de notities bijwerken
