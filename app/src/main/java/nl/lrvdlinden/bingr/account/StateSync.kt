@@ -103,6 +103,45 @@ object StateSync {
     // MARK: lokale stand
 
     private val prefs get() = AppState.appContext.getSharedPreferences("bingr.statesync", Context.MODE_PRIVATE)
+
+    // MARK: build 91: kijkvoorkeuren van het account (settings.shared)
+
+    /** build 91: de kijkvoorkeuren in `settings.shared` (alleen het hoofdprofiel schrijft ze). */
+    private val sharedViewingKeys = listOf("audioLanguage", "subtitleLanguage", "autoSubtitles", "openSubtitlesLanguage")
+    /** build 91: dezelfde kijkvoorkeuren als ruwe Android-sleutels (`settings.android.prefs`). */
+    private val rawViewingKeys = setOf("player.audioLanguage", "player.subtitleLanguage", "autoSubtitles",
+        TrackPreferences.autoSubtitlesKey, "os.language")
+
+    /**
+     * build 91: kijkvoorkeur van het account (`settings.shared.<k>`): de laatst gelezen serverversie, anders de lokaal
+     * bewaarde kopie (ook offline en vóór de eerste sync); null = onbekend. Voor profielen zonder eigen keuze (`prefs` null).
+     */
+    fun sharedViewing(k: String): String? {
+        serverSettings?.get("shared")?.jS(k)?.let { return it }
+        return runCatching { prefs.getString("shared.$k", null) }.getOrNull()
+    }
+
+    /** build 91: kijkvoorkeuren uit `settings.shared` van de server lokaal bewaren. */
+    private fun rememberSharedViewing(settings: JsonObject?) {
+        val s = settings?.get("shared") as? JsonObject ?: return
+        runCatching {
+            prefs.edit().apply { sharedViewingKeys.forEach { k -> s.jS(k)?.let { putString("shared.$k", it) } } }.apply()
+        }
+    }
+
+    /** build 91: de huidige keuzes van het hoofdprofiel (of een account zonder profielen) als kijkvoorkeuren van het account bewaren. */
+    fun rememberLocalViewing() {
+        if (!Store.canManage) return
+        runCatching {
+            prefs.edit()
+                .putString("shared.audioLanguage", TrackPreferences.audio)
+                .putString("shared.subtitleLanguage", TrackPreferences.subtitle)
+                .putString("shared.autoSubtitles", TrackPreferences.autoSubtitles)
+                .putString("shared.openSubtitlesLanguage", OpenSubtitles.defaultLanguage)
+                .apply()
+        }
+    }
+
     private fun localAt(section: String): Long? = runCatching {
         prefs.getLong("upd.$section", -1L).takeIf { it >= 0 }
     }.getOrNull()
@@ -373,7 +412,7 @@ object StateSync {
         val ok = Account.putState(section, data) != null
         if (ok) when (section) {
             CONNECTIONS -> serverConnections = data
-            SETTINGS -> serverSettings = data
+            SETTINGS -> { serverSettings = data; rememberSharedViewing(data) }
             REMINDERS -> serverReminders = data
         }
         return ok
@@ -539,6 +578,10 @@ object StateSync {
             if (!Prefs.bool("ui.showMovies", true)) add("movies")
             if (!Prefs.bool("ui.showSeries", true)) add("series")
         }
+        // build 91: de talen en de ondertitelstand in Prefs zijn die van het actieve profiel. Alleen het hoofdprofiel
+        // (of een account zonder profielen) schrijft ze in `shared`; anders blijft de serverversie staan.
+        val main = Store.canManage
+        if (main) rememberLocalViewing()
         return mapOf(
             "appLanguage" to JsonPrimitive(Prefs.string("app.language") ?: ""),
             "playerEngine" to JsonPrimitive(engineToShared(Prefs.string("player.engine"))),
@@ -562,14 +605,20 @@ object StateSync {
             "deinterlace" to JsonPrimitive(PlayerSettings.deinterlace),
             "resumeLastChannel" to JsonPrimitive(PlayerSettings.resumeLastChannel),
             "introMarkers" to IntroMarkers.toJson(IntroMarkers.all),
-        )
+        ).filterKeys { main || it !in sharedViewingKeys }
     }
 
     private fun settingsJson(): JsonObject {
         val base = serverSettings ?: JsonObject(emptyMap())
         val shared = (base["shared"] as? JsonObject ?: JsonObject(emptyMap())) + sharedSettings()
-        val raw = settingKeys.filter { it !in sharedOnlyKeys }.mapNotNull { k -> rawJson(k)?.let { k to it } }.toMap()
-        val android = (base["android"] as? JsonObject ?: JsonObject(emptyMap())) + mapOf("prefs" to JsonObject(raw))
+        val oldAndroid = base["android"] as? JsonObject ?: JsonObject(emptyMap())
+        var raw = settingKeys.filter { it !in sharedOnlyKeys }.mapNotNull { k -> rawJson(k)?.let { k to it } }.toMap()
+        // build 91: een ander profiel dan het hoofdprofiel laat ook de ruwe kijkvoorkeuren zoals de server ze had
+        if (!Store.canManage) {
+            val oldPrefs = oldAndroid["prefs"] as? JsonObject ?: JsonObject(emptyMap())
+            raw = raw.filterKeys { it !in rawViewingKeys } + oldPrefs.filterKeys { it in rawViewingKeys }
+        }
+        val android = oldAndroid + mapOf("prefs" to JsonObject(raw))
         return JsonObject(base + mapOf(
             "shared" to JsonObject(shared),
             "android" to JsonObject(android),
@@ -690,6 +739,7 @@ object StateSync {
             return
         }
         serverSettings = data
+        rememberSharedViewing(data)
         val at = sectionAt(data, sec.updatedAt)
         when {
             local == null || at > local -> {

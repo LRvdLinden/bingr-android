@@ -162,6 +162,11 @@ class PlayerController(item: PlayableItem) {
         duration = 0.0; currentTime = 0.0; position = 0.0
         autoSubsFor = null; osJob?.cancel(); osJob = null
         contentInfo = null
+        // build 91: ingeladen ondertitel van de vorige titel weg, anders slaan de automatische ondertitels elke volgende titel over
+        if (externalCues.isNotEmpty() || externalSubtitleName != null || externalSubtitleFile != null) {
+            externalCues = emptyList(); subtitleText = null; externalSubtitleName = null
+            externalSubtitleFile = null; externalSubtitleLang = null
+        }
         attempts = 0; triedOtherEngine = false; reconnecting = false; errorText = null; isBuffering = true
         stallSince = null
         retryPending = false; everPlayed = false; lastGoodPosition = 0.0; triedBackup = false; backupPending = false

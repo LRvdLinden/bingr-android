@@ -173,7 +173,7 @@
     var zapTimer = null, zapIndex = null, digitBuffer = '', digitTimer = null;
     var marker = null;
     var extCues = null, extOffset = 0, extTimer = null, scrobbled = false, stopSent = false;
-    var startGen = 0, limited = false, t0 = 0, marks = {}, audioChosen = false, autoSubsDone = false;
+    var startGen = 0, limited = false, t0 = 0, marks = {}, audioChosen = false, autoSubsDone = false, autoSubsRetried = false;
     // app naar de achtergrond: AVPlay is vrijgegeven; bij terugkomen opnieuw openen op deze plek
     var suspended = false, bgPos = 0, bgPaused = false, pauseAfterOpen = false;
 
@@ -282,7 +282,7 @@
      */
     function start(resumeAt) {
       var gen = ++startGen;
-      t0 = Date.now(); marks = {}; limited = false; audioChosen = false; autoSubsDone = false;
+      t0 = Date.now(); marks = {}; limited = false; audioChosen = false; autoSubsDone = false; autoSubsRetried = false;
       errorBox.style.display = 'none';
       spinner.style.display = 'flex';
       nextShown = false; nextDismissed = false; nextCard.style.display = 'none';
@@ -388,16 +388,24 @@
      */
     function autoSubtitles() {
       if (autoSubsDone || !engine || isLive() || isCatchup() || extCues) return;
+      var tr = engine.tracks();
+      // build 91: HLS meldt ondertitelsporen soms pas later: dan één keer opnieuw kijken (het afspelen wacht nergens op)
+      if (!tr.text.length && !autoSubsRetried) {
+        autoSubsRetried = true;
+        var my0 = engine;
+        setTimeout(function () { if (!closed && engine === my0) autoSubtitles(); }, 4000);
+        return;
+      }
       autoSubsDone = true;
       var mode = B.clang.autoSubtitles();
-      if (mode === 'off') return;
       var want = B.clang.preferredSubtitle();
       var audio = currentAudioLang();
       var cl = contentLang();
-      if (mode === 'whenNeeded' && (!audio || audio === want)) return;
+      var needed = mode === 'always' || (mode === 'whenNeeded' && !!audio && audio !== want);
       // ondertitels in de gewenste taal zitten al in het beeld ("NL SUBS")
-      if (cl && cl.s === want) return;
-      var tr = engine.tracks();
+      if (cl && cl.s === want) needed = false;
+      // build 91: geen automatische ondertitels nodig: de gewone standaard-ondertiteltaal voor sporen in de stream (zoals Android)
+      if (!needed) { applyStreamSubtitleDefault(tr); return; }
       if (tr.currentText != null) { var on = null; tr.text.forEach(function (t) { if (t.index === tr.currentText) on = t; }); if (on && B.clang.norm(on.lang) === want) return; }
       for (var i = 0; i < tr.text.length; i++) {
         if (B.clang.norm(tr.text[i].lang) === want) {
@@ -409,10 +417,10 @@
       var OS = B.opensubtitles;
       if (!OS.ready() || !OS.isLoggedIn()) return;
       var my = engine, id = item.id;
-      var series = ctx.series || null;
-      var imdb = item.imdbID || (item.type === 'episode' ? B.trakt.imdbFor(series || { title: item.title }, true) : B.trakt.imdbFor({ title: item.title, year: B.int(item.subtitle) }, false));
-      OS.search({ imdb: imdb, title: item.title, year: item.type === 'movie' ? B.int(item.subtitle) : null,
-        season: item.type === 'episode' ? item.season : null, episode: item.type === 'episode' ? item.episode : null }, [want]).then(function (list) {
+      osIds().then(function (ids) {
+        if (closed || engine !== my || item.id !== id || extCues) return [];
+        return OS.search(osQuery(ids), [want]);
+      }).then(function (list) {
         list = list.filter(function (x) { return B.clang.norm(x.language) === want; });
         if (!list.length || closed || engine !== my || item.id !== id || extCues) return null;
         return OS.download(list[0]).then(function (cues) {
@@ -421,6 +429,47 @@
           U.toast(L('Subtitles turned on automatically: %@', langName(want)), 4000);
         });
       }).catch(function (e) { B.log('auto-ondertitels', e && e.message); });
+    }
+    /**
+     * build 91: standaard-ondertiteltaal in de stream (prefs.streamSubtitleLanguage / settings.shared.subtitleLanguage)
+     * als er geen automatische ondertitels nodig zijn: oud "off" = uit, '' = niets kiezen, anders dat spoor.
+     */
+    function applyStreamSubtitleDefault(tr) {
+      var raw = B.clang.streamSubtitleSetting();
+      if (raw === 'off') { if (tr.currentText != null) engine.selectText(null); return; }
+      var code = B.clang.norm(raw);
+      if (!code) return;
+      for (var i = 0; i < tr.text.length; i++) {
+        if (B.clang.norm(tr.text[i].lang) === code) {
+          if (tr.text[i].index !== tr.currentText) engine.selectText(tr.text[i].index);
+          return;
+        }
+      }
+    }
+    /**
+     * build 91: ids voor OpenSubtitles: IMDb (eigen id, de Trakt-index, anders zoeken bij Trakt), en zonder IMDb-id
+     * het TMDB-id uit de cache van de leeftijdskeuring (agerating.js; zo nodig één keer opgezocht). Promise {imdb, tmdb}.
+     */
+    function osIds() {
+      var isEp = item.type === 'episode';
+      var series = ctx.series || null;
+      var quick = item.imdbID || (isEp ? B.trakt.imdbFor(series || { title: item.title }, true) : B.trakt.imdbFor({ title: item.title, year: B.int(item.subtitle) }, false));
+      var pImdb = quick ? Promise.resolve(quick) : (B.trakt.resolveImdb ? B.trakt.resolveImdb(item) : Promise.resolve(null));
+      return pImdb.then(function (imdb) {
+        var AR = B.ageRatings;
+        if (imdb || !AR || !AR.lookup) return { imdb: imdb || null, tmdb: null };
+        var hit = !isEp && Lib.lib && Lib.lib.byId ? Lib.lib.byId[item.id] : null;
+        var x = isEp ? (series || { title: item.title, year: item.year || null }) : (hit ? hit.item : { title: item.title, year: item.year || B.int(item.subtitle) });
+        return AR.lookup(x, isEp).then(function (r) {
+          return { imdb: null, tmdb: r && r.found !== false && r.id != null ? r.id : null };
+        }, function () { return { imdb: null, tmdb: null }; });
+      }, function () { return { imdb: null, tmdb: null }; });
+    }
+    /** build 91: zoekvraag voor OS.search met deze ids. */
+    function osQuery(ids) {
+      var isEp = item.type === 'episode';
+      return { imdb: ids.imdb, tmdb: ids.tmdb, title: item.title, year: item.type === 'movie' ? B.int(item.subtitle) : null,
+        season: isEp ? item.season : null, episode: isEp ? item.episode : null };
     }
     function showExtCues(cues) {
       try { engine.selectText(null); } catch (e) { /* stil */ }
@@ -583,14 +632,19 @@
     /** OpenSubtitles: zoeken (IMDb-id of titel), kiezen, downloaden en zelf tonen boven de video. */
     function openSubtitles() {
       var OS = B.opensubtitles;
-      if (!OS.ready()) { U.toast(L('Something went wrong. Please try again.')); return; }
+      if (!OS.ready()) {
+        // build 91: app-sleutels van de server nog niet binnen: eerst ophalen en dan opnieuw
+        U.toast(L('Loading…'));
+        B.account.fetchConfig().then(function (ok) {
+          if (closed) return;
+          if (ok && OS.ready()) openSubtitles(); else U.toast(L('Something went wrong. Please try again.'));
+        }, function () { if (!closed) U.toast(L('Something went wrong. Please try again.')); });
+        return;
+      }
       if (!OS.isLoggedIn()) { U.toast(L('Sign in to OpenSubtitles under My Bingr → OpenSubtitles to download subtitles.'), 5000); return; }
       var lang = OS.defaultLanguage();
-      var series = ctx.series || null;
-      var imdb = item.imdbID || (item.type === 'episode' ? B.trakt.imdbFor(series || { title: item.title }, true) : B.trakt.imdbFor({ title: item.title, year: B.int(item.subtitle) }, false));
       U.toast(L('Searching…'));
-      OS.search({ imdb: imdb, title: item.title, year: item.type === 'movie' ? B.int(item.subtitle) : null,
-        season: item.type === 'episode' ? item.season : null, episode: item.type === 'episode' ? item.episode : null }, lang ? [lang] : []).then(function (list) {
+      osIds().then(function (ids) { return OS.search(osQuery(ids), lang ? [lang] : []); }).then(function (list) {
         if (closed) return;
         if (!list.length) { U.toast(lang ? L('No subtitles found in %@.', langName(lang) || lang) : L('No subtitles found for this title.')); return; }
         U.choose('OpenSubtitles', list.slice(0, 30).map(function (x, i) {

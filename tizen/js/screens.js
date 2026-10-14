@@ -1789,27 +1789,35 @@
       section(L('Audio & subtitles'));
       var CLg = B.clang;
       var langOpts = ['nl', 'en', 'de', 'fr', 'es', 'it', 'pt', 'pl', 'tr', 'ar', 'hi'];
-      // kijkvoorkeuren: de keuze geldt voor het account (settings.shared) én dit profiel (prefs), zoals op Android
+      // kijkvoorkeuren: de keuze geldt voor dit profiel (prefs); build 91: alleen het hoofdprofiel (of een account zonder
+      // profielen) past ook die van het account aan (settings.shared), anders krijgen andere profielen deze keuze mee
       function pv(key, sharedKey) { var v = D.profilePref(key); return v != null ? v : String(D.shared(sharedKey, '') || ''); }
+      var viewingMain = !prof || D.isMain(prof) || !D.profiles.length;
+      function setViewing(sharedKey, prefKey, v) {
+        if (viewingMain) D.setShared(sharedKey, v);
+        D.setProfilePref(prefKey, v);
+        render();
+      }
       var aud = pv('audioLanguage', 'audioLanguage');
       function audLabel(v) { return v === 'stream' ? L('As in the stream') : (v ? CLg.name(v) : L('Same as app') + ' (' + CLg.name(B.lang) + ')'); }
       row(L('Default audio language'), audLabel(aud), function () {
         U.choose(L('Default audio language'), [{ value: '', label: audLabel('') }, { value: 'stream', label: L('As in the stream') }]
-          .concat(langOpts.map(function (c) { return { value: c, label: CLg.name(c) }; })), aud, function (v) { D.setShared('audioLanguage', v); D.setProfilePref('audioLanguage', v); render(); });
+          .concat(langOpts.map(function (c) { return { value: c, label: CLg.name(c) }; })), aud, function (v) { setViewing('audioLanguage', 'audioLanguage', v); });
       });
       var autoS = CLg.autoSubtitles();
       var autoLabels = { off: L('Off'), whenNeeded: L('When needed'), always: L('Always') };
       row(L('Automatic subtitles'), autoLabels[autoS], function () {
         U.choose(L('Automatic subtitles'), ['whenNeeded', 'always', 'off'].map(function (v) { return { value: v, label: autoLabels[v] }; }), autoS, function (v) {
-          D.setShared('autoSubtitles', v); D.setProfilePref('autoSubtitles', v); render();
+          setViewing('autoSubtitles', 'autoSubtitles', v);
         });
       });
       var subRaw = pv('streamSubtitleLanguage', 'subtitleLanguage');
       var subCur = subRaw === 'off' ? '' : CLg.norm(subRaw);
       var subAuto = L('Same as app') + ' (' + CLg.name(CLg.appLanguage()) + ')';
-      row(L('Subtitle language'), subCur ? CLg.name(subCur) : subAuto, function () {
-        U.choose(L('Subtitle language'), [{ value: '', label: subAuto }].concat(langOpts.map(function (c) { return { value: c, label: CLg.name(c) }; })), subCur, function (v) {
-          D.setShared('subtitleLanguage', v); D.setProfilePref('streamSubtitleLanguage', v); render();
+      // build 91: zelfde naam als op Android ("Standaard ondertiteltaal" = taal van ondertitels in de stream)
+      row(L('Default subtitle language'), subCur ? CLg.name(subCur) : subAuto, function () {
+        U.choose(L('Default subtitle language'), [{ value: '', label: subAuto }].concat(langOpts.map(function (c) { return { value: c, label: CLg.name(c) }; })), subCur, function (v) {
+          setViewing('subtitleLanguage', 'streamSubtitleLanguage', v);
         });
       });
 
@@ -1819,12 +1827,14 @@
         row('Trakt', T.isLoggedIn() ? (T.username() || L('On')) : (A.allowed('trakt') ? L('Off') : S.lifetimeBadge()), function () { S.traktMenu(render); });
       } else row('Trakt', L('The server, Trakt and OpenSubtitles belong to the main account and are used by all profiles.'), null);
       row('OpenSubtitles', OS.isLoggedIn() ? OS.username() : L('Off'), function () { S.openSubtitlesMenu(render); });
-      var osl = OS.defaultLanguage();
+      // build 91: eigen naam (niet te verwarren met de ondertiteltaal in de stream); ISO 639-1, ook een taal die hier niet in de lijst staat
+      var osl = OS.normLanguage(OS.defaultLanguage());
       var oslabel = '';
-      OS.languages.forEach(function (l) { if (l[0].slice(0, 2) === osl.slice(0, 2)) oslabel = l[1]; });
-      row(L('Default subtitle language'), oslabel || L('All'), function () {
-        U.choose(L('Default subtitle language'), [{ value: '', label: L('All') }].concat(OS.languages.map(function (l) { return { value: l[0], label: l[1] }; })), osl, function (v) {
-          D.setShared('openSubtitlesLanguage', v); D.setProfilePref('subtitleLanguage', v); render();
+      OS.languages.forEach(function (l) { if (l[0] === osl) oslabel = l[1]; });
+      if (!oslabel && osl) oslabel = CLg.name(osl) || osl;
+      row(L('OpenSubtitles language'), oslabel || L('All'), function () {
+        U.choose(L('OpenSubtitles language'), [{ value: '', label: L('All') }].concat(OS.languages.map(function (l) { return { value: l[0], label: l[1] }; })), osl, function (v) {
+          setViewing('openSubtitlesLanguage', 'subtitleLanguage', v);
         });
       });
 

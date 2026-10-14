@@ -172,9 +172,13 @@ fun SettingsScreen() {
     var showMovies by remember { mutableStateOf(Prefs.bool("ui.showMovies", true)) }
     var showSeries by remember { mutableStateOf(Prefs.bool("ui.showSeries", true)) }
     var autoplayTrailers by remember { mutableStateOf(HeroTrailer.enabled) }
-    val profileKey = Store.activeProfileID
-    // kijkvoorkeuren horen bij het profiel: opnieuw lezen na wisselen van profiel
-    var autoSubtitles by remember(profileKey) { mutableStateOf(TrackPreferences.autoSubtitles) }
+    /**
+     * build 91: kijkvoorkeur wijzigen. Alleen het hoofdprofiel (of een account zonder profielen) past ook de
+     * instellingen van het account aan (`settings.shared`); een ander profiel alleen zijn eigen `prefs`.
+     */
+    fun viewingChange(block: () -> Unit) {
+        if (Store.canManage) { block(); StateSync.rememberLocalViewing() } else StateSync.withoutSettingsChange { block() }
+    }
     var engine by remember { mutableStateOf(Prefs.string("player.engine") ?: "auto") }
     var refreshPolicy by remember { mutableStateOf(RefreshPolicy.current) }
     var zapDelay by remember { mutableIntStateOf(PlayerSettings.zapDelay) }
@@ -560,17 +564,21 @@ fun SettingsScreen() {
                 S2Dropdown(L("Default language"),
                     listOf("" to L("All languages")) + TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },
                     OpenSubtitles.defaultLanguage) { v ->
-                    OpenSubtitles.defaultLanguage = v
-                    Store.updateActivePreferences { it.copy(subtitleLanguage = v) }
+                    viewingChange {
+                        OpenSubtitles.defaultLanguage = v
+                        Store.updateActivePreferences { it.copy(subtitleLanguage = v) }
+                    }
                 }
                 // build 59: uit / alleen als nodig (andere audiotaal) / altijd
                 S2Dropdown(L("Automatic subtitles"), listOf(
                     TrackPreferences.AUTO_OFF to L("Off"),
                     TrackPreferences.AUTO_WHEN_NEEDED to L("When needed"),
                     TrackPreferences.AUTO_ALWAYS to L("Always"),
-                ), autoSubtitles) { v ->
-                    autoSubtitles = v; TrackPreferences.autoSubtitles = v
-                    Store.updateActivePreferences { it.copy(autoSubtitles = null, autoSubtitleMode = v) }
+                ), TrackPreferences.autoSubtitles) { v -> // build 91: rechtstreeks lezen (ook na een wijziging uit de sync)
+                    viewingChange {
+                        TrackPreferences.autoSubtitles = v
+                        Store.updateActivePreferences { it.copy(autoSubtitles = null, autoSubtitleMode = v) }
+                    }
                 }
             }
         }
@@ -590,8 +598,10 @@ fun SettingsScreen() {
                     listOf("" to L("App language"), TrackPreferences.STREAM to L("As in the stream")) +
                         TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },
                     TrackPreferences.audio) { v ->
-                    TrackPreferences.audio = v
-                    Store.updateActivePreferences { it.copy(audioLanguage = v) }
+                    viewingChange {
+                        TrackPreferences.audio = v
+                        Store.updateActivePreferences { it.copy(audioLanguage = v) }
+                    }
                 }
                 S2Dropdown(L("Zap delay"), PlayerSettings.zapDelayOptions, zapDelay) {
                     zapDelay = it; PlayerSettings.zapDelay = it
@@ -614,10 +624,12 @@ fun SettingsScreen() {
                 S2Dropdown(L("Default subtitle language"),
                     listOf("" to L("App language")) + TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },
                     TrackPreferences.subtitle.takeIf { it != "off" } ?: "") { v ->
-                    // oud "off" eerst vastleggen als automatische stand, anders gaat "Uit" verloren
-                    if (TrackPreferences.subtitle == "off") TrackPreferences.autoSubtitles = TrackPreferences.autoSubtitles
-                    TrackPreferences.subtitle = v
-                    Store.updateActivePreferences { it.copy(streamSubtitleLanguage = v) }
+                    viewingChange {
+                        // oud "off" eerst vastleggen als automatische stand, anders gaat "Uit" verloren
+                        if (TrackPreferences.subtitle == "off") TrackPreferences.autoSubtitles = TrackPreferences.autoSubtitles
+                        TrackPreferences.subtitle = v
+                        Store.updateActivePreferences { it.copy(streamSubtitleLanguage = v) }
+                    }
                 }
             }
         }

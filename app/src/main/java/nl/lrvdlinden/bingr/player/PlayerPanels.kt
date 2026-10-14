@@ -267,10 +267,13 @@ fun OpenSubtitlesPanel(player: PlayerController, onDismiss: () -> Unit) {
         loading = true; error = null; results = emptyList()
         val it = player.item
         try {
+            // build 91: ook hier TMDB als er geen IMDb-id is (zoals de automatische ondertitels), en de opgeschoonde titel
+            val tmdb = Details.cachedTMDB(if (it.type == MediaType.EPISODE) it.seriesID else it.id)
             results = OpenSubtitles.search(
-                imdbID = it.imdbID, title = it.title, year = it.subtitle?.toIntOrNull(),
+                imdbID = it.imdbID, title = ContentLanguage.displayTitle(it.title),
+                year = if (it.type == MediaType.MOVIE) it.subtitle?.toIntOrNull() else null,
                 season = it.season, episode = it.episode,
-                languages = if (language.isEmpty()) emptyList() else listOf(language)
+                languages = if (language.isEmpty()) emptyList() else listOf(language), tmdbID = tmdb,
             )
             if (results.isEmpty()) {
                 error = if (language.isEmpty()) L("No subtitles found for this title.")

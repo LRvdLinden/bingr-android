@@ -53,8 +53,13 @@ object OpenSubtitles {
     private val defaultLanguageState = mutableStateOf(initialDefaultLanguage())
     /** Standaardtaal (ISO 639-1, bijv. "nl"); "" = alle talen. Prefs "os.language" */
     var defaultLanguage: String
-        get() = defaultLanguageState.value
+        // build 91: oudere Tizen-versies bewaarden "pt-PT" / "zh-CN"; hier altijd ISO 639-1
+        get() = normalizedLanguage(defaultLanguageState.value)
         set(v) { defaultLanguageState.value = v; Prefs.put("os.language", v) }
+
+    /** build 91: taalcode als ISO 639-1 ("pt-PT" → "pt", "zh-CN" → "zh"); "" blijft "" (alle talen). */
+    fun normalizedLanguage(code: String): String =
+        code.trim().lowercase().split('-', '_').firstOrNull().orEmpty()
 
     private fun initialDefaultLanguage(): String {
         Prefs.string("os.language")?.let { return it }

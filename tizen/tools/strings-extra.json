@@ -1051,5 +1051,17 @@
     "tr": "Altyazı dili",
     "ar": "لغة الترجمة",
     "zh-Hans": "字幕语言"
+  },
+  "OpenSubtitles language": {
+    "nl": "OpenSubtitles-taal",
+    "de": "OpenSubtitles-Sprache",
+    "fr": "Langue OpenSubtitles",
+    "es": "Idioma de OpenSubtitles",
+    "it": "Lingua OpenSubtitles",
+    "pt": "Idioma do OpenSubtitles",
+    "pl": "Język OpenSubtitles",
+    "tr": "OpenSubtitles dili",
+    "ar": "لغة OpenSubtitles",
+    "zh-Hans": "OpenSubtitles 语言"
   }
 }

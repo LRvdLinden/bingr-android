@@ -279,7 +279,14 @@
 
   S.openSubtitlesMenu = function (onChange) {
     var OS = B.opensubtitles;
-    if (!OS.ready()) { U.toast(L('Something went wrong. Please try again.')); return; }
+    // build 91: uitloggen kan altijd; zonder app-sleutel van de server eerst de config ophalen en dan opnieuw
+    if (!OS.ready() && !OS.isLoggedIn()) {
+      U.toast(L('Loading…'));
+      B.account.fetchConfig().then(function (ok) {
+        if (ok && OS.ready()) S.openSubtitlesMenu(onChange); else U.toast(L('Something went wrong. Please try again.'));
+      }, function () { U.toast(L('Something went wrong. Please try again.')); });
+      return;
+    }
     if (OS.isLoggedIn()) {
       U.modal({ title: 'OpenSubtitles', text: L('Signed in as %@', OS.username()), buttons: [
         { label: L('Sign out'), fn: function () { OS.logout().then(function () { if (onChange) onChange(); }); } }, { label: L('Close') }] });

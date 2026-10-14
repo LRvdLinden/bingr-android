@@ -236,17 +236,23 @@ object Store {
         val fresh = !isMain(p)
         val auto = p.autoSubtitles
         if (auto != null) Prefs.put("autoSubtitles", auto) else if (fresh) Prefs.put("autoSubtitles", false)
-        // build 59: ondertitelstand (off/whenNeeded/always) van dit profiel, anders de standaard
+        // build 91: zonder eigen keuze (`prefs` null) geldt `settings.shared` (docs/ACCOUNT.md), voor elk profiel.
+        // Onbekend (nog nooit gesynchroniseerd): het hoofdprofiel houdt wat er staat, een ander profiel de standaard.
+        val sharedSub = StateSync.sharedViewing("subtitleLanguage")
+        // build 59: ondertitelstand (off/whenNeeded/always) van dit profiel, anders die van het account, anders de standaard
         val mode = p.subtitleMode
+            ?: TrackPreferences.normalizedMode(StateSync.sharedViewing("autoSubtitles"))
+                // oud "ondertitels uit" (subtitleLanguage "off") = geen automatische ondertitels (build 60)
+                ?: (if (sharedSub == "off") TrackPreferences.AUTO_OFF else null)
         // zonder eigen stand: oud "ondertitels uit" (streamSubtitleLanguage "off") = geen automatische ondertitels (build 60)
         if (mode != null) TrackPreferences.autoSubtitles = mode
         else if (fresh) TrackPreferences.autoSubtitles =
             if (p.streamSubtitleLanguage == "off") TrackPreferences.AUTO_OFF else TrackPreferences.AUTO_WHEN_NEEDED
-        val audio = p.audioLanguage
+        val audio = p.audioLanguage ?: StateSync.sharedViewing("audioLanguage")
         if (audio != null) TrackPreferences.audio = audio else if (fresh) TrackPreferences.audio = ""
-        val sub = p.streamSubtitleLanguage
+        val sub = p.streamSubtitleLanguage ?: sharedSub
         if (sub != null) TrackPreferences.subtitle = sub else if (fresh) TrackPreferences.subtitle = ""
-        val os = p.subtitleLanguage
+        val os = p.subtitleLanguage ?: StateSync.sharedViewing("openSubtitlesLanguage")
         if (os != null) OpenSubtitles.defaultLanguage = os
         else if (fresh) OpenSubtitles.defaultLanguage = Localizer.language.take(2)
         Unit

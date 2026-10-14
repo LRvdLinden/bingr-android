@@ -384,6 +384,10 @@
       return r.imdb;
     });
   }
+  /** build 91: IMDb-id van een item opzoeken (eigen id, de index, anders Trakt zoeken); Promise met id of null. */
+  Trakt.resolveImdb = function (item) {
+    return Promise.resolve().then(function () { return item ? resolveImdb(item) : null; }).catch(function () { return null; });
+  };
   /**
    * Scrobble start/pause/stop (progress 0…1). Bij stop ≥ 80% telt het als gezien; mislukt de scrobble dan,
    * dan via /sync/history. Live en terugkijken worden niet gescrobbled.
@@ -424,19 +428,22 @@
   OS.ready = function () { return !!OS.apiKey(); };
   OS.isLoggedIn = function () { return !!C.opensubtitles(); };
   OS.username = function () { var o = C.opensubtitles(); return o ? o.username || '' : ''; };
+  // build 91: ISO 639-1, zoals Android en iOS (vroeger "pt-PT" en "zh-CN"; die worden bij het lezen nog herkend)
   OS.languages = [['nl', 'Nederlands'], ['en', 'English'], ['de', 'Deutsch'], ['fr', 'Français'], ['es', 'Español'], ['it', 'Italiano'],
-    ['pt-PT', 'Português'], ['tr', 'Türkçe'], ['ar', 'العربية'], ['pl', 'Polski'], ['zh-CN', '简体中文']];
-  /** Standaardtaal: settings.shared.openSubtitlesLanguage, anders de ondertiteltaal, anders de app-taal. */
+    ['pt', 'Português'], ['tr', 'Türkçe'], ['ar', 'العربية'], ['pl', 'Polski'], ['zh', '简体中文']];
+  /** build 91: taalcode als ISO 639-1 ("pt-PT" → "pt", "zh-CN" → "zh"); '' blijft '' (alle talen). */
+  OS.normLanguage = function (c) { return String(c == null ? '' : c).trim().toLowerCase().split(/[-_]/)[0]; };
+  /** Standaardtaal: prefs.subtitleLanguage, anders settings.shared.openSubtitlesLanguage, anders de ondertiteltaal, anders de app-taal. */
   OS.defaultLanguage = function () {
     var D = B.data;
     var pv = D.profilePref ? D.profilePref('subtitleLanguage') : null;
-    if (pv != null && pv !== 'off') return pv;
+    if (pv != null && pv !== 'off') return OS.normLanguage(pv);
     var v = D.shared('openSubtitlesLanguage', null);
-    if (v != null) return String(v);
+    if (v != null) return OS.normLanguage(v);
     var t = String(D.shared('subtitleLanguage', '') || '');
     return t.length === 2 ? t : String(B.lang || 'en').slice(0, 2);
   };
-  function apiCodes(c) { c = String(c || '').toLowerCase(); if (c === 'pt' || c === 'pt-pt') return ['pt-br', 'pt-pt']; if (c === 'zh' || c === 'zh-cn') return ['zh-cn', 'zh-tw']; return c ? [c] : []; }
+  function apiCodes(c) { c = OS.normLanguage(c); if (c === 'pt') return ['pt-br', 'pt-pt']; if (c === 'zh') return ['zh-cn', 'zh-tw']; return c ? [c] : []; }
   function osRequest(path, method, params, body, host) {
     var o = C.opensubtitles();
     var h = host || (o && o.baseURL) || OS_HOST;
@@ -465,7 +472,10 @@
     osRequest('/logout', 'DELETE').catch(B.noop);
     return changed(function (d) { d.opensubtitles = null; });
   };
-  /** Zoeken op IMDb-id (afleveringen: parent_imdb_id + seizoen/aflevering) of anders op titel. */
+  /**
+   * Zoeken op IMDb-id (afleveringen: parent_imdb_id + seizoen/aflevering), anders op TMDB-id (build 91, opts.tmdb;
+   * afleveringen: parent_tmdb_id), anders op titel.
+   */
   OS.search = function (opts, languages) {
     var q = {};
     var langs = [];
@@ -474,7 +484,11 @@
     if (langs.length) q.languages = langs.join(',');
     var numeric = B.int(String(opts.imdb || '').replace('tt', ''));
     var isEp = opts.season != null && opts.episode != null;
-    if (numeric && numeric > 0) {
+    var tmdbId = B.int(opts.tmdb);
+    if (!(numeric && numeric > 0) && tmdbId && tmdbId > 0) {
+      if (isEp) { q.parent_tmdb_id = String(tmdbId); q.season_number = String(opts.season); q.episode_number = String(opts.episode); }
+      else q.tmdb_id = String(tmdbId);
+    } else if (numeric && numeric > 0) {
       if (isEp) { q.parent_imdb_id = String(numeric); q.season_number = String(opts.season); q.episode_number = String(opts.episode); }
       else q.imdb_id = String(numeric);
     } else if (opts.title) {

@@ -308,6 +308,11 @@
     var v = raw === 'off' || raw === 'stream' ? '' : CL.norm(raw);
     return v || CL.appLanguage();
   };
+  /**
+   * build 91: ingestelde taal van ondertitels in de stream zoals hij staat (prefs.streamSubtitleLanguage, anders
+   * settings.shared.subtitleLanguage): '' = de app-taal, 'off' = oud "ondertitels uit", anders een taalcode.
+   */
+  CL.streamSubtitleSetting = function () { return pref('streamSubtitleLanguage', 'subtitleLanguage'); };
   /** "off" / "whenNeeded" / "always"; null = onbekend (zelfde waarden als TrackPreferences.normalizedMode). */
   function mode(v) {
     var s = String(v == null ? '' : v).trim().toLowerCase();
