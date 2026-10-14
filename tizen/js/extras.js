@@ -310,6 +310,22 @@
     }, L('No reminders yet. Open a program in the TV guide and choose “Remind me”.'));
   };
 
+  /**
+   * Support (build 75): de tv kan niet betrouwbaar een browser openen, dus een QR-code met het adres van
+   * https://support.bingr.online (scannen met de telefoon).
+   */
+  S.SUPPORT_URL = 'https://support.bingr.online';
+  S.support = function () {
+    var qr = h('div.qr-box.small');
+    var box = h('div.support-cols', [qr, h('div', [
+      h('p.modal-text', L("Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.")),
+      h('div.support-url', S.SUPPORT_URL.replace(/^https?:\/\//, ''))
+    ])]);
+    var s = U.modal({ title: L('Support'), content: box, buttons: [{ label: L('Close') }] });
+    S.drawQR(qr, S.SUPPORT_URL, 240);
+    return s;
+  };
+
   /** QR-code tekenen in een vak (gedeeld met het inlogscherm). */
   S.drawQR = function (box, url, size) {
     U.clear(box);

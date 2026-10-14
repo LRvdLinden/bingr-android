@@ -99,7 +99,8 @@
     // profielmenu (build 72)
     person: '<circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     people: '<circle cx="9" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17" cy="9" r="2.8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2.5 20c0-3.8 2.9-6 6.5-6s6.5 2.2 6.5 6M15.5 14.2c3.3-.4 6 1.5 6 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
-    signout: '<path d="M14 4H6v16h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 12h11M17.5 8.5L21 12l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+    signout: '<path d="M14 4H6v16h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 12h11M17.5 8.5L21 12l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+    help: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.3 9.4a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.3-2.7 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17.6" r="1.2" fill="currentColor"/>'
   };
   U.logo = function (small) {
     return U.h('div.logo' + (small ? '.small' : ''), [U.h('div.logo-word', 'BINGR'), U.h('div.logo-bar')]);

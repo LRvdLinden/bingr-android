@@ -814,7 +814,10 @@
   "Clear the viewing statistics of all profiles?": "هل تريد مسح إحصائيات المشاهدة لكل الملفات الشخصية؟",
   "Clear the viewing statistics of %@?": "هل تريد مسح إحصائيات المشاهدة لـ %@؟",
   "No viewing statistics yet. Bingr keeps track from %@.": "لا توجد إحصائيات مشاهدة بعد. يسجلها Bingr منذ %@.",
-  "Statistics are not available yet. Please try again later.": "الإحصائيات غير متاحة بعد. يرجى المحاولة لاحقًا."
+  "Statistics are not available yet. Please try again later.": "الإحصائيات غير متاحة بعد. يرجى المحاولة لاحقًا.",
+  "Support": "الدعم",
+  "Help": "مساعدة",
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "لديك أسئلة أو مشكلات؟ امسح رمز QR بكاميرا هاتفك لفتح صفحة دعم Bingr."
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -1631,7 +1634,10 @@
   "Clear the viewing statistics of all profiles?": "Wiedergabestatistiken aller Profile löschen?",
   "Clear the viewing statistics of %@?": "Wiedergabestatistiken von %@ löschen?",
   "No viewing statistics yet. Bingr keeps track from %@.": "Noch keine Wiedergabestatistiken. Bingr erfasst sie ab dem %@.",
-  "Statistics are not available yet. Please try again later.": "Statistiken sind noch nicht verfügbar. Bitte versuche es später erneut."
+  "Statistics are not available yet. Please try again later.": "Statistiken sind noch nicht verfügbar. Bitte versuche es später erneut.",
+  "Support": "Support",
+  "Help": "Hilfe",
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Fragen oder Probleme? Scanne den QR-Code mit der Kamera deines Handys, um die Support-Seite von Bingr zu öffnen."
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -2448,7 +2454,10 @@
   "Clear the viewing statistics of all profiles?": "¿Borrar las estadísticas de visualización de todos los perfiles?",
   "Clear the viewing statistics of %@?": "¿Borrar las estadísticas de visualización de %@?",
   "No viewing statistics yet. Bingr keeps track from %@.": "Aún no hay estadísticas de visualización. Bingr las registra desde el %@.",
-  "Statistics are not available yet. Please try again later.": "Las estadísticas aún no están disponibles. Inténtalo más tarde."
+  "Statistics are not available yet. Please try again later.": "Las estadísticas aún no están disponibles. Inténtalo más tarde.",
+  "Support": "Soporte",
+  "Help": "Ayuda",
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "¿Preguntas o problemas? Escanea el código QR con la cámara de tu móvil para abrir la página de soporte de Bingr."
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -3265,7 +3274,10 @@
   "Clear the viewing statistics of all profiles?": "Effacer les statistiques de visionnage de tous les profils ?",
   "Clear the viewing statistics of %@?": "Effacer les statistiques de visionnage de %@ ?",
   "No viewing statistics yet. Bingr keeps track from %@.": "Pas encore de statistiques de visionnage. Bingr les enregistre depuis le %@.",
-  "Statistics are not available yet. Please try again later.": "Les statistiques ne sont pas encore disponibles. Réessayez plus tard."
+  "Statistics are not available yet. Please try again later.": "Les statistiques ne sont pas encore disponibles. Réessayez plus tard.",
+  "Support": "Assistance",
+  "Help": "Aide",
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Des questions ou un problème ? Scannez le code QR avec l'appareil photo de votre téléphone pour ouvrir la page d'assistance de Bingr."
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -4082,7 +4094,10 @@
   "Clear the viewing statistics of all profiles?": "Cancellare le statistiche di visione di tutti i profili?",
   "Clear the viewing statistics of %@?": "Cancellare le statistiche di visione di %@?",
   "No viewing statistics yet. Bingr keeps track from %@.": "Ancora nessuna statistica di visione. Bingr le registra dal %@.",
-  "Statistics are not available yet. Please try again later.": "Le statistiche non sono ancora disponibili. Riprova più tardi."
+  "Statistics are not available yet. Please try again later.": "Le statistiche non sono ancora disponibili. Riprova più tardi.",
+  "Support": "Assistenza",
+  "Help": "Aiuto",
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Domande o problemi? Scansiona il codice QR con la fotocamera del telefono per aprire la pagina di assistenza di Bingr."
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -4899,7 +4914,10 @@
   "Clear the viewing statistics of all profiles?": "De kijkstatistieken van alle profielen wissen?",
   "Clear the viewing statistics of %@?": "De kijkstatistieken van %@ wissen?",
   "No viewing statistics yet. Bingr keeps track from %@.": "Nog geen kijkstatistieken. Bingr houdt ze bij vanaf %@.",
-  "Statistics are not available yet. Please try again later.": "Statistieken zijn nog niet beschikbaar. Probeer het later opnieuw."
+  "Statistics are not available yet. Please try again later.": "Statistieken zijn nog niet beschikbaar. Probeer het later opnieuw.",
+  "Support": "Support",
+  "Help": "Hulp",
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Vragen of problemen? Scan de QR-code met de camera van je telefoon om de supportpagina van Bingr te openen."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -5716,7 +5734,10 @@
   "Clear the viewing statistics of all profiles?": "Wyczyścić statystyki oglądania wszystkich profili?",
   "Clear the viewing statistics of %@?": "Wyczyścić statystyki oglądania profilu %@?",
   "No viewing statistics yet. Bingr keeps track from %@.": "Brak statystyk oglądania. Bingr zapisuje je od %@.",
-  "Statistics are not available yet. Please try again later.": "Statystyki nie są jeszcze dostępne. Spróbuj ponownie później."
+  "Statistics are not available yet. Please try again later.": "Statystyki nie są jeszcze dostępne. Spróbuj ponownie później.",
+  "Support": "Pomoc techniczna",
+  "Help": "Pomoc",
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Pytania lub problemy? Zeskanuj kod QR aparatem telefonu, aby otworzyć stronę pomocy Bingr."
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -6533,7 +6554,10 @@
   "Clear the viewing statistics of all profiles?": "Limpar as estatísticas de visualização de todos os perfis?",
   "Clear the viewing statistics of %@?": "Limpar as estatísticas de visualização de %@?",
   "No viewing statistics yet. Bingr keeps track from %@.": "Ainda não há estatísticas de visualização. O Bingr regista-as desde %@.",
-  "Statistics are not available yet. Please try again later.": "As estatísticas ainda não estão disponíveis. Tente novamente mais tarde."
+  "Statistics are not available yet. Please try again later.": "As estatísticas ainda não estão disponíveis. Tente novamente mais tarde.",
+  "Support": "Suporte",
+  "Help": "Ajuda",
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Dúvidas ou problemas? Lê o código QR com a câmara do telemóvel para abrir a página de suporte do Bingr."
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -7350,7 +7374,10 @@
   "Clear the viewing statistics of all profiles?": "Tüm profillerin izleme istatistikleri temizlensin mi?",
   "Clear the viewing statistics of %@?": "%@ için izleme istatistikleri temizlensin mi?",
   "No viewing statistics yet. Bingr keeps track from %@.": "Henüz izleme istatistiği yok. Bingr bunları %@ tarihinden itibaren kaydediyor.",
-  "Statistics are not available yet. Please try again later.": "İstatistikler henüz kullanılamıyor. Lütfen daha sonra tekrar deneyin."
+  "Statistics are not available yet. Please try again later.": "İstatistikler henüz kullanılamıyor. Lütfen daha sonra tekrar deneyin.",
+  "Support": "Destek",
+  "Help": "Yardım",
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "Soruların veya sorunların mı var? Bingr destek sayfasını açmak için QR kodunu telefonunun kamerasıyla tara."
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -8167,6 +8194,9 @@
   "Clear the viewing statistics of all profiles?": "要清除所有资料的观看统计吗？",
   "Clear the viewing statistics of %@?": "要清除 %@ 的观看统计吗？",
   "No viewing statistics yet. Bingr keeps track from %@.": "暂无观看统计。Bingr 自 %@ 起开始记录。",
-  "Statistics are not available yet. Please try again later.": "统计暂不可用，请稍后再试。"
+  "Statistics are not available yet. Please try again later.": "统计暂不可用，请稍后再试。",
+  "Support": "支持",
+  "Help": "帮助",
+  "Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.": "有问题？用手机相机扫描二维码，打开 Bingr 支持页面。"
  }
 }

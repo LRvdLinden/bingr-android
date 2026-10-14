@@ -129,6 +129,8 @@ object Details {
         // taal op posters als de titel/categorie hem niet noemt (build 59)
         ContentLanguage.rememberOriginal(t.title, t.year, isShow, d.originalLanguage)
         synchronized(cache) { cache[t.id] = d.copy() }
+        // build 75: gevonden IMDb-/TMDB-id ook voor de vinkjes op de posters gebruiken (Trakt)
+        Trakt.learn(t, d.imdbID, d.tmdbID ?: tmdbHint)
         return d
     }
 

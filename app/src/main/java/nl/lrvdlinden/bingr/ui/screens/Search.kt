@@ -371,7 +371,8 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
                                 s.title, s.poster,
                                 modifier = Modifier.focusLift { ScreensNav.detail(DetailTarget.SeriesT(s)) },
                                 accent = accent,
-                                language = languageLabel(s)
+                                language = languageLabel(s),
+                                watchedEpisodes = Playables.watchedEpisodeCount(s)
                             )
                         }
                     }

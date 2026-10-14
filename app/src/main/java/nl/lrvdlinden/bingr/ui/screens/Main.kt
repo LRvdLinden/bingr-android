@@ -203,6 +203,7 @@ fun MainScreen() {
 
         ScreensStackHost()
     }
+    SupportDialogHost()
 
     val err = Playlists.error
     if (err != null) {

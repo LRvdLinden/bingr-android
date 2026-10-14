@@ -54,25 +54,50 @@ object Trakt {
 
     /** Titel(+jaar) → IMDb-ID, zodat vinkjes direct op IPTV-titels passen zonder per titel op te zoeken. */
     @Serializable
-    data class TitleIndex(val movies: Map<String, String> = emptyMap(), val shows: Map<String, String> = emptyMap()) {
+    data class TitleIndex(
+        val movies: Map<String, String> = emptyMap(),
+        val shows: Map<String, String> = emptyMap(),
+        /** imdb → jaar volgens Trakt (build 75): titel zonder jaar-match niet aan een remake uit een ander jaar koppelen */
+        val years: Map<String, Int> = emptyMap(),
+        /** TMDB-id → imdb (build 75), voor titels waarvan we alleen de TMDB-id kennen (Xtream-info / TMDB) */
+        val tmdbMovies: Map<String, String> = emptyMap(),
+        val tmdbShows: Map<String, String> = emptyMap(),
+    ) {
         fun imdb(title: String, year: Int?, show: Boolean): String? {
             val n = Net.normTitle(title)
+            if (n.isEmpty()) return null
             val d = if (show) shows else movies
-            if (year != null) d["$n|$year"]?.let { return it }
-            return d[n]
+            if (year != null) {
+                d["$n|$year"]?.let { return it }
+                // IPTV-jaartallen wijken vaak één jaar af
+                d["$n|${year - 1}"]?.let { return it }
+                d["$n|${year + 1}"]?.let { return it }
+            }
+            val i = d[n] ?: return null
+            // films: bekend jaar dat duidelijk anders is (bijv. "Dune" 1984 vs. 2021) → geen match.
+            // Niet bij series: aanbieders zetten daar vaak het jaar van het laatste seizoen.
+            if (!show && year != null) years[i]?.let { y -> if (kotlin.math.abs(y - year) > 1) return null }
+            return i
         }
+        fun imdb(tmdb: Int, show: Boolean): String? = (if (show) tmdbShows else tmdbMovies)[tmdb.toString()]
     }
     private class IndexBuilder(from: TitleIndex) {
         val movies = HashMap(from.movies)
         val shows = HashMap(from.shows)
-        fun add(title: String?, year: Int?, imdb: String, show: Boolean) {
+        val years = HashMap(from.years)
+        val tmdbMovies = HashMap(from.tmdbMovies)
+        val tmdbShows = HashMap(from.tmdbShows)
+        fun add(title: String?, year: Int?, imdb: String, show: Boolean, tmdb: Int? = null) {
+            if (tmdb != null) (if (show) tmdbShows else tmdbMovies)[tmdb.toString()] = imdb
+            if (year != null) years[imdb] = year
             if (title == null) return
             val n = Net.normTitle(title)
+            if (n.isEmpty()) return
             val d = if (show) shows else movies
             d[n] = imdb
             if (year != null) d["$n|$year"] = imdb
         }
-        fun build() = TitleIndex(movies, shows)
+        fun build() = TitleIndex(movies, shows, years, tmdbMovies, tmdbShows)
     }
 
     private class NotLoggedIn : Exception(L("Not signed in to Trakt."))
@@ -445,14 +470,16 @@ object Trakt {
         val wm = HashSet<String>()
         for (x in f.movies.jItems) {
             val mv = x.jO("movie")
-            val i = ids(mv).imdb ?: continue
-            wm.add(i); idx.add(mv.jS("title"), mv.jI("year"), i, false)
+            val mi = ids(mv)
+            val i = mi.imdb ?: continue
+            wm.add(i); idx.add(mv.jS("title"), mv.jI("year"), i, false, mi.tmdb)
         }
         val eps = HashMap<String, Set<String>>()
         for (show in f.shows.jItems) {
             val sh = show.jO("show")
-            val imdb = ids(sh).imdb ?: continue
-            idx.add(sh.jS("title"), sh.jI("year"), imdb, true)
+            val si = ids(sh)
+            val imdb = si.imdb ?: continue
+            idx.add(sh.jS("title"), sh.jI("year"), imdb, true, si.tmdb)
             val set = HashSet<String>()
             for (season in show.jList("seasons")) {
                 val sn = season.jI("number") ?: continue
@@ -474,8 +501,8 @@ object Trakt {
         for (x in f.watchlist.jItems) {
             val mm = x.jO("movie"); val ss = x.jO("show")
             (ids(mm).imdb ?: ids(ss).imdb)?.let { wset.add(it) }
-            if (mm != null) ids(mm).imdb?.let { idx.add(mm.jS("title"), mm.jI("year"), it, false) }
-            if (ss != null) ids(ss).imdb?.let { idx.add(ss.jS("title"), ss.jI("year"), it, true) }
+            if (mm != null) ids(mm).let { mi -> mi.imdb?.let { idx.add(mm.jS("title"), mm.jI("year"), it, false, mi.tmdb) } }
+            if (ss != null) ids(ss).let { si -> si.imdb?.let { idx.add(ss.jS("title"), ss.jI("year"), it, true, si.tmdb) } }
         }
         return Built(wm, eps, pb, wset, idx.build())
     }
@@ -488,6 +515,29 @@ object Trakt {
      */
     fun imdb(m: Movie): String? = m.imdbID ?: indexed(m.title, m.year, false) ?: Metadata.cached(m)?.imdbID
     fun imdb(s: Series): String? = s.imdbID ?: indexed(s.title, s.year, true) ?: Metadata.cached(s)?.imdbID
+
+    /**
+     * Details van een titel geladen (build 75): de IMDb-id uit Xtream-info/TMDB (of via de TMDB-id uit de Trakt-index)
+     * onthouden voor deze IPTV-titel. Zo krijgt de poster in Home/Series/Zoeken hetzelfde vinkje of "N BEKEKEN" als de
+     * detailpagina, ook als de titel van de aanbieder niet op de Trakt-titel lijkt (bijv. een Nederlandse titel).
+     */
+    fun learn(t: DetailTarget, imdbID: String?, tmdb: Int?) {
+        if (!isLoggedIn) return
+        AppScope.launch(Dispatchers.Main.immediate) {
+            if (!isLoggedIn) return@launch
+            val show = t.isSeries
+            val known = when (t) { is DetailTarget.MovieT -> imdb(t.movie); is DetailTarget.SeriesT -> imdb(t.series) }
+            val id = imdbID?.takeIf { it.startsWith("tt") } ?: tmdb?.let { titleIndex.imdb(it, show) } ?: return@launch
+            if (known == id) return@launch
+            // alleen als het iets toevoegt aan wat we van Trakt weten (bekeken of op de watchlist)
+            val relevant = id in watchlist || (if (show) watchedEpisodes.containsKey(id) else id in watchedMovies)
+            if (!relevant) return@launch
+            val b = IndexBuilder(titleIndex)
+            b.add(t.title, null, id, show)   // geen jaar: dat van Trakt blijft leidend
+            titleIndex = b.build()
+            saveCache()
+        }
+    }
 
     private fun indexed(raw: String, year: Int?, show: Boolean): String? {
         val idx = titleIndex

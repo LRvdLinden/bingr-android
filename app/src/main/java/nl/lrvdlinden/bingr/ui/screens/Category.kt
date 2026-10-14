@@ -149,6 +149,7 @@ fun CategoryScreen(target: CategoryTarget, onClose: () -> Unit) {
 @Composable
 private fun CategoryCell(t: DetailTarget, modifier: Modifier) {
     val watched = (t as? DetailTarget.MovieT)?.let { Playables.isWatched(it.movie, Trakt.imdb(it.movie)) } ?: false
+    val watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.watchedEpisodeCount(it.series) } ?: 0
     val rating = categoryRating(t)
     Column(modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(tvs(6)))) {
@@ -161,6 +162,8 @@ private fun CategoryCell(t: DetailTarget, modifier: Modifier) {
                     contentAlignment = Alignment.Center
                 ) { Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(tvs(13))) }
             }
+            // series (build 75): rood label "N BEKEKEN" linksboven
+            if (watchedEpisodes > 0) PosterLabel(L("%d WATCHED", watchedEpisodes), Modifier.align(Alignment.TopStart).padding(6.dp))
             if (rating != null) {
                 Row(
                     Modifier.align(Alignment.TopEnd).padding(6.dp).clip(RoundedCornerShape(4.dp)).background(Theme.imdb)

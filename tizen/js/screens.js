@@ -260,6 +260,7 @@
     if (p != null) card.appendChild(h('div.card-progress', [h('div', { style: { width: Math.round(B.clamp(p, 0, 1) * 100) + '%' } })]));
     if (opts.label) card.appendChild(h('div.card-label', opts.label));
     langStrip(card, x, type);
+    watchedMarks(card, x, type);
     card.onEnter = function () { openItem(type, x); };
     card.onFocus = opts.onFocus || null;
     card._key = type + ':' + x.id;
@@ -273,6 +274,60 @@
     if (!txt) return;
     card.appendChild(h('div.card-lang', txt));
     card.classList.add('has-lang');
+  }
+  /**
+   * Bekeken (build 75), zoals de andere apps: film → vinkje rechtsboven; serie → rood label "N BEKEKEN" linksboven
+   * (aantal bekeken afleveringen: Trakt (alleen hoofdprofiel) samen met wat dit profiel in Bingr uitkeek).
+   */
+  var localEps = null;
+  function localEpisodeIndex() {
+    if (localEps) return localEps;
+    localEps = {};
+    D.setList('watched').forEach(function (k) {
+      if (k.indexOf('ep:') !== 0) return;
+      var bar = k.lastIndexOf('|');
+      if (bar < 0) return;
+      var sid = k.slice(3, bar);
+      (localEps[sid] = localEps[sid] || {})[k.slice(bar + 1)] = true;
+    });
+    return localEps;
+  }
+  // bekeken gewijzigd (in Bingr, via sync of Trakt): de vinkjes/labels op alle getoonde posters bijwerken
+  var marksPending = false;
+  function marksChanged() {
+    localEps = null;
+    if (marksPending) return;
+    marksPending = true;
+    B.whenQuiet(function () {
+      marksPending = false;
+      var cards = document.querySelectorAll('.card.poster, .card.top10');
+      for (var i = 0; i < cards.length; i++) if (cards[i]._wm) watchedMarks(cards[i], cards[i]._wm.x, cards[i]._wm.type);
+    }, 500);
+  }
+  B.on('profileData', marksChanged);
+  B.on('trakt', marksChanged);
+  function watchedEpisodeCount(s) {
+    var all = {}, n = 0;
+    function add(k) { if (!all[k]) { all[k] = true; n++; } }
+    var t = B.trakt.watchedEpisodes(s);
+    if (t) Object.keys(t).forEach(add);
+    var l = localEpisodeIndex()[s.id];
+    if (l) Object.keys(l).forEach(add);
+    (s.episodes || []).forEach(function (e) { if (D.isWatched(e.id)) add(e.season + '-' + e.number); });
+    return n;
+  }
+  S.watchedEpisodeCount = watchedEpisodeCount;
+  function watchedMarks(card, x, type) {
+    if (type !== 'movie' && type !== 'series') return;
+    card._wm = { x: x, type: type };
+    var old = card.querySelectorAll('.card-check, .card-badges');
+    for (var i = 0; i < old.length; i++) card.removeChild(old[i]);
+    if (type === 'movie') {
+      if (D.isWatched(x.id) || B.trakt.isMovieWatched(x)) card.appendChild(h('div.card-check', [U.icon('check')]));
+    } else if (type === 'series') {
+      var n = watchedEpisodeCount(x);
+      if (n > 0) card.appendChild(h('div.card-badges', [h('div.card-badge', L('%d WATCHED', n))]));
+    }
   }
   function pct(p) { return Math.round(B.clamp((Date.now() - p.start) / (p.end - p.start), 0, 1) * 100) + '%'; }
   function channelCard(ch, list) {
@@ -290,6 +345,7 @@
   function top10Card(x, type, i) {
     var card = h('div.card.top10.f', [h('div.top10-num', String(i + 1)), U.img(x.poster, 'poster-img', x.title)]);
     langStrip(card, x, type);
+    watchedMarks(card, x, type);
     card.onEnter = function () { openItem(type, x); };
     card._key = type + ':' + x.id;
     return card;
@@ -445,7 +501,7 @@
     }
     // voortgang, lijsten en favorieten: alleen de rijen die erover gaan, en pas als het stil is
     var dataPending = false;
-    offs.push(B.on('profileData', function () {
+    function onProfileData() {
       Object.keys(pages).forEach(function (k) { if (pages[k].onData && k !== current) pages[k].stale = true; });
       if (!pages[current] || !pages[current].onData) return;
       if (U.top() !== screen) { dataStale = true; return; }
@@ -456,7 +512,8 @@
         if (U.top() !== screen) { dataStale = true; return; }
         rerender();
       }, 600);
-    }));
+    }
+    offs.push(B.on('profileData', onProfileData));
     offs.push(B.on('epg', function () { var pg = pages[current]; if (pg && pg.onEpg) B.whenQuiet(function () { if (el.parentNode) pg.onEpg(); }, 400); }));
     // scherm weg (profiel wisselen, uitloggen, taal): luisteraars en pagina's opruimen, anders blijft alles in het geheugen
     screen.destroy = function () {
@@ -1133,6 +1190,10 @@
     item(U.icon('gear'), L('Settings'), function () { go('settings'); });
     if (A.isSignedIn()) {
       item(U.icon('person'), L('Account & devices'), function () { U.push(S.devices()); });
+    }
+    // build 75: support.bingr.online als QR-code
+    item(U.icon('help'), L('Support'), function () { S.support(); });
+    if (A.isSignedIn()) {
       sep();
       item(U.icon('signout'), L('Sign out'), function () {
         U.modal({ title: L('Sign out'), text: L('Sign out of Bingr on this device?'), buttons: [
@@ -1431,6 +1492,8 @@
         U.modal({ title: L('Sign out'), text: L('Sign out of Bingr on this device?'), buttons: [
           { label: L('Sign out'), fn: function () { B.app.signOut(); } }, { label: L('Cancel') }] });
       }, { danger: true });
+      // build 75: hulp nodig? → support.bingr.online (QR-code)
+      row(L('Support'), S.SUPPORT_URL.replace(/^https?:\/\//, ''), function () { S.support(); });
 
       section(L('Profile'));
       row(L('Switch profile'), prof.name, function () { B.app.switchProfile(); });

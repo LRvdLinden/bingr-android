@@ -54,6 +54,10 @@ fun PosterCard(
     language: String? = null,
     /** Label [badge] linksboven in de hoek in plaats van midden onderaan (build 74, rij "Voor jou") */
     badgeTopStart: Boolean = false,
+    /** Series (build 75): aantal bekeken afleveringen → rood label "N BEKEKEN" linksboven (onder [badge] als die daar staat) */
+    watchedEpisodes: Int = 0,
+    /** Extra ruimte boven de labels linksboven (Top 10: onder het "TOP 10"-merkje) */
+    topStartInset: Dp = 0.dp,
 ) {
     Box(modifier.width(width).height(width * 1.5f).clip(RoundedCornerShape(4.dp))) {
         RemoteImage(poster, Modifier.matchParentSize(), placeholder = ContentLanguage.displayTitle(title))
@@ -70,11 +74,16 @@ fun PosterCard(
             }
         }
         if (language != null) LanguageStrip(language, Modifier.align(Alignment.BottomCenter))
-        if (badge != null && badgeTopStart) {
-            Text(badge, color = Color.White, fontSize = tsp(9), fontWeight = FontWeight.Black,
-                modifier = Modifier.align(Alignment.TopStart).padding(start = 6.dp, top = 6.dp + (if (accent != null) tvs(4) else 0.dp))
-                    .clip(RoundedCornerShape(2.dp)).background(Theme.red).padding(horizontal = 5.dp, vertical = 2.dp))
-        } else if (badge != null) {
+        if ((badge != null && badgeTopStart) || watchedEpisodes > 0) {
+            Column(
+                Modifier.align(Alignment.TopStart).padding(start = 6.dp, top = 6.dp + topStartInset + (if (accent != null) tvs(4) else 0.dp)),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                if (badge != null && badgeTopStart) PosterLabel(badge)
+                if (watchedEpisodes > 0) PosterLabel(L("%d WATCHED", watchedEpisodes))
+            }
+        }
+        if (badge != null && !badgeTopStart) {
             Text(badge, color = Color.White, fontSize = tsp(9), fontWeight = FontWeight.Black,
                 modifier = Modifier.align(Alignment.BottomCenter)
                     .padding(bottom = (if (progress == null) 6.dp else 10.dp) + (if (language != null) tvs(16) else 0.dp))
@@ -82,6 +91,14 @@ fun PosterCard(
         }
         if (progress != null && progress > 0) ProgressBar(progress, Modifier.align(Alignment.BottomCenter))
     }
+}
+
+/** Rood label op een poster (SERIE/FILM, "N BEKEKEN"): witte, vette kleine kapitalen op rood, afgerond. */
+@Composable
+fun PosterLabel(text: String, modifier: Modifier = Modifier) {
+    Text(text, color = Color.White, fontSize = tsp(9), fontWeight = FontWeight.Black, maxLines = 1,
+        style = TextStyle(fontFeatureSettings = "smcp, c2sc"), letterSpacing = 0.3.sp,
+        modifier = modifier.clip(RoundedCornerShape(2.dp)).background(Theme.red).padding(horizontal = 5.dp, vertical = 2.dp))
 }
 
 /**
@@ -110,7 +127,8 @@ fun languageLabel(s: Series): String? = ContentLanguage.of(s)?.label
 
 /** Netflix-Top 10: groot zwart cijfer met grijze rand, poster schuift er half overheen. */
 @Composable
-fun Top10Card(rank: Int, title: String, poster: String?, watched: Boolean = false, badge: String? = null, language: String? = null) {
+fun Top10Card(rank: Int, title: String, poster: String?, watched: Boolean = false, badge: String? = null, language: String? = null,
+              watchedEpisodes: Int = 0) {
     val w = Theme.posterWidth * 1.08f
     val h = w * 1.5f
     val measurer = rememberTextMeasurer()
@@ -126,7 +144,8 @@ fun Top10Card(rank: Int, title: String, poster: String?, watched: Boolean = fals
                 drawStyle = Stroke(width = (h.value / 45f).coerceAtLeast(3f)))
         })
         Box(Modifier.offset(x = -(h * 0.16f))) {
-            PosterCard(title, poster, width = w, watched = watched, badge = badge, language = language)
+            PosterCard(title, poster, width = w, watched = watched, badge = badge, language = language,
+                watchedEpisodes = watchedEpisodes, topStartInset = tvs(28))
             Column(Modifier.padding(5.dp).clip(RoundedCornerShape(2.dp)).background(Theme.red).padding(horizontal = 3.dp, vertical = 1.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("TOP", color = Color.White, fontSize = tsp(6), fontWeight = FontWeight.Black, lineHeight = tsp(7))

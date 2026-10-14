@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,6 +33,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // bestand van een download buiten de app verwijderd → niet meer als "Gedownload" tonen
         Downloads.verifyFiles()
+        // build 75: terug in de app → Trakt-vinkjes bijwerken (wat je intussen elders keek), zoals iOS bij "active".
+        // Zonder force: eerst /sync/last_activities, dus goedkoop als er niets veranderd is.
+        if (AppState.stage == AppState.Stage.MAIN && Trakt.isLoggedIn) AppScope.launch { runCatching { Trakt.refresh() } }
     }
 
     override fun onDestroy() { if (current === this) current = null; super.onDestroy() }

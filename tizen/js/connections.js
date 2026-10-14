@@ -119,7 +119,7 @@
     B.idb.get('trakt.cache.v1').then(function (c) {
       // alleen als er intussen niets nieuws is opgehaald of gewist
       if (!c || typeof c !== 'object' || cacheGen) return;
-      cacheT = { movies: c.movies || [], shows: c.shows || {}, index: c.index || {}, activity: c.activity || null };
+      cacheT = { movies: c.movies || [], shows: c.shows || {}, index: c.index || {}, years: c.years || {}, activity: c.activity || null };
       loadCache();
     });
   }
@@ -136,7 +136,7 @@
     clearTimeout(cacheTimer);
     cacheTimer = setTimeout(function () { B.idb.set('trakt.cache.v1', cacheT); }, 1500);
   }
-  Trakt.reset = function () { cacheGen++; cacheT = { movies: [], shows: {}, index: {}, activity: null }; loadCache(); };
+  Trakt.reset = function () { cacheGen++; cacheT = { movies: [], shows: {}, index: {}, years: {}, activity: null }; loadCache(); B.emit('trakt'); };
 
   Trakt.clientID = function () { return A.serverKey('traktClientID') || ''; };
   Trakt.ready = function () { return !!Trakt.clientID(); };
@@ -296,17 +296,33 @@
   // titel → IMDb-index (Trakt-titels en eerder opgezochte IPTV-titels)
   function idxKey(title, year, show) { return (show ? 's' : 'm') + '|' + B.fold(title).replace(/[^a-z0-9]+/g, ' ').trim() + '|' + (year || ''); }
   function indexAdd(title, year, imdb, show) {
-    if (!title || !imdb) return;
+    if (!imdb) return;
+    // jaar volgens Trakt (build 75): een titel zonder jaar-match niet aan een film uit een ander jaar koppelen
+    if (year) (cacheT.years = cacheT.years || {})[imdb] = year;
+    if (!title) return;
     cacheT.index[idxKey(title, year, show)] = imdb;
     cacheT.index[idxKey(title, null, show)] = cacheT.index[idxKey(title, null, show)] || imdb;
   }
   function indexed(title, year, show) {
-    var ix = cacheT.index || {};
-    var p = B.parseTitle(title);
-    return ix[idxKey(title, year, show)] || ix[idxKey(p.title, year || p.year, show)] || ix[idxKey(p.title, null, show)] || null;
+    var ix = cacheT.index || {}, yrs = cacheT.years || {};
+    var p = B.parseTitle(title), y = year || p.year || null;
+    if (y) {
+      // IPTV-jaartallen wijken vaak één jaar af
+      var exact = ix[idxKey(title, y, show)] || ix[idxKey(p.title, y, show)] || ix[idxKey(p.title, y - 1, show)] || ix[idxKey(p.title, y + 1, show)];
+      if (exact) return exact;
+    }
+    var hit = ix[idxKey(title, null, show)] || ix[idxKey(p.title, null, show)] || null;
+    // films: duidelijk ander jaar (bijv. "Dune" 1984 vs. 2021) → geen match; series niet (aanbieders zetten daar vaak het laatste jaar)
+    if (hit && !show && y && yrs[hit] && Math.abs(yrs[hit] - y) > 1) return null;
+    return hit;
   }
   Trakt.imdbFor = function (x, show) { return (x && x.imdbID) || (x ? indexed(x.rawTitle || x.title, x.year, show) : null); };
   Trakt.isMovieWatched = function (m) { var i = Trakt.isLoggedIn() ? Trakt.imdbFor(m, false) : null; return !!(i && watchedMovies[i]); };
+  /** Bekeken afleveringen van een serie op Trakt als { "s-e": true } (alleen hoofdprofiel), anders null. */
+  Trakt.watchedEpisodes = function (series) {
+    var i = Trakt.isLoggedIn() ? Trakt.imdbFor(series, true) : null;
+    return (i && watchedShows[i]) || null;
+  };
   Trakt.isEpisodeWatched = function (series, season, ep) {
     var i = Trakt.isLoggedIn() ? Trakt.imdbFor(series, true) : null;
     return !!(i && watchedShows[i] && watchedShows[i][season + '-' + ep]);

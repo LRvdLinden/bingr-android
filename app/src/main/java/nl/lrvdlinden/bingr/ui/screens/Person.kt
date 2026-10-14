@@ -174,7 +174,8 @@ fun PersonScreen(ref: PersonRef, onClose: () -> Unit) {
                                     .then(if (i == 0 && bio == null) Modifier.focusRequester(firstFocus) else Modifier)
                                     .focusLift { ScreensNav.detail(t) },
                                 watched = (t as? DetailTarget.MovieT)?.let { Playables.isWatched(it.movie, Trakt.imdb(it.movie)) } ?: false,
-                                language = languageLabel(t)
+                                language = languageLabel(t),
+                                watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.watchedEpisodeCount(it.series) } ?: 0
                             )
                         }
                     }

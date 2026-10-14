@@ -36,6 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -310,6 +311,8 @@ fun SettingsScreen() {
                 if (Account.isSignedIn) {
                     S2NavRow(L("Account & devices"), Icons.Default.AccountCircle) { MyBingrNav.page = MyBingrPage.ACCOUNT }
                 }
+                // build 75: support.bingr.online (telefoon: browser, TV: QR-code)
+                S2Row(L("Support"), icon = Icons.Default.SupportAgent, onClick = { Support.open(ctx) })
             }
         }
 
@@ -358,6 +361,13 @@ fun SettingsScreen() {
                     })
                     accountError?.let { S2Row(it, tint = Theme.red) }
                 }
+            }
+        }
+        // build 75: hulp nodig? → support.bingr.online
+        item {
+            S2Section(L("Help")) {
+                S2Row(L("Support"), icon = Icons.Default.SupportAgent, value = Support.URL.removePrefix("https://"),
+                    onClick = { Support.open(ctx) })
             }
         }
 
@@ -853,7 +863,8 @@ private fun S2MyBingrHeader() {
                 items(mine) { t ->
                     val watched = (t as? DetailTarget.MovieT)?.let { Playables.isWatched(it.movie, Trakt.imdb(it.movie)) } ?: false
                     PosterCard(t.title, t.poster, modifier = Modifier.focusLift { ScreensNav.detail(t) },
-                        watched = watched, progress = progress[t.id]?.fraction)
+                        watched = watched, progress = progress[t.id]?.fraction,
+                        watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.watchedEpisodeCount(it.series) } ?: 0)
                 }
             }
         }

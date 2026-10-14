@@ -268,6 +268,8 @@
     } else {
       startHeartbeat();
       setTimeout(checkAnnouncements, 2000);
+      // build 75: terug op de tv → Trakt-vinkjes bijwerken (alleen als Trakt iets nieuws meldt), zoals iOS/Android
+      if (app.profile) B.trakt.refresh(false);
       if (B.player.current) B.player.current.resumeFromBackground();
       if (B.multiview.current) B.multiview.current.resumeFromBackground();
     }

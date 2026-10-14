@@ -270,7 +270,7 @@ private class HomeModel(val filter: Filter) {
                 if (filter == Filter.SERIES && !t.isSeries) return
                 when (t) {
                     is DetailTarget.MovieT -> if (Trakt.isWatched(Trakt.imdb(t.movie)) || t.movie.id in localWatched) return
-                    is DetailTarget.SeriesT -> if (Trakt.watchedCount(Trakt.imdb(t.series)) > 0) return
+                    is DetailTarget.SeriesT -> if (Playables.watchedEpisodeCount(t.series) > 0) return
                 }
                 seen.add(t.id); out.add(t)
             }
@@ -686,12 +686,6 @@ private fun MovieRow(title: String, items: List<Movie>, all: List<Movie>?, pid: 
     }
 }
 
-/** Aantal bekeken afleveringen van een serie: Trakt, of lokaal (per profiel). */
-private fun watchedEpisodeCount(s: Series): Int {
-    val lw = Store.localWatched
-    return maxOf(Trakt.watchedCount(Trakt.imdb(s)), Store.localWatchedCount(s.id), s.episodes.count { it.id in lw })
-}
-
 @Composable
 private fun SeriesRow(title: String, items: List<Series>, all: List<Series>?) {
     val keys = rememberKeys(items) { it.id }
@@ -702,13 +696,12 @@ private fun SeriesRow(title: String, items: List<Series>, all: List<Series>?) {
 
 @Composable
 private fun SeriesPoster(s: Series) {
-    val count = watchedEpisodeCount(s)
     var collect by remember { mutableStateOf(false) }
     PosterCard(
         s.title, s.poster,
         modifier = Modifier.focusLift(onLongClick = { collect = true }) { openDetail(DetailTarget.SeriesT(s)) },
-        badge = if (count > 0) L("%d WATCHED", count) else null,
-        language = languageLabel(s)
+        language = languageLabel(s),
+        watchedEpisodes = Playables.watchedEpisodeCount(s)
     )
     if (collect) AddToCollectionDialog(Collections.ref(DetailTarget.SeriesT(s)), s.title, s.poster) { collect = false }
 }
@@ -780,12 +773,15 @@ private fun ForYouRow(filter: Filter, all: List<DetailTarget>) {
     val keys = rememberKeys(items) { (if (it.isSeries) "s:" else "m:") + it.id }
     MediaRow(L("For you"), onSeeAll = { openCategory(L("For you"), items) }) {
         keyedItems(items, keys) { t ->
+            // build 75: bekeken-label onder het SERIE/FILM-label, vinkje rechtsboven voor bekeken films
             PosterCard(
                 t.title, t.poster,
                 modifier = Modifier.focusLift { openDetail(t) },
+                watched = (t as? DetailTarget.MovieT)?.let { Playables.isWatched(it.movie, Trakt.imdb(it.movie)) } ?: false,
                 badge = if (t.isSeries) L("SERIES") else L("MOVIE"),
                 language = languageLabel(t),
-                badgeTopStart = true
+                badgeTopStart = true,
+                watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.watchedEpisodeCount(it.series) } ?: 0
             )
         }
     }
@@ -813,7 +809,7 @@ private fun Top10SeriesRow(title: String, all: List<Series>) {
     MediaRow(title, onSeeAll = { openCategory(title, all.map { DetailTarget.SeriesT(it) }) }) {
         itemsIndexed(all.take(10)) { i, s ->
             Box(Modifier.focusLift { openDetail(DetailTarget.SeriesT(s)) }) {
-                Top10Card(i + 1, s.title, s.poster, language = languageLabel(s))
+                Top10Card(i + 1, s.title, s.poster, language = languageLabel(s), watchedEpisodes = Playables.watchedEpisodeCount(s))
             }
         }
     }

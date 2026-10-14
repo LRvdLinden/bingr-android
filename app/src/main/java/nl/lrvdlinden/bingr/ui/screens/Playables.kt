@@ -42,6 +42,28 @@ object Playables {
     fun isWatched(e: Episode, imdb: String?): Boolean =
         Trakt.isWatched(imdb, e.season, e.number) || Store.isEpisodeWatched(e)
 
+    /**
+     * Aantal bekeken afleveringen van een serie voor het label "N BEKEKEN" op de poster (build 75): de vereniging van
+     * Trakt (alleen hoofdaccount) en wat dit profiel in Bingr afvinkte/uitkeek (seizoen-aflevering-sleutels en
+     * aflevering-id's). Eerder werd het maximum van die bronnen genomen, waardoor de teller te laag uitviel als een
+     * deel op Trakt en een deel alleen in Bingr bekeken was.
+     */
+    fun watchedEpisodeCount(s: Series, imdb: String? = Trakt.imdb(s)): Int {
+        val lw = Store.localWatched
+        val trakt = imdb?.let { Trakt.watchedEpisodes[it] }.orEmpty()
+        val prefix = "ep:${s.id}|"
+        var set: MutableSet<String>? = null
+        for (k in lw) if (k.startsWith(prefix)) {
+            val x = set ?: HashSet(trakt).also { set = it }
+            x.add(k.substring(prefix.length))
+        }
+        if (s.episodes.isNotEmpty() && lw.isNotEmpty()) for (e in s.episodes) if (e.id in lw) {
+            val x = set ?: HashSet(trakt).also { set = it }
+            x.add("${e.season}-${e.number}")
+        }
+        return set?.size ?: trakt.size
+    }
+
     fun cleanEpisodeTitle(e: Episode): String {
         val parts = e.title.split(" - ")
         if (parts.size >= 3) {

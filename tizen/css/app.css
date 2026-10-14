@@ -223,6 +223,14 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 .card.top10 .card-lang { left: auto; width: 206px; border-radius: 0 0 8px 8px; }
 .card.has-lang .card-progress { bottom: 38px; }
 .card.has-lang .card-label { bottom: 30px; }
+/* bekeken (build 75): vinkje rechtsboven (film), rood label "N BEKEKEN" linksboven (serie) */
+.card-check { position: absolute; right: 10px; top: 10px; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center; }
+.card-check .ic { width: 24px; height: 24px; }
+.card-badges { position: absolute; left: 10px; top: 10px; display: flex; flex-direction: column; align-items: flex-start; }
+.card-badge { margin-bottom: 6px; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: #fff; font-size: 17px; font-weight: 900;
+  letter-spacing: 0.5px; line-height: 1.25; text-transform: uppercase; white-space: nowrap; }
+.card.top10 .card-badges { left: 134px; }
 .card.chan { width: 330px; height: 186px; background: #1d1d1d; display: flex; flex-direction: column; }
 .chan-logo { height: 116px; display: flex; align-items: center; justify-content: center; background: linear-gradient(160deg, #2c2c2c, #191919); }
 .logo-img { width: 72%; height: 80%; background-size: contain; }
@@ -593,6 +601,9 @@ html.mv-hole .layer.multiview { background: transparent; }
 .link-cols { display: flex; align-items: center; }
 .qr-box.small { width: 260px; height: 260px; margin: 10px 50px 10px 0; flex: none; }
 .qr-box.small canvas { width: 240px; height: 240px; }
+/* support (build 75): QR-code + adres */
+.support-cols { display: flex; align-items: center; text-align: left; max-width: 1000px; }
+.support-url { margin-top: 18px; font-size: 40px; font-weight: 800; }
 .player.ov .pl-sub { bottom: 300px; }
 .pl-sub { transition: bottom 0.2s ease; }
 .modal-text { white-space: pre-line; }

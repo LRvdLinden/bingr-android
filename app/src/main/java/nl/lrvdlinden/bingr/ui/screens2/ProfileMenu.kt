@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -108,6 +109,7 @@ fun ProfileMenu(expanded: Boolean, onDismiss: () -> Unit) {
     var pinFor by remember { mutableStateOf<ViewerProfile?>(null) }
     var confirmSignOut by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val tv = AppState.isTV
 
     fun switchTo(p: ViewerProfile) {
@@ -144,6 +146,10 @@ fun ProfileMenu(expanded: Boolean, onDismiss: () -> Unit) {
         ProfileMenuItem(L("Settings"), Icons.Default.Settings) { onDismiss(); MyBingrNav.go(MyBingrPage.SETTINGS) }
         if (Account.isSignedIn) {
             ProfileMenuItem(L("Account & devices"), Icons.Default.AccountCircle) { onDismiss(); MyBingrNav.go(MyBingrPage.ACCOUNT) }
+        }
+        // build 75: support.bingr.online (telefoon: browser, TV: QR-code)
+        ProfileMenuItem(L("Support"), Icons.Default.SupportAgent) { onDismiss(); Support.open(ctx) }
+        if (Account.isSignedIn) {
             ProfileMenuDivider()
             ProfileMenuItem(L("Sign out"), Icons.AutoMirrored.Filled.Logout) { onDismiss(); confirmSignOut = true }
         }
