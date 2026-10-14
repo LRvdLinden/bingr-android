@@ -65,6 +65,8 @@ object AppState {
             if (!Account.isSignedIn) return@launch
             // app-sleutels van de server ophalen (op de achtergrond)
             Account.launchConfigFetch()
+            // abonnement (build 88): Gratis of Lifetime
+            Entitlements.launchFetch(force = true)
             // even wachten op de profielen en servers van het account (max. 8 seconden; fouten zijn stil)
             withTimeoutOrNull(8_000) {
                 ProfileSync.syncNow()

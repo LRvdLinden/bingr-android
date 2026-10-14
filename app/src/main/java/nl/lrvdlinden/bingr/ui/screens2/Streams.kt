@@ -178,6 +178,11 @@ fun StreamLimitScreen(info: Account.StreamList, onRetry: () -> Unit, onClose: ()
                         textAlign = TextAlign.Center)
                     Text(L("Your account can be used on up to %d screens at the same time.", data.limit),
                         color = Theme.secondary, fontSize = tsp(15), textAlign = TextAlign.Center)
+                    // build 88: Gratis → met Lifetime meer schermen tegelijk
+                    if (data.isFree) {
+                        Text(L("Upgrade to Lifetime to watch on up to %d screens at the same time.", Entitlements.LIFETIME_STREAMS),
+                            color = Color.White, fontSize = tsp(14), textAlign = TextAlign.Center)
+                    }
                 }
             }
             if (data.streams.isNotEmpty()) {
@@ -201,6 +206,10 @@ fun StreamLimitScreen(info: Account.StreamList, onRetry: () -> Unit, onClose: ()
                         NetflixButton(L("Close"), Icons.Filled.Close, kind = NetflixKind.SECONDARY) { onClose() }
                     }
                 }
+            }
+            // build 88: Gratis → upgraden naar Lifetime (meer schermen tegelijk)
+            if (data.isFree && !working) item {
+                UpgradeLimitButton(Entitlements.Feature.STREAMS, Modifier.padding(bottom = tvs(20)))
             }
         }
     }

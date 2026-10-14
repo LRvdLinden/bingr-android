@@ -36,7 +36,8 @@ object Accent {
     /** Kleur van een profiel (ontbreekt of onbekend = rood). */
     fun keyFor(p: ViewerProfile?): String = valid(p?.accentColor) ?: DEFAULT
 
-    val key: String get() = keyFor(Store.activeProfile)
+    /** Build 88: accentkleuren horen bij Lifetime; met Gratis rood (de gekozen kleur blijft bewaard voor later). */
+    val key: String get() = if (Entitlements.themes) keyFor(Store.activeProfile) else DEFAULT
     val color: Color get() = (options.firstOrNull { it.key == key } ?: options[0]).color
 
     /** Kleur kiezen voor het actieve profiel. */

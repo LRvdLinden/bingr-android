@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Text
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -194,8 +195,9 @@ fun SettingsScreen() {
     LaunchedEffect(Unit) { runCatching { OpenSubtitles.refreshUser() } }
     /** Wie kijkt er nu (alleen hoofdprofiel), elke 30 s bijgewerkt. */
     var watching by remember { mutableStateOf<Account.StreamList?>(null) }
-    LaunchedEffect(Account.isSignedIn, Store.canManage, sub) {
-        if (!Account.isSignedIn || !Store.canManage || sub != null) return@LaunchedEffect
+    LaunchedEffect(Account.isSignedIn, Store.canManage, sub, Entitlements.nowWatching) {
+        // build 88: Nu aan het kijken hoort bij Lifetime
+        if (!Account.isSignedIn || !Store.canManage || sub != null || !Entitlements.nowWatching) { watching = null; return@LaunchedEffect }
         while (true) {
             try { watching = Account.listStreams() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { }
             kotlinx.coroutines.delay(30_000L)
@@ -208,8 +210,18 @@ fun SettingsScreen() {
         sub = null; editing = null; addingServer = false; editingProfile = null; addingProfile = false
     }
 
+    // build 88: onderdeel van Lifetime (ook als de server het tijdens het kijken dichtzet): terug en het upgradevenster
+    val lockedSub = when (sub) {
+        S2SettingsSub.STATS -> Entitlements.Feature.STATS.takeIf { !Entitlements.stats }
+        S2SettingsSub.WATCHING, S2SettingsSub.WATCH_LOG -> Entitlements.Feature.NOW_WATCHING.takeIf { !Entitlements.nowWatching }
+        else -> null
+    }
+    LaunchedEffect(lockedSub) {
+        if (lockedSub != null) { sub = null; Upgrade.show(lockedSub) }
+    }
+
     // volledige subschermen (vervangen de lijst, zodat de focus erin blijft)
-    when (sub) {
+    if (lockedSub == null) when (sub) {
         S2SettingsSub.CATEGORIES -> { CategoriesScreen { sub = null }; return }
         S2SettingsSub.MANAGE -> { ManageScreen { sub = null }; return }
         S2SettingsSub.HISTORY -> { HistoryScreen { sub = null }; return }
@@ -293,9 +305,12 @@ fun SettingsScreen() {
                     }
                 }
                 // kijkstatistieken (build 68): hoofdprofiel alle profielen, andere profielen alleen hun eigen
-                S2NavRow(L("Statistics"), Icons.Default.BarChart) { sub = S2SettingsSub.STATS }
+                S2NavRow(L("Statistics"), Icons.Default.BarChart, locked = !Entitlements.stats) {
+                    Upgrade.gate(Entitlements.Feature.STATS) { sub = S2SettingsSub.STATS }
+                }
                 if (isMain) {
                     S2NavRow("Trakt",
+                        locked = !Trakt.isLoggedIn && !Entitlements.trakt,
                         subtitle = if (Trakt.isLoggedIn) Trakt.username ?: Trakt.displayName else L("Connect Trakt"),
                         value = if (Trakt.isLoggedIn) Trakt.lastRefresh?.let { L("Trakt synced %@", s2Time(it)) } else null,
                         leading = {
@@ -320,6 +335,11 @@ fun SettingsScreen() {
                 S2NavRow(L("Settings"), Icons.Default.Settings) { MyBingrNav.page = MyBingrPage.SETTINGS }
                 if (Account.isSignedIn) {
                     S2NavRow(L("Account & devices"), Icons.Default.AccountCircle) { MyBingrNav.page = MyBingrPage.ACCOUNT }
+                    // build 88: abonnement (Gratis / Lifetime); tik = vergelijking en upgraden
+                    Entitlements.current?.let { e ->
+                        S2NavRow(L("Subscription"), Icons.Default.WorkspacePremium,
+                            value = if (e.isFree) L("Free") else L("Lifetime")) { Upgrade.show(null) }
+                    }
                 }
                 // build 75: support.bingr.online (telefoon: browser, TV: QR-code)
                 S2Row(L("Support"), icon = Icons.Default.SupportAgent, onClick = { Support.open(ctx) })
@@ -359,10 +379,15 @@ fun SettingsScreen() {
                     if (!AppState.isTV) S2Row(L("Link a TV"), icon = Icons.Default.Tv, onClick = { linkingTv = true })
                     S2Row(L("Devices"), icon = Icons.Default.Devices, onClick = { showDevices = true })
                     if (isMain) {
+                        // build 88: Nu aan het kijken en de geschiedenis van 7 dagen horen bij Lifetime
+                        val nw = Entitlements.nowWatching
                         S2Row(L("Watching now"), icon = Icons.Default.PlayCircle,
-                            value = watching?.let { w -> L("%d of %d watching now", w.streams.size, w.limit) },
-                            onClick = { sub = S2SettingsSub.WATCHING })
-                        S2Row(L("Watch history (7 days)"), icon = Icons.Default.History, onClick = { sub = S2SettingsSub.WATCH_LOG })
+                            value = watching?.takeIf { nw }?.let { w -> L("%d of %d watching now", w.streams.size, w.limit) },
+                            onClick = { Upgrade.gate(Entitlements.Feature.NOW_WATCHING) { sub = S2SettingsSub.WATCHING } },
+                            trailing = { if (!(nw)) LifetimeBadge() })
+                        S2Row(L("Watch history (7 days)"), icon = Icons.Default.History,
+                            onClick = { Upgrade.gate(Entitlements.Feature.NOW_WATCHING) { sub = S2SettingsSub.WATCH_LOG } },
+                            trailing = { if (!(nw)) LifetimeBadge() })
                     }
                     S2Row(L("Sign out"), icon = Icons.AutoMirrored.Filled.Logout, onClick = { accountConfirm = "signout" })
                     S2Row(L("Delete account"), icon = Icons.Default.Delete, tint = Theme.red, onClick = { accountConfirm = "delete" })
@@ -407,7 +432,11 @@ fun SettingsScreen() {
                             AppScope.launch { runCatching { Playlists.select(current, forceRefresh = true) } }
                         })
                     }
-                    S2Row(L("Add server"), icon = Icons.Default.Add, onClick = { addingServer = true })
+                    // build 88: met Gratis één server; bestaande extra servers blijven gewoon werken
+                    val canAdd = Entitlements.canAddServer(Store.playlists.size)
+                    S2Row(L("Add server"), icon = Icons.Default.Add,
+                        onClick = { if (canAdd) addingServer = true else Upgrade.show(Entitlements.Feature.MULTI_SERVER) },
+                        trailing = { if (!(canAdd)) LifetimeBadge() })
                     if (source != null) {
                         val current = Store.playlists.firstOrNull { it.id == source.id } ?: source
                         S2Row(L("Delete server"), icon = Icons.Default.Delete, tint = Theme.red, onClick = { deletingServer = current })
@@ -497,8 +526,11 @@ fun SettingsScreen() {
                             })
                         S2Row(L("Sign out of Trakt"), icon = Icons.AutoMirrored.Filled.Logout, tint = Theme.red, onClick = { Trakt.logout() })
                     } else {
-                        S2Row(L("Connect Trakt"), icon = Icons.Default.Link, onClick = {
-                            s2WithServerKeys({ Secrets.traktReady }, { showTraktLogin = true }, { setup = "trakt" })
+                        S2Row(L("Connect Trakt"), icon = Icons.Default.Link,
+                            trailing = { if (!(Entitlements.trakt)) LifetimeBadge() }, onClick = {
+                            // build 88: Trakt koppelen hoort bij Lifetime
+                            if (!Entitlements.trakt) Upgrade.show(Entitlements.Feature.TRAKT)
+                            else s2WithServerKeys({ Secrets.traktReady }, { showTraktLogin = true }, { setup = "trakt" })
                         })
                     }
                     Trakt.lastError?.let { S2Row(it, tint = Theme.red) }
@@ -652,7 +684,13 @@ fun SettingsScreen() {
             S2Section(L("Appearance"),
                 if (AppIcon.canChoose) L("Each profile has its own accent color. The app icon is only changed on this device.")
                 else L("Each profile has its own accent color.")) {
-                S2Dropdown(L("Accent color"), Accent.options.map { it.key to L(it.titleKey) }, Accent.key) { Accent.set(it) }
+                // build 88: accentkleuren horen bij Lifetime
+                if (Entitlements.themes) {
+                    S2Dropdown(L("Accent color"), Accent.options.map { it.key to L(it.titleKey) }, Accent.key) { Accent.set(it) }
+                } else {
+                    S2Row(L("Accent color"), value = L("Red"), onClick = { Upgrade.show(Entitlements.Feature.THEMES) },
+                        trailing = { LifetimeBadge() })
+                }
                 if (AppIcon.canChoose) {
                     S2Dropdown(L("App icon"), AppIcon.options.map { it.key to L(it.titleKey) }, AppIcon.current) { k ->
                         if (k != AppIcon.current) iconConfirm = k
@@ -740,7 +778,7 @@ fun SettingsScreen() {
         ConnectionsSetupScreen(focus) {
             setup = null
             when (focus) {
-                "trakt" -> if (Secrets.traktReady && !Trakt.isLoggedIn) showTraktLogin = true
+                "trakt" -> if (Secrets.traktReady && !Trakt.isLoggedIn && Entitlements.trakt) showTraktLogin = true
                 "opensubtitles" -> if (Secrets.openSubtitlesReady && !OpenSubtitles.isLoggedIn) showOSLogin = true
             }
         }
@@ -986,9 +1024,12 @@ private fun S2NavRow(
     value: String? = null,
     subtitle: String? = null,
     leading: (@Composable () -> Unit)? = null,
+    /** Build 88: hoort bij Lifetime (Gratis): slotje "Lifetime" voor het pijltje. */
+    locked: Boolean = false,
     onClick: () -> Unit,
 ) {
     S2Row(title, icon = icon, value = value, subtitle = subtitle, leading = leading, onClick = onClick, trailing = {
+        if (locked) LifetimeBadge()
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Theme.secondary, modifier = Modifier.size(tvs(20)))
     })
 }

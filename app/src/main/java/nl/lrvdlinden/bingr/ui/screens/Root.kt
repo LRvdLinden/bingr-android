@@ -91,6 +91,8 @@ fun BingrRoot() {
         LaunchedEffect(limit != null) {
             if (limit != null) { AppState.playing = null; AppState.showMultiview = false }
         }
+        // build 88: upgraden naar Lifetime (boven alles, ook boven de speler en "Too many devices")
+        UpgradeDialogHost()
     }
 }
 

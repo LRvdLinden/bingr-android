@@ -162,6 +162,7 @@
   // MARK: te veel apparaten
 
   S.deviceLimit = function (info, onRetry, onCancel) {
+    var free = info.plan ? String(info.plan).toLowerCase() === 'free' : A.isFree();
     var list = h('div.dev-list.sy.fm', { 'data-pad': '40' });
     function draw(devs) {
       U.clear(list);
@@ -178,8 +179,10 @@
     var el = layer('limit', [h('div.limit-card', [
       h('h1', L('Too many devices')),
       h('p.dim', L('Your account can be used on up to %d devices. Remove a device to sign in on this one.', info.limit)),
+      // build 88: Gratis → met Lifetime meer apparaten
+      free ? h('p', L('Or upgrade to Lifetime to use Bingr on up to %d devices.', A.LIFETIME.devices)) : null,
       list,
-      h('div.modal-buttons', [U.button(L('Cancel'), onCancel)])
+      h('div.modal-buttons', [free ? U.button(L('Upgrade to Lifetime'), function () { S.upgrade('devices'); }, { icon: 'lock' }) : null, U.button(L('Cancel'), onCancel)])
     ])]);
     return { el: el, onBack: function () { onCancel(); return true; } };
   };
@@ -1303,6 +1306,9 @@
     item(U.icon('gear'), L('Settings'), function () { go('settings'); });
     if (A.isSignedIn()) {
       item(U.icon('person'), L('Account & devices'), function () { U.push(S.devices()); });
+      // build 88: abonnement (Gratis / Lifetime)
+      var ent = A.entitlements();
+      if (ent) item(U.icon('star'), L('Subscription') + ': ' + (ent.free ? L('Free') : L('Lifetime')), function () { S.upgrade(null); });
     }
     // build 75: support.bingr.online als QR-code
     item(U.icon('help'), L('Support'), function () { S.support(); });
@@ -1736,11 +1742,15 @@
       section(L('Account'));
       row(L('Signed in as %@', A.email() || ''), null, null);
       row(L('Devices'), null, function () { U.push(S.devices()); });
+      // build 88: abonnement (Gratis / Lifetime); statistieken, Nu aan het kijken en de geschiedenis horen bij Lifetime
+      var ent = A.entitlements();
+      if (ent) row(L('Subscription'), ent.free ? L('Free') : L('Lifetime'), function () { S.upgrade(null); });
+      function lock(f) { return A.allowed(f) ? null : S.lifetimeBadge(); }
       // kijkstatistieken (build 68): hoofdprofiel alle profielen, andere profielen alleen hun eigen
-      row(L('Statistics'), null, function () { U.push(S.stats()); });
+      row(L('Statistics'), lock('stats'), function () { S.gate('stats', function () { U.push(S.stats()); }); });
       if (main) {
-        row(L('Watching now'), null, function () { U.push(S.streams()); });
-        row(L('Watch history (7 days)'), null, function () { U.push(S.watchLog()); });
+        row(L('Watching now'), lock('now_watching'), function () { S.gate('now_watching', function () { U.push(S.streams()); }); });
+        row(L('Watch history (7 days)'), lock('now_watching'), function () { S.gate('now_watching', function () { U.push(S.watchLog()); }); });
       }
       row(L('Sign out'), null, function () {
         U.modal({ title: L('Sign out'), text: L('Sign out of Bingr on this device?'), buttons: [
@@ -1752,7 +1762,9 @@
       section(L('Profile'));
       row(L('Switch profile'), prof.name, function () { B.app.switchProfile(); });
       var accent = D.accentKey(prof);
-      row(L('Accent color'), L(accent.charAt(0).toUpperCase() + accent.slice(1)), function () {
+      // build 88: accentkleuren horen bij Lifetime
+      if (!A.allowed('themes')) row(L('Accent color'), h('span', [L('Red'), S.lifetimeBadge()]), function () { S.upgrade('themes'); });
+      else row(L('Accent color'), L(accent.charAt(0).toUpperCase() + accent.slice(1)), function () {
         U.choose(L('Accent color'), Object.keys(D.accents).map(function (k) { return { value: k, label: L(k.charAt(0).toUpperCase() + k.slice(1)) }; }), accent, function (v) {
           D.setAccent(prof.id, v).then(function () { B.app.applyAccent(); render(); });
           B.app.applyAccent(v); render();
@@ -1804,7 +1816,7 @@
       section('Trakt & OpenSubtitles');
       var T = B.trakt, OS = B.opensubtitles;
       if (T.allowed()) {
-        row('Trakt', T.isLoggedIn() ? (T.username() || L('On')) : L('Off'), function () { S.traktMenu(render); });
+        row('Trakt', T.isLoggedIn() ? (T.username() || L('On')) : (A.allowed('trakt') ? L('Off') : S.lifetimeBadge()), function () { S.traktMenu(render); });
       } else row('Trakt', L('The server, Trakt and OpenSubtitles belong to the main account and are used by all profiles.'), null);
       row('OpenSubtitles', OS.isLoggedIn() ? OS.username() : L('Off'), function () { S.openSubtitlesMenu(render); });
       var osl = OS.defaultLanguage();
@@ -1870,7 +1882,11 @@
     }
     pg.refresh = render;
     pg.onShow = function () { render(); };
-    pg.destroy = B.on('connections', function () { if (el.parentNode && el.style.display !== 'none' && U.top() && U.top().el.contains(el)) render(); });
+    function visibleRender() { if (el.parentNode && el.style.display !== 'none' && U.top() && U.top().el.contains(el)) render(); }
+    var offConn = B.on('connections', visibleRender);
+    // build 88: abonnement gewijzigd → sloten bijwerken
+    var offEnt = B.on('entitlements', visibleRender);
+    pg.destroy = function () { offConn(); offEnt(); };
     render();
     return pg;
   };
@@ -1908,6 +1924,12 @@
       }, function (e) {
         if (quiet === true) return;
         U.clear(list.track); list.track.appendChild(h('div.state.dim', e.message || L('Something went wrong. Please try again.')));
+        // build 88: hoort bij Lifetime (403 feature_locked) → knop naar het upgradevenster
+        if (e && e.locked) {
+          var up = U.button(L('Upgrade to Lifetime'), function () { S.upgrade(e.feature); }, { icon: 'lock', primary: true });
+          list.track.appendChild(h('div.state', [up]));
+          if (U.top() === s) U.focus(up, true);
+        }
       });
     }
     var s = { el: el, refresh: refresh, onShow: function (back) { if (!back) refresh(); }, onBack: function () { U.pop(); return true; } };

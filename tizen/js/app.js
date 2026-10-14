@@ -28,6 +28,8 @@
 
   app.applyAccent = function (key) {
     var k = key || D.accentKey(app.profile);
+    // build 88: accentkleuren horen bij Lifetime; met Gratis rood (de gekozen kleur blijft bewaard)
+    if (!A.allowed('themes')) k = 'red';
     var c = D.accents[k] || D.accents.red;
     document.documentElement.style.setProperty('--accent', c);
     B.store.set('lastAccent', k);
@@ -91,6 +93,8 @@
     reg.then(function (r) {
       if (r && r.limit) { showLimit(r); return; }
       A.fetchConfig().then(function (ok) { if (ok) B.emit('config'); });
+      // abonnement (build 88): Gratis of Lifetime
+      A.fetchEntitlements(true);
       var haveCache = D.profiles.length > 0;
       var sync = Promise.all([D.syncProfiles(), D.syncSources(), D.syncState()]).then(function (r) { D.migrateAccent(); return r; });
       // met cache meteen door; zonder cache maximaal 8 seconden wachten
@@ -268,6 +272,8 @@
     } else {
       startHeartbeat();
       setTimeout(checkAnnouncements, 2000);
+      // build 88: abonnement bijwerken (na een upgrade op bingr.online gaan de sloten open)
+      A.fetchEntitlements(false);
       // build 75: terug op de tv → Trakt-vinkjes bijwerken (alleen als Trakt iets nieuws meldt), zoals iOS/Android
       if (app.profile) B.trakt.refresh(false);
       if (B.player.current) B.player.current.resumeFromBackground();
@@ -285,6 +291,9 @@
     if (app.profile) { var main = S.main(); U.reset(main); }
     else showProfiles();
   });
+
+  // build 88: abonnement gewijzigd → accentkleur opnieuw toepassen
+  B.on('entitlements', function () { if (app.profile) app.applyAccent(); });
 
   B.on('profiles', function () {
     if (app.profile && !D.profileById(app.profile.id)) showProfiles();

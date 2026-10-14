@@ -68,6 +68,9 @@ object Account {
         isSignedIn = !refreshToken.isNullOrEmpty()
         deviceSp = ctx.getSharedPreferences("bingr.device", Context.MODE_PRIVATE)
         deviceRegistered = p.getBoolean("device_registered", false)
+        // abonnement (build 88): cache van dit account
+        Entitlements.init(ctx)
+        if (isSignedIn) Entitlements.onAccount(userId)
         installLifecycleObserver()
     }
 
@@ -88,6 +91,7 @@ object Account {
             if (uid != null) putString("user_id", uid) else remove("user_id")
         }?.apply()
         isSignedIn = true
+        Entitlements.onAccount(uid)
         return true
     }
 
@@ -97,6 +101,7 @@ object Account {
         deviceRegistered = false
         deviceLimit = null
         isSignedIn = false
+        Entitlements.signedOut()
         ProfileSync.reset()
         SourceSync.reset()
         StateSync.reset()
@@ -116,6 +121,22 @@ object Account {
     private class Reply(val code: Int, val json: JsonElement?) {
         val ok get() = code in 200..299
         val errorCode: String? get() = json.jS("error_code") ?: json.jS("code")?.takeIf { it.toIntOrNull() == null } ?: json.jS("error")
+        /** Build 88: 403 feature_locked (Gratis). */
+        val featureLocked: Boolean get() = code == 403 && (errorCode == "feature_locked" || json.jS("error") == "feature_locked")
+    }
+
+    /** 403 feature_locked → abonnement bijwerken en [FeatureLockedException] gooien. */
+    private fun checkLocked(r: Reply) {
+        if (!r.featureLocked) return
+        val f = r.json.jS("feature")
+        Entitlements.locked(f)
+        throw FeatureLockedException(f)
+    }
+
+    /** Veld `entitlements` in een antwoord (config, heartbeat) meenemen als het er is. */
+    private fun takeEntitlements(r: Reply) {
+        if (!r.ok) return
+        r.json.jO("entitlements")?.let { Entitlements.apply(it) }
     }
 
     private suspend fun post(path: String, body: JsonElement, bearer: String? = null): Reply {
@@ -379,7 +400,10 @@ object Account {
     )
 
     /** Antwoord van register_device met 403 device_limit. */
-    data class DeviceLimit(val limit: Int, val devices: List<Device>)
+    data class DeviceLimit(val limit: Int, val devices: List<Device>, val plan: String? = null) {
+        /** Build 88: Gratis (van de server, anders uit het bewaarde abonnement). */
+        val isFree: Boolean get() = plan?.lowercase()?.let { it == "free" } ?: Entitlements.isFree
+    }
 
     /** Alleen als de server geen `limit` meestuurt; normaal komt de limiet altijd van de server. */
     private const val DEFAULT_DEVICE_LIMIT = 15
@@ -449,7 +473,7 @@ object Account {
         val r = deviceCall("register_device", deviceId, mapOf("name" to deviceDisplayName, "platform" to devicePlatform) + versionFields())
         if (r.code == 403 || r.errorCode == "device_limit") {
             if (r.errorCode == "device_limit" || r.json.jObj?.containsKey("devices") == true) {
-                throw DeviceLimitException(DeviceLimit(r.json.jI("limit") ?: DEFAULT_DEVICE_LIMIT, parseDevices(r.json.jList("devices"))))
+                throw DeviceLimitException(DeviceLimit(r.json.jI("limit") ?: DEFAULT_DEVICE_LIMIT, parseDevices(r.json.jList("devices")), r.json.jS("plan")))
             }
         }
         if (!r.ok) throw generic()
@@ -461,6 +485,7 @@ object Account {
         val r = deviceCall("heartbeat", deviceId, versionFields())
         if (r.json.jB("revoked") == true) return false
         if (!r.ok) throw generic()
+        takeEntitlements(r)
         return true
     }
 
@@ -540,6 +565,8 @@ object Account {
                         androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
                             deviceCheck()
                             Announcements.check()
+                            // abonnement (build 88): na een upgrade op bingr.online gaan de sloten meteen open
+                            Entitlements.launchFetch()
                             heartbeatJob?.cancel()
                             heartbeatJob = AppScope.launch {
                                 while (true) { delay(5 * 60_000L); deviceCheck() }
@@ -725,12 +752,23 @@ object Account {
         val r = post("/functions/v1/device-auth", buildJsonObject { put("action", "config") }, bearer = token)
         val obj = r.json.jObj ?: return false
         if (!r.ok) return false
+        takeEntitlements(r)
         val values = Secrets.Key.entries.mapNotNull { k ->
             if (!obj.containsKey(k.serverField)) null else k to (obj.jS(k.serverField) ?: "")
         }.toMap()
         if (values.isEmpty()) return false
         Secrets.storeServerKeys(values)
         return true
+    }
+
+    /**
+     * Build 88: device-auth `entitlements` {platform}. null = netwerkfout, geen sessie of een oude backend
+     * zonder deze actie (dan blijft alles open).
+     */
+    suspend fun entitlementsJson(platform: String): JsonElement? {
+        val r = authedDeviceAuth(buildJsonObject { put("action", "entitlements"); put("platform", platform) }) ?: return null
+        if (!r.ok || isUnknownAction(r)) return null
+        return r.json
     }
 
     private var configJob: kotlinx.coroutines.Job? = null
@@ -753,6 +791,8 @@ object Account {
             if (refresh() == RefreshResult.INVALID) { AppState.signedOut(); return@launch }
             // app-sleutels (Trakt, OpenSubtitles, OMDb, TMDB) van de server
             launchConfigFetch()
+            // abonnement (build 88)
+            Entitlements.launchFetch(force = true)
             // apparaat: heartbeat, of registreren als dat nog niet gebeurd is
             deviceCheck()
             // profielen van het account ophalen/samenvoegen (stil, ook offline geen probleem)
@@ -864,7 +904,10 @@ object Account {
         val current: Boolean get() = deviceId == Account.deviceId
     }
 
-    data class StreamList(val limit: Int, val streams: List<StreamInfo>)
+    data class StreamList(val limit: Int, val streams: List<StreamInfo>, val plan: String? = null) {
+        /** Build 88: Gratis (van de server, anders uit het bewaarde abonnement). */
+        val isFree: Boolean get() = plan?.lowercase()?.let { it == "free" } ?: Entitlements.isFree
+    }
 
     /** Eén regel uit watch_log. */
     data class WatchEntry(
@@ -917,7 +960,7 @@ object Account {
             put("tz", timeZoneId())
         }) ?: return StreamStart.Failed
         if (r.code == 403 && (r.errorCode == "stream_limit" || r.json.jObj?.containsKey("streams") == true)) {
-            return StreamStart.Limit(StreamList(r.json.jI("limit") ?: DEFAULT_STREAM_LIMIT, parseStreams(r.json.jList("streams"))))
+            return StreamStart.Limit(StreamList(r.json.jI("limit") ?: DEFAULT_STREAM_LIMIT, parseStreams(r.json.jList("streams")), r.json.jS("plan")))
         }
         return if (r.ok) StreamStart.Ok else StreamStart.Failed
     }
@@ -939,6 +982,7 @@ object Account {
     /** list_streams: limiet en wie er nu kijkt. */
     suspend fun listStreams(): StreamList {
         val r = authedDeviceAuth(buildJsonObject { put("action", "list_streams") }) ?: throw AccountException(L("No internet connection."))
+        checkLocked(r)
         if (!r.ok || r.json == null) throw generic()
         return StreamList(r.json.jI("limit") ?: DEFAULT_STREAM_LIMIT, parseStreams(r.json.jList("streams")))
     }
@@ -947,6 +991,7 @@ object Account {
     suspend fun watchLog(days: Int = 7): List<WatchEntry> {
         val r = authedDeviceAuth(buildJsonObject { put("action", "watch_log"); put("days", days) })
             ?: throw AccountException(L("No internet connection."))
+        checkLocked(r)
         if (!r.ok || r.json == null) throw generic()
         return r.json.jList("entries").mapNotNull { e ->
             val start = Net.parseISODate(e.jS("started_at")) ?: return@mapNotNull null
@@ -1070,6 +1115,7 @@ object Account {
             if (!profileId.isNullOrBlank()) put("profile_id", profileId)
             put("tz", timeZoneId())
         }) ?: throw AccountException(L("No internet connection."))
+        checkLocked(r)
         if (isUnknownAction(r)) throw StatsUnavailable()
         if (!r.ok || r.json == null) throw generic()
         return parseStats(r.json)
@@ -1081,6 +1127,7 @@ object Account {
             put("action", "delete_watch_stats")
             if (!profileId.isNullOrBlank()) put("profile_id", profileId)
         }) ?: throw AccountException(L("No internet connection."))
+        checkLocked(r)
         if (isUnknownAction(r)) throw StatsUnavailable()
         if (!r.ok || r.json.jB("ok") == false) throw generic()
     }

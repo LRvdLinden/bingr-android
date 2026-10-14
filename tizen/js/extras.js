@@ -6,7 +6,7 @@
 (function () {
   'use strict';
   var B = window.B;
-  var U = B.ui, D = B.data, Lib = B.lib, S = B.screens, M = B.media;
+  var U = B.ui, D = B.data, Lib = B.lib, S = B.screens, M = B.media, A = B.account;
   var h = U.h;
   var L = function () { return B.L.apply(null, arguments); };
   function lower(s) { return String(s || '').toLowerCase(); }
@@ -38,8 +38,11 @@
       return r;
     }, L('No servers yet'), function (track, refresh) {
       if (!main) return;
-      var add = h('div.st-row.f.add-row', [U.icon('list'), h('div.st-label', L('Add server'))]);
+      // build 88: met Gratis één server; bestaande extra servers blijven gewoon werken
+      var canAdd = A.canAddServer(D.sources.length);
+      var add = h('div.st-row.f.add-row', [U.icon('list'), h('div.st-label', L('Add server')), canAdd ? null : S.lifetimeBadge()]);
       add.onEnter = function () {
+        if (!A.canAddServer(D.sources.length)) { S.upgrade('multi_server'); return; }
         U.choose(L('Choose the playlist type'), D.kinds.map(function (k) { return { value: k, label: k }; }), null, function (k) { U.push(S.serverEdit({ kind: k }, refresh)); });
       };
       track.appendChild(add);
@@ -238,6 +241,8 @@
 
   S.traktMenu = function (onChange) {
     var T = B.trakt;
+    // build 88: Trakt koppelen hoort bij Lifetime
+    if (!T.isLoggedIn() && !A.allowed('trakt')) { S.upgrade('trakt'); return; }
     if (!T.ready()) { U.toast(L('Trakt: could not connect')); return; }
     if (T.isLoggedIn()) {
       var scrob = T.scrobbleEnabled();
@@ -308,6 +313,63 @@
       };
       return row;
     }, L('No reminders yet. Open a program in the TV guide and choose “Remind me”.'));
+  };
+
+  // MARK: abonnement (build 88)
+
+  /** Slotje met "Lifetime": overal hetzelfde naast iets dat bij Lifetime hoort (alleen met Gratis). */
+  S.lifetimeBadge = function () { return h('span.life-badge', [U.icon('lock'), h('span', L('Lifetime'))]); };
+
+  /** feature open → fn(), anders het upgradevenster. */
+  S.gate = function (feature, fn) { if (A.allowed(feature)) fn(); else S.upgrade(feature); };
+
+  /**
+   * Upgraden naar Lifetime: vergelijking Gratis ↔ Lifetime, prijs en (als de server upgrade.link geeft) een QR-code met
+   * het adres van bingr.online/upgrade. Zolang het venster open is, wordt het abonnement af en toe opgehaald; na
+   * betalen op de telefoon verschijnt dan een bedankje.
+   */
+  S.upgrade = function (feature) {
+    var e = A.entitlements();
+    var fs = (e && e.free && e.streams) || A.FREE.streams, fd = (e && e.free && e.devices) || A.FREE.devices;
+    var fsv = (e && e.free && e.servers) || A.FREE.servers;
+    var yes = '✓', no = '—';
+    var table = h('div.up-table', [h('div.up-row.up-head', [h('div.up-label', ''), h('div.up-col', L('Free')), h('div.up-col.life', L('Lifetime'))])]);
+    [[L('Streams at the same time'), String(fs), String(A.LIFETIME.streams)],
+      [L('Devices'), String(fd), String(A.LIFETIME.devices)],
+      [L('Servers'), String(fsv), L('Unlimited')],
+      [L('Statistics'), no, yes], [L('Watching now'), no, yes], ['Trakt', no, yes], [L('Accent colors'), no, yes]
+    ].forEach(function (r) {
+      table.appendChild(h('div.up-row', [h('div.up-label', r[0]), h('div.up-col.dim', r[1]), h('div.up-col', r[2])]));
+    });
+    if (e) table.appendChild(h('div.up-row', [h('div.up-label.dim', L('Your plan')), h('div.up-col', e.free ? yes : ''), h('div.up-col', e.free ? '' : yes)]));
+    var right = h('div.up-side');
+    var lead = h('p.modal-text', A.lockedReason(feature));
+    var price = h('div.up-price', L('%@ one-time', A.price()));
+    var note = h('div.dim', L('Pay once, keep it forever. No subscription.'));
+    var url = A.upgradeUrl();
+    if (A.upgradeLink()) {
+      var qr = h('div.qr-box.small');
+      right.appendChild(qr);
+      right.appendChild(h('div.up-url', url.replace(/^https?:\/\//, '').replace(/\/$/, '')));
+      right.appendChild(h('div.dim.up-scan', L("Scan the QR code with your phone's camera to upgrade on bingr.online.")));
+      S.drawQR(qr, url, 240);
+    }
+    var body = h('div.up-body', [h('div.up-main', [table, price, note]), right]);
+    var box = h('div', [lead, body]);
+    var thanks = function () {
+      U.clear(box);
+      box.appendChild(h('p.modal-text', L('You have Bingr Lifetime. Thank you!')));
+    };
+    if (!feature && e && !e.free) thanks();
+    var s = U.modal({ title: L('Bingr Lifetime'), content: box, buttons: [{ label: L('Close') }] });
+    s.el.classList.add('upgrade');
+    var off = B.on('entitlements', function (info) { if (info && info.upgraded && box.parentNode) thanks(); });
+    var timer = setInterval(function () {
+      if (!document.body.contains(box)) { clearInterval(timer); off(); return; }
+      A.fetchEntitlements(true);
+    }, 10000);
+    A.fetchEntitlements(false);
+    return s;
   };
 
   /**

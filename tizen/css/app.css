@@ -671,3 +671,25 @@ html.mv-hole .layer.multiview { background: transparent; }
 .cat-all-in { position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center;
   justify-content: center; text-align: center; }
 .cat-all-icon { width: 40px; height: 40px; margin-bottom: 8px; color: #fff; }
+
+/* build 88: abonnement (Gratis / Lifetime) */
+.life-badge { display: inline-flex; align-items: center; margin-left: 16px; padding: 3px 12px 3px 8px; border-radius: 20px; background: #f5c518; color: #000; font-size: 18px; font-weight: 800; letter-spacing: 0.5px; vertical-align: middle; white-space: nowrap; }
+.life-badge .ic { width: 18px; height: 18px; margin-right: 6px; color: #000; }
+.life-badge .ic svg { width: 18px; height: 18px; }
+.st-row.focused .life-badge, .st-row.focused .life-badge .ic { color: #000; }
+.add-row .life-badge { margin-left: 24px; }
+.layer.modal.upgrade .modal-box { max-width: 1400px; }
+.up-body { display: flex; align-items: center; margin-top: 10px; }
+.up-main { flex: 1; min-width: 560px; }
+.up-side { margin-left: 50px; display: flex; flex-direction: column; align-items: center; text-align: center; max-width: 340px; }
+.up-side .qr-box.small { margin: 0 0 14px 0; }
+.up-url { font-size: 30px; font-weight: 800; }
+.up-scan { margin-top: 8px; font-size: 22px; }
+.up-table { background: #232323; border-radius: 12px; padding: 6px 0; }
+.up-row { display: flex; align-items: center; padding: 8px 24px; font-size: 25px; border-top: 1px solid #333; }
+.up-row:first-child { border-top: 0; }
+.up-head { font-weight: 800; }
+.up-label { flex: 1.6; }
+.up-col { flex: 1; text-align: center; }
+.up-col.life { color: #f5c518; }
+.up-price { margin-top: 20px; font-size: 34px; font-weight: 800; }

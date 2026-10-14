@@ -807,6 +807,9 @@
       U.clear(errorBox);
       errorBox.appendChild(h('h2', L('Too many people are watching')));
       errorBox.appendChild(h('p', L('Your account can be used on up to %d screens at the same time.', r.limit)));
+      // build 88: Gratis → met Lifetime meer schermen tegelijk
+      var free = r.plan ? String(r.plan).toLowerCase() === 'free' : A.isFree();
+      if (free) errorBox.appendChild(h('p', L('Upgrade to Lifetime to watch on up to %d screens at the same time.', A.LIFETIME.streams)));
       var list = h('div.limit-list');
       r.streams.forEach(function (s) {
         list.appendChild(h('div.limit-row', [U.icon(U.platformIcon(s.platform)),
@@ -815,6 +818,7 @@
       errorBox.appendChild(list);
       var row = h('div.modal-buttons');
       row.appendChild(U.button(L('Try again'), function () { errorBox.style.display = 'none'; start(ctx.resume || 0); }, { primary: true }));
+      if (free) row.appendChild(U.button(L('Upgrade to Lifetime'), function () { B.screens.upgrade('streams'); }, { icon: 'lock' }));
       row.appendChild(U.button(L('Close'), close));
       errorBox.appendChild(row);
       errorBox.style.display = 'flex';

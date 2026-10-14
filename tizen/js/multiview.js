@@ -207,7 +207,12 @@
     function start() {
       A.streamStart(profile.id, profile.name, 'Multiview · ' + tiles.map(function (t) { return t.ch.name; }).join(', '), 'live', tiles[0].ch.id).then(function (r) {
         if (closed || suspended) return;
-        if (r.limit) { U.toast(L('Too many people are watching')); close(); return; }
+        if (r.limit) {
+          U.toast(L('Too many people are watching')); close();
+          // build 88: Gratis → upgradevenster (meer schermen tegelijk met Lifetime)
+          if (r.plan ? String(r.plan).toLowerCase() === 'free' : A.isFree()) B.screens.upgrade('streams');
+          return;
+        }
         clearInterval(pingTimer);
         pingTimer = setInterval(function () {
           if (closed || suspended) { clearInterval(pingTimer); return; }

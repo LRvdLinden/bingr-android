@@ -53,6 +53,7 @@
 
   function clear() {
     session = null;
+    ent = null; entOwner = null; entAt = 0;
     B.store.del('auth');
     B.store.set('deviceRegistered', false);
     B.emit('signedOut');
@@ -68,6 +69,8 @@
         var j = r.json || {};
         r.ok = r.status >= 200 && r.status < 300;
         r.errorCode = j.error_code || (typeof j.code === 'string' ? j.code : null) || j.error || null;
+        // build 88: 403 feature_locked (Gratis)
+        r.featureLocked = r.status === 403 && (r.errorCode === 'feature_locked' || j.error === 'feature_locked');
         return r;
       }, function () { throw new AccountError(L('No internet connection.'), 'offline'); });
   }
@@ -292,7 +295,7 @@
     return deviceCall('register_device', A.deviceId(), B.assign({ name: A.deviceDisplayName(), platform: B.config.platform }, versionFields())).then(function (r) {
       if (!r) return 'failed';
       var j = r.json || {};
-      if (r.status === 403 && (r.errorCode === 'device_limit' || j.devices)) return { limit: j.limit || 15, devices: parseDevices(j.devices) };
+      if (r.status === 403 && (r.errorCode === 'device_limit' || j.devices)) return { limit: j.limit || 15, devices: parseDevices(j.devices), plan: j.plan || null };
       if (!r.ok) return 'failed';
       B.store.set('deviceRegistered', true);
       return 'ok';
@@ -302,6 +305,7 @@
     return deviceCall('heartbeat', A.deviceId(), versionFields()).then(function (r) {
       if (!r) return true; // netwerkfout: niet uitloggen
       if (r.json && r.json.revoked === true) return false;
+      if (r.ok && r.json && r.json.entitlements) A.applyEntitlements(r.json.entitlements);
       return true;
     });
   };
@@ -353,6 +357,7 @@
   A.fetchConfig = function () {
     return authed({ action: 'config' }).then(function (r) {
       if (!r || !r.ok || !r.json) return false;
+      if (r.json.entitlements) A.applyEntitlements(r.json.entitlements);
       B.store.set('serverKeys', r.json);
       return true;
     });
@@ -440,6 +445,116 @@
     });
   };
 
+  // MARK: abonnement (build 88): Gratis of Lifetime
+
+  /*
+   * device-auth "entitlements" {platform: 'tizen'} (ook als veld "entitlements" in config/heartbeat), bewaard per
+   * account in localStorage. Onbekend (nooit opgehaald, netwerkfout zonder cache) = alles open zoals Lifetime.
+   */
+  var ent = null, entOwner = null, entAt = 0, entBusy = null;
+  A.UPGRADE_URL = 'https://bingr.online/upgrade/';
+  A.FREE = { streams: 2, devices: 8, servers: 1 };
+  A.LIFETIME = { streams: 6, devices: 15 };
+
+  function parseEnt(j) {
+    if (!j || typeof j !== 'object' || !j.plan) return null;
+    var plan = String(j.plan).toLowerCase(), free = plan === 'free';
+    var lim = j.limits || {}, f = j.features || {}, up = j.upgrade || {};
+    function feat(k) { return typeof f[k] === 'boolean' ? f[k] : !free; }
+    function int(v) { var n = parseInt(v, 10); return isFinite(n) ? n : null; }
+    return {
+      plan: plan, free: free,
+      streams: int(lim.streams), devices: int(lim.devices),
+      servers: Object.prototype.hasOwnProperty.call(lim, 'servers') ? int(lim.servers) : (free ? A.FREE.servers : null),
+      stats: feat('stats'), now_watching: feat('now_watching'), trakt: feat('trakt'), multi_server: feat('multi_server'), themes: feat('themes'),
+      url: /^https:\/\//.test(String(up.url || '')) ? String(up.url) : A.UPGRADE_URL,
+      link: typeof up.link === 'boolean' ? up.link : true,
+      price: up.price || '€ 4,99', price_en: up.price_en || '€4.99'
+    };
+  }
+  function entKey() { var u = A.userId(); return u ? 'entitlements.' + u : null; }
+  /** Huidig abonnement of null (onbekend). */
+  A.entitlements = function () {
+    var u = A.isSignedIn() ? A.userId() : null;
+    if (u !== entOwner) { entOwner = u; entAt = 0; ent = u ? parseEnt(B.store.get(entKey(), null)) : null; }
+    return ent;
+  };
+  A.isFree = function () { var e = A.entitlements(); return !!(e && e.free); };
+  A.isLifetime = function () { var e = A.entitlements(); return !!(e && !e.free); };
+  /** feature: 'stats' | 'now_watching' | 'trakt' | 'multi_server' | 'themes' | 'streams' | 'devices'. */
+  A.allowed = function (feature) {
+    var e = A.entitlements();
+    if (!e) return true;
+    if (feature === 'streams' || feature === 'devices') return !e.free;
+    return e[feature] !== false;
+  };
+  /** Mag er nog een server bij? Bestaande extra servers blijven gewoon werken. */
+  A.canAddServer = function (existing) {
+    var e = A.entitlements();
+    if (!e || e.multi_server || e.servers == null) return true;
+    return existing < e.servers;
+  };
+  A.upgradeUrl = function () { var e = A.entitlements(); return e ? e.url : A.UPGRADE_URL; };
+  A.upgradeLink = function () { var e = A.entitlements(); return e ? e.link : true; };
+  A.price = function () {
+    var e = A.entitlements(), nl = String(B.lang || '').indexOf('nl') === 0;
+    return nl ? (e ? e.price : '€ 4,99') : (e ? e.price_en : '€4.99');
+  };
+  A.applyEntitlements = function (j) {
+    var e = parseEnt(j);
+    if (!e || !A.isSignedIn()) return false;
+    var before = A.entitlements();
+    var was = before ? JSON.stringify(before) : '';
+    ent = e; entOwner = A.userId(); entAt = Date.now();
+    B.store.set(entKey(), j);
+    if (JSON.stringify(e) !== was) B.emit('entitlements', { upgraded: !!(before && before.free && !e.free) });
+    return true;
+  };
+  /** Ophalen (na inloggen, bij terugkeer op de tv); hooguit eens per minuut tenzij force. */
+  A.fetchEntitlements = function (force) {
+    if (!A.isSignedIn()) return Promise.resolve(false);
+    if (entBusy) return entBusy;
+    if (!force && Date.now() - entAt < 60000) return Promise.resolve(false);
+    entBusy = authed({ action: 'entitlements', platform: B.config.platform || 'tizen' }).then(function (r) {
+      if (!r || !r.ok || !r.json || unknownAction(r)) return false;
+      return A.applyEntitlements(r.json);
+    }, function () { return false; }).then(function (ok) { entBusy = null; return ok; });
+    return entBusy;
+  };
+  /** Waarom iets bij Lifetime hoort (upgradevenster en foutmeldingen). */
+  A.lockedReason = function (feature) {
+    switch (feature) {
+      case 'stats': return L('Statistics are part of Bingr Lifetime.');
+      case 'now_watching': return L('Watching now and the watch history are part of Bingr Lifetime.');
+      case 'trakt': return L('Trakt is part of Bingr Lifetime.');
+      case 'multi_server': return L('More servers are part of Bingr Lifetime. Your current servers keep working.');
+      case 'themes': return L('Accent colors are part of Bingr Lifetime.');
+      case 'streams': return L('With Bingr Lifetime you can watch on up to %d screens at the same time.', A.LIFETIME.streams);
+      case 'devices': return L('With Bingr Lifetime you can use up to %d devices.', A.LIFETIME.devices);
+      default: return L('Get more out of Bingr with a one-time upgrade.');
+    }
+  };
+  function normFeature(f) {
+    f = String(f || '').toLowerCase();
+    if (f === 'now-watching' || f === 'watching' || f === 'list_streams' || f === 'watch_log' || f === 'history') return 'now_watching';
+    if (f === 'watch_stats' || f === 'statistics') return 'stats';
+    return f;
+  }
+  /** Server zegt feature_locked: dat onderdeel dicht, opnieuw ophalen en een fout met de reden gooien. */
+  function checkLocked(r) {
+    if (!r || !r.featureLocked) return;
+    var f = normFeature(r.json && r.json.feature);
+    var e = A.entitlements() || parseEnt({ plan: 'free', features: { stats: true, now_watching: true, trakt: true, multi_server: true, themes: true } });
+    e.plan = 'free'; e.free = true;
+    if (f && Object.prototype.hasOwnProperty.call(e, f) && typeof e[f] === 'boolean') e[f] = false;
+    ent = e; entOwner = A.userId();
+    B.emit('entitlements', {});
+    A.fetchEntitlements(true);
+    var err = new AccountError(A.lockedReason(f), 'feature_locked');
+    err.locked = true; err.feature = f;
+    throw err;
+  }
+
   // MARK: tegelijk kijken en kijkgeschiedenis
 
   function parseStreams(list) {
@@ -471,7 +586,7 @@
     return authed(body).then(function (r) {
       if (!r) return { failed: true };
       var j = r.json || {};
-      if (r.status === 403 && (r.errorCode === 'stream_limit' || j.streams)) return { limit: j.limit || 6, streams: parseStreams(j.streams) };
+      if (r.status === 403 && (r.errorCode === 'stream_limit' || j.streams)) return { limit: j.limit || 6, streams: parseStreams(j.streams), plan: j.plan || null };
       return r.ok ? { ok: true } : { failed: true };
     });
   };
@@ -488,12 +603,14 @@
   A.streamStop = function () { return authed({ action: 'stream_stop', device_id: A.deviceId() }).catch(B.noop); };
   A.listStreams = function () {
     return authed({ action: 'list_streams' }).then(function (r) {
+      checkLocked(r);
       if (!r || !r.ok) throw generic();
       return { limit: r.json.limit || 6, streams: parseStreams(r.json.streams) };
     });
   };
   A.watchLog = function (days) {
     return authed({ action: 'watch_log', days: days || 7 }).then(function (r) {
+      checkLocked(r);
       if (!r || !r.ok) throw generic();
       return (r.json.entries || []).map(function (e) {
         return {
@@ -545,6 +662,7 @@
     if (profileId) body.profile_id = profileId;
     return authed(body).then(function (r) {
       if (!r) throw new AccountError(L('No internet connection.'), 'offline');
+      checkLocked(r);
       if (unknownAction(r)) throw unavailable();
       if (!r.ok || !r.json) throw generic();
       return A.parseStats(r.json);
@@ -556,6 +674,7 @@
     if (profileId) body.profile_id = profileId;
     return authed(body).then(function (r) {
       if (!r) throw new AccountError(L('No internet connection.'), 'offline');
+      checkLocked(r);
       if (unknownAction(r)) throw unavailable();
       if (!r.ok || (r.json && r.json.ok === false)) throw generic();
       return true;

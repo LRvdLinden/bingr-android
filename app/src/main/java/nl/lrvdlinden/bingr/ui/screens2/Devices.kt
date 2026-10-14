@@ -363,6 +363,11 @@ fun TooManyDevicesScreen(info: Account.DeviceLimit) {
                     Text(L("Too many devices"), color = Color.White, fontSize = tsp(26), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     Text(L("Your account can be used on up to %d devices. Remove a device to sign in on this one.", info.limit),
                         color = Theme.secondary, fontSize = tsp(15), textAlign = TextAlign.Center)
+                    // build 88: Gratis → met Lifetime meer apparaten
+                    if (info.isFree) {
+                        Text(L("Or upgrade to Lifetime to use Bingr on up to %d devices.", Entitlements.LIFETIME_DEVICES),
+                            color = Color.White, fontSize = tsp(14), textAlign = TextAlign.Center)
+                    }
                 }
             }
             item { S2Header(L("%d of %d devices", info.devices.size, info.limit)) }
@@ -377,7 +382,11 @@ fun TooManyDevicesScreen(info: Account.DeviceLimit) {
                 Box(Modifier.widthIn(max = S2MaxWidth).fillMaxWidth().padding(horizontal = Theme.edge, vertical = tvs(20)),
                     contentAlignment = Alignment.Center) {
                     if (working) CircularProgressIndicator(color = Theme.red)
-                    else NetflixButton(L("Cancel"), kind = NetflixKind.SECONDARY, modifier = Modifier.widthIn(min = 200.dp)) { cancel() }
+                    else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // build 88: Gratis → upgraden naar Lifetime (meer apparaten)
+                        if (info.isFree) UpgradeLimitButton(Entitlements.Feature.DEVICES, Modifier.widthIn(min = 200.dp))
+                        NetflixButton(L("Cancel"), kind = NetflixKind.SECONDARY, modifier = Modifier.widthIn(min = 200.dp)) { cancel() }
+                    }
                 }
             }
         }
