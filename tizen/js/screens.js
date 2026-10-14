@@ -379,7 +379,8 @@
 
   var NAV = [
     ['search', 'search', 'Search'], ['home', 'home', 'Home'], ['live', 'live', 'Live TV'], ['movies', 'movies', 'Movies'],
-    ['series', 'series', 'Series'], ['mylist', 'list', 'My List'], ['settings', 'gear', 'Settings']
+    ['series', 'series', 'Series'], ['categories', 'grid', 'Categories'], ['mylist', 'list', 'My List'],
+    ['settings', 'gear', 'Settings']
   ];
   S.main = function () {
     var content = h('div.main-content', { 'data-zone': 'content' });
@@ -1258,7 +1259,7 @@
     var body = vScroller('.dt-body', { 'data-pad': '60' });
     body.track.appendChild(h('div.dt-info', [h('div.dt-kind', type === 'series' ? L('SERIES') : L('FILM')), h('h1.dt-title', x.title), meta, langEl, plot, buttons]));
     if (type === 'series') body.track.appendChild(h('div.dt-episodes', [seasonsEl, epsEl]));
-    var bg = h('div.dt-bg', [U.img(x.poster, 'hero-img', null, true)]);
+    var bg = h('div.dt-bg', [h('div.dt-kb', [U.img(x.poster, 'hero-img', null, true)])]);
     var el = layer('detail', [bg, h('div.dt-shade'),
       h('div.dt-poster', [U.img(x.poster, 'poster-img', x.title, true)]), body]);
     var episodes = [], season = null, currentEp = null;
@@ -1267,8 +1268,19 @@
     // MARK: trailer in de kop (build 82, = Android/iOS en bingr.online/movie/…)
     // Na 1,5 s zonder geluid in de achtergrond (YouTube-embed, youtube-nocookie), pas zichtbaar als hij echt speelt.
     // Series: trailer van het nieuwste seizoen, anders die van de serie. Stopt bij afspelen, een ander scherm,
-    // de app op de achtergrond en aan het einde; speelt hij niet binnen 10 s (embed geblokkeerd), dan blijft de afbeelding.
-    var tr = { frame: null, playing: false, muted: true, started: false, looking: false, wait: null, timeout: null, duration: 0 };
+    // de app op de achtergrond en aan het einde.
+    // Build 85: de app draait vanaf file://, dus de embed krijgt geen Referer mee en YouTube weigert hem sindsdien
+    // (fout 153). Daarom eerst de embed met widget_referrer, en lukt dat niet, dan via een kleine doorgeefpagina op
+    // https://bingr.online/trailer/ (echte https-herkomst; geeft dezelfde widget-berichten door). Lukt ook dat niet
+    // (fout of te traag), dan beweegt de kopafbeelding rustig (Ken Burns).
+    var TRAILER_RELAY = 'https://bingr.online/trailer/';
+    var tr = { frame: null, playing: false, muted: true, started: false, looking: false, wait: null, timeout: null, duration: 0,
+      key: null, attempt: 0, failed: false };
+    function trLog() {
+      // diagnose alleen als debug aan staat (window.BINGR_DEBUG of D.setLocal('debug', true))
+      if (!window.BINGR_DEBUG && D.local('debug', false) !== true) return;
+      B.log.apply(null, ['trailer'].concat(Array.prototype.slice.call(arguments)));
+    }
     function trailerAllowed() {
       if (D.local('autoplayTrailers', true) === false || document.hidden) return false;
       try { if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false; } catch (e) { }
@@ -1284,50 +1296,87 @@
       try { m = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data; } catch (e) { return; }
       if (!m) return;
       var state = m.event === 'onStateChange' ? m.info : (m.event === 'infoDelivery' && m.info ? m.info.playerState : null);
-      if (m.event === 'onError') { stopTrailer(); return; }
+      if (m.event === 'onReady') trLog('ready', tr.attempt);
+      if (m.event === 'onError') { trLog('fout', m.info, 'poging', tr.attempt); trailerFailed(); return; }
+      if (state != null && state !== -1) trLog('state', state);
       if (state === 1 && !tr.playing) {
         tr.playing = true;
         clearTimeout(tr.timeout);
         tr.frame.className = 'dt-trailer on';
+        bg.className = 'dt-bg';
         drawButtonsKeepFocus();
       } else if (state === 0) stopTrailer();
       // net vóór het einde stoppen (geen eindscherm met andere video's)
       if (m.event === 'infoDelivery' && m.info && m.info.currentTime != null && m.info.duration) tr.duration = m.info.duration;
       if (m.event === 'infoDelivery' && m.info && m.info.currentTime != null && tr.duration && tr.duration - m.info.currentTime < 1.2) stopTrailer();
     }
-    function startTrailer(key) {
-      if (tr.started || !key || !trailerAllowed()) return;
-      tr.started = true;
-      var id = String(key).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
+    function trailerSrc(id) {
+      if (tr.attempt === 0) {
+        return 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&mute=1&controls=0&playsinline=1&enablejsapi=1&rel=0' +
+          '&iv_load_policy=3&disablekb=1&fs=0&modestbranding=1&cc_load_policy=0' +
+          '&widget_referrer=' + encodeURIComponent('https://bingr.online/tizen');
+      }
+      return TRAILER_RELAY + '?v=' + encodeURIComponent(id) + '&app=tizen';
+    }
+    function mountTrailer() {
       var f = document.createElement('iframe');
       f.className = 'dt-trailer';
       f.setAttribute('tabindex', '-1');
       f.setAttribute('allow', 'autoplay; encrypted-media');
+      f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
       f.setAttribute('frameborder', '0');
-      f.src = 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&mute=1&controls=0&playsinline=1&enablejsapi=1&rel=0' +
-        '&iv_load_policy=3&disablekb=1&fs=0&modestbranding=1&cc_load_policy=0';
+      f.src = trailerSrc(tr.key);
+      trLog('start poging', tr.attempt, tr.key);
       f.onload = function () {
+        if (tr.frame !== f) return;
         // de IFrame-API stuurt pas berichten na "listening"
         try { f.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*'); } catch (e) { }
         trailerSend('mute');
         trailerSend('playVideo');
       };
       tr.frame = f;
+      tr.playing = false;
+      bg.appendChild(f);
+      clearTimeout(tr.timeout);
+      tr.timeout = setTimeout(function () { if (!tr.playing) { trLog('speelt niet binnen 12 s, poging', tr.attempt); trailerFailed(); } }, 12000);
+    }
+    function startTrailer(key) {
+      if (tr.started || !key || !trailerAllowed()) return;
+      tr.started = true;
+      tr.key = String(key).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
+      tr.attempt = 0;
       tr.muted = true;
       window.addEventListener('message', onTrailerMessage);
-      bg.appendChild(f);
-      tr.timeout = setTimeout(function () { if (!tr.playing) stopTrailer(); }, 10000);
+      mountTrailer();
+    }
+    function removeFrame() {
+      var f = tr.frame;
+      if (!f) return;
+      tr.frame = null;
+      f.className = 'dt-trailer';
+      setTimeout(function () { try { f.src = 'about:blank'; } catch (e) { } if (f.parentNode) f.parentNode.removeChild(f); }, 350);
+    }
+    /** Embed geweigerd of te traag: eerst de doorgeefpagina proberen, daarna Ken Burns op de kopafbeelding. */
+    function trailerFailed() {
+      clearTimeout(tr.timeout);
+      if (tr.playing) { stopTrailer(); return; }
+      trailerSend('stopVideo');
+      removeFrame();
+      // meteen rustig bewegen; speelt de tweede poging alsnog, dan komt de trailer eroverheen
+      tr.failed = true;
+      if (!tr.playing) bg.className = 'dt-bg kb';
+      if (tr.attempt === 0 && trailerAllowed()) { tr.attempt = 1; mountTrailer(); return; }
+      window.removeEventListener('message', onTrailerMessage);
     }
     function stopTrailer() {
       clearTimeout(tr.wait); clearTimeout(tr.timeout);
       tr.wait = null;
       if (!tr.frame) return;
-      var f = tr.frame, was = tr.playing;
+      var was = tr.playing;
       trailerSend('stopVideo');
       window.removeEventListener('message', onTrailerMessage);
-      tr.frame = null; tr.playing = false;
-      f.className = 'dt-trailer';
-      setTimeout(function () { try { f.src = 'about:blank'; } catch (e) { } if (f.parentNode) f.parentNode.removeChild(f); }, 350);
+      removeFrame();
+      tr.playing = false;
       if (was) drawButtonsKeepFocus();
     }
     /** Trailer opzoeken en na 1,5 s starten (één keer per pagina). */

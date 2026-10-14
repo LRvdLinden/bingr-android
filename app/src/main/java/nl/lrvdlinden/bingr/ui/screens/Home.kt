@@ -665,6 +665,8 @@ fun HomeScreen(filter: Filter) {
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 BingrLogo(26.sp)
+                // build 85: Categorieën (Netflix-stijl), voor Home alles, op Films/Series alleen die soort
+                if (lib.movies.isNotEmpty() || lib.series.isNotEmpty()) CategoriesChip(filter)
                 Spacer(Modifier.weight(1f))
                 Box(Modifier.size(34.dp).focusLift { ScreensNav.search() }, contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Search, L("Search"), tint = Color.White, modifier = Modifier.size(25.dp))

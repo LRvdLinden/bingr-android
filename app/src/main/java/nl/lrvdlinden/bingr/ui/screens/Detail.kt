@@ -67,6 +67,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -407,7 +408,11 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
         ) {
             // MARK: kop
             Box(Modifier.fillMaxWidth().height(headerHeight)) {
-                RemoteImage(heroImage, Modifier.matchParentSize())
+                // build 85: speelt de trailer niet (YouTube weigert de embed, geen WebView), dan beweegt de afbeelding rustig
+                val kb = heroTrailer.failed && !HeroTrailer.reduceMotion(ctx)
+                Box(Modifier.matchParentSize().clipToBounds()) {
+                    RemoteImage(heroImage, Modifier.matchParentSize().kenBurns(kb))
+                }
                 HeroTrailerView(heroTrailer, Modifier.matchParentSize())
                 Box(
                     Modifier.matchParentSize().background(

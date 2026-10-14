@@ -73,6 +73,8 @@
     check: '<path d="M4.5 12.5l5 5L19.5 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>',
     gear: '<path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.4 5l2-1.5-2-3.5-2.4.9a7.6 7.6 0 0 0-1.8-1L15.8 6h-4l-.4 2.4a7.6 7.6 0 0 0-1.8 1l-2.4-.9-2 3.5 2 1.5a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.5 2.4-.9c.6.4 1.1.7 1.8 1l.4 2.4h4l.4-2.4c.7-.3 1.2-.6 1.8-1l2.4.9 2-3.5-2-1.5c.1-.7.1-1.3 0-2z" fill="currentColor" transform="translate(-1.8 -2) scale(1.08)"/>',
     play: '<path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/>',
+    // build 85: Categorieën (vier tegels)
+    grid: '<rect x="3.5" y="3.5" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6" fill="currentColor"/>',
     // build 82: geluid aan/uit (trailer in de kop van de detailpagina)
     volume: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     volumeOff: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',

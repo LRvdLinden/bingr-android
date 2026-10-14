@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
@@ -69,7 +70,8 @@ private data class MainTab(val id: Int, val title: String, val icon: ImageVector
 
 /**
  * Hoofdscherm (= MainTabView.swift). Telefoon: onderbalk; TV: bovenbalk met tabbladen zoals Netflix op TV.
- * Tabbladen: 0 Home, 1 Live TV, 2 Films, 3 Series, 4 Zoeken, 5 Mijn Bingr, 6 Downloads (build 52, niet op TV).
+ * Tabbladen: 0 Home, 1 Live TV, 2 Films, 3 Series, 4 Zoeken, 5 Mijn Bingr, 6 Downloads (build 52, niet op TV),
+ * 7 Categorieën (build 85, alleen op TV; telefoon/tablet: chip in de kop van Home/Films/Series).
  */
 @Composable
 fun MainScreen() {
@@ -88,6 +90,9 @@ fun MainScreen() {
         if (hasLive && showLive) add(MainTab(1, L("Live TV"), Icons.Default.LiveTv))
         if (showMovies) add(MainTab(2, L("Movies"), Icons.Default.Movie))
         if (showSeries) add(MainTab(3, L("Series"), Icons.Default.VideoLibrary))
+        if (tv && (showMovies || showSeries) && (lib.movies.isNotEmpty() || lib.series.isNotEmpty())) {
+            add(MainTab(7, L("Categories"), Icons.Default.Category))
+        }
         if (!isPhone) add(MainTab(4, L("Search"), Icons.Default.Search))
         if (Downloads.supported) add(MainTab(6, L("Downloads"), Icons.Default.Download))
         // build 72: het profiel zelf zit nu als avatar met menu rechtsboven (zoals op bingr.online)
@@ -158,6 +163,7 @@ fun MainScreen() {
                         3 -> HomeScreen(Filter.SERIES)
                         4 -> SearchScreen(modal = false, onClose = {})
                         6 -> Box(Modifier.fillMaxSize().statusBarsPadding()) { DownloadsScreen() }
+                        7 -> CategoriesScreen(Filter.ALL, asTab = true)
                         else -> Box(Modifier.fillMaxSize().then(if (tv) Modifier else Modifier.statusBarsPadding())) { SettingsScreen() }
                     }
                 }

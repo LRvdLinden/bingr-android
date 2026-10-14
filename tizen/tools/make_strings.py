@@ -13,7 +13,12 @@ OUT = os.path.join(TIZEN, 'js', 'strings.js')
 
 # teksten die via een variabele worden opgevraagd (menu, kleuren)
 DYNAMIC = ['Search', 'Home', 'Live TV', 'Movies', 'Series', 'My List', 'Settings',
-           'Red', 'Blue', 'Green', 'Purple', 'Orange', 'Pink', 'Automatic', 'OK']
+           'Red', 'Blue', 'Green', 'Purple', 'Orange', 'Pink', 'Automatic', 'OK',
+           # build 85: Categorieën (genre-namen, soorten en sorteringen gaan via een variabele)
+           'Categories', 'All', 'Popular', 'Newest', 'A–Z', 'Rating',
+           'Action', 'Adventure', 'Comedy', 'Drama', 'Thriller', 'Crime', 'Science Fiction', 'Fantasy', 'Horror',
+           'Mystery', 'Romance', 'Animation', 'Family', 'Kids', 'Documentary', 'History', 'War', 'Western', 'Music',
+           'Reality', 'Soap']
 
 PAT = [re.compile(r'\bL\(\s*"((?:[^"\\]|\\.)*)"'), re.compile(r"\bL\(\s*'((?:[^'\\]|\\.)*)'")]
 
