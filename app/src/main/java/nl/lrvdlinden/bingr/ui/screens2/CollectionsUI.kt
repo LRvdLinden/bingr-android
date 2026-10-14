@@ -430,12 +430,20 @@ fun CollectionEditScreen(existing: BingrCollection?, onClose: () -> Unit, initia
 @Composable
 fun HomeScreenSettings(onClose: () -> Unit) {
     val tv = AppState.isTV
-    // build 86: de rij "Categorieën" staat altijd vijf rijen onder "Nu live": alleen aan/uit, apart van de volgorde
+    // build 86: de rij "Categorieën" hier alleen aan/uit, apart van de volgorde. Standaard staat hij direct na "live"
+    // (= op Home vijf rijen tussen "Nu live" en Categorieën); is hij op een ander apparaat verplaatst, dan blijft hij
+    // na dezelfde rij staan.
     val initial = remember { HomeLayouts.effective(Store.activeHomeLayout) }
     var rows by remember { mutableStateOf(initial.filter { it.key != HomeLayouts.CATEGORY_TILES }) }
     var tiles by remember { mutableStateOf(initial.firstOrNull { it.key == HomeLayouts.CATEGORY_TILES } ?: HomeRow(HomeLayouts.CATEGORY_TILES)) }
+    // de rij waar Categorieën na staat ("" = bovenaan)
+    val tilesAfter = remember {
+        val i = initial.indexOfFirst { it.key == HomeLayouts.CATEGORY_TILES }
+        if (i < 0) "live" else if (i == 0) "" else initial[i - 1].key
+    }
     fun saveAll(n: List<HomeRow>) {
-        val i = n.indexOfFirst { it.key == "live" }
+        if (tilesAfter.isEmpty()) { HomeLayouts.save(listOf(tiles) + n); return }
+        val i = n.indexOfFirst { it.key == tilesAfter }.takeIf { it >= 0 } ?: n.indexOfFirst { it.key == "live" }
         HomeLayouts.save(if (i < 0) n + tiles else n.take(i + 1) + tiles + n.drop(i + 1))
     }
     fun commit(n: List<HomeRow>) { rows = n; saveAll(n) }
@@ -504,7 +512,7 @@ fun HomeScreenSettings(onClose: () -> Unit) {
             }
         }
         item {
-            S2Section(footer = L("Always 5 rows below the Live TV row.")) {
+            S2Section(footer = if (tilesAfter == "live") L("Always 5 rows below the Live TV row.") else null) {
                 S2Row(HomeLayouts.title(HomeLayouts.CATEGORY_TILES),
                     icon = Icons.Default.GridView,
                     tint = if (tiles.visible) Color.White else Theme.secondary,

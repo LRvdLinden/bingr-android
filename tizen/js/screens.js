@@ -669,6 +669,8 @@
       };
       // build 86: ankerpunt "Nu live" voor de rij Categorieën (ook als de rij Nu live uit staat of leeg is)
       b['@live'] = function () { return h('div.live-anchor'); };
+      // plek van de rij Categorieën als het profiel hem elders in de indeling heeft gezet (niet direct na "live")
+      b['@browse'] = function () { return h('div.browse-slot'); };
       D.collectionsFor(B.app.profile.id).forEach(function (c) {
         b['collection:' + c.id] = function () {
           var items = Lib.collectionItems(c, 40);
@@ -678,15 +680,43 @@
       });
       return b;
     }
+    /**
+     * Startscherm-indeling van dit profiel (gesynchroniseerd), of null. De rij Categorieën heet overal "browse"
+     * (zoals iOS/tvOS/macOS en web); oudere sleutels "categorytiles" en "genres" tellen als "browse" (plek en
+     * aan/uit blijven; dubbele vervallen).
+     */
+    var TILE_ALIASES = { categorytiles: 'browse', genres: 'browse' };
+    function homeLayout() {
+      var layout = D.homeLayout();
+      if (!layout) return null;
+      var seen = {}, out = [];
+      layout.forEach(function (r) {
+        if (!r || !r.key) return;
+        var k = TILE_ALIASES[r.key] || r.key;
+        if (seen[k]) return;
+        seen[k] = true;
+        out.push({ key: k, visible: r.visible !== false });
+      });
+      return out;
+    }
+    /** Categorieën op de standaardplek (in de indeling direct na "live", of niet in de indeling)? Dan 5 rijen onder Nu live. */
+    function autoTiles() {
+      var layout = homeLayout();
+      if (!layout) return true;
+      for (var i = 0; i < layout.length; i++) if (layout[i].key === 'browse') return i > 0 && layout[i - 1].key === 'live';
+      return true;
+    }
     function order(b) {
       var colls = Object.keys(b).filter(function (k) { return k.indexOf('collection:') === 0; });
       var o = ['continue', 'mylist', 'top10', 'live', 'recent'].concat(colls).concat(['categories']);
-      var layout = D.homeLayout();
+      var layout = homeLayout();
+      var auto = autoTiles();
       if (layout) {
         var known = {};
         o = [];
         layout.forEach(function (r) {
-          if (!r || !r.key || !b[r.key] || r.key === '@live') return;
+          if (r.key === 'browse') { if (!auto && r.visible) o.push('@browse'); return; }
+          if (!b[r.key] || r.key === '@live' || r.key === '@browse') return;
           known[r.key] = true;
           if (r.visible !== false) o.push(r.key);
           if (r.key === 'live') o.push('@live');
@@ -702,19 +732,22 @@
       } else o.splice(o.indexOf('live') + 1, 0, '@live');
       return o;
     }
-    /** Rij "Categorieën" (build 86) aan? Per profiel in de startscherm-indeling (sleutel categorytiles), standaard aan. */
+    /** Rij "Categorieën" (build 86) aan? Per profiel in de startscherm-indeling (sleutel browse), standaard aan. */
     function tilesOn() {
-      var layout = D.homeLayout(), on = true;
-      if (layout) layout.forEach(function (r) { if (r && r.key === 'categorytiles' && r.visible === false) on = false; });
+      var layout = homeLayout(), on = true;
+      if (layout) layout.forEach(function (r) { if (r.key === 'browse' && !r.visible) on = false; });
       return on;
     }
     /**
-     * De rij "Categorieën" precies vijf getoonde rijen onder "Nu live" zetten; zijn er daarna minder, dan onderaan.
-     * Telt de rijen zoals ze in de pagina staan (Top 10 = twee rijen, lege rijen tellen niet).
+     * De rij "Categorieën" zetten: op de standaardplek met precies vijf getoonde rijen tussen "Nu live" en
+     * Categorieën; zijn er daarna minder, dan onderaan. Telt de rijen zoals ze in de pagina staan (Top 10 = twee
+     * rijen, lege rijen tellen niet). Heeft het profiel de rij elders gezet, dan op die plek (.browse-slot).
      */
     function positionCats() {
-      var cat = blocks.categorytiles && blocks.categorytiles[0];
+      var cat = blocks.browse && blocks.browse[0];
       if (!cat) return;
+      var slot = track.querySelector('.browse-slot');
+      if (slot) { if (cat.nextSibling !== slot) track.insertBefore(cat, slot); return; }
       var end = track.querySelector('.page-end');
       var anchor = track.querySelector('.live-anchor');
       var ref = end, n = 0;
@@ -727,13 +760,13 @@
       if (ref !== cat && cat.nextSibling !== ref) track.insertBefore(cat, ref);
     }
     function buildCats() {
-      var old = blocks.categorytiles || [];
+      var old = blocks.browse || [];
       var f = U.focused, fKey = f && old.some(function (o) { return o.contains(f); }) ? f._key : null;
       old.forEach(function (o) { if (o.parentNode) o.parentNode.removeChild(o); });
       var row = tilesOn() && S.categoriesRow ? S.categoriesRow() : null;
-      blocks.categorytiles = row ? [row] : [];
+      blocks.browse = row ? [row] : [];
       if (!row) return;
-      row._row = 'categorytiles';
+      row._row = 'browse';
       track.insertBefore(row, track.querySelector('.page-end'));
       positionCats();
       if (fKey) {
@@ -801,11 +834,11 @@
     // nieuwe genres binnen (TMDB): de rij Categorieën opnieuw als de afstandsbediening stil is
     var catPending = false;
     var offCats = B.on('ageRatings', function () {
-      if (catPending || !blocks.categorytiles) return;
+      if (catPending || !blocks.browse) return;
       catPending = true;
       B.whenQuiet(function () {
         catPending = false;
-        if (document.body.contains(scroller) && blocks.categorytiles) buildCats();
+        if (document.body.contains(scroller) && blocks.browse) buildCats();
       }, 2500);
     });
     pg.destroy = function () { offCats(); };

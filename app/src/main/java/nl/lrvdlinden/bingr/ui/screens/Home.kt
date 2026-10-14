@@ -542,22 +542,26 @@ fun HomeScreen(filter: Filter) {
                 }
             }
 
-            // build 86: rij "Categorieën" (tegels) precies vijf getoonde rijen onder "Nu live"; zijn er daarna minder
-            // rijen, dan onderaan. Staat "Nu live" uit of is die rij leeg, dan telt de plek waar hij zou staan.
+            // build 86: rij "Categorieën" (tegels) op zijn standaardplek (in de indeling direct na "live"): precies vijf
+            // getoonde rijen tussen "Nu live" en Categorieën; zijn er daarna minder rijen, dan onderaan. Staat "Nu live"
+            // uit of is die rij leeg, dan telt de plek waar hij zou staan. Elders in de indeling gezet (bv. op een
+            // ander apparaat verplaatst): dan staat hij op die plek.
             val tilesOn = filter == Filter.ALL && (lib.movies.isNotEmpty() || lib.series.isNotEmpty()) &&
                 layoutRows.any { it.key == HomeLayouts.CATEGORY_TILES && it.visible }
+            val tilesAt = layoutRows.indexOfFirst { it.key == HomeLayouts.CATEGORY_TILES }
+            val autoTiles = tilesAt > 0 && layoutRows[tilesAt - 1].key == "live"
             var sinceLive = -1
             var tilesPlaced = false
             fun LazyListScope.placeTiles() {
                 if (!tilesOn || tilesPlaced) return
                 tilesPlaced = true
-                item(key = "categorytiles") { CategoriesHomeRow() }
+                item(key = "browse") { CategoriesHomeRow() }
             }
             /** Na elke getoonde rij: tellen vanaf "Nu live" en de categorierij na de vijfde plaatsen. */
             fun LazyListScope.shown(visible: Boolean = true) {
                 if (!visible || sinceLive < 0) return
                 sinceLive++
-                if (sinceLive == 5) placeTiles()
+                if (autoTiles && sinceLive == 5) placeTiles()
             }
 
             fun LazyListScope.section(key: String) {
@@ -655,12 +659,12 @@ fun HomeScreen(filter: Filter) {
                 // "Nu live" blijft ook uitgezet het ankerpunt voor de categorierij
                 layoutRows.forEach { r ->
                     when {
-                        r.key == HomeLayouts.CATEGORY_TILES -> Unit
+                        r.key == HomeLayouts.CATEGORY_TILES -> if (!autoTiles) placeTiles()
                         r.visible -> section(r.key)
                         r.key == "live" && sinceLive < 0 -> { sinceLive = 0 }
                     }
                 }
-                placeTiles()
+                if (autoTiles) placeTiles()
             } else {
                 listOf("continue", "mylist", "recent", "foryou", "top10").forEach { section(it) }
                 layoutRows.filter { it.visible && it.key.startsWith("collection:") }.forEach { section(it.key) }

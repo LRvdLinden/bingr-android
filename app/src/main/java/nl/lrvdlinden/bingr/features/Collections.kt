@@ -345,10 +345,15 @@ data class HomeLayout(val rows: List<HomeRow> = emptyList(), val updatedAt: Long
 
 object HomeLayouts {
     /**
-     * Build 86: rij "Categorieën" met tegels (genres en servercategorieën). Alleen aan/uit; de plek is vast:
-     * vijf rijen onder "Nu live" (zie HomeScreen), dus de volgorde in de lijst telt voor deze rij niet.
+     * Build 86: rij "Categorieën" met tegels (genres en servercategorieën). Sleutel "browse", gelijk aan iOS/tvOS/macOS
+     * en web (de indeling wordt gesynchroniseerd). Staat hij in de indeling direct na "live" (standaard), dan komt hij
+     * op Home na precies vijf getoonde rijen onder "Nu live" (zie HomeScreen); heeft het profiel hem (op een ander
+     * apparaat) verplaatst, dan staat hij op die plek. Hier alleen aan/uit.
      */
-    const val CATEGORY_TILES = "categorytiles"
+    const val CATEGORY_TILES = "browse"
+
+    /** Oudere sleutels voor deze rij ("categorytiles" Android/Samsung TV, "genres" web) → "browse"; dubbele vervallen. */
+    private val aliases = mapOf("categorytiles" to CATEGORY_TILES, "genres" to CATEGORY_TILES)
 
     /** Vaste rij-sleutels in de standaardvolgorde. */
     val fixedKeys = listOf("continue", "mylist", "top10", "foryou", "recent", "live", CATEGORY_TILES, "movies", "series", "categories")
@@ -402,7 +407,7 @@ object HomeLayouts {
     private fun normalize(k: String): String = if (k.startsWith("collection:")) {
         val id = k.removePrefix("collection:")
         Collections.visible.firstOrNull { it.id.equals(id, ignoreCase = true) }?.homeKey ?: k
-    } else k
+    } else aliases[k] ?: k
 
     /** Opslaan voor het actieve profiel; onbekende sleutels uit de oude versie blijven achteraan bewaard. */
     fun save(rows: List<HomeRow>) {
