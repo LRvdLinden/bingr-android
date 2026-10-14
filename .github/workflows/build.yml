@@ -274,11 +274,13 @@ jobs:
           V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
           git clone -q --depth 1 "https://x-access-token:${TOKEN}@github.com/LRvdLinden/bingr-beheer.git" beheer
           [ -f pkg/notes.md ] || { mkdir -p pkg; awk -v b="Build $B" '/^## /{f=($0 ~ (b "$"))?1:0; next} f && !/^_.*_$/' CHANGELOG.md > pkg/notes.md; }
-          # één pakket per build (een nieuwe versie krijgt een nieuw buildnummer); staat de build er al, dan alleen de notities bijwerken
-          A="beheer/versions/android/$V-build$B"; T="beheer/versions/tizen/$V-build$B"
-          if [ -d "$A" ]; then cp pkg/notes.md "$A/notes.md"
+          # per platform alleen de nieuwste build (versions/Android/v<versie>/, versions/Samsung TV/v<versie>/);
+          # staat deze build er al, dan alleen de notities bijwerken
+          cur() { python3 -c "import json,sys;print(json.load(open('beheer/versions/latest.json')).get(sys.argv[1],{}).get('build',0))" "$1" 2>/dev/null || echo 0; }
+          A="beheer/versions/Android/v$V"; T="beheer/versions/Samsung TV/v$V"
+          if [ "$(cur android)" = "$B" ]; then cp pkg/notes.md "$A/notes.md"
           elif ls pkg/*.apk >/dev/null 2>&1; then python3 beheer/tools/add_version.py android "$B" pkg/Bingr-$V-build$B.apk --notes pkg/notes.md --version "$V"; fi
-          if [ -d "$T" ]; then cp pkg/notes.md "$T/notes.md"
+          if [ "$(cur tizen)" = "$B" ]; then cp pkg/notes.md "$T/notes.md"
           elif [ -d dist ]; then
             KIND=$(grep -o 'SIGN_KIND=.*' dist/signing.txt | cut -d= -f2 || true)
             for w in dist/*.wgt; do python3 beheer/tools/add_version.py tizen "$B" "$w" --notes pkg/notes.md --version "$V"; done
