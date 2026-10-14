@@ -332,8 +332,8 @@ object Store {
      * profielen die elders verwijderd zijn (tombstone). Die gaan hier weg met foto, pincode en gegevens; was het
      * het actieve profiel, dan terug naar "Wie kijkt er?". Het hoofdprofiel wordt nooit verwijderd.
      */
-    fun applySyncedProfiles(list: List<ViewerProfile>, removed: List<String>) {
-        val main = mainProfileID
+    fun applySyncedProfiles(list: List<ViewerProfile>, removed: List<String>, newMain: String? = null) {
+        val main = newMain?.takeIf { id -> list.any { it.id == id } } ?: mainProfileID
         val gone = removed.filter { it != main }
         val newList = list.filter { it.id !in gone }
         if (newList.isEmpty()) return
@@ -347,7 +347,7 @@ object Store {
         if (gone.isNotEmpty()) photoVersion++
         profiles = newList
         write("profiles", profiles)
-        if (mainProfileIDStored == null || newList.none { it.id == mainProfileIDStored }) {
+        if (mainProfileIDStored == null || newList.none { it.id == mainProfileIDStored } || (main != null && main != mainProfileIDStored)) {
             mainProfileIDStored = main?.takeIf { id -> newList.any { it.id == id } } ?: newList.first().id
             saveMeta()
         }

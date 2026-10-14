@@ -261,6 +261,7 @@ object ProfileSync {
         val tombs = localTombstones()
         val mainKey = Store.mainProfileID?.let(::idKey)
         var needUpload = false
+        var newMain: String? = null
 
         val local = Store.profiles
         val removed = mutableListOf<String>()
@@ -280,6 +281,8 @@ object ProfileSync {
                     if (newerStrict(su, lu)) {
                         merged += toProfile(o, existing = p) to (o.jI("order") ?: i)
                         setLocalUpdatedAt(key, su)
+                        // build 89: hoofdprofiel elders (of op bingr.online) gewijzigd → overnemen
+                        if (o.jB("isMain") == true && key != mainKey) newMain = p.id
                     } else {
                         if (newerStrict(lu, su)) needUpload = true
                         // build 54: lokaal nog geen accentkleur en de server wel → overnemen (ook als de server niet nieuwer is)
@@ -295,15 +298,17 @@ object ProfileSync {
             if (isTombstone(o) || key in present) continue
             if (key in tombs) { needUpload = true; continue }               // hier verwijderd, server weet het nog niet
             val su = o.jS("updatedAt")?.takeIf { it.isNotBlank() } ?: EPOCH
-            merged += toProfile(o) to (o.jI("order") ?: Int.MAX_VALUE)
+            val np = toProfile(o)
+            merged += np to (o.jI("order") ?: Int.MAX_VALUE)
             setLocalUpdatedAt(key, su)
+            if (o.jB("isMain") == true && key != mainKey) newMain = np.id
         }
         // lokale tombstones die nog niet als tombstone op de server staan
         if (tombs.keys.any { k -> byKey[k]?.let { !isTombstone(it) } ?: true }) needUpload = true
 
         val list = merged.withIndex().sortedWith(compareBy<IndexedValue<Pair<ViewerProfile, Int>>>({ it.value.second }, { it.index })).map { it.value.first }
-        if (list.isNotEmpty() && (list != local || removed.isNotEmpty())) {
-            withoutUpload { Store.applySyncedProfiles(list, removed) }
+        if (list.isNotEmpty() && (list != local || removed.isNotEmpty() || newMain != null)) {
+            withoutUpload { Store.applySyncedProfiles(list, removed, newMain) }
         }
         return needUpload
     }
