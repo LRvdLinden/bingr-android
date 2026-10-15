@@ -4,6 +4,15 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 101
+_15 oktober 2026_
+
+### Samsung TV (Tizen)
+
+**Opgelost**
+
+- Samsung TV: in het ondertitelmenu staat weer welke taal elk spoor is (en anders het soort ondertitel), ook op tv's die de taalgegevens anders aanleveren
+
 ## Versie 1.0.0 · Build 100
 _15 oktober 2026_
 

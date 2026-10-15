@@ -98,13 +98,19 @@
     var out = { audio: [], text: [] };
     try {
       var all = webapis.avplay.getTotalTrackInfo() || [];
+      var logged = this._tracksLogged;
       for (var i = 0; i < all.length; i++) {
-        var t = all[i], extra = {};
-        try { extra = JSON.parse(t.extra_info || '{}'); } catch (e) { extra = {}; }
-        var lang = extra.language || extra.track_lang || '';
+        var t = all[i], info = trackInfo(t.extra_info);
+        var extra = info.extra, lang = info.lang;
+        if (!logged && (t.type === 'TEXT' || t.type === 'AUDIO')) B.log('spoor ' + t.type + ' ' + t.index + ': ' + String(typeof t.extra_info === 'string' ? t.extra_info : JSON.stringify(t.extra_info)).slice(0, 200));
         if (t.type === 'AUDIO') out.audio.push({ index: t.index, lang: lang, label: langName(lang) || (L('Audio') + ' ' + (out.audio.length + 1)), extra: extra });
-        else if (t.type === 'TEXT') out.text.push({ index: t.index, lang: lang, label: langName(lang) || (L('Subtitles') + ' ' + (out.text.length + 1)) });
+        else if (t.type === 'TEXT') {
+          var n = out.text.length + 1, kind = info.kind;
+          out.text.push({ index: t.index, lang: lang,
+            label: langName(lang) || (L('Subtitles') + ' ' + n + (kind ? ' · ' + kind : '')) });
+        }
       }
+      this._tracksLogged = true;
     } catch (e) { /* geen sporen */ }
     try {
       var cur = webapis.avplay.getCurrentStreamInfo() || [];
@@ -190,6 +196,33 @@
 
   /** Naam van een taalcode van een spoor (nl, nld, dut, eng, …) in de taal van de app; '' als onbekend. */
   function langName(code) { return B.clang.name(code); }
+
+  /**
+   * build 101: extra_info van AVPlay lezen. Per tv-model/firmware verschillend: een JSON-tekst, al een object, of tekst
+   * die geen geldige JSON is (sleutels zonder aanhalingstekens). Taal staat in track_lang (ondertitels), language
+   * (audio) of soms lang/Language. kind = soort ondertitel (SRT, TTML, WebVTT…) voor als de taal onbekend is.
+   */
+  var KINDS = { srt: 'SRT', subrip: 'SRT', ttml: 'TTML', webvtt: 'WebVTT', vtt: 'WebVTT', ass: 'ASS', ssa: 'SSA',
+    dvbsub: 'DVB', dvb: 'DVB', pgs: 'PGS', vobsub: 'VobSub', smi: 'SAMI', sami: 'SAMI', cea608: 'CC', cea708: 'CC', tx3g: 'Text' };
+  function trackInfo(raw) {
+    var extra = {};
+    if (raw && typeof raw === 'object') extra = raw;
+    else if (raw) { try { extra = JSON.parse(raw); } catch (e) { extra = {}; } }
+    var lang = '';
+    ['track_lang', 'language', 'lang', 'Language', 'TrackLang', 'track_language'].some(function (k) {
+      if (extra && typeof extra[k] === 'string' && extra[k].trim()) { lang = extra[k].trim(); return true; }
+      return false;
+    });
+    var text = typeof raw === 'string' ? raw : '';
+    if (!lang && text) {
+      var m = /(?:track_lang|language|lang)["']?\s*[:=]\s*["']?([A-Za-z]{2,3}(?:[-_][A-Za-z]{2,4})?)/i.exec(text);
+      if (m) lang = m[1];
+    }
+    var fourcc = String((extra && (extra.fourCC || extra.fourcc || extra.subtitle_type || extra.codec)) || '');
+    if (!fourcc && text) { var f = /(?:fourCC|codec)["']?\s*[:=]\s*["']?([A-Za-z0-9_-]{2,12})/i.exec(text); if (f) fourcc = f[1]; }
+    var kind = KINDS[fourcc.toLowerCase().replace(/[^a-z0-9]/g, '')] || '';
+    return { extra: extra || {}, lang: lang, kind: kind };
+  }
 
   // MARK: spelerscherm
 
