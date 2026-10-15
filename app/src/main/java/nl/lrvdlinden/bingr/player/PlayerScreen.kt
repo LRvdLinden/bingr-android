@@ -387,13 +387,18 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             player.stop()
             if (PlayerController.current === player) PlayerController.current = null
             MainActivity.current?.keepScreenOn(false)
+            MainActivity.current?.updatePiP(false)   // build 97: geen automatisch beeld-in-beeld meer na de speler
             FrameRateMatcher.reset((player.engine as? ExoEngine)?.let { FrameRateMatcher.surfaceOf(it.view) })
         }
     }
     LaunchedEffect(zapBannerID) {
         if (zapBanner != null) { delay(PlayerSettings.zapDelay.toLong() + 3_000); zapBanner = null }
     }
-    LaunchedEffect(player.isPlaying) { MainActivity.current?.keepScreenOn(player.isPlaying) }
+    LaunchedEffect(player.isPlaying) {
+        MainActivity.current?.keepScreenOn(player.isPlaying)
+        // build 97: knop afspelen/pauzeren in het PiP-venster en automatisch PiP (Android 12+) volgen de afspeelstand
+        MainActivity.current?.updatePiP(player.isPlaying)
+    }
     LaunchedEffect(pokeID, panel, player.isPlaying, showControls) {
         if (showControls) {
             delay(6000)   // 6 s niets gedaan → bediening weg (rondkijken met de D-pad houdt hem zichtbaar)

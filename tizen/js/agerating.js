@@ -22,7 +22,7 @@
   AR.key = function (title, year, isShow) { return (isShow ? 's' : 'm') + '|' + String(title || '').toLowerCase() + '|' + (year != null ? year : ''); };
   AR.cached = function (title, year, isShow) {
     var r = cache[AR.key(title, year, isShow)];
-    return r && r.found !== false ? r : null;
+    return r && r.found !== false ? touch(r) : null;
   };
   function any(list, set) { if (!list) return false; for (var i = 0; i < list.length; i++) if (set.indexOf(list[i]) >= 0) return true; return false; }
   AR.isKidsInfo = function (info) { return !!(info && any(info.genres, KIDS)); };
@@ -52,10 +52,21 @@
     }, function () { loaded = true; });
     return loading;
   };
+  // build 97: hooguit elke 30 s opslaan (niet bij elke titel opnieuw uitstellen) en de cache begrenzen (LRU, 5000 titels)
+  var SAVE_MS = 30000, MAX_CACHE = 5000, lastSave = 0;
   function scheduleSave() {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () { B.idb.set('ageRatings', cache); }, 4000);
+    if (saveTimer) return;
+    var wait = Math.max(4000, SAVE_MS - (Date.now() - lastSave));
+    saveTimer = setTimeout(function () { saveTimer = null; lastSave = Date.now(); prune(); B.idb.set('ageRatings', cache); }, wait);
   }
+  /** Oudste (langst niet gebruikte) regels weg als de cache groter is dan MAX_CACHE. */
+  function prune() {
+    var keys = Object.keys(cache);
+    if (keys.length <= MAX_CACHE) return;
+    keys.sort(function (a, b) { return ((cache[a].u || cache[a].checked || 0) - (cache[b].u || cache[b].checked || 0)); });
+    for (var i = 0; i < keys.length - MAX_CACHE; i++) delete cache[keys[i]];
+  }
+  function touch(r) { if (r) r.u = Date.now(); return r; }
   B.on('wipe', function () { cache = {}; });
 
   function apiKey() { return B.account.serverKey('tmdbAPIKey') || ''; }
@@ -115,12 +126,12 @@
   function fresh(r) { return !!r && (r.found !== false || Date.now() - (r.checked || 0) < RETRY_MS); }
   function fetchOne(t) {
     var k = AR.key(t.title, t.year, t.isShow);
-    if (fresh(cache[k])) return Promise.resolve(cache[k]);
+    if (fresh(cache[k])) return Promise.resolve(touch(cache[k]));
     var p = B.parseTitle(t.title);
     var clean = p.title || t.title;
     return AR.ageInfo(t.imdb, clean, t.year != null ? t.year : p.year, t.isShow).then(function (r) {
       if (!r) return cache[k] || null;
-      cache[k] = r;
+      cache[k] = touch(r);
       scheduleSave();
       return r;
     });
@@ -176,7 +187,13 @@
   };
   AR.lookup = function (x, isShow) { return AR.preload().then(function () { return fetchOne({ title: x.rawTitle || x.title, year: x.year, isShow: isShow, imdb: x.imdbID || null }); }); };
 
-  var bump = B.debounce(function () { B.emit('ageRatings'); }, 2500);
+  // build 97: nieuwe classificaties hooguit één keer per 10 s melden (opnieuw filteren en tekenen is zwaar)
+  var BUMP_MS = 10000, lastBump = 0, bumpTimer = null;
+  function bump() {
+    if (bumpTimer) return;
+    var wait = Math.max(2500, BUMP_MS - (Date.now() - lastBump));
+    bumpTimer = setTimeout(function () { bumpTimer = null; lastBump = Date.now(); B.emit('ageRatings'); }, wait);
+  }
   /** Hele bibliotheek bijwerken (alleen bij een profiel met leeftijdsgrens). Kindergroepen eerst. */
   AR.warm = function (raw) {
     if (!apiKey() || running || !raw) return Promise.resolve();

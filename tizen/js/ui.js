@@ -73,8 +73,7 @@
     check: '<path d="M4.5 12.5l5 5L19.5 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>',
     gear: '<path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.4 5l2-1.5-2-3.5-2.4.9a7.6 7.6 0 0 0-1.8-1L15.8 6h-4l-.4 2.4a7.6 7.6 0 0 0-1.8 1l-2.4-.9-2 3.5 2 1.5a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.5 2.4-.9c.6.4 1.1.7 1.8 1l.4 2.4h4l.4-2.4c.7-.3 1.2-.6 1.8-1l2.4.9 2-3.5-2-1.5c.1-.7.1-1.3 0-2z" fill="currentColor" transform="translate(-1.8 -2) scale(1.08)"/>',
     play: '<path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/>',
-    // build 85: Categorieën (vier tegels)
-    grid: '<rect x="3.5" y="3.5" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6" fill="currentColor"/>',
+    // build 97: dubbele 'grid' (build 85) weggehaald; de latere definitie hieronder was al degene die gold
     // build 82: geluid aan/uit (trailer in de kop van de detailpagina)
     volume: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     volumeOff: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
@@ -182,7 +181,14 @@
   function visible(el) {
     if (!el || !el.isConnected && !document.body.contains(el)) return false;
     if (el.classList.contains('disabled')) return false;
-    return el.offsetParent !== null || el.offsetWidth > 0;
+    if (!(el.offsetParent !== null || el.offsetWidth > 0)) return false;
+    // build 97: onzichtbaar maar wel in de lay-out (verborgen speler-overlay, visibility: hidden of opacity 0) telt niet
+    if (el.closest && el.closest('.pl-overlay:not(.show)')) return false;
+    try {
+      var cs = window.getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.opacity === '0') return false;
+    } catch (e) { /* stil */ }
+    return true;
   }
   U.focusables = function (root) {
     var all = (root || U.layer()).querySelectorAll('.f');
@@ -379,6 +385,11 @@
   /** Ingedrukt gehouden pijltjes: hooguit één stap per ~75 ms, zodat de tv het tekenen bijhoudt. */
   U.REPEAT_MS = 75;
   U.onKeyUp = function () { B.keyRepeating = false; };
+  // build 97: geen keyup (app naar de achtergrond, venster kwijt): niet blijven denken dat er een toets ingedrukt is
+  try {
+    window.addEventListener('blur', function () { B.keyRepeating = false; });
+    document.addEventListener('visibilitychange', function () { B.keyRepeating = false; });
+  } catch (e) { /* stil */ }
   U.onKeyDown = function (e) {
     var name = U.keyName(e);
     if (!name) return;
@@ -390,6 +401,8 @@
     lastHandled = now;
     // herinnering in beeld: groen = naar die zender
     if (B.reminders && B.reminders.onKey(name)) { e.preventDefault(); e.stopPropagation(); return; }
+    // build 97: Exit-toets (10182): Bingr netjes afsluiten via dezelfde weg als twee keer Terug
+    if (name === 'exit') { e.preventDefault(); e.stopPropagation(); if (B.app && B.app.exit) B.app.exit(); return; }
     // tekstvelden (alleen in de test-browser) houden hun letters
     if (e.target && e.target.tagName === 'INPUT' && name === 'back' && e.keyCode === 8) return;
     var top = U.top();
@@ -636,6 +649,16 @@
     } catch (e) { io = null; }
     return io;
   }
+  /** build 97: plaatjes in een weggehaald element niet meer volgen (anders houdt de observer ze in het geheugen). */
+  U.forgetImgs = function (node) {
+    if (!io || !node) return;
+    try {
+      if (node._src && !node._loading) io.unobserve(node);
+      var list = node.querySelectorAll ? node.querySelectorAll('.img') : [];
+      for (var i = 0; i < list.length; i++) if (list[i]._src && !list[i]._loading) io.unobserve(list[i]);
+    } catch (e) { /* stil */ }
+  };
+  function dropNode(track, n) { if (n.parentNode === track) track.removeChild(n); U.forgetImgs(n); }
 
   // MARK: virtuele lijst (lange lijsten: alleen de rijen in beeld bestaan in de DOM)
 
@@ -677,7 +700,7 @@
       var from = Math.max(0, first - buffer), to = Math.min(count - 1, first + visibleRows + buffer);
       Object.keys(nodes).forEach(function (k) {
         var i = +k;
-        if ((i < from || i > to) && nodes[i] !== U.focused) { track.removeChild(nodes[i]); delete nodes[i]; }
+        if ((i < from || i > to) && nodes[i] !== U.focused) { dropNode(track, nodes[i]); delete nodes[i]; }
       });
       for (var i = from; i <= to; i++) place(i);
     }
@@ -703,7 +726,7 @@
       node: function (i) { return nodes[i] || null; },
       refresh: function (n) {
         count = n == null ? count : n;
-        Object.keys(nodes).forEach(function (k) { track.removeChild(nodes[k]); });
+        Object.keys(nodes).forEach(function (k) { dropNode(track, nodes[k]); });
         nodes = {};
         cur = Math.min(cur, Math.max(0, count - 1));
         track.style.height = (count * rowH) + 'px';
@@ -711,7 +734,7 @@
       },
       redrawVisible: function () {
         var f = U.focused, fi = f && f._vi;
-        Object.keys(nodes).forEach(function (k) { track.removeChild(nodes[k]); });
+        Object.keys(nodes).forEach(function (k) { dropNode(track, nodes[k]); });
         nodes = {};
         windowAt(top);
         if (fi != null && nodes[fi] && f && !document.body.contains(f)) U.focus(nodes[fi], true);
@@ -768,7 +791,7 @@
       var from = Math.max(0, (first - buffer) * cols), to = Math.min(count - 1, (first + visRows + buffer) * cols - 1);
       Object.keys(nodes).forEach(function (k) {
         var i = +k;
-        if ((i < from || i > to) && nodes[i] !== U.focused) { track.removeChild(nodes[i]); delete nodes[i]; }
+        if ((i < from || i > to) && nodes[i] !== U.focused) { dropNode(track, nodes[i]); delete nodes[i]; }
       });
       for (var i = from; i <= to; i++) place(i);
     }
@@ -788,13 +811,13 @@
       focusIndex: function (i) { if (!count) return; i = B.clamp(i, 0, count - 1); scrollTo(i); U.focus(place(i)); },
       reset: function (n) {
         count = n; cur = 0; topRow = 0; pos = -1;
-        Object.keys(nodes).forEach(function (k) { track.removeChild(nodes[k]); });
+        Object.keys(nodes).forEach(function (k) { dropNode(track, nodes[k]); });
         nodes = {};
         track.style.height = (rows() * cellH) + 'px';
         scrollTo(0);
       },
       redrawVisible: function () {
-        Object.keys(nodes).forEach(function (k) { if (nodes[k] !== U.focused) { track.removeChild(nodes[k]); delete nodes[k]; } });
+        Object.keys(nodes).forEach(function (k) { if (nodes[k] !== U.focused) { dropNode(track, nodes[k]); delete nodes[k]; } });
         windowAt(topRow);
       }
     };

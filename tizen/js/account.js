@@ -600,7 +600,10 @@
       return r.ok ? true : null;
     });
   };
-  A.streamStop = function () { return authed({ action: 'stream_stop', device_id: A.deviceId() }).catch(B.noop); };
+  // build 97: laatste stream_stop onthouden, zodat afsluiten erop kan wachten (app.exit)
+  var lastStop = null;
+  A.streamStop = function () { lastStop = authed({ action: 'stream_stop', device_id: A.deviceId() }).catch(B.noop); return lastStop; };
+  A.lastStreamStop = function () { return lastStop; };
   A.listStreams = function () {
     return authed({ action: 'list_streams' }).then(function (r) {
       checkLocked(r);

@@ -20,8 +20,14 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -77,10 +83,13 @@ fun Modifier.focusLift(
     onClick: () -> Unit,
 ): Modifier = composed {
     var focused by remember { mutableStateOf(false) }
+    // build 97: TV: na het sluiten van een scherm (detail, categorie) komt de focus terug op dit element (FocusRestore)
+    val restore = remember { FocusRequester() }
     val s by animateFloatAsState(if (focused) scale else 1f, spring(dampingRatio = 0.78f, stiffness = 500f), label = "lift")
     val alpha = if (dimWhenIdle && !focused && AppState.isTV) 0.75f else 1f
     this
-        .onFocusChanged { focused = it.isFocused }
+        .focusRequester(restore)
+        .onFocusChanged { focused = it.isFocused; FocusRestore.focusChanged(restore, it.isFocused) }
         .graphicsLayer {
             scaleX = s; scaleY = s; this.alpha = alpha
             shadowElevation = if (focused) 28f else 0f
@@ -163,11 +172,18 @@ fun RemoteImage(
     modifier: Modifier = Modifier,
     placeholder: String = "",
     fit: Boolean = false,
+    /** build 97: TalkBack-label (bijv. de titel van een poster); null = decoratief */
+    contentDescription: String? = null,
 ) {
-    Box(modifier.background(Theme.card), contentAlignment = Alignment.Center) {
+    val label = contentDescription?.takeIf { it.isNotBlank() }
+    val described = if (label == null) Modifier
+        else Modifier.semantics { this.contentDescription = label; role = androidx.compose.ui.semantics.Role.Image }
+    Box(modifier.background(Theme.card).then(described), contentAlignment = Alignment.Center) {
         if (placeholder.isNotEmpty()) {
             Text(placeholder, color = Theme.secondary, fontSize = 11.sp, textAlign = TextAlign.Center,
-                maxLines = 3, modifier = Modifier.padding(6.dp))
+                maxLines = 3,
+                // build 97: met een label leest TalkBack de titel één keer (niet ook nog de tijdelijke tekst)
+                modifier = Modifier.padding(6.dp).then(if (label == null) Modifier else Modifier.clearAndSetSemantics { }))
         }
         if (!url.isNullOrBlank()) {
             coil.compose.AsyncImage(

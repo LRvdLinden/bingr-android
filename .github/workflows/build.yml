@@ -79,6 +79,11 @@ jobs:
       - name: APK en notities klaarzetten voor bingr-beheer/versions
         if: success() && github.event_name != 'pull_request'
         run: |
+          # build 97: nooit een APK met de tijdelijke debug-sleutel publiceren (die installeert niet over de echte heen)
+          if [ -z "${BINGR_KEYSTORE:-}" ]; then
+            echo "::error::Secret BINGR_KEYSTORE_BASE64 ontbreekt: APK is met de debug-sleutel getekend en wordt niet in bingr-beheer/versions gezet (wel als artefact van deze run)."
+            exit 1
+          fi
           V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
           mkdir -p pkg; cp app/build/outputs/apk/release/*.apk "pkg/Bingr-$V-build$B.apk"
           # notities uit CHANGELOG.md (sectie van dit buildnummer)
@@ -92,8 +97,9 @@ jobs:
           name: Bingr-Android-pkg
           path: pkg/
 
+      # build 97: niet bij pull requests (die mogen de branch ci-logs niet overschrijven)
       - name: Log op branch ci-logs zetten
-        if: always()
+        if: always() && github.event_name != 'pull_request'
         run: |
           set +e
           mkdir -p /tmp/logs; cp build.log /tmp/logs/ 2>/dev/null; cp errors.txt /tmp/logs/ 2>/dev/null
@@ -115,14 +121,20 @@ jobs:
           java-version: '17'
 
       # oude Samsung-tv's (Tizen 4.0 = Chromium M56): geen nieuwere JS-syntax, API's of CSS in de app
+      # build 97: pipefail (een fout van check_compat ging verloren in `| tee`) en een mislukte npm-installatie laat de job falen;
+      # terser komt mee voor de bundel van package.sh (NODE_PATH via GITHUB_ENV)
       - name: Compatibiliteit met oude tv's controleren
+        shell: bash
         run: |
+          set -eo pipefail
           mkdir -p "$RUNNER_TEMP/tlogs" "$RUNNER_TEMP/compat"
-          if (cd "$RUNNER_TEMP/compat" && npm init -y >/dev/null && npm i --no-save --no-audit --no-fund acorn@8.14.0 acorn-walk@8.3.4 >/dev/null 2>&1); then
-            NODE_PATH="$RUNNER_TEMP/compat/node_modules" node tizen/tools/check_compat.js 2>&1 | tee "$RUNNER_TEMP/tlogs/compat.log"
-          else
-            echo "::warning::acorn niet te installeren; compatibiliteitscontrole overgeslagen" | tee "$RUNNER_TEMP/tlogs/compat.log"
+          if ! (cd "$RUNNER_TEMP/compat" && npm init -y >/dev/null && npm i --no-save --no-audit --no-fund acorn@8.14.0 acorn-walk@8.3.4 terser@5.36.0 > "$RUNNER_TEMP/tlogs/npm.log" 2>&1); then
+            tail -30 "$RUNNER_TEMP/tlogs/npm.log" || true
+            echo "::error::acorn/terser niet te installeren; de compatibiliteitscontrole kan niet draaien" | tee "$RUNNER_TEMP/tlogs/compat.log"
+            exit 1
           fi
+          echo "NODE_PATH=$RUNNER_TEMP/compat/node_modules" >> "$GITHUB_ENV"
+          NODE_PATH="$RUNNER_TEMP/compat/node_modules" node tizen/tools/check_compat.js 2>&1 | tee "$RUNNER_TEMP/tlogs/compat.log"
 
       - name: Tizen Studio CLI uit de cache
         id: cache
@@ -209,9 +221,13 @@ jobs:
           echo "SIGN_KIND=$KIND" >> "$GITHUB_ENV"
 
       - name: .wgt bouwen
+        shell: bash
         run: |
+          set -eo pipefail
           mkdir -p "$RUNNER_TEMP/tlogs"
           tizen/tools/package.sh "$RUNNER_TEMP/out" 2>&1 | tee "$RUNNER_TEMP/tlogs/package.log"
+          # build 97: ook de bundel in het pakket (js/bingr.min.js, js/boot.js, js/strings/) moet op Chromium M56 draaien
+          node tizen/tools/check_compat.js "$RUNNER_TEMP/out/app" 2>&1 | tee -a "$RUNNER_TEMP/tlogs/compat.log"
           V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
           mkdir -p dist
           if [ -f "$RUNNER_TEMP/out/Bingr-$V-build$B.wgt" ]; then
@@ -231,8 +247,9 @@ jobs:
           name: Bingr-Tizen-wgt
           path: dist/
 
+      # build 97: niet bij pull requests
       - name: Tizen-log op branch ci-logs-tizen zetten
-        if: always()
+        if: always() && github.event_name != 'pull_request'
         run: |
           set +e
           mkdir -p /tmp/tlogs; cp "$RUNNER_TEMP"/tlogs/*.log /tmp/tlogs/ 2>/dev/null; cp dist/signing.txt /tmp/tlogs/ 2>/dev/null

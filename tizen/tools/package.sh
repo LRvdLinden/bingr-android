@@ -39,6 +39,16 @@ PY
 sed -i.bak -e "s/__BINGR_BUILD__/$B/" -e "s/__BINGR_VERSION__/$V/" "$STAGE/js/core.js" && rm -f "$STAGE/js/core.js.bak"
 grep -o 'version="[^"]*"' "$STAGE/config.xml" | head -2
 
+# build 97: één verkleinde bundel (js/bingr.min.js) in plaats van ~20 losse scripts, teksten per taal (js/strings/<taal>.js,
+# alleen de gekozen taal wordt geladen) en qrcode.js pas bij een QR-code. De bronbestanden in tizen/ blijven zoals ze zijn.
+# Zonder node: het pakket blijft zoals vroeger (losse scripts, strings.js met alle talen).
+if command -v node >/dev/null 2>&1; then
+  python3 "$HERE/make_strings.py" --split "$STAGE"
+  node "$HERE/bundle.js" "$STAGE"
+else
+  echo "let op: node niet gevonden; scripts worden niet gebundeld"
+fi
+
 NAME="Bingr-$V-build$B.wgt"
 rm -f "$OUT"/*.wgt "$OUT/signing.txt"
 

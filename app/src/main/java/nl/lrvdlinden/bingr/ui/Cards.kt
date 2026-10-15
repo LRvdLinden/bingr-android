@@ -60,7 +60,9 @@ fun PosterCard(
     topStartInset: Dp = 0.dp,
 ) {
     Box(modifier.width(width).height(width * 1.5f).clip(RoundedCornerShape(4.dp))) {
-        RemoteImage(poster, Modifier.matchParentSize(), placeholder = ContentLanguage.displayTitle(title))
+        // build 97: TalkBack leest de titel van de poster
+        val shown = ContentLanguage.displayTitle(title)
+        RemoteImage(poster, Modifier.matchParentSize(), placeholder = shown, contentDescription = shown)
         if (accent != null) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(tvs(4)).background(accent))
         if (watched) {
             Box(Modifier.align(Alignment.TopEnd).padding(6.dp).size(tvs(20)).clip(CircleShape).background(Theme.red),

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    build 97: Google-back-up tot en met Android 11 (android:fullBackupContent).
+    Nooit meenemen naar een ander apparaat: de sessie van het Bingr-account (refresh_token), de vaste device_id,
+    de wachtwoorden en tokens van servers, Trakt, OpenSubtitles en pincodes (bingr.secrets) en de app-sleutels van
+    de server. Al het andere (instellingen, profielen, lijsten) mag wel mee.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="bingr.account.xml" />
+    <exclude domain="sharedpref" path="bingr.device.xml" />
+    <exclude domain="sharedpref" path="bingr.secrets.xml" />
+    <exclude domain="sharedpref" path="bingr.serverkeys.xml" />
+</full-backup-content>

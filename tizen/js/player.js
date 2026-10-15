@@ -17,9 +17,17 @@
 
   function AVEngine(ev) { this.ev = ev; this.opened = false; this.playing = false; this.dur = 0; }
   AVEngine.prototype.name = 'avplay';
+  // build 97: een tv heeft één AVPlay-speler; alleen de engine die hem als laatste opende mag hem stoppen of bedienen
+  AVEngine.owner = null;
   AVEngine.prototype.open = function (url, opts) {
     var self = this, av = webapis.avplay;
+    AVEngine.owner = self;
     return new Promise(function (resolve, reject) {
+      // build 97: de belofte precies één keer afronden; een fout vóór het eerste beeld gaat alleen via reject
+      // (dan kiest de speler de HTML5-terugval), pas daarna via ev.error (nieuwe poging / reservebron)
+      var settled = false, started = false;
+      function ok() { if (settled) return; settled = true; started = true; resolve(); }
+      function bad(e) { if (settled) return; settled = true; reject(e instanceof Error ? e : new Error(String(e || 'PLAYER_ERROR'))); }
       try {
         try { av.stop(); av.close(); } catch (e) { /* niets open */ }
         av.open(url);
@@ -32,8 +40,13 @@
           onbufferingprogress: B.noop,
           onbufferingcomplete: function () { self.ev.buffering(false); },
           oncurrentplaytime: B.noop,
-          onstreamcompleted: function () { self.playing = false; self.ev.ended(); },
-          onerror: function (t) { self.playing = false; self.ev.error(String(t || 'PLAYER_ERROR')); },
+          onstreamcompleted: function () { if (AVEngine.owner !== self) return; self.playing = false; self.ev.ended(); },
+          onerror: function (t) {
+            if (AVEngine.owner !== self) return;
+            self.playing = false;
+            if (!started) bad(new Error(String(t || 'PLAYER_ERROR')));
+            else self.ev.error(String(t || 'PLAYER_ERROR'));
+          },
           onevent: B.noop,
           onsubtitlechange: function (duration, text) { self.ev.subtitle(text || ''); },
           ondrmevent: B.noop
@@ -45,23 +58,32 @@
           av.setBufferingParam('PLAYER_BUFFER_FOR_RESUME', 'PLAYER_BUFFER_SIZE_IN_SECOND', opts.live ? 3 : 2);
         } catch (e) { /* niet ondersteund */ }
         av.prepareAsync(function () {
+          if (settled || AVEngine.owner !== self) { bad(new Error('stale')); return; }
           try { self.dur = av.getDuration() / 1000; } catch (e) { self.dur = 0; }
           if (opts.mark) opts.mark('prepared');
           // sporen kiezen vóór play(): geen hoorbare wissel van audiotaal
           if (opts.onReady) { try { opts.onReady(); } catch (e) { B.log('onReady', e); } }
-          var go = function () { av.play(); self.playing = true; resolve(); };
+          // build 97: een fout in play() of seekTo() rondt de belofte af (geen eindeloze spinner)
+          var go = function () {
+            if (settled) return;
+            try { av.play(); self.playing = true; ok(); } catch (e) { bad(e); }
+          };
           if (opts.start && opts.start > 5 && !opts.live) {
-            av.seekTo(Math.floor(opts.start * 1000), go, go);
+            try { av.seekTo(Math.floor(opts.start * 1000), go, go); } catch (e) { B.log('seekTo', e && e.message); go(); }
           } else go();
-        }, function (e) { reject(new Error(String(e && e.name || e || 'prepare'))); });
-      } catch (e) { reject(e); }
+        }, function (e) { bad(new Error(String(e && e.name || e || 'prepare'))); });
+      } catch (e) { bad(e); }
     });
   };
   AVEngine.prototype.play = function () { try { webapis.avplay.play(); this.playing = true; } catch (e) { /* stil */ } };
   AVEngine.prototype.pause = function () { try { webapis.avplay.pause(); this.playing = false; } catch (e) { /* stil */ } };
   AVEngine.prototype.stop = function () {
-    try { webapis.avplay.stop(); } catch (e) { /* stil */ }
-    try { webapis.avplay.close(); } catch (e) { /* stil */ }
+    // build 97: een oude engine (tegel, voorbeeld) sluit niet de speler die een andere engine net geopend heeft
+    if (AVEngine.owner === this || AVEngine.owner == null) {
+      try { webapis.avplay.stop(); } catch (e) { /* stil */ }
+      try { webapis.avplay.close(); } catch (e) { /* stil */ }
+      AVEngine.owner = null;
+    }
     this.playing = false; this.opened = false;
   };
   AVEngine.prototype.time = function () { try { return webapis.avplay.getCurrentTime() / 1000; } catch (e) { return 0; } };
@@ -110,28 +132,44 @@
     this.v.onended = function () { self.ev.ended(); };
     this.v.onerror = function () { self.ev.error('MEDIA_ERR_' + ((self.v.error && self.v.error.code) || 0)); };
   }
+  /** build 97: dit element speelt nog voor deze engine (een voorbeeld- of tegelvideo kan intussen een nieuwe engine hebben). */
+  HTMLEngine.prototype.mine = function () { return this.v._engine === this; };
   HTMLEngine.prototype.name = 'html5';
   HTMLEngine.prototype.open = function (url, opts) {
-    var v = this.v;
+    var v = this.v, self = this;
+    v._engine = self;
     v.style.display = 'block';
     return new Promise(function (resolve, reject) {
       var done = false;
       v.oncanplay = function () {
-        if (done) return; done = true;
+        if (done || !self.mine()) return; done = true;
         if (opts.mark) opts.mark('prepared');
         if (opts.onReady) { try { opts.onReady(); } catch (e) { B.log('onReady', e); } }
         if (opts.start && opts.start > 5 && !opts.live) { try { v.currentTime = opts.start; } catch (e) { /* stil */ } }
         var p = v.play();
         if (p && p.then) p.then(resolve, function () { resolve(); }); else resolve();
       };
-      v.onerror = function () { if (!done) { done = true; reject(new Error('MEDIA_ERR')); } };
+      // build 97: open() overschreef de foutafhandeling van de engine; fouten ná de start gaan nu ook naar ev.error
+      // (nieuwe poging of reservebron in de speler, ook in het voorbeeld en de multiview-tegels)
+      v.onerror = function () {
+        if (!self.mine()) return;
+        if (!done) { done = true; reject(new Error('MEDIA_ERR')); return; }
+        if (!self.stopped) self.ev.error('MEDIA_ERR_' + ((v.error && v.error.code) || 0));
+      };
+      self.stopped = false;
       v.src = url;
       v.load();
     });
   };
   HTMLEngine.prototype.play = function () { var p = this.v.play(); if (p && p.catch) p.catch(B.noop); };
   HTMLEngine.prototype.pause = function () { this.v.pause(); };
-  HTMLEngine.prototype.stop = function () { try { this.v.pause(); this.v.removeAttribute('src'); this.v.load(); } catch (e) { /* stil */ } if (!this.own) this.v.style.display = 'none'; };
+  HTMLEngine.prototype.stop = function () {
+    // build 97: removeAttribute('src') + load() geeft soms zelf een fout; die telt niet meer
+    this.stopped = true;
+    if (this.v._engine && this.v._engine !== this) return;
+    try { this.v.pause(); this.v.removeAttribute('src'); this.v.load(); } catch (e) { /* stil */ }
+    if (!this.own) this.v.style.display = 'none';
+  };
   HTMLEngine.prototype.setRect = B.noop;
   HTMLEngine.prototype.time = function () { return this.v.currentTime || 0; };
   HTMLEngine.prototype.duration = function () { var d = this.v.duration; return isFinite(d) ? d : 0; };
@@ -176,6 +214,8 @@
     var startGen = 0, limited = false, t0 = 0, marks = {}, audioChosen = false, autoSubsDone = false, autoSubsRetried = false;
     // app naar de achtergrond: AVPlay is vrijgegeven; bij terugkomen opnieuw openen op deze plek
     var suspended = false, bgPos = 0, bgPaused = false, pauseAfterOpen = false;
+    // build 97: laatst bekende afspeelpositie (voor "Opnieuw proberen" na een fout; engine.time() is dan vaak 0)
+    var lastPos = 0, markerTimer = null, markerScreen = null;
 
     var video = h('div.pl-stage');
     var subtitle = h('div.pl-sub');
@@ -259,7 +299,7 @@
           var frac = (Date.now() - nn.now.start) / (nn.now.end - nn.now.start);
           bar.firstChild.style.width = (B.clamp(frac, 0, 1) * 100) + '%';
           tCur.textContent = B.fmtTime(nn.now.start); tDur.textContent = B.fmtTime(nn.now.end);
-        } else { bar.firstChild.style.width = '100%'; tCur.textContent = 'LIVE'; tDur.textContent = ''; }
+        } else { bar.firstChild.style.width = '100%'; tCur.textContent = L('LIVE'); tDur.textContent = ''; }
         return;
       }
       bar.firstChild.style.width = (d > 0 ? B.clamp(t / d, 0, 1) * 100 : 0) + '%';
@@ -282,6 +322,7 @@
      */
     function start(resumeAt) {
       var gen = ++startGen;
+      lastPos = !isLive() && resumeAt > 0 ? resumeAt : 0;
       t0 = Date.now(); marks = {}; limited = false; audioChosen = false; autoSubsDone = false; autoSubsRetried = false;
       errorBox.style.display = 'none';
       spinner.style.display = 'flex';
@@ -316,7 +357,8 @@
       var events = {
         buffering: function (b) { spinner.style.display = b ? 'flex' : 'none'; },
         ended: function () { onEnded(); },
-        error: function (msg) { fail(new Error(msg)); },
+        // build 97: alleen fouten van de engine die nu speelt (een oude poging telt niet meer)
+        error: function (msg) { if (engine === my && !closed) fail(new Error(msg)); },
         subtitle: function (t) { subtitle.innerHTML = B.esc(String(t || '').replace(/<[^>]+>/g, '')).replace(/\n/g, '<br>'); }
       };
       var useAV = hasAVPlay() && !item.forceHTML;
@@ -486,7 +528,7 @@
       // één stille nieuwe poging
       if (attempts < 1) {
         attempts++;
-        var at = engine && !isLive() ? engine.time() : 0;
+        var at = isLive() ? 0 : currentPos();
         var g = startGen;
         setTimeout(function () {
           if (closed || suspended || g !== startGen) return;
@@ -508,14 +550,23 @@
       }
       showError();
     }
+    /** build 97: positie om te hervatten: de engine als die nog iets zinnigs meldt, anders de laatst bekende. */
+    function currentPos() {
+      var t = 0;
+      try { t = engine ? engine.time() : 0; } catch (e) { t = 0; }
+      if (t > 0) lastPos = t;
+      return lastPos || 0;
+    }
     function showError() {
       if (closed) return;
+      // build 97: de plek onthouden vóór het stoppen, zodat "Opnieuw proberen" daar verder gaat (niet bij 0)
+      var resumePos = isLive() ? 0 : (currentPos() || ctx.resume || 0);
       if (engine) engine.stop();
       U.clear(errorBox);
       errorBox.appendChild(h('h2', L("Can't play this")));
       errorBox.appendChild(h('p', isLive() ? L('This channel is not available right now.') : L('This title could not be loaded.')));
       var row = h('div.modal-buttons');
-      row.appendChild(U.button(L('Try again'), function () { attempts = 0; triedBackup = false; start(engine && !isLive() ? engine.time() : (ctx.resume || 0)); }, { primary: true }));
+      row.appendChild(U.button(L('Try again'), function () { attempts = 0; triedBackup = false; start(resumePos); }, { primary: true }));
       if (isLive()) row.appendChild(U.button(L('Other source'), chooseBackup, { icon: 'layers' }));
       row.appendChild(U.button(L('Close'), close));
       errorBox.appendChild(row);
@@ -717,10 +768,10 @@
         fields.forEach(function (f) {
           var k = f[0];
           var val = h('div.mk-val', fmt(m[k]));
-          var setB = U.button(L('Set'), function () { m[k] = Math.max(0, Math.round(engine.time() * 10) / 10); persist(); draw(k + ':set'); }, { cls: 'mk-set' });
-          var minus = U.button('−5 s', function () { if (m[k] != null) { m[k] = Math.max(0, m[k] - 5); engine.seek(m[k]); persist(); draw(k + ':minus'); } }, { cls: 'mk-adj' });
-          var plus = U.button('+5 s', function () { if (m[k] != null) { m[k] = m[k] + 5; engine.seek(m[k]); persist(); draw(k + ':plus'); } }, { cls: 'mk-adj' });
-          var go = U.button('', function () { if (m[k] != null) engine.seek(m[k]); }, { icon: 'play', cls: 'round mk-go' });
+          var setB = U.button(L('Set'), function () { if (!engine) return; m[k] = Math.max(0, Math.round(engine.time() * 10) / 10); persist(); draw(k + ':set'); }, { cls: 'mk-set' });
+          var minus = U.button('−5 s', function () { if (engine && m[k] != null) { m[k] = Math.max(0, m[k] - 5); engine.seek(m[k]); persist(); draw(k + ':minus'); } }, { cls: 'mk-adj' });
+          var plus = U.button('+5 s', function () { if (engine && m[k] != null) { m[k] = m[k] + 5; engine.seek(m[k]); persist(); draw(k + ':plus'); } }, { cls: 'mk-adj' });
+          var go = U.button('', function () { if (engine && m[k] != null) engine.seek(m[k]); }, { icon: 'play', cls: 'round mk-go' });
           setB._fk = k + ':set'; minus._fk = k + ':minus'; plus._fk = k + ':plus'; go._fk = k + ':go';
           [setB, minus, plus, go].forEach(function (b) { if (b._fk === focusKey) target = b; });
           rows.appendChild(h('div.mk-row.fm', [h('div.mk-label', f[1]), val, minus, setB, plus, go]));
@@ -728,20 +779,27 @@
         if (target) U.focus(target, true);
       }
       var timeEl = h('div.mk-time');
-      var tt = setInterval(function () { if (engine) timeEl.textContent = B.fmtDur(engine.time()) + (engine.duration() > 0 ? ' / ' + B.fmtDur(engine.duration()) : ''); }, 300);
+      // build 97: stopt bij sluiten, bij de achtergrond (pauseForBackground) en als de engine weg is
+      clearInterval(markerTimer);
+      var tt = markerTimer = setInterval(function () {
+        if (closed || suspended || !engine) return;
+        try { timeEl.textContent = B.fmtDur(engine.time()) + (engine.duration() > 0 ? ' / ' + B.fmtDur(engine.duration()) : ''); } catch (e) { /* stil */ }
+      }, 300);
       var clear = U.button(L('Clear'), function () { m = { introStart: null, introEnd: null, creditsStart: null }; persist(); draw(null); U.focus(rows.querySelector('.f')); });
       var done = U.button(L('Done'), function () { closePanel(); }, { primary: true });
       var box = h('div.mk-box', [h('h2', L('Intro & credits')), h('p.modal-text', L('Mark the intro and credits once; Bingr uses them for every episode of this series.')),
         timeEl, rows, h('div.modal-buttons.fm', [done, clear]), h('div.mk-hint.dim', L('⏪ / ⏩ on the remote: −10 s / +10 s'))]);
       var s = { modal: true, el: h('div.layer.modal.mk-layer', [box]) };
-      function closePanel() { clearInterval(tt); U.pop(); if (engine && !engine.playing) engine.play(); renderInfo(); showOverlay(true); }
+      function closePanel() { clearInterval(tt); if (markerTimer === tt) markerTimer = null; markerScreen = null; if (U.top() === s) U.pop(); if (engine && !engine.playing) engine.play(); renderInfo(); showOverlay(true); }
       s.onBack = closePanel;
       s.onKey = function (name) {
+        if (!engine) return name === 'ff' || name === 'rw' || name === 'playpause' || name === 'play' || name === 'pause';
         if (name === 'ff' || name === 'rw') { engine.seek(Math.max(0, engine.time() + (name === 'ff' ? 10 : -10))); return true; }
         if (name === 'playpause' || name === 'play' || name === 'pause') { if (engine.playing) engine.pause(); else engine.play(); return true; }
         return false;
       };
       draw(null);
+      markerScreen = s;
       U.push(s);
       U.focus(rows.querySelector('.mk-set'));
     }
@@ -798,8 +856,13 @@
 
     // MARK: voortgang en geschiedenis (= saveProgress/recordHistory op Android)
 
+    /** build 97: voortgang alleen naar het profiel waarmee het afspelen begon (niet naar een intussen gekozen profiel). */
+    function ownProfile() {
+      var cur = D.activeProfileId ? D.activeProfileId() : null;
+      return !cur || !profile || String(cur).toLowerCase() === String(profile.id).toLowerCase();
+    }
     function saveProgress(force, ended) {
-      if (!engine || isLive() || isCatchup()) return;
+      if (!engine || isLive() || isCatchup() || !ownProfile()) return;
       var now = Date.now();
       if (!force && now - lastSave < 10000) return;
       lastSave = now;
@@ -819,7 +882,7 @@
       }
     }
     function recordHistory() {
-      if (recorded || watchedSeconds < 60 || isCatchup()) return;
+      if (recorded || watchedSeconds < 60 || isCatchup() || !ownProfile()) return;
       recorded = true;
       D.addHistory({
         itemID: item.channel ? item.channel.id : item.id, playlistID: Lib.source ? Lib.source.id : null, title: item.title,
@@ -857,6 +920,7 @@
       if (closed) return;
       limited = true;
       spinner.style.display = 'none';
+      var resumePos = isLive() ? 0 : (currentPos() || ctx.resume || 0);
       if (engine) engine.stop();
       U.clear(errorBox);
       errorBox.appendChild(h('h2', L('Too many people are watching')));
@@ -871,7 +935,7 @@
       });
       errorBox.appendChild(list);
       var row = h('div.modal-buttons');
-      row.appendChild(U.button(L('Try again'), function () { errorBox.style.display = 'none'; start(ctx.resume || 0); }, { primary: true }));
+      row.appendChild(U.button(L('Try again'), function () { errorBox.style.display = 'none'; start(resumePos); }, { primary: true }));
       if (free) row.appendChild(U.button(L('Upgrade to Lifetime'), function () { B.screens.upgrade('streams'); }, { icon: 'lock' }));
       row.appendChild(U.button(L('Close'), close));
       errorBox.appendChild(row);
@@ -947,6 +1011,13 @@
         case 'info': if (overlayVisible()) hideOverlay(); else showOverlay(true); return true;
       }
       var skipVisible = skipBtn.style.display !== 'none';
+      // build 97: kaart "Intro overslaan" / "Volgende aflevering" zonder overlay: OK gaat naar de kaart, nooit naar een
+      // verborgen knop van de overlay
+      var cardBtn = nextCard.style.display !== 'none' ? nextCard.querySelector('.f') : (skipVisible ? skipBtn : null);
+      if (!overlayVisible() && cardBtn && name === 'enter') {
+        var onCard = U.focused && (U.focused === skipBtn || nextCard.contains(U.focused));
+        if (!onCard) { U.focus(cardBtn); if (cardBtn.onEnter) cardBtn.onEnter(); return true; }
+      }
       if (!overlayVisible() && !skipVisible && nextCard.style.display === 'none') {
         if (name === 'enter') { showOverlay(true); return true; }
         if (name === 'left' || name === 'right') { if (isLive()) showOverlay(true); else jump(name === 'left' ? -10 : 10); return true; }
@@ -970,6 +1041,7 @@
     function tick() {
       if (!engine || closed) return;
       updateTime();
+      if (!isLive()) { var tp = engine.time(); if (tp > 0) lastPos = tp; }
       if (engine.playing) {
         watchedSeconds += 1;
         recordHistory();
@@ -983,7 +1055,8 @@
           if (!overlayVisible()) U.focus(skipBtn);
         } else if (!intro && skipBtn.style.display !== 'none') {
           skipBtn.style.display = 'none';
-          if (U.focused === skipBtn) { U.focused = null; }
+          // build 97: ook de focus-markering weghalen
+          if (U.focused === skipBtn) { skipBtn.classList.remove('focused'); U.focused = null; }
         }
         if (item.type === 'episode' && d > 120) {
           var credits = marker && marker.creditsStart != null ? marker.creditsStart : d - 25;
@@ -1000,7 +1073,7 @@
     function clearTimers() {
       clearInterval(tickTimer); clearInterval(pingTimer); clearInterval(countdownTimer);
       clearTimeout(overlayTimer); clearTimeout(zapTimer); clearTimeout(digitTimer);
-      clearInterval(extTimer);
+      clearInterval(extTimer); clearInterval(markerTimer); markerTimer = null;
     }
     function close() {
       if (closed) return;
@@ -1028,6 +1101,9 @@
       bgPaused = !!(engine && !engine.playing);
       startGen++; // lopende start (URL ophalen, prepare) negeren
       clearInterval(pingTimer); clearInterval(countdownTimer); clearTimeout(zapTimer); clearTimeout(digitTimer);
+      clearInterval(markerTimer); markerTimer = null;
+      // build 97: paneel "Intro & aftiteling" sluiten (de engine is zo weg; na terugkomen start de speler opnieuw)
+      if (markerScreen) { if (U.top() === markerScreen) U.pop(); markerScreen = null; }
       zapIndex = null; digitBuffer = ''; zapBanner.style.display = 'none';
       if (nextShown && nextCard.style.display !== 'none') { nextShown = false; nextCard.style.display = 'none'; }
       if (engine) { engine.stop(); engine = null; }

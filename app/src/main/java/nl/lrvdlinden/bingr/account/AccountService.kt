@@ -24,7 +24,10 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 
 /** Fout van het Bingr-account; [message] is al vertaald en kan direct getoond worden. */
-class AccountException(message: String) : Exception(message)
+open class AccountException(message: String) : Exception(message)
+
+/** build 97: het account is geblokkeerd ([Account.bannedMessage]); de tv-koppeling stopt dan met pollen. */
+class BannedException(message: String) : AccountException(message)
 
 /**
  * Bingr-account (Supabase, gewone REST zonder SDK), volgens docs/ACCOUNT.md in de iOS-repo.
@@ -48,10 +51,11 @@ object Account {
     private var sp: SharedPreferences? = null
     /** Apart bestand: blijft staan na uitloggen (device_id). */
     private var deviceSp: SharedPreferences? = null
-    private var accessToken: String? = null
-    private var refreshToken: String? = null
-    private var expiresAt: Long = 0L // epoch-seconden
-    private var storedUserId: String? = null
+    // build 97: @Volatile, de sync leest ze ook buiten de main thread (schrijven gebeurt alleen op main)
+    @Volatile private var accessToken: String? = null
+    @Volatile private var refreshToken: String? = null
+    @Volatile private var expiresAt: Long = 0L // epoch-seconden
+    @Volatile private var storedUserId: String? = null
     /** Refresh tokens zijn eenmalig: nooit twee vernieuwingen tegelijk. */
     private val refreshLock = Mutex()
 
@@ -146,14 +150,18 @@ object Account {
             put("Accept", "application/json")
             if (bearer != null) put("Authorization", "Bearer $bearer")
         }
+        // build 97: JSON maken en lezen buiten de main thread (get_state kan groot zijn)
+        val text = withContext(Dispatchers.Default) { body.toString() }
         val r = try {
-            Http.request(Secrets.supabaseUrl + path, method = "POST", headers = headers, jsonBody = body.toString())
+            Http.request(Secrets.supabaseUrl + path, method = "POST", headers = headers, jsonBody = text)
         } catch (e: IOException) {
             throw AccountException(L("No internet connection."))
         } catch (e: IllegalArgumentException) {
             throw AccountException(L("Something went wrong. Please try again."))
         }
-        val json = r.body.takeIf { it.isNotBlank() }?.let { runCatching { Http.json.parseToJsonElement(it) }.getOrNull() }
+        val json = r.body.takeIf { it.isNotBlank() }?.let { b ->
+            withContext(Dispatchers.Default) { runCatching { Http.json.parseToJsonElement(b) }.getOrNull() }
+        }
         return Reply(r.code, json)
     }
 
@@ -179,7 +187,19 @@ object Account {
     /** Geblokkeerd (inloggen of tv-koppeling): melding laten staan en een fout met de tekst geven. */
     private fun banned(): AccountException {
         blockedNotice = true
-        return AccountException(bannedMessage)
+        return BannedException(bannedMessage)
+    }
+
+    /**
+     * build 97: geblokkeerd tijdens een gewone aanroep (heartbeat, apparaten, sync): net als bij het vernieuwen van de
+     * sessie lokaal uitloggen (zonder logout-aanroep) en de melding op het inlogscherm tonen.
+     */
+    private suspend fun bannedSignOut() {
+        withContext(Dispatchers.Main.immediate) {
+            blockedNotice = true
+            if (isSignedIn) clear()
+            AppState.signedOut()
+        }
     }
 
     private suspend fun <T> working(block: suspend () -> T): T {
@@ -243,7 +263,8 @@ object Account {
     /**
      * Sessie vernieuwen. 400/401 → uitgelogd (INVALID); netwerk- of serverfout → sessie houden (OFFLINE).
      */
-    suspend fun refresh(): RefreshResult = refreshLock.withLock { refreshLocked() }
+    // build 97: altijd op de main thread (clear() en AppState wijzigen state), ook als de sync van elders aanroept
+    suspend fun refresh(): RefreshResult = withContext(Dispatchers.Main.immediate) { refreshLock.withLock { refreshLocked() } }
 
     private suspend fun refreshLocked(): RefreshResult {
         val token = refreshToken ?: return RefreshResult.INVALID
@@ -340,12 +361,24 @@ object Account {
     /** Hoofdletters, zonder streepjes en spaties. */
     fun normalizeCode(s: String): String = s.uppercase().filter { it.isLetterOrDigit() }
 
-    /** Naam van dit apparaat voor het koppelscherm op de telefoon. */
-    val deviceName: String
+    /** build 97: één plek voor het soort apparaat ([deviceName] en [devicePlatform] gebruiken dit allebei). */
+    private enum class DeviceKind { FIRE_TV, GOOGLE_TV, ANDROID_TV, TABLET, PHONE }
+
+    private val deviceKind: DeviceKind
         get() = when {
-            Build.MANUFACTURER.equals("Amazon", ignoreCase = true) -> "Fire TV"
-            AppState.isTV -> "Android TV"
-            else -> "Android"
+            Build.MANUFACTURER.equals("Amazon", ignoreCase = true) -> DeviceKind.FIRE_TV
+            AppState.isTV && isGoogleTV -> DeviceKind.GOOGLE_TV
+            AppState.isTV -> DeviceKind.ANDROID_TV
+            runCatching { AppState.appContext.resources.configuration.smallestScreenWidthDp }.getOrDefault(0) >= 600 -> DeviceKind.TABLET
+            else -> DeviceKind.PHONE
+        }
+
+    /** Naam van dit apparaat voor het koppelscherm op de telefoon (Google TV heet hier ook "Android TV", zoals altijd). */
+    val deviceName: String
+        get() = when (deviceKind) {
+            DeviceKind.FIRE_TV -> "Fire TV"
+            DeviceKind.GOOGLE_TV, DeviceKind.ANDROID_TV -> "Android TV"
+            DeviceKind.TABLET, DeviceKind.PHONE -> "Android"
         }
 
     // MARK: gekoppelde apparaten (limiet van de server)
@@ -368,12 +401,12 @@ object Account {
 
     /** Android, Android tablet, Android TV, Google TV of Fire TV (zie docs/ACCOUNT.md, build 45). */
     val devicePlatform: String
-        get() = when {
-            Build.MANUFACTURER.equals("Amazon", ignoreCase = true) -> "Fire TV"
-            AppState.isTV && isGoogleTV -> "Google TV"
-            AppState.isTV -> "Android TV"
-            runCatching { AppState.appContext.resources.configuration.smallestScreenWidthDp }.getOrDefault(0) >= 600 -> "Android tablet"
-            else -> "Android"
+        get() = when (deviceKind) {
+            DeviceKind.FIRE_TV -> "Fire TV"
+            DeviceKind.GOOGLE_TV -> "Google TV"
+            DeviceKind.ANDROID_TV -> "Android TV"
+            DeviceKind.TABLET -> "Android tablet"
+            DeviceKind.PHONE -> "Android"
         }
 
     /** Google TV: GOOGLE_EXPERIENCE, of een Chromecast, of merk "google". */
@@ -430,11 +463,22 @@ object Account {
     }
 
     private suspend fun deviceCall(action: String, id: String, extra: Map<String, String> = emptyMap()): Reply {
-        val token = validAccessToken()
-        return post("/functions/v1/device-auth", buildJsonObject {
+        val body = buildJsonObject {
             put("action", action); put("device_id", id)
             extra.forEach { (k, v) -> put(k, v) }
-        }, bearer = token)
+        }
+        var r = post("/functions/v1/device-auth", body, bearer = validAccessToken())
+        // build 97: gewone 401 (token net verlopen of ingetrokken): één keer vernieuwen en opnieuw proberen
+        if (r.code == 401 && !isBanned(r) && refresh() == RefreshResult.OK) {
+            val token = accessToken
+            if (token != null) r = post("/functions/v1/device-auth", body, bearer = token)
+        }
+        // build 97: geblokkeerd (401 user_banned of banned: true) telde bij de heartbeat als "nog in gebruik"
+        if (isBanned(r)) {
+            bannedSignOut()
+            throw BannedException(bannedMessage)
+        }
+        return r
     }
 
     /** App-versie voor de beheerder: "1.0.0 (62)" (versionName + buildnummer). */
@@ -630,13 +674,16 @@ object Account {
             while (!restart) {
                 delay(c.interval * 1000L)
                 if (System.currentTimeMillis() > deadline) { restart = true; break }
-                val p = try { pollTv(c) } catch (e: AccountException) { onError(e.message); continue }
+                // build 97: geblokkeerd → stoppen (geen nieuwe codes meer aanvragen of pollen); de melding blijft staan
+                val p = try { pollTv(c) } catch (e: BannedException) { onError(e.message); onCode(null); return } catch (e: AccountException) { onError(e.message); continue }
                 onError(null)
                 when (p) {
                     TvPoll.Pending -> {}
                     TvPoll.Expired -> restart = true
                     is TvPoll.Approved -> {
-                        try { verifyTv(p.tokenHash, p.email); return } catch (e: AccountException) {
+                        try { verifyTv(p.tokenHash, p.email); return } catch (e: BannedException) {
+                            onError(e.message); onCode(null); return
+                        } catch (e: AccountException) {
                             onError(e.message); restart = true
                         }
                     }
@@ -816,10 +863,12 @@ object Account {
         var token = runCatching { validAccessToken() }.getOrNull() ?: return null
         repeat(2) { attempt ->
             val r = try { post("/functions/v1/device-auth", body, bearer = token) } catch (e: AccountException) { return null }
+            // build 97: geblokkeerd → uitloggen met de melding (zoals bij de heartbeat)
+            if (isBanned(r)) { bannedSignOut(); return null }
             if (r.code != 401 || attempt == 1) return r
             when (refresh()) {
                 RefreshResult.OK -> token = accessToken ?: return null
-                RefreshResult.INVALID -> { AppState.signedOut(); return null }
+                RefreshResult.INVALID -> { withContext(Dispatchers.Main.immediate) { AppState.signedOut() }; return null }
                 RefreshResult.OFFLINE -> return null
             }
         }

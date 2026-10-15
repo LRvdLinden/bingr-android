@@ -36,19 +36,20 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* knoppen en focus */
-.f { transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease; }
+.f { transition: transform 0.16s ease, background-color 0.16s ease; } /* build 97: geen overgang op box-shadow (duur op tv's) */
 .btn { display: inline-flex; align-items: center; justify-content: center; height: 72px; padding: 0 38px; border-radius: 8px;
   background: rgba(109, 109, 110, 0.7); color: #fff; font-size: 28px; font-weight: 700; margin-right: 18px; white-space: nowrap; }
 .btn .ic { width: 34px; height: 34px; margin-right: 14px; }
 .btn.round { width: 72px; padding: 0; border-radius: 50%; }
 .btn.round .ic { margin: 0; }
 .btn.primary { background: #fff; color: #000; }
-.btn.focused { background: #fff; color: #000; transform: scale(1.08); box-shadow: 0 0 0 4px var(--accent), 0 10px 30px rgba(0,0,0,0.6); }
-.btn.primary.focused { background: var(--accent); color: #fff; box-shadow: 0 0 0 4px #fff, 0 10px 30px rgba(0,0,0,0.6); }
+/* build 97: lichtere focusschaduw (rand + korte schaduw) */
+.btn.focused { background: #fff; color: #000; transform: scale(1.08); box-shadow: 0 0 0 4px var(--accent), 0 6px 14px rgba(0,0,0,0.5); }
+.btn.primary.focused { background: var(--accent); color: #fff; box-shadow: 0 0 0 4px #fff, 0 6px 14px rgba(0,0,0,0.5); }
 /* afspeelknop: altijd gevuld in de accentkleur met witte tekst; focus = groter + witte rand en gloed */
 .btn.play { background: var(--accent); color: #fff; }
 .btn.play.focused { background: var(--accent); color: #fff; transform: scale(1.1);
-  box-shadow: 0 0 0 5px #fff, 0 0 32px 6px rgba(255,255,255,0.45), 0 10px 30px rgba(0,0,0,0.6); }
+  box-shadow: 0 0 0 5px #fff, 0 0 16px 3px rgba(255,255,255,0.35), 0 6px 14px rgba(0,0,0,0.5); }
 .ic { display: inline-block; width: 40px; height: 40px; flex: none; }
 .ic svg { width: 100%; height: 100%; display: block; }
 
@@ -212,7 +213,7 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 .card { flex: none; position: relative; margin-right: 20px; border-radius: 8px; overflow: hidden; background: var(--card); }
 .card.poster { width: 206px; height: 309px; }
 .poster-img { width: 100%; height: 100%; }
-.card.focused { transform: scale(1.1); box-shadow: 0 0 0 5px #fff, 0 16px 40px rgba(0,0,0,0.85); z-index: 2; }
+.card.focused { transform: scale(1.1); box-shadow: 0 0 0 5px #fff, 0 8px 18px rgba(0,0,0,0.7); z-index: 2; }
 .card-progress { position: absolute; left: 12px; right: 12px; bottom: 12px; height: 6px; background: rgba(255,255,255,0.3); border-radius: 3px; overflow: hidden; }
 .card-progress > div { height: 100%; background: var(--accent); }
 .card-progress.inline { position: relative; left: 0; right: 0; bottom: 0; width: 220px; display: inline-block; margin-right: 16px; vertical-align: middle; }
@@ -245,13 +246,15 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
   -webkit-text-stroke: 5px #6b6b6b; letter-spacing: -24px; }
 .card.top10 .poster-img { position: absolute; right: 0; top: 0; width: 206px; height: 309px; border-radius: 8px; }
 .card.top10.focused { box-shadow: none; }
-.card.top10.focused .poster-img { box-shadow: 0 0 0 5px #fff, 0 16px 40px rgba(0,0,0,0.85); }
+.card.top10.focused .poster-img { box-shadow: 0 0 0 5px #fff, 0 8px 18px rgba(0,0,0,0.7); }
 
 /* home + hero */
 .home { overflow: hidden; }
 .hero { position: relative; height: 760px; padding: 0; margin: 0 0 10px; }
 .hero-bg { position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; }
-.hero-img { width: 100%; height: 100%; -webkit-filter: blur(26px) brightness(0.55); filter: blur(26px) brightness(0.55); transform: scale(1.2); }
+/* build 97: geen beeldvullende blur(26px) meer (te zwaar voor tv-GPU's): een effen, doorschijnende achtergrond */
+.hero-img { display: none; }
+.hero-bg, .dt-kb { background: rgba(48, 48, 52, 0.55); }
 .hero-poster { position: absolute; right: 120px; top: 90px; width: 380px; height: 570px; border-radius: 12px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,0.7); }
 .hero-shade { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: linear-gradient(90deg, #000 6%, rgba(0,0,0,0.75) 42%, rgba(0,0,0,0) 75%), linear-gradient(0deg, #000 0%, rgba(0,0,0,0) 30%); }
 .hero-info { position: absolute; left: 60px; top: 150px; width: 1000px; }
@@ -347,8 +350,7 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 /* build 85: speelt de trailer niet (YouTube weigert de embed), dan beweegt de kopafbeelding rustig (Ken Burns) */
 .dt-kb { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
 /* de wrapper beweegt (niet het vervaagde beeld zelf): de vervaging wordt één keer getekend, daarna alleen verschoven */
-.dt-bg.kb .dt-kb { -webkit-animation: dtKenBurns 24s ease-in-out infinite alternate; animation: dtKenBurns 24s ease-in-out infinite alternate;
-  will-change: transform; }
+.dt-bg.kb .dt-kb { -webkit-animation: none; animation: none; } /* build 97: effen achtergrond, niets te bewegen */
 @-webkit-keyframes dtKenBurns { from { -webkit-transform: scale(1.04) translate(-1%, 0.5%); } to { -webkit-transform: scale(1.14) translate(1.5%, -1%); } }
 @keyframes dtKenBurns { from { transform: scale(1.04) translate(-1%, 0.5%); } to { transform: scale(1.14) translate(1.5%, -1%); } }
 @media (prefers-reduced-motion: reduce) { .dt-bg.kb .dt-kb { -webkit-animation: none; animation: none; } }
@@ -463,9 +465,10 @@ html:not(.playing) .player { background: #000; }
 .pl-spin { position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; }
 .pl-spin .spinner { width: 90px; height: 90px; border-width: 7px; }
 .pl-sub { position: absolute; left: 160px; right: 160px; bottom: 110px; text-align: center; font-size: 46px; font-weight: 600; text-shadow: 0 0 6px #000, 0 2px 4px #000, 0 0 2px #000; line-height: 1.3; }
-.pl-overlay { position: absolute; left: 0; top: 0; right: 0; bottom: 0; opacity: 0; transition: opacity 0.25s ease;
+/* build 97: verborgen overlay ook visibility: hidden (na het uitfaden), zodat de focus er niet op kan landen */
+.pl-overlay { position: absolute; left: 0; top: 0; right: 0; bottom: 0; opacity: 0; visibility: hidden; transition: opacity 0.25s ease, visibility 0s linear 0.25s;
   background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.9) 100%); }
-.pl-overlay.show { opacity: 1; }
+.pl-overlay.show { opacity: 1; visibility: visible; transition: opacity 0.25s ease, visibility 0s linear 0s; }
 .pl-top { position: absolute; left: 90px; top: 70px; right: 90px; }
 .pl-title { font-size: 52px; font-weight: 800; }
 .pl-subtitle { font-size: 30px; color: #ddd; margin-top: 8px; }
@@ -630,12 +633,12 @@ html.mv-hole .layer.multiview { background: transparent; }
   color: #fff; font-size: 26px; font-weight: 600; white-space: nowrap; -webkit-transition: transform 0.15s; transition: transform 0.15s; }
 .cat-pill.active { background: #fff; color: #000; border-color: #fff; }
 .cat-pill.focused { background: #fff; color: #000; border-color: #fff; -webkit-transform: scale(1.08); transform: scale(1.08);
-  box-shadow: 0 0 0 4px var(--accent), 0 10px 30px rgba(0,0,0,0.6); }
+  box-shadow: 0 0 0 4px var(--accent), 0 6px 14px rgba(0,0,0,0.5); }
 .cats-sec { margin-bottom: 26px; }
 .cats-grid { display: flex; flex-wrap: wrap; width: 1700px; }
 .cat-tile { position: relative; width: 400px; height: 225px; margin: 0 22px 22px 0; border-radius: 12px; overflow: hidden;
-  -webkit-transition: transform 0.16s ease, box-shadow 0.16s ease; transition: transform 0.16s ease, box-shadow 0.16s ease; }
-.cat-tile.focused { -webkit-transform: scale(1.07); transform: scale(1.07); box-shadow: 0 0 0 5px #fff, 0 16px 40px rgba(0,0,0,0.85); z-index: 2; }
+  -webkit-transition: transform 0.16s ease; transition: transform 0.16s ease; }
+.cat-tile.focused { -webkit-transform: scale(1.07); transform: scale(1.07); box-shadow: 0 0 0 5px #fff, 0 8px 18px rgba(0,0,0,0.7); z-index: 2; }
 .cat-fan { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
 .cat-fan-img { position: absolute; top: 30px; width: 120px; height: 180px; border-radius: 8px; background-color: #222; box-shadow: 0 8px 22px rgba(0,0,0,0.6); }
 .cat-fan-img.p0 { right: 16px; -webkit-transform: rotate(4deg); transform: rotate(4deg); }

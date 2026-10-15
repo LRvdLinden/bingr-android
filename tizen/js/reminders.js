@@ -86,15 +86,29 @@
     timer = setInterval(check, 20000);
     setTimeout(check, 3000);
   };
+  /**
+   * build 97: niet melden (en niets weghalen) als de app op de achtergrond staat; een herinnering gaat pas uit de
+   * lijst als de melding echt een paar seconden in beeld was (of de gebruiker op groen drukte).
+   */
+  var SEEN_MS = 3000, seenTimer = null;
   function check() {
-    if (!B.app || !B.app.profile) return;
+    if (!B.app || !B.app.profile || document.hidden || R.pending) return;
     var now = Date.now();
     var due = null;
     items().forEach(function (r) { if (!due && r.start <= now + 60000 && r.start > now - 300000) due = r; });
     if (!due) return;
-    R.remove(due.id);
     show(due);
   }
+  function markSeen(r) {
+    if (r && r.seen !== true) { r.seen = true; if (R.has(r.id)) R.remove(r.id); }
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      // melding nog niet gezien: weghalen zonder de herinnering te wissen (komt terug als de app weer voor staat)
+      clearTimeout(seenTimer);
+      if (R.pending && R.pending.seen !== true && banner) hide(banner);
+    } else if (timer) setTimeout(check, 1500);
+  });
   R._check = check;
   function show(r) {
     var U = B.ui, h = U.h;
@@ -110,6 +124,8 @@
     var el = banner;
     setTimeout(function () { el.classList.add('show'); }, 20);
     R.pending = r;
+    clearTimeout(seenTimer);
+    seenTimer = setTimeout(function () { if (!document.hidden && banner === el) markSeen(r); }, SEEN_MS);
     setTimeout(function () { hide(el); }, 20000);
   }
   function hide(el) {
@@ -122,6 +138,7 @@
   R.onKey = function (name) {
     if (!R.pending || name !== 'green') return false;
     var r = R.pending;
+    markSeen(r);
     hide(banner);
     var Lib = B.lib;
     var hit = Lib.lib.byId && Lib.lib.byId[r.channelID];

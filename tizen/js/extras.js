@@ -398,6 +398,13 @@
   /** QR-code tekenen in een vak (gedeeld met het inlogscherm). */
   S.drawQR = function (box, url, size) {
     U.clear(box);
+    box._qr = url;
+    // build 97: qrcode.js wordt pas hier geladen
+    if (!window.qrcode) {
+      box.appendChild(U.spinner());
+      B.loadQR().then(function () { if (box._qr === url) S.drawQR(box, url, size); }, function () { if (box._qr === url) { U.clear(box); box.appendChild(h('div', url)); } });
+      return;
+    }
     try {
       var q = window.qrcode(0, 'M');
       q.addData(url);

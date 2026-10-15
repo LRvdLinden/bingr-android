@@ -11,7 +11,7 @@
     <!-- Herinneringen (Reminders): exact alarm als het mag, anders valt de code terug op een gewoon alarm -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- build 97: FOREGROUND_SERVICE_MEDIA_PLAYBACK weg (er is geen voorgronddienst voor afspelen) -->
     <!-- Downloads (build 52): voorgronddienst met voortgangsmelding -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -23,6 +23,8 @@
     <application
         android:name=".BingrApplication"
         android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:banner="@drawable/tv_banner"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"

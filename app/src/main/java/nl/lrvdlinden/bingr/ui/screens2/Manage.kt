@@ -76,9 +76,12 @@ fun s2GroupPrefix(g: String): String? {
     return if (p in s2PrefixSkip) null else p
 }
 
-/** Categorieën aan/uit per onderdeel, met snelknoppen per land/taal (NL, BE, DE …). */
+/**
+ * Categorieën aan/uit per onderdeel, met snelknoppen per land/taal (NL, BE, DE …).
+ * build 97: hernoemd (was CategoriesScreen, botste met het overzicht Categorieën in ui/screens/Categories.kt).
+ */
 @Composable
-fun CategoriesScreen(onClose: () -> Unit) {
+fun ManageCategoriesScreen(onClose: () -> Unit) {
     var kind by remember { mutableStateOf(S2Kind.LIVE) }
     var filter by remember { mutableStateOf("") }
     val pid = Playlists.source?.id

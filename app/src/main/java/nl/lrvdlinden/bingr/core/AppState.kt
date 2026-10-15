@@ -11,7 +11,11 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** App-brede scope voor achtergrondwerk dat schermen overleeft. */
+/**
+ * App-brede scope voor achtergrondwerk dat schermen overleeft. Draait op de main thread (Compose-state en de
+ * sync-objecten worden alleen daar gewijzigd); build 97: zwaar werk (JSON, samenvoegen, bestanden) gaat met
+ * withContext naar Dispatchers.Default/IO, zie Account.post, StateSync, ProfileSync en Store.writeIn.
+ */
 val AppScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
 /** Globale navigatiestatus (tegenhanger van AppState op iOS). */
@@ -84,6 +88,9 @@ object AppState {
     fun signedOut() {
         playing = null
         showMultiview = false
+        // build 97: upgradevenster en "Too many devices" horen bij het vorige account: dicht
+        Upgrade.close()
+        Account.deviceLimit = null
         if (!Account.configured && skippedAccount) return
         stage = Stage.AUTH
     }

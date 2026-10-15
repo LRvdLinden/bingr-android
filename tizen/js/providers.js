@@ -52,7 +52,9 @@
     return out;
   };
 
-  P.m3uLibrary = function (text, playlistID) {
+  /** build 97: opts.channelsOnly → alleen de zenders (voor de reservebron), zonder films en series op te bouwen. */
+  P.m3uLibrary = function (text, playlistID, opts) {
+    var only = !!(opts && opts.channelsOnly);
     var channels = [], movies = [], seriesMap = {}, seriesEps = {}, seriesOrder = [];
     var number = 0;
     var other = L('Other');
@@ -67,6 +69,7 @@
       var id = prefix + '-' + B.stableHash(e.url);
       var looksSeries = lower.indexOf('/series/') >= 0 || (parsed.season != null && parsed.episode != null);
       var looksMovie = !looksSeries && (lower.indexOf('/movie/') >= 0 || /\.(mkv|mp4|avi)$/.test(lower));
+      if (only && (looksSeries || looksMovie)) continue;
       if (looksSeries) {
         var sKey = parsed.title.toLowerCase();
         if (!seriesMap[sKey]) {
@@ -161,14 +164,7 @@
       var ext = self.preferHLS ? 'm3u8' : 'ts';
       var base = self.server, u = self.username, p = self.password;
       var channels = [], movies = [], series = [];
-      r[1].forEach(function (l) {
-        var sid = B.str(l.stream_id); if (sid == null) return;
-        channels.push({
-          id: 'x' + sid, name: l.name || 'Channel', logo: urlValue(l.stream_icon), group: lc[B.str(l.category_id) || ''] || other,
-          streamURL: base + '/live/' + u + '/' + p + '/' + sid + '.' + ext, epgID: l.epg_channel_id || null,
-          number: B.int(l.num), catchupDays: B.int(l.tv_archive) === 1 ? (B.int(l.tv_archive_duration) || 0) : 0
-        });
-      });
+      channels = self.mapLive(r[1], lc, other);
       r[3].forEach(function (v) {
         var sid = B.str(v.stream_id); if (sid == null) return;
         var pt = B.parseTitle(v.name || '');
@@ -197,6 +193,26 @@
       });
       return { channels: channels, movies: movies, series: series, epg: {} };
     });
+  };
+  /** Live-zenders uit get_live_streams (build 97: ook los gebruikt voor de reservebron). */
+  Xtream.prototype.mapLive = function (list, lc, other) {
+    var ext = this.preferHLS ? 'm3u8' : 'ts';
+    var base = this.server, u = this.username, p = this.password;
+    var channels = [];
+    (list || []).forEach(function (l) {
+      var sid = B.str(l && l.stream_id); if (sid == null) return;
+      channels.push({
+        id: 'x' + sid, name: l.name || 'Channel', logo: urlValue(l.stream_icon), group: lc[B.str(l.category_id) || ''] || other,
+        streamURL: base + '/live/' + u + '/' + p + '/' + sid + '.' + ext, epgID: l.epg_channel_id || null,
+        number: B.int(l.num), catchupDays: B.int(l.tv_archive) === 1 ? (B.int(l.tv_archive_duration) || 0) : 0
+      });
+    });
+    return channels;
+  };
+  /** build 97: alleen get_live_streams (geen films, series of categorieën), voor de reservebron. */
+  Xtream.prototype.liveChannels = function () {
+    var self = this;
+    return this.list('get_live_streams').then(function (list) { return self.mapLive(list, {}, L('Other')); });
   };
   /** Afleveringen per seizoen: {"1": [...]} of een lijst met lijsten (zoals episodeGroups op Android). */
   function episodeGroups(info) {
@@ -327,10 +343,10 @@
     if (!/^http/i.test(c) || c.indexOf('localhost') >= 0) return null;
     return c;
   }
-  Stalker.prototype.library = function () {
+  /** Zenders met hun genres (build 97: los, zodat de reservebron niet de hele bibliotheek met films hoeft te laden). */
+  Stalker.prototype.liveChannels = function () {
     var self = this;
     var other = L('Other');
-    var lib = { channels: [], movies: [], series: [], epg: {} };
     return (this.token ? Promise.resolve() : this.connect()).then(function () {
       return Promise.all([
         self.js(self.url([['type', 'itv'], ['action', 'get_genres']])).catch(function () { return []; }),
@@ -340,13 +356,21 @@
       var gMap = {};
       items(r[0]).forEach(function (g) { if (g && g.id != null && !B.has(gMap, String(g.id))) gMap[String(g.id)] = g.title || other; });
       var chans = (r[1] && r[1].data) || [];
-      lib.channels = chans.filter(function (c) { return c && c.id != null; }).map(function (c) {
+      return chans.filter(function (c) { return c && c.id != null; }).map(function (c) {
         return {
           id: 'st' + c.id, name: c.name || 'Channel', logo: urlValue(c.logo), group: gMap[String(c.tv_genre_id || '')] || other,
           streamURL: directURL(c.cmd), epgID: c.xmltv_id || null, number: B.int(c.number),
           catchupDays: Math.floor((B.int(c.tv_archive_duration) || 0) / 24), stalkerCmd: c.cmd || null
         };
       });
+    });
+  };
+  Stalker.prototype.library = function () {
+    var self = this;
+    var other = L('Other');
+    var lib = { channels: [], movies: [], series: [], epg: {} };
+    return this.liveChannels().then(function (chs) {
+      lib.channels = chs;
       return self.js(self.url([['type', 'vod'], ['action', 'get_categories']])).catch(function () { return []; });
     }).then(function (cats) {
       cats = items(cats).filter(function (c) { return c && c.id != null && String(c.id) !== '*'; }).slice(0, 40);

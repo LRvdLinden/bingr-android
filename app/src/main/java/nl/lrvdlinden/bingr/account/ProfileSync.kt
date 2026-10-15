@@ -4,9 +4,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -209,11 +211,15 @@ object ProfileSync {
     private suspend fun readServer(): List<JsonObject>? {
         val r = call("/rest/v1/account_data?select=profiles,updated_at", "GET") ?: return null
         if (!r.ok) return null
-        val rows = Http.json.parseToJsonElement(r.body.ifBlank { "[]" }) as? JsonArray ?: return null
-        return rows.firstOrNull().jList("profiles")
-            .mapNotNull { it as? JsonObject }
-            .filter { !it.jS("id").isNullOrBlank() }
-            .sortedBy { it.jI("order") ?: Int.MAX_VALUE }
+        // build 97: JSON lezen buiten de main thread
+        return withContext(Dispatchers.Default) {
+            val rows = runCatching { Http.json.parseToJsonElement(r.body.ifBlank { "[]" }) }.getOrNull() as? JsonArray
+                ?: return@withContext null
+            rows.firstOrNull().jList("profiles")
+                .mapNotNull { it as? JsonObject }
+                .filter { !it.jS("id").isNullOrBlank() }
+                .sortedBy { it.jI("order") ?: Int.MAX_VALUE }
+        }
     }
 
     private suspend fun sync() {
@@ -261,7 +267,19 @@ object ProfileSync {
         val tombs = localTombstones()
         val mainKey = Store.mainProfileID?.let(::idKey)
         var needUpload = false
-        var newMain: String? = null
+        // build 97: hoofdprofiel van de server (isMain) overnemen als die regel óf de regel van het oude hoofdprofiel
+        // nieuwer is dan wat hier staat (vóór build 97 alleen als de regel van het nieuwe hoofdprofiel nieuwer was).
+        // Vóór het samenvoegen bepalen: daarna zijn de lokale tijden bijgewerkt.
+        val serverMainKey = all.firstOrNull { !isTombstone(it) && it.jB("isMain") == true }?.jS("id")?.let(::idKey)
+        fun rowNewer(key: String?): Boolean {
+            if (key == null) return false
+            val o = byKey[key] ?: return false
+            if (isTombstone(o)) return false
+            val su = o.jS("updatedAt")?.takeIf { it.isNotBlank() } ?: EPOCH
+            return newerStrict(su, localUpdatedAt(key) ?: EPOCH)
+        }
+        val adoptMain = serverMainKey != null && serverMainKey != mainKey && serverMainKey !in tombs &&
+            (rowNewer(serverMainKey) || rowNewer(mainKey))
 
         val local = Store.profiles
         val removed = mutableListOf<String>()
@@ -281,8 +299,7 @@ object ProfileSync {
                     if (newerStrict(su, lu)) {
                         merged += toProfile(o, existing = p) to (o.jI("order") ?: i)
                         setLocalUpdatedAt(key, su)
-                        // build 89: hoofdprofiel elders (of op bingr.online) gewijzigd → overnemen
-                        if (o.jB("isMain") == true && key != mainKey) newMain = p.id
+                        // build 89: hoofdprofiel elders (of op bingr.online) gewijzigd → overnemen (build 97: zie adoptMain)
                     } else {
                         if (newerStrict(lu, su)) needUpload = true
                         // build 54: lokaal nog geen accentkleur en de server wel → overnemen (ook als de server niet nieuwer is)
@@ -301,12 +318,12 @@ object ProfileSync {
             val np = toProfile(o)
             merged += np to (o.jI("order") ?: Int.MAX_VALUE)
             setLocalUpdatedAt(key, su)
-            if (o.jB("isMain") == true && key != mainKey) newMain = np.id
         }
         // lokale tombstones die nog niet als tombstone op de server staan
         if (tombs.keys.any { k -> byKey[k]?.let { !isTombstone(it) } ?: true }) needUpload = true
 
         val list = merged.withIndex().sortedWith(compareBy<IndexedValue<Pair<ViewerProfile, Int>>>({ it.value.second }, { it.index })).map { it.value.first }
+        val newMain: String? = if (adoptMain) list.firstOrNull { idKey(it.id) == serverMainKey }?.id else null
         if (list.isNotEmpty() && (list != local || removed.isNotEmpty() || newMain != null)) {
             withoutUpload { Store.applySyncedProfiles(list, removed, newMain) }
         }

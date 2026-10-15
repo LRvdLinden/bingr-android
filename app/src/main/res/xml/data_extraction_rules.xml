@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    build 97: back-up en overzetten naar een nieuw apparaat vanaf Android 12 (android:dataExtractionRules).
+    Zelfde uitsluitingen als backup_rules.xml: sessie, device_id, geheimen en app-sleutels blijven op dit apparaat.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="bingr.account.xml" />
+        <exclude domain="sharedpref" path="bingr.device.xml" />
+        <exclude domain="sharedpref" path="bingr.secrets.xml" />
+        <exclude domain="sharedpref" path="bingr.serverkeys.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="bingr.account.xml" />
+        <exclude domain="sharedpref" path="bingr.device.xml" />
+        <exclude domain="sharedpref" path="bingr.secrets.xml" />
+        <exclude domain="sharedpref" path="bingr.serverkeys.xml" />
+    </device-transfer>
+</data-extraction-rules>

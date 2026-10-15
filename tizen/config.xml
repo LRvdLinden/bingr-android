@@ -15,9 +15,17 @@
   <icon src="icon.png"/>
   <content src="index.html"/>
   <feature name="http://tizen.org/feature/screen.size.all"/>
+  <!--
+    build 97: netwerktoegang blijft "*": IPTV-bronnen (M3U, Xtream, MAC-portal), hun streams, logo's en XMLTV-gidsen,
+    Plex/Jellyfin/Emby-servers en Stremio-add-ons staan op willekeurige http(s)-adressen die de gebruiker zelf invult.
+    Vaste diensten: bingr.online, Supabase (vjewsncmsxmhmhnoxwqx.supabase.co), api/image.themoviedb.org, trakt.tv,
+    api.opensubtitles.com, plex.tv en YouTube (trailer-embed).
+    Navigeren (pagina of iframe) mag alleen nog naar bingr.online en de YouTube-embed; de app zelf navigeert nergens heen.
+    CSP: geen 'unsafe-eval' meer (geen eval, new Function of setTimeout met tekst in de code) en scripts alleen lokaal.
+  -->
   <access origin="*" subdomains="true"/>
-  <tizen:allow-navigation>*</tizen:allow-navigation>
-  <tizen:content-security-policy>default-src * 'self' data: blob: 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval' file: http: https:; img-src * data: blob: http: https:; media-src * blob: data: http: https:; connect-src * http: https:; style-src 'self' 'unsafe-inline';</tizen:content-security-policy>
+  <tizen:allow-navigation>bingr.online *.bingr.online youtube-nocookie.com *.youtube-nocookie.com youtube.com *.youtube.com</tizen:allow-navigation>
+  <tizen:content-security-policy>default-src * 'self' data: blob: 'unsafe-inline'; script-src 'self' 'unsafe-inline' file:; img-src * data: blob: http: https:; media-src * blob: data: http: https:; connect-src * http: https:; frame-src https://www.youtube-nocookie.com https://www.youtube.com; style-src 'self' 'unsafe-inline';</tizen:content-security-policy>
   <tizen:privilege name="http://tizen.org/privilege/internet"/>
   <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
   <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>

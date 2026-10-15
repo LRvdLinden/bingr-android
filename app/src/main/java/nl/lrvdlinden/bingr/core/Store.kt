@@ -7,9 +7,14 @@ import android.graphics.BitmapFactory
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.serializer
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Alle gebruikersgegevens (Android-tegenhanger van CloudStore op iOS).
@@ -102,7 +107,22 @@ object Store {
         dir = File(ctx.filesDir, "store").apply { mkdirs() }
         secrets = ctx.getSharedPreferences("bingr.secrets", Context.MODE_PRIVATE)
         load()
+        // build 97: geheimen van vóór build 97 (platte tekst) eenmalig versleutelen, op de achtergrond
+        writer.execute { runCatching { migrateSecrets() } }
     }
+
+    // MARK: build 97: bestanden schrijven buiten de main thread
+
+    /** Eén schrijf-thread: opdrachten gaan op volgorde, zodat de laatste versie van een bestand altijd wint. */
+    private val writer = Executors.newSingleThreadExecutor { r -> Thread(r, "bingr-store").apply { isDaemon = true } }
+    /** Nog niet geschreven waarden (pad → waarde), zodat lezen direct na schrijven de nieuwe versie geeft. */
+    private val pending = ConcurrentHashMap<String, Any>()
+
+    /** Bestandswerk van anderen (bijv. de metabestanden van StateSync) in dezelfde volgorde als de Store-bestanden. */
+    fun enqueueIO(block: () -> Unit) { writer.execute { runCatching(block) } }
+
+    /** Wachten tot alle schrijfopdrachten klaar zijn (vóór mappen verwijderen of hernoemen; hooguit 5 s). */
+    fun flushWrites() { runCatching { writer.submit { }.get(5, TimeUnit.SECONDS) } }
 
     // MARK: opslaan/laden
 
@@ -111,17 +131,29 @@ object Store {
     /** Map van het actieve profiel (zonder profiel: de oude map, wordt bij het eerste profiel overgenomen) */
     private val pdir: File get() = profileDir(activeProfileID)
 
-    private inline fun <reified T> readIn(d: File, name: String, def: T): T =
-        runCatching { Http.json.decodeFromString<T>(File(d, "$name.json").readText()) }.getOrDefault(def)
+    private inline fun <reified T> readIn(d: File, name: String, def: T): T {
+        val f = File(d, "$name.json")
+        // build 97: wat nog op de schrijf-thread wacht is de nieuwste versie
+        pending[f.path]?.let { p -> (p as? T)?.let { return it } }
+        return runCatching { Http.json.decodeFromString<T>(f.readText()) }.getOrDefault(def)
+    }
 
+    @Suppress("UNCHECKED_CAST")
     private inline fun <reified T> writeIn(d: File, name: String, value: T) {
-        // build 60: eerst naar een tijdelijk bestand en dan hernoemen (atomair), zodat een app die midden in het
-        // schrijven stopt (update, geheugen vol, afsluiten) nooit een half bestand achterlaat (= profielen of lijsten kwijt)
-        runCatching {
-            val f = File(d, "$name.json")
-            val tmp = File(d, "$name.json.tmp")
-            tmp.writeText(Http.json.encodeToString(value))
-            if (!tmp.renameTo(f)) { f.delete(); if (!tmp.renameTo(f)) tmp.delete() }
+        val f = File(d, "$name.json")
+        val v: Any = value ?: return
+        val ser = serializer<T>() as KSerializer<Any>
+        // build 97: JSON maken en schrijven op de schrijf-thread (niet meer op de main thread)
+        pending[f.path] = v
+        writer.execute {
+            // build 60: eerst naar een tijdelijk bestand en dan hernoemen (atomair), zodat een app die midden in het
+            // schrijven stopt (update, geheugen vol, afsluiten) nooit een half bestand achterlaat (= profielen of lijsten kwijt)
+            runCatching {
+                val tmp = File(d, "$name.json.tmp")
+                tmp.writeText(Http.json.encodeToString(ser, v))
+                if (!tmp.renameTo(f)) { f.delete(); if (!tmp.renameTo(f)) tmp.delete() }
+            }
+            pending.remove(f.path, v)
         }
     }
 
@@ -166,6 +198,7 @@ object Store {
 
     /** Gegevens van vóór de profielen (store/<naam>.json) naar de map van dit profiel verplaatsen (alleen het hoofdaccount). */
     private fun adoptLegacyData(profileID: String) {
+        flushWrites()   // build 97: eerst alles wat nog geschreven moet worden
         val target = profileDir(profileID)
         for (name in profileFiles) {
             val src = File(dir, "$name.json")
@@ -305,6 +338,7 @@ object Store {
         val main = mainID?.takeIf { id -> list.any { it.id == id } } ?: list.first().id
         val adopted = adoptFrom != null && list.none { it.id == adoptFrom }
         if (adopted) {
+            flushWrites()   // build 97: map pas hernoemen als alles geschreven is
             runCatching {
                 val old = File(dir, "profile-$adoptFrom")
                 val new = File(dir, "profile-$main")
@@ -343,6 +377,7 @@ object Store {
         val gone = removed.filter { it != main }
         val newList = list.filter { it.id !in gone }
         if (newList.isEmpty()) return
+        if (gone.isNotEmpty()) flushWrites()   // build 97: geen schrijfopdracht die de map daarna weer aanmaakt
         for (id in gone) {
             Collections.profileDeleted(id, fromSync = true)
             Downloads.profileDeleted(id)
@@ -406,6 +441,7 @@ object Store {
         ProfileSync.profilesChanged()
         setPhoto(p.id, null, fromSync = true)
         setSecret("profile.${p.id}.pin", null)
+        flushWrites()   // build 97
         runCatching { File(dir, "profile-${p.id}").deleteRecursively() }
         if (activeProfileID == p.id) {
             activeProfileID = null
@@ -429,10 +465,46 @@ object Store {
 
     // MARK: geheimen (wachtwoorden, tokens, eigen API-sleutels)
 
-    fun secret(key: String): String? = secrets.getString(key, null)
+    /** build 97: ontsleutelde waarden (de Keystore niet bij elke lezing aanspreken). */
+    private val secretCache = ConcurrentHashMap<String, String>()
+    private val secretLock = Any()
+
+    /** build 97: versleuteld bewaard ([SecureBox], AES-GCM met een Keystore-sleutel); platte tekst van vroeger wordt ook gelezen. */
+    fun secret(key: String): String? {
+        secretCache[key]?.let { return it }
+        val raw = runCatching { secrets.getString(key, null) }.getOrNull() ?: return null
+        val v = SecureBox.decrypt(raw) ?: return null
+        secretCache[key] = v
+        return v
+    }
+
+    private fun putSecret(key: String, value: String?) {
+        synchronized(secretLock) {
+            if (value == null) {
+                secretCache.remove(key)
+                secrets.edit().remove(key).apply()
+            } else {
+                secretCache[key] = value
+                secrets.edit().putString(key, SecureBox.encrypt(value) ?: value).apply()
+            }
+        }
+    }
+
+    /** build 97: bestaande geheimen in platte tekst versleutelen (schrijf-thread; niet als het intussen gewijzigd is). */
+    private fun migrateSecrets() {
+        val all = secrets.all
+        for ((k, v) in all) {
+            if (v !is String || SecureBox.isEncrypted(v)) continue
+            val enc = SecureBox.encrypt(v) ?: return   // Keystore werkt niet: alles laten zoals het was
+            synchronized(secretLock) {
+                if (secrets.getString(k, null) == v) secrets.edit().putString(k, enc).apply()
+            }
+        }
+    }
+
     fun setSecret(key: String, value: String?) {
-        val old = secrets.getString(key, null)
-        secrets.edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
+        val old = secret(key)
+        putSecret(key, value)
         // wachtwoord of token van een server gewijzigd → ook naar het account (build 43)
         if (old != value && key.startsWith("playlist.")) SourceSync.secretChanged(key)
         // Trakt, OpenSubtitles en pincodes → ook naar het account (build 44)
@@ -441,11 +513,17 @@ object Store {
 
     /** Alle geheimen met dit voorvoegsel (bijv. "playlist.<id>."), sleutel → waarde. */
     fun secretsWithPrefix(prefix: String): Map<String, String> = runCatching {
-        secrets.all.mapNotNull { (k, v) -> if (k.startsWith(prefix) && v is String) k to v else null }.toMap()
+        secrets.all.mapNotNull { (k, v) -> if (k.startsWith(prefix) && v is String) secret(k)?.let { k to it } else null }.toMap()
     }.getOrDefault(emptyMap())
 
     private fun removeSecrets(match: (String) -> Boolean) {
-        runCatching { secrets.edit().apply { secrets.all.keys.filter(match).forEach { remove(it) } }.apply() }
+        runCatching {
+            synchronized(secretLock) {
+                val keys = secrets.all.keys.filter(match)
+                keys.forEach { secretCache.remove(it) }
+                secrets.edit().apply { keys.forEach { remove(it) } }.apply()
+            }
+        }
     }
 
     // MARK: servers (afspeellijsten)
@@ -535,6 +613,7 @@ object Store {
      * (geheimen, pincodes, foto's, per-profielgegevens, aanpassingen, kinderslot en herinneringen).
      */
     fun wipeAccountData() {
+        flushWrites()   // build 97
         (playlists.map { it.id } + profiles.map { it.id }).forEach { runCatching { photoFile(it).delete() } }
         removeSecrets { it.startsWith("playlist.") || it.startsWith("profile.") || it == "parental.pin" }
         runCatching { dir.listFiles()?.forEach { f -> if (f.isDirectory && f.name.startsWith("profile-")) f.deleteRecursively() } }

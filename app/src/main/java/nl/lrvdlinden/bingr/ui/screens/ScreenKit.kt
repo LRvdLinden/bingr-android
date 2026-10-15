@@ -18,6 +18,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.text.Normalizer
 
@@ -43,14 +44,53 @@ object ScreensNav {
 
     val stack = mutableStateListOf<Item>()
     private var counter = 0L
+    /** build 97: per geopend scherm het element dat de focus had toen het openging (TV, zie [FocusRestore]). */
+    private val returnFocus = HashMap<Long, FocusRequester>()
 
-    fun push(e: ScreenEntry) { counter += 1; stack.add(Item(counter, e)) }
+    fun push(e: ScreenEntry) {
+        counter += 1
+        FocusRestore.current?.let { returnFocus[counter] = it }
+        stack.add(Item(counter, e))
+    }
     fun detail(t: DetailTarget) = push(ScreenEntry.Detail(t))
     fun category(t: CategoryTarget) = push(ScreenEntry.Category(t))
     fun search() = push(ScreenEntry.Search)
     fun person(r: PersonRef) = push(ScreenEntry.Person(r))
-    fun close(id: Long) { stack.removeAll { it.id == id } }
-    fun clear() { stack.clear() }
+    fun close(id: Long) {
+        val wasTop = stack.lastOrNull()?.id == id
+        val back = returnFocus.remove(id)
+        stack.removeAll { it.id == id }
+        // build 97: TV: focus terug op de kaart (of knop) die dit scherm opende, ook in de rijen van Home
+        if (wasTop && back != null) FocusRestore.restore(back)
+    }
+    fun clear() { stack.clear(); returnFocus.clear() }
+}
+
+/**
+ * build 97: focus terugzetten na het sluiten van een scherm (Detail, categorie, zoeken …) op TV. Elk element met
+ * [focusLift] heeft een eigen FocusRequester en meldt hier wanneer het de focus krijgt; [ScreensNav.push] onthoudt
+ * het element dat de focus had, [ScreensNav.close] vraagt de focus daar weer op (een paar pogingen, want het scherm
+ * eronder is pas na het sluiten weer focusbaar). Staat het element er niet meer, dan gebeurt er niets (zoals vroeger).
+ */
+object FocusRestore {
+    /** Het element dat nu de focus heeft (alleen op de main thread). */
+    var current: FocusRequester? = null
+        private set
+
+    fun focusChanged(r: FocusRequester, focused: Boolean) {
+        if (focused) current = r else if (current === r) current = null
+    }
+
+    fun restore(r: FocusRequester) {
+        if (!AppState.isTV) return
+        AppScope.launch {
+            repeat(10) {
+                delay(80)
+                if (current === r) return@launch
+                runCatching { r.requestFocus() }
+            }
+        }
+    }
 }
 
 /** Tekent de schermstapel volledig over het scherm; alleen de bovenste krijgt focus. */

@@ -17,6 +17,8 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromStream
+import kotlinx.serialization.json.encodeToStream
 import java.io.File
 
 /**
@@ -636,11 +638,17 @@ object Playlists {
 
     private fun cacheFile(p: PlaylistSource) = File(AppState.appContext.filesDir, "cache-${p.id}.json")
 
-    /** Gecachete inhoud (blokkeert: aanroepen buiten de main thread). */
+    /**
+     * Gecachete inhoud (blokkeert: aanroepen buiten de main thread). build 97: direct uit het bestand lezen
+     * (decodeFromStream) in plaats van eerst het hele bestand als één String in het geheugen.
+     */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     fun readCache(p: PlaylistSource): Library? {
         val f = cacheFile(p)
         if (!f.exists()) return null
-        return runCatching { Http.json.decodeFromString(Library.serializer(), f.readText()) }.getOrNull()
+        return runCatching {
+            f.inputStream().buffered(64 * 1024).use { Http.json.decodeFromStream(Library.serializer(), it) }
+        }.getOrNull()
     }
 
     /** Leeftijd van de cache in ms (null = geen cache). */
@@ -650,14 +658,17 @@ object Playlists {
         return System.currentTimeMillis() - f.lastModified()
     }
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private fun writeCache(p: PlaylistSource, lib: Library) {
         val f = cacheFile(p)
         AppScope.launch(Dispatchers.IO) {
+            // build 97: direct naar het bestand (encodeToStream) en een eigen tijdelijk bestand per keer, zodat twee
+            // gelijktijdige schrijfacties elkaar niet in de weg zitten
+            val tmp = File(f.parentFile, f.name + "." + System.nanoTime() + ".tmp")
             runCatching {
-                val tmp = File(f.parentFile, f.name + ".tmp")
-                tmp.writeText(Http.json.encodeToString(Library.serializer(), lib))
-                if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
-            }
+                tmp.outputStream().buffered(64 * 1024).use { Http.json.encodeToStream(Library.serializer(), lib, it) }
+                if (!tmp.renameTo(f)) { f.delete(); if (!tmp.renameTo(f)) tmp.delete() }
+            }.onFailure { tmp.delete() }
         }
     }
 

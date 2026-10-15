@@ -32,7 +32,10 @@ object StreamSession {
     init {
         AppScope.launch {
             for (op in queue) {
-                try { op() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { }
+                // build 97: een CancellationException uit één aanvraag (bijv. een withTimeout) stopte de wachtrij voor
+                // altijd; alleen echt stoppen als deze coroutine zelf geannuleerd is, anders gewoon door
+                val failure = runCatching { op() }.exceptionOrNull()
+                if (failure is kotlinx.coroutines.CancellationException && !isActive) throw failure
             }
         }
     }

@@ -182,6 +182,12 @@
     active.sort(function (a, b) { return (B.int(a.order) || 0) - (B.int(b.order) || 0); });
     D.profiles = active;
     save();
+    // build 97: lokale kijkstatus (pstate.<id>) van verwijderde profielen opruimen
+    if (active.length) {
+      var ids = {};
+      active.forEach(function (p) { ids[lower(p.id)] = true; });
+      B.store.keys('pstate.').forEach(function (k) { if (!ids[k.slice(7)] && !(P.id && k.slice(7) === lower(P.id))) B.store.del(k); });
+    }
     B.emit('profiles');
   }
 
@@ -541,23 +547,25 @@
     var j = toJSON({}, st); delete j.updatedAt; return JSON.stringify(j);
   }
 
-  // Actief profiel: model + basis van de server
+  // Actief profiel: model + basis van de server.
+  // build 97: bij een profielwissel komt er een nieuw object; een lopende sync/upload houdt zo het object (en de id)
+  // van het profiel waarvoor hij begon, en schrijft nooit de voortgang van het oude profiel bij het nieuwe.
   var P = { id: null, st: null, base: null, names: [], dirty: false };
   function pkey(id) { return 'pstate.' + lower(id); }
-  function persistP() {
-    if (!P.id) return;
-    B.store.set(pkey(P.id), { st: P.st, base: P.base, names: P.names, dirty: P.dirty });
+  function persistP(Q) {
+    Q = Q || P;
+    if (!Q.id) return;
+    B.store.set(pkey(Q.id), { st: Q.st, base: Q.base, names: Q.names, dirty: Q.dirty });
   }
   D.loadProfileState = function (id) {
     var saved = B.store.get(pkey(id), null);
-    P.id = id;
-    P.st = (saved && saved.st) || { sets: { myList: {}, favorites: {}, watched: {}, recentChannels: {} }, progress: {}, history: {} };
-    SET_FIELDS.forEach(function (f) { P.st.sets[f] = P.st.sets[f] || {}; });
-    P.base = (saved && saved.base) || null;
-    P.names = (saved && saved.names) || [];
-    P.dirty = !!(saved && saved.dirty);
+    var st = (saved && saved.st) || { sets: { myList: {}, favorites: {}, watched: {}, recentChannels: {} }, progress: {}, history: {} };
+    SET_FIELDS.forEach(function (f) { st.sets[f] = st.sets[f] || {}; });
+    P = { id: id, st: st, base: (saved && saved.base) || null, names: (saved && saved.names) || [], dirty: !!(saved && saved.dirty) };
     B.emit('profileData');
   };
+  /** build 97: id van het profiel waarvan de kijkstatus nu geladen is (de speler schrijft alleen naar zijn eigen profiel). */
+  D.activeProfileId = function () { return P.id; };
 
   /** Pincodes van alle profielen uit de state (pin staat in profile.<id>). */
   function readPins(sections) {
@@ -586,6 +594,10 @@
    */
   D.syncState = function () {
     if (syncing) return syncing;
+    return startSync(P);
+  };
+  /** build 97: sync voor een vast profielobject Q (zie P hierboven). */
+  function startSync(Q) {
     syncing = A.getState().then(function (all) {
       if (!all) return false;
       // instellingen: het geheel van de server; wijzigingen van deze tv die nog niet geüpload zijn gaan erover en worden verstuurd
@@ -599,13 +611,23 @@
       B.emit('settings');
       // connections (Trakt/OpenSubtitles) en herinneringen voegen zelf samen
       B.emit('state', all);
-      if (!P.id) return true;
-      return mergeActive(all);
+      if (!Q.id) return true;
+      return mergeActive(all, Q);
     }).catch(function (e) { B.log('sync', e); return false; }).then(function (r) { syncing = null; return r; });
     return syncing;
-  };
+  }
+  /**
+   * build 97: wijzigingen van profiel Q versturen. Loopt er al een sync, dan daarna opnieuw als Q dan nog
+   * wijzigingen heeft (die sync kan zijn gegevens al vóór de laatste wijziging hebben samengevoegd).
+   */
+  function flushQ(Q) {
+    if (syncing) return syncing.then(function () { return Q.dirty ? flushQ(Q) : true; });
+    if (!Q.dirty) return Promise.resolve(true);
+    return startSync(Q);
+  }
 
-  function mergeActive(all) {
+  function mergeActive(all, Q) {
+    var P = Q;
     var id = lower(P.id);
     var names = Object.keys(all).filter(function (n) { return lower(n) === 'profile.' + id; });
     var server = null, base = null;
@@ -632,17 +654,18 @@
     P.st = merged;
     var needUpload = prefsNewer || (!srv ? hasAny(merged) : stateKey(merged) !== stateKey(srv));
     P.dirty = false;
-    persistP();
-    if (changed) B.emit('profileData');
+    persistP(P);
+    if (changed && P === activeP()) B.emit('profileData');
     if (!needUpload) return true;
     var json = toJSON(P.base, merged);
     var targets = P.names.length ? P.names : ['profile.' + P.id];
     return Promise.all(targets.map(function (n) { return A.putState(n, json); })).then(function (res) {
-      if (res.some(function (x) { return x == null; })) { P.dirty = true; persistP(); return false; }
-      P.base = json; persistP();
+      if (res.some(function (x) { return x == null; })) { P.dirty = true; persistP(P); return false; }
+      P.base = json; persistP(P);
       return true;
     });
   }
+  function activeP() { return P; }
   function hasAny(st) {
     var any = Object.keys(st.progress).length || Object.keys(st.history).length;
     SET_FIELDS.forEach(function (f) { if (Object.keys(st.sets[f]).length) any = true; });
@@ -659,14 +682,18 @@
       if (since < 30000) wait = Math.max(3000, 30000 - since);
     }
     clearTimeout(timer);
-    timer = setTimeout(function () { lastProgressUpload = Date.now(); D.syncState(); }, wait);
+    var Q = P;
+    timer = setTimeout(function () { lastProgressUpload = Date.now(); flushQ(Q); }, wait);
   }
-  /** Meteen versturen (stoppen met afspelen, app naar de achtergrond). */
+  /**
+   * Meteen versturen (stoppen met afspelen, app naar de achtergrond, profiel wisselen).
+   * build 97: altijd voor het profiel dat nu geladen is, ook als er al een sync loopt (dan daarna nog een keer).
+   */
   D.flush = function () {
-    if (!P.dirty) return Promise.resolve();
-    clearTimeout(timer);
-    lastProgressUpload = Date.now();
-    return D.syncState();
+    var Q = P;
+    if (!Q.dirty && !syncing) return Promise.resolve();
+    if (Q.dirty) { clearTimeout(timer); lastProgressUpload = Date.now(); }
+    return flushQ(Q);
   };
 
   // lezen

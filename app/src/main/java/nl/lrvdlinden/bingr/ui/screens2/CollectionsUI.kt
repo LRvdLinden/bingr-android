@@ -503,7 +503,9 @@ fun HomeScreenSettings(onClose: () -> Unit) {
                                     if (i > 0) S2IconButton(Icons.Default.KeyboardArrowUp, L("Move up"), size = tvs(18)) { move(i, -1) }
                                     if (i < rows.size - 1) S2IconButton(Icons.Default.KeyboardArrowDown, L("Move down"), size = tvs(18)) { move(i, 1) }
                                 }
-                                Icon(if (r.visible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null,
+                                // build 97: TalkBack zegt of de rij zichtbaar of verborgen is
+                                Icon(if (r.visible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    if (r.visible) L("Visible") else L("Hidden"),
                                     tint = if (r.visible) Theme.red else Theme.secondary, modifier = Modifier.size(tvs(20)))
                             })
                     }

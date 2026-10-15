@@ -43,25 +43,14 @@
       U.toast(L('Signed in as %@', A.email() || ''));
       onDone();
     }
+    // build 97: zelfde tekenfunctie als Support (S.drawQR in extras.js), die qrcode.js pas nu laadt
     function drawQR(url) {
       U.clear(qrBox);
-      if (!url) { qrBox.appendChild(U.spinner()); return; }
-      try {
-        var q = window.qrcode(0, 'M');
-        q.addData(url);
-        q.make();
-        var n = q.getModuleCount();
-        var size = 360, cell = Math.floor(size / (n + 4));
-        var canvas = document.createElement('canvas');
-        canvas.width = canvas.height = cell * (n + 4);
-        var g = canvas.getContext('2d');
-        g.fillStyle = '#fff'; g.fillRect(0, 0, canvas.width, canvas.height);
-        g.fillStyle = '#000';
-        for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (q.isDark(r, c)) g.fillRect((c + 2) * cell, (r + 2) * cell, cell, cell);
-        qrBox.appendChild(canvas);
-      } catch (e) { qrBox.appendChild(h('div', url)); }
+      if (!url) { qrBox._qr = null; qrBox.appendChild(U.spinner()); return; }
+      S.drawQR(qrBox, url, 360);
     }
     drawQR(null);
+    B.loadQR().catch(B.noop);
     var s = {
       el: el,
       onShow: function () {
@@ -74,7 +63,8 @@
         if (A.blockedNotice()) err.textContent = A.bannedMessage();
         flow.promise.then(function () { finish(); });
       },
-      onBack: function () { B.app.exit(); return true; },
+      // build 97: eerste Terug sluit niet meteen; nog een keer Terug (met melding), zoals op Home
+      onBack: function () { B.app.confirmExit(); return true; },
       destroy: function () { if (flow) flow.cancel(); }
     };
     return s;
@@ -254,7 +244,8 @@
     var el = layer('profiles', [h('div.prof-top', [U.logo()]), h('h1.prof-title', L("Who's watching?")), row]);
     var off = function () { var f = U.focused; draw(); if (!row.contains(f)) U.focusFirst(row); };
     var unsub = B.on('profiles', function () { if (el.parentNode && !el.classList.contains('hidden')) off(); });
-    return { el: el, onBack: function () { B.app.exit(); return true; }, destroy: unsub };
+    // build 97: Terug vraagt eerst om bevestiging (nog een keer Terug), zoals op Home
+    return { el: el, onBack: function () { B.app.confirmExit(); return true; }, destroy: unsub };
   };
 
   // MARK: kaarten
@@ -1953,7 +1944,7 @@
     if (d < 3600) return L('%d min ago', Math.round(d / 60));
     if (d < 86400) return B.fmtTime(ms);
     if (d < 2 * 86400) return L('yesterday');
-    return new Date(ms).toLocaleDateString();
+    return new Date(ms).toLocaleDateString(B.lang || undefined); // build 97: in de taal van de app
   }
   S.devices = function () {
     return listScreen(L('Devices'), function () {

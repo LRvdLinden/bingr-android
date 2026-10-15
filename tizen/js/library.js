@@ -335,8 +335,9 @@
       if (!u) return Promise.reject(new Error(L('Invalid URL')));
       return B.getText(u, null, 180000).then(function (text) {
         var lib = P.m3uLibrary(text, src.id);
+        // build 97: gids-URL uit de kop lezen vóórdat de tekst wordt vrijgegeven (anders faalde een M3U zonder eigen gids-URL)
+        lib.epgURL = P.urlValue(src.epgURL) || P.m3uEpgURL(text || '');
         text = null;
-        lib.epgURL = P.urlValue(src.epgURL) || P.m3uEpgURL(text);
         return lib;
       });
     }
@@ -413,7 +414,7 @@
       lib.epg = ownEpg || {};
       B.idb.set('lib:' + src.id, { at: Date.now(), lib: lib });
       // alleen de zenders apart, voor de reservebron op andere servers
-      B.idb.set('chan:' + src.id, lib.channels.map(function (c) { return { name: c.name, epgID: c.epgID, streamURL: c.streamURL, stalkerCmd: c.stalkerCmd || null }; }));
+      saveChannels(src, lib.channels);
       if (my !== gen) return;
       var epg = Lib.raw && Lib.source && Lib.source.id === src.id ? Lib.raw.epg : {};
       lib.epg = ownEpg || epg || {};
@@ -491,7 +492,8 @@
     var norm = Lib.normalizeName(ch.name);
     if (!epg && norm.length < 2) return Promise.resolve([]);
     return Promise.all(others.map(function (src) {
-      return B.idb.get('chan:' + src.id).then(function (list) {
+      return B.idb.get('chan:' + src.id).then(function (c) {
+        var list = chanList(c);
         if (!list) return null;
         var hit = null, byEpg = false;
         if (epg) for (var i = 0; i < list.length; i++) if (list[i].epgID && String(list[i].epgID).trim().toLowerCase() === epg) { hit = list[i]; byEpg = true; break; }
@@ -508,7 +510,28 @@
     return Promise.resolve(h.url);
   };
 
-  /** Andere servers op de achtergrond laden (voor de reservebron), één tegelijk. */
+  // build 97: zenderlijst voor de reservebron met een vervaldatum ({at, list}); oude caches waren een kale lijst
+  var CHAN_TTL = 6 * 3600000;
+  function saveChannels(src, channels) {
+    return B.idb.set('chan:' + src.id, { at: Date.now(), list: channels.map(function (c) { return { name: c.name, epgID: c.epgID, streamURL: c.streamURL, stalkerCmd: c.stalkerCmd || null }; }) });
+  }
+  function chanList(c) { return !c ? null : Array.isArray(c) ? c : (Array.isArray(c.list) ? c.list : null); }
+  function chanFresh(c) { return !!(c && !Array.isArray(c) && c.at && Date.now() - c.at < CHAN_TTL && Array.isArray(c.list)); }
+  /** build 97: alleen de live-zenders van een IPTV-server (geen films of series), voor de reservebron. */
+  function fetchChannels(src) {
+    if (src.kind === 'M3U / M3U8') {
+      var u = P.urlValue(src.m3uURL);
+      if (!u) return Promise.reject(new Error(L('Invalid URL')));
+      return B.getText(u, null, 180000).then(function (text) { return P.m3uLibrary(text, src.id, { channelsOnly: true }).channels; });
+    }
+    if (src.kind === 'Xtream Codes') {
+      var x = new P.Xtream(src, D.secret(src, 'password'));
+      return x.authenticate().then(function () { return x.liveChannels(); });
+    }
+    if (src.kind === 'Stalker / MAC-portal') return new P.Stalker(src).liveChannels();
+    return Promise.resolve([]);
+  }
+  /** Andere servers op de achtergrond laden (voor de reservebron), één tegelijk; build 97: alleen hun zenders, en opnieuw na 6 uur. */
   Lib.warmOthers = function () {
     var cur = Lib.source ? Lib.source.id : null;
     var list = D.sources.filter(function (s) { return s.id !== cur && IPTV.indexOf(s.kind) >= 0; });
@@ -516,9 +539,9 @@
     list.forEach(function (src) {
       chain = chain.then(function () {
         return B.idb.get('chan:' + src.id).then(function (c) {
-          if (c) return;
-          return fetchLibrary(src).then(function (lib) {
-            B.idb.set('chan:' + src.id, lib.channels.map(function (x) { return { name: x.name, epgID: x.epgID, streamURL: x.streamURL, stalkerCmd: x.stalkerCmd || null }; }));
+          if (chanFresh(c)) return;
+          return fetchChannels(src).then(function (chs) {
+            if (chs && chs.length) return saveChannels(src, chs);
           }, B.noop);
         });
       });

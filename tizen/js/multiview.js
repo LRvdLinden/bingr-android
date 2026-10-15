@@ -87,15 +87,23 @@
       for (var k = 0; k < all.length; k++) if (all[k]._ti === fi) target = all[k];
       U.focus(target || all[0]);
     }
+    /**
+     * build 97: elke start van een tegel krijgt een generatie (t.gen). Een oudere start (URL nog onderweg, prepare,
+     * late fout) doet niets meer: geen tweede engine, en hij maakt de nieuwe start niet "mislukt".
+     * Alleen de hoofdtegel gebruikt AVPlay; een andere tegel die nog een AVPlay-engine had, wordt eerst gestopt.
+     */
     function play(t) {
       stopTile(t);
+      var g = t.gen = (t.gen || 0) + 1;
+      function stale() { return closed || suspended || tiles.indexOf(t) < 0 || t.gen !== g; }
       t.failed = false;
       t.el.classList.remove('failed');
       Lib.resolveURL(B.player.channelItem(t.ch), true).then(function (url) {
-        if (closed || suspended || tiles.indexOf(t) < 0) return;
-        if (!url) { failTile(t); return; }
-        var events = { buffering: B.noop, ended: B.noop, subtitle: B.noop, error: function () { failTile(t); } };
+        if (stale()) return;
+        if (!url) { failTile(t, g); return; }
+        var events = { buffering: B.noop, ended: B.noop, subtitle: B.noop, error: function () { failTile(t, g); } };
         if (t.main && B.engines.hasAVPlay()) {
+          tiles.forEach(function (o) { if (o !== t && o.engine && o.engine.name === 'avplay') stopTile(o); });
           t.engine = new B.engines.AV(events);
           t.el.classList.add('hole');
           document.documentElement.classList.add('mv-hole');
@@ -111,18 +119,21 @@
         t.engine = new B.engines.HTML(events, t.video);
         return t.engine.open(url, { live: true });
       }).then(function () {
+        if (t.gen !== g) return;
         // intussen dicht, naar de achtergrond of tegel weg: de speler meteen weer vrijgeven
         if (closed || suspended || tiles.indexOf(t) < 0) { stopTile(t); return; }
-        t.el.classList.add('playing');
-      }, function () { failTile(t); });
+        if (t.engine) t.el.classList.add('playing');
+      }, function () { failTile(t, g); });
     }
-    function failTile(t) {
+    function failTile(t, g) {
       if (closed || suspended) return;
+      if (g != null && t.gen !== g) return;
       stopTile(t);
       t.failed = true;
       if (t.el) { t.el.classList.add('failed'); t.el.classList.remove('playing'); }
     }
     function stopTile(t) {
+      t.gen = (t.gen || 0) + 1; // build 97: lopende start van deze tegel vervalt
       if (t.engine) { try { t.engine.stop(); } catch (e) { /* stil */ } t.engine = null; }
       if (t.el) { t.el.classList.remove('hole'); t.el.classList.remove('playing'); }
       if (t.main) document.documentElement.classList.remove('mv-hole');

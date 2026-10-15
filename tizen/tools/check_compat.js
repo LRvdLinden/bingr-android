@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Controleert of de Tizen-app draait op oude Samsung-tv's (Tizen 4.0 = Chromium M56, Tizen 5.0 = M63).
-//   npm i --no-save acorn@8 acorn-walk@8 && node tizen/tools/check_compat.js
+//   npm i --no-save acorn@8 acorn-walk@8 && node tizen/tools/check_compat.js [map]
 // - JS: moet als ES2017 te parsen zijn (geen ?. ?? ...spread in objecten, optionele catch, class fields)
 // - JS: geen API's die M56 niet kent (flat, fromEntries, replaceAll, allSettled, finally, padStart, ...)
 // - CSS: geen eigenschappen/selectors die M56 niet kent (gap in flexbox, grid, aspect-ratio, inset, :is, ...)
@@ -11,7 +11,8 @@ var path = require('path');
 var acorn = require('acorn');
 var walk = require('acorn-walk');
 
-var TIZEN = path.resolve(__dirname, '..');
+// build 97: optioneel een andere map (de pakketmap met de bundel), standaard tizen/
+var TIZEN = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve(__dirname, '..');
 var problems = [];
 function report(file, line, msg) { problems.push(path.relative(TIZEN, file) + ':' + line + ': ' + msg); }
 

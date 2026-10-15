@@ -98,7 +98,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    // build 97: lifecycle-viewmodel-compose weg (nergens gebruikt)
     implementation("androidx.lifecycle:lifecycle-process:2.8.7")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
@@ -112,7 +112,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-exoplayer-dash:$media3")
     implementation("androidx.media3:media3-ui:$media3")
-    implementation("androidx.media3:media3-session:$media3")
+    // build 97: media3-session weg (geen MediaSession in de app)
     implementation("androidx.media3:media3-datasource-okhttp:$media3")
     implementation("org.videolan.android:libvlc-all:3.5.1")
 

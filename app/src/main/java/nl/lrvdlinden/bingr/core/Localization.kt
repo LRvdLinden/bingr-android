@@ -4,11 +4,8 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Zelfde vertaalsysteem als iOS: Engelse tekst is de sleutel, vertalingen komen uit
@@ -21,7 +18,12 @@ object Localizer {
         "es" to "Español", "it" to "Italiano", "pt" to "Português", "tr" to "Türkçe",
         "pl" to "Polski", "ar" to "العربية", "zh-Hans" to "简体中文"
     )
-    private var table: Map<String, Map<String, String>> = emptyMap()
+    /**
+     * build 97: per taal, pas geladen als die taal nodig is (bij het starten alleen de actieve taal; vroeger werden
+     * alle 10 talen, 572 KB JSON, bij het starten in Application.onCreate ingelezen).
+     */
+    private val tables = ConcurrentHashMap<String, Map<String, String>>()
+    private var appContext: Context? = null
 
     /** "" = volg het systeem */
     // (geen `var override … private set`: die setter botst op de JVM met setOverride())
@@ -31,13 +33,44 @@ object Localizer {
         private set
 
     fun init(ctx: Context) {
-        runCatching {
-            val text = ctx.assets.open("Translations.json").bufferedReader().readText()
-            val root = Json.parseToJsonElement(text).jsonObject
-            table = root.mapValues { (_, v) -> (v as JsonObject).mapValues { it.value.jsonPrimitive.content } }
-        }
+        appContext = ctx.applicationContext
         overrideState = Prefs.string("app.language") ?: ""
         language = resolve(override)
+        table(language)
+    }
+
+    /** Vertalingen van één taal ("en" = geen tabel: de Engelse tekst is de sleutel). */
+    private fun table(lang: String): Map<String, String> {
+        if (lang == "en") return emptyMap()
+        tables[lang]?.let { return it }
+        val ctx = appContext ?: return emptyMap()
+        val t = runCatching { readLanguage(ctx, lang) }.getOrDefault(emptyMap())
+        tables[lang] = t
+        return t
+    }
+
+    /**
+     * Alleen het blok van [lang] uit Translations.json lezen (streaming; de andere talen worden overgeslagen zonder
+     * ze op te bouwen). Formaat: `{"<taal>": {"<Engels>": "<vertaling>", …}, …}`.
+     */
+    private fun readLanguage(ctx: Context, lang: String): Map<String, String> {
+        val out = HashMap<String, String>(4096)
+        ctx.assets.open("Translations.json").use { input ->
+            android.util.JsonReader(java.io.InputStreamReader(input.buffered(), Charsets.UTF_8)).use { r ->
+                r.beginObject()
+                while (r.hasNext()) {
+                    if (r.nextName() != lang) { r.skipValue(); continue }
+                    r.beginObject()
+                    while (r.hasNext()) {
+                        val k = r.nextName()
+                        if (r.peek() == android.util.JsonToken.STRING) out[k] = r.nextString() else r.skipValue()
+                    }
+                    r.endObject()
+                    return out
+                }
+            }
+        }
+        return out
     }
 
     fun setOverride(code: String) {
@@ -54,7 +87,7 @@ object Localizer {
         return if (l.language in codes) l.language else "en"
     }
 
-    fun text(key: String): String = if (language == "en") key else table[language]?.get(key) ?: key
+    fun text(key: String): String { val l = language; return if (l == "en") key else table(l)[key] ?: key }
     val locale: Locale get() = if (language == "zh-Hans") Locale.SIMPLIFIED_CHINESE else Locale(language)
     val isRTL: Boolean get() = language == "ar"
 }

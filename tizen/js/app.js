@@ -13,11 +13,19 @@
     return Promise.race([p, new Promise(function (r) { setTimeout(function () { r(null); }, ms); })]);
   }
 
+  var exiting = false;
   app.exit = function () {
+    if (exiting) return;
+    exiting = true;
     // speler netjes sluiten (AVPlay vrijgeven, stream_stop, voortgang) en openstaande wijzigingen versturen
     try { if (B.player.current) B.player.current.close(); if (B.multiview.current) B.multiview.current.close(); B.preview.stop(); } catch (e) { /* stil */ }
-    D.flush();
-    try { tizen.application.getCurrentApplication().exit(); } catch (e) { B.log('exit'); }
+    // build 97: wachten op het versturen (voortgang, stream_stop), maar hooguit ~1,5 s
+    var work = Promise.all([
+      Promise.resolve().then(function () { return D.flush(); }).catch(B.noop),
+      Promise.resolve().then(function () { return A.lastStreamStop ? A.lastStreamStop() : null; }).catch(B.noop)
+    ]);
+    withTimeout(work, 1500).then(quit, quit);
+    function quit() { try { tizen.application.getCurrentApplication().exit(); } catch (e) { B.log('exit'); exiting = false; } }
   };
   var exitArmed = 0;
   app.confirmExit = function () {
@@ -42,12 +50,26 @@
   };
 
   // profielfoto's: één keer per pad+versie ophalen
+  // build 97: per pad alleen de nieuwste versie; de object-URL van een vervangen of verwijderde foto vrijgeven
   var photos = {};
+  function revoke(p) { p.then(function (u) { if (u) { try { URL.revokeObjectURL(u); } catch (e) { /* stil */ } } }, B.noop); }
   app.photo = function (path, updated) {
-    var k = path + '|' + (updated || '');
-    if (!photos[k]) photos[k] = A.photoURL(path);
-    return photos[k];
+    var k = String(updated || '');
+    var cur = photos[path];
+    if (cur && cur.k === k) return cur.p;
+    if (cur) revoke(cur.p);
+    var p = A.photoURL(path);
+    photos[path] = { k: k, p: p };
+    return p;
   };
+  /** build 97: foto's van profielen die er niet meer zijn (of geen foto meer hebben) vrijgeven. */
+  function prunePhotos() {
+    var used = {};
+    D.profiles.forEach(function (p) { if (p && p.photo && p.photo.path) used[p.photo.path] = String(p.photo.updated || ''); });
+    Object.keys(photos).forEach(function (path) {
+      if (!B.has(used, path)) { revoke(photos[path].p); delete photos[path]; }
+    });
+  }
 
   // MARK: flow
 
@@ -66,12 +88,13 @@
     U.push(S.splash());
     B.on('signedOut', function () { toLogin(); });
     B.on('sessionInvalid', function () { A.revokedSignOut(); });
+    // build 97: geen vaste wachttijd meer voor het splashscherm: door zodra de app klaar is (na één frame)
     setTimeout(function () {
       if (A.isSignedIn()) {
         afterLogin(false);
         A.refresh().then(function (res) { if (res === 'invalid') toLogin(); });
       } else toLogin();
-    }, 900);
+    }, 0);
   }
 
   var onLogin = false;
@@ -118,23 +141,29 @@
     U.reset(S.profiles(pickProfile));
     app.applyAccent(B.store.get('lastAccent', 'red'));
   }
-  app.switchProfile = function () {
+  /**
+   * build 97: speler sluiten en de voortgang van het huidige profiel versturen vóórdat een ander profiel geladen wordt
+   * (hooguit ~4 s wachten; de upload loopt daarna door voor het oude profiel, zie D.loadProfileState).
+   */
+  function leaveProfile() {
     if (B.player.current) B.player.current.close();
     if (B.multiview.current) B.multiview.current.close();
     B.preview.stop();
     B.ageRatings.stop();
-    D.flush();
-    showProfiles();
+    return withTimeout(Promise.resolve().then(function () { return D.flush(); }).catch(B.noop), 4000);
+  }
+  var switching = false;
+  app.switchProfile = function () {
+    if (switching) return;
+    switching = true;
+    leaveProfile().then(function () { switching = false; showProfiles(); });
   };
 
   /** Meteen naar een ander profiel vanuit het profielmenu (build 72); de pincode is dan al gecontroleerd. */
   app.openProfile = function (p) {
-    if (B.player.current) B.player.current.close();
-    if (B.multiview.current) B.multiview.current.close();
-    B.preview.stop();
-    B.ageRatings.stop();
-    D.flush();
-    pickProfile(p);
+    if (switching) return;
+    switching = true;
+    leaveProfile().then(function () { switching = false; pickProfile(p); });
   };
 
   function pickProfile(p) {
@@ -197,11 +226,19 @@
     B.ageRatings.warm(Lib.raw);
   }
   // nieuwe classificaties: opnieuw filteren (alleen bij een leeftijdsgrens), als de afstandsbediening stil is
-  var agePending = false;
+  // build 97: hooguit één keer per 10 s opnieuw filteren en tekenen
+  var agePending = false, ageLast = 0;
   B.on('ageRatings', function () {
     if (!app.profile || D.ageLimit(app.profile) == null || agePending) return;
     agePending = true;
-    B.whenQuiet(function () { agePending = false; Lib.applyFilters(); }, 1500);
+    setTimeout(function () {
+      B.whenQuiet(function () {
+        agePending = false;
+        if (!app.profile || D.ageLimit(app.profile) == null) return;
+        ageLast = Date.now();
+        Lib.applyFilters();
+      }, 1500);
+    }, Math.max(0, 10000 - (Date.now() - ageLast)));
   });
   B.on('config', function () { if (app.profile) { B.trakt.refresh(false); warmAges(); } });
   function PCrelock() { if (B.parental.isUnlocked()) B.parental.lock(); }
@@ -292,10 +329,20 @@
     else showProfiles();
   });
 
+  // build 97: teksten van een andere taal zijn later binnengekomen (pakket laadt één taal tegelijk): schermen opnieuw opbouwen
+  B.on('strings', function () {
+    if (B.player.current || B.multiview.current || onLogin) return;
+    var top = U.top();
+    if (!top || top.el.classList.contains('splash')) return;
+    if (app.profile) app.rebuild();
+    else showProfiles();
+  });
+
   // build 88: abonnement gewijzigd → accentkleur opnieuw toepassen
   B.on('entitlements', function () { if (app.profile) app.applyAccent(); });
 
   B.on('profiles', function () {
+    prunePhotos();
     if (app.profile && !D.profileById(app.profile.id)) showProfiles();
   });
 

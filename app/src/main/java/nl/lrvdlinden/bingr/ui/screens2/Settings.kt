@@ -226,7 +226,7 @@ fun SettingsScreen() {
 
     // volledige subschermen (vervangen de lijst, zodat de focus erin blijft)
     if (lockedSub == null) when (sub) {
-        S2SettingsSub.CATEGORIES -> { CategoriesScreen { sub = null }; return }
+        S2SettingsSub.CATEGORIES -> { ManageCategoriesScreen { sub = null }; return }
         S2SettingsSub.MANAGE -> { ManageScreen { sub = null }; return }
         S2SettingsSub.HISTORY -> { HistoryScreen { sub = null }; return }
         S2SettingsSub.NAS -> { NetworkBrowserScreen { sub = null }; return }

@@ -82,12 +82,32 @@
     if (window.requestIdleCallback) return window.requestIdleCallback(fn, { timeout: timeout || 1500 });
     return setTimeout(function () { fn({ timeRemaining: function () { return 8; }, didTimeout: true }); }, 30);
   };
+  /** build 97: script later laden (één keer per pad). Promise. */
+  var scripts = {};
+  B.loadScript = function (src) {
+    if (scripts[src]) return scripts[src];
+    scripts[src] = new Promise(function (resolve, reject) {
+      var el = document.createElement('script');
+      el.src = src;
+      el.onload = function () { resolve(); };
+      el.onerror = function () { delete scripts[src]; reject(new Error('script ' + src)); };
+      document.head.appendChild(el);
+    });
+    return scripts[src];
+  };
+  /** build 97: QR-bibliotheek pas laden als een scherm een QR-code toont (inloggen, support). */
+  B.loadQR = function () {
+    if (window.qrcode) return Promise.resolve(window.qrcode);
+    return B.loadScript('js/lib/qrcode.js').then(function () { return window.qrcode; });
+  };
   /** Pas uitvoeren als er ~ms geen toets is ingedrukt (scrollen gaat altijd voor). */
   B.whenQuiet = function (fn, ms) {
     ms = ms || 350;
     function check() {
       var since = Date.now() - B.lastKeyAt;
-      if (since < ms || B.keyRepeating) setTimeout(check, Math.max(60, ms - since));
+      // build 97: "ingedrukt" telt na 1 s zonder toets niet meer (een gemiste keyup hield dit anders eeuwig tegen)
+      var repeating = B.keyRepeating && since < 1000;
+      if (since < ms || repeating) setTimeout(check, Math.max(60, Math.min(1000, ms - since)));
       else fn();
     }
     check();
@@ -435,8 +455,16 @@
       var sys = (navigator.language || 'en').toLowerCase();
       pick = sys.indexOf('zh') === 0 ? 'zh-Hans' : sys.split(/[-_]/)[0];
     }
-    B.lang = (pick === 'en' || B.has(all, pick)) ? pick : 'en';
+    // build 97: in het pakket staat elke taal in een eigen bestand (js/strings/<taal>.js, lijst in BINGR_LANGS);
+    // een taal die nog niet geladen is, wordt nu geladen en daarna gemeld ('strings'); tot dan Engels
+    var avail = window.BINGR_LANGS || Object.keys(all);
+    B.lang = (pick === 'en' || avail.indexOf(pick) >= 0) ? pick : 'en';
     try { document.documentElement.lang = B.lang; } catch (e) { /* stil */ }
+    if (B.store) B.store.set('lang', B.lang);
+    if (B.lang !== 'en' && !B.has(all, B.lang) && window.BINGR_LANGS) {
+      var want = B.lang;
+      B.loadScript('js/strings/' + want + '.js').then(function () { if (B.lang === want) B.emit('strings'); }, B.noop);
+    }
   };
   B.languages = [
     ['', 'Automatic'], ['nl', 'Nederlands'], ['en', 'English'], ['de', 'Deutsch'], ['fr', 'Français'],

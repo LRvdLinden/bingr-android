@@ -13,7 +13,11 @@ class HttpException(val code: Int, message: String) : Exception(message)
 
 /** Netwerk: één OkHttp-client, JSON via kotlinx.serialization. Alles op Dispatchers.IO. */
 object Http {
-    const val USER_AGENT = "Bingr v1.0.0"
+    /**
+     * build 97: uit BuildConfig in plaats van vast in de code. Bewust alleen de versie ("Bingr v1.0.0", zoals altijd):
+     * IPTV-panelen en de server zien zo precies dezelfde User-Agent; het buildnummer gaat apart mee (app_version).
+     */
+    val USER_AGENT: String = "Bingr v" + BuildConfig.VERSION_NAME
     val json = Json { ignoreUnknownKeys = true; isLenient = true; coerceInputValues = true; explicitNulls = false }
     val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)

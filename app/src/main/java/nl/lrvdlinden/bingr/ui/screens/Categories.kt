@@ -44,8 +44,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,9 +61,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.text.Collator
 
@@ -222,20 +228,37 @@ class CategoryIndex(val genres: Map<String, CategoryMembers>, val server: List<P
 /** Eén index per bibliotheek + cacheversie (Metadata/AgeRatings); de vorige blijft bruikbaar tot de nieuwe klaar is. */
 object CategoryIndexCache {
     private var key: String? = null
-    private var libID: Int = 0
+    /** build 97: de bibliotheek van [data] zelf (identiteit), niet zijn identityHashCode (die kan botsen) */
+    private var dataLib = java.lang.ref.WeakReference<Library>(null)
     private var data: CategoryIndex? = null
     private var warmedFor: Int = 0
+    /** build 97: vast volgnummer per bibliotheek-object, voor een stabiele sleutel */
+    private var genLib = java.lang.ref.WeakReference<Library>(null)
+    private var gen = 0L
+    /** build 97: één berekening per sleutel tegelijk; wie dezelfde index vraagt, wacht op dezelfde berekening */
+    private val lock = Mutex()
+    private var inflight: Pair<String, Deferred<CategoryIndex>>? = null
 
-    private fun keyOf(lib: Library) = "${System.identityHashCode(lib)}|${AgeRatings.version}|${Metadata.version}"
+    private fun genOf(lib: Library): Long {
+        if (genLib.get() !== lib) { genLib = java.lang.ref.WeakReference(lib); gen++ }
+        return gen
+    }
+
+    private fun keyOf(lib: Library) = "${genOf(lib)}|${AgeRatings.version}|${Metadata.version}"
 
     /** Laatst berekende index van deze bibliotheek (ook als de caches intussen nieuwer zijn). */
-    fun peek(lib: Library): CategoryIndex? = if (libID == System.identityHashCode(lib)) data else null
+    fun peek(lib: Library): CategoryIndex? = if (dataLib.get() === lib) data else null
 
     suspend fun get(lib: Library): CategoryIndex {
-        val k = keyOf(lib)
-        data?.let { if (key == k) return it }
-        val built = withContext(Dispatchers.Default) { CategoryIndex.build(lib) }
-        key = k; libID = System.identityHashCode(lib); data = built
+        val (k, job) = lock.withLock {
+            val k = keyOf(lib)
+            data?.let { if (key == k && dataLib.get() === lib) return it }
+            val running = inflight?.takeIf { it.first == k && !it.second.isCancelled }?.second
+            k to (running ?: AppScope.async(Dispatchers.Default) { CategoryIndex.build(lib) }.also { inflight = k to it })
+        }
+        // een mislukte berekening telt als geannuleerd (isCancelled) en wordt de volgende keer opnieuw gestart
+        val built = job.await()
+        lock.withLock { key = k; dataLib = java.lang.ref.WeakReference(lib); data = built }
         return built
     }
 
@@ -262,7 +285,8 @@ fun rememberCategoryIndex(): CategoryIndex? {
     LaunchedEffect(libKey) { CategoryIndexCache.warm(lib) }
     LaunchedEffect(libKey, versions) {
         if (idx != null) delay(1_500)
-        idx = CategoryIndexCache.get(lib)
+        // build 97: een fout bij het opbouwen laat het scherm niet crashen (de vorige index blijft staan)
+        screensSafe { CategoryIndexCache.get(lib) }?.let { idx = it }
     }
     return idx
 }
@@ -448,6 +472,28 @@ private fun sortRating(t: DetailTarget): Double {
     return md?.imdbRating?.toDoubleOrNull() ?: t.rating?.takeIf { it > 0 } ?: -1.0
 }
 
+/**
+ * build 97: sorteren met vooraf berekende sleutels (één keer per titel, niet bij elke vergelijking). Draait op
+ * Dispatchers.Default; leest alleen de caches (Metadata.cached), net als [CategoryIndex.build].
+ */
+private fun sortTitles(list: List<DetailTarget>, sort: GenreSort, locale: java.util.Locale): List<DetailTarget> = when (sort) {
+    // populair: aantal IMDb-stemmen, dan de score; zonder gegevens de volgorde van de bron
+    GenreSort.POPULAR -> list.map { Triple(it, imdbVotes(it) ?: -1L, sortRating(it)) }
+        .sortedWith(compareByDescending<Triple<DetailTarget, Long, Double>> { it.second }.thenByDescending { it.third })
+        .map { it.first }
+    GenreSort.NEWEST -> list.sortedWith(
+        compareByDescending<DetailTarget> { (it as? DetailTarget.MovieT)?.movie?.addedAt ?: Long.MIN_VALUE }
+            .thenByDescending { it.year ?: Int.MIN_VALUE }
+    )
+    GenreSort.AZ -> {
+        val collator = Collator.getInstance(locale).apply { strength = Collator.PRIMARY }
+        list.map { it to collator.getCollationKey(ContentLanguage.displayTitle(it.title)) }
+            .sortedWith { a, b -> a.second.compareTo(b.second) }
+            .map { it.first }
+    }
+    GenreSort.RATING -> list.map { it to sortRating(it) }.sortedByDescending { it.second }.map { it.first }
+}
+
 /** Een genre of servercategorie: kop met aantal, Alles/Films/Series, sorteren en een raster met posters. */
 @Composable
 fun CategoryPageScreen(ref: CategoryRef, initial: Filter, onClose: () -> Unit) {
@@ -466,21 +512,21 @@ fun CategoryPageScreen(ref: CategoryRef, initial: Filter, onClose: () -> Unit) {
     val kind = if (kindState in available) kindState else Filter.ALL
     var sortRaw by remember { mutableStateOf(Prefs.string("categories.sort") ?: GenreSort.POPULAR.raw) }
     val sort = GenreSort.entries.firstOrNull { it.raw == sortRaw } ?: GenreSort.POPULAR
-    val metaVersion = Metadata.version
-    val titles = remember(members, kind, sort, metaVersion) {
-        val list = members?.targets(kind).orEmpty()
-        val collator = Collator.getInstance(Localizer.locale).apply { strength = Collator.PRIMARY }
-        when (sort) {
-            // populair: aantal IMDb-stemmen, dan de score; zonder gegevens de volgorde van de bron
-            GenreSort.POPULAR -> list.sortedWith(compareByDescending<DetailTarget> { imdbVotes(it) ?: -1L }.thenByDescending { sortRating(it) })
-            GenreSort.NEWEST -> list.sortedWith(
-                compareByDescending<DetailTarget> { (it as? DetailTarget.MovieT)?.movie?.addedAt ?: Long.MIN_VALUE }
-                    .thenByDescending { it.year ?: Int.MIN_VALUE }
-            )
-            GenreSort.AZ -> list.sortedWith { a, b -> collator.compare(ContentLanguage.displayTitle(a.title), ContentLanguage.displayTitle(b.title)) }
-            GenreSort.RATING -> list.sortedByDescending { sortRating(it) }
+    // build 97: nieuwe metadata (stemmen, scores) hooguit eens per 2 s opnieuw sorteren, en het sorteren zelf buiten de
+    // main thread met vooraf berekende sorteersleutels. De vorige volgorde blijft staan tot de nieuwe klaar is; de
+    // items houden hun key, dus de scrollpositie blijft waar hij was.
+    var sortVersion by remember { mutableStateOf(Metadata.version) }
+    LaunchedEffect(Unit) {
+        snapshotFlow { Metadata.version }.collect { v ->
+            if (v != sortVersion) sortVersion = v
+            delay(2_000)
         }
     }
+    val locale = Localizer.locale
+    val sorted by produceState<List<DetailTarget>?>(null, members, kind, sort, sortVersion, locale) {
+        value = withContext(Dispatchers.Default) { sortTitles(members?.targets(kind).orEmpty(), sort, locale) }
+    }
+    val titles = sorted.orEmpty()
     val firstFocus = rememberInitialFocus(key = ref)
     val genre = ref.genre?.let { Genres.bySlug[it] }
     val colors = genre?.colors ?: Genres.serverColors(ref.server ?: "")
@@ -529,6 +575,12 @@ fun CategoryPageScreen(ref: CategoryRef, initial: Filter, onClose: () -> Unit) {
                 }
             }
             if (index == null) {
+                item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
+                    Box(Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Theme.red, modifier = Modifier.size(tvs(32)))
+                    }
+                }
+            } else if (sorted == null) {
                 item(key = "loading", span = { GridItemSpan(maxLineSpan) }) {
                     Box(Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = Theme.red, modifier = Modifier.size(tvs(32)))

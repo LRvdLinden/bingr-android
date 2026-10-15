@@ -92,13 +92,16 @@ object StateSync {
     /** Alles wat de server leest/schrijft, één tegelijk. */
     private val lock = Mutex()
     /** Laatst gelezen serverversies (voor het apple-blok en onbekende velden). */
-    private var serverSettings: JsonObject? = null
-    private var serverConnections: JsonObject? = null
-    private var serverReminders: JsonObject? = null
+    @Volatile private var serverSettings: JsonObject? = null
+    @Volatile private var serverConnections: JsonObject? = null
+    @Volatile private var serverReminders: JsonObject? = null
     /** Collecties zoals de server ze kent (build 54: profiel → id → object, kleine letters), voor velden die deze app niet kent. */
-    private var serverCollectionItems = mapOf<String, Map<String, JsonObject>>()
-    /** Sectienaam op de server per profiel (kleine letters id → naam), want iOS gebruikt hoofdletters. */
-    private val sectionNames = mutableMapOf<String, String>()
+    @Volatile private var serverCollectionItems = mapOf<String, Map<String, JsonObject>>()
+    /**
+     * Sectienaam op de server per profiel (kleine letters id → naam), want iOS gebruikt hoofdletters.
+     * build 97: thread-veilig, het samenvoegen van profielen loopt op Dispatchers.Default.
+     */
+    private val sectionNames = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     // MARK: lokale stand
 
@@ -149,6 +152,86 @@ object StateSync {
         runCatching { prefs.edit().apply { if (v == null) remove("upd.$section") else putLong("upd.$section", v) }.apply() }
     }
 
+    // MARK: build 97: vergelijken met servertijden (niet de klok van dit apparaat tegen die van de server)
+
+    private fun longPref(k: String): Long? = runCatching { prefs.getLong(k, -1L).takeIf { it >= 0 } }.getOrNull()
+    private fun setLongPref(k: String, v: Long?) {
+        runCatching { prefs.edit().apply { if (v == null) remove(k) else putLong(k, v) }.apply() }
+    }
+
+    /** `updatedAt` van de serverregel (servertijd, epoch-ms) van de versie die hier het laatst verwerkt of geüpload is. */
+    private fun srvAt(section: String): Long? = longPref("srv.$section")
+    private fun setSrvAt(section: String, v: Long?) = setLongPref("srv.$section", v)
+    /** [localAt] van de laatste lokale versie die de server ook heeft (geüpload of van de server overgenomen). */
+    private fun ackAt(section: String): Long? = longPref("ack.$section")
+    private fun setAckAt(section: String, v: Long?) = setLongPref("ack.$section", v)
+
+    /** Een lokale wijziging die nog niet op de server staat? */
+    private fun isPending(section: String): Boolean {
+        val l = localAt(section) ?: return false
+        val a = ackAt(section) ?: return true
+        return l > a
+    }
+
+    /** Lokale wijziging: altijd later dan de vorige versie (ook als die van een apparaat met een voorlopende klok kwam). */
+    private fun bumpLocal(section: String) {
+        setLocalAt(section, maxOf(System.currentTimeMillis(), (localAt(section) ?: 0L) + 1))
+    }
+
+    /** De serverversie is overgenomen: [at] als lokale versie en de servertijd van de regel onthouden. */
+    private fun adopted(section: String, at: Long, row: Long?) {
+        setLocalAt(section, at); setAckAt(section, at)
+        if (row != null) setSrvAt(section, row)
+    }
+
+    /** Servertijd van een onderdeel (`updatedAt` van de regel); null = oude backend zonder die tijd. */
+    private fun rowAt(sec: Account.StateSection?): Long? = sec?.updatedAt?.let { time(JsonPrimitive(it)) }
+
+    /** Wat er met een onderdeel (connections, settings, reminders) moet gebeuren. */
+    private enum class Plan { ADOPT, UPLOAD, MERGE, NONE }
+
+    /**
+     * build 97: de server is gewijzigd als de servertijd van de regel nieuwer is dan die van de laatst verwerkte
+     * versie; lokaal is gewijzigd als er een wijziging is die de server nog niet heeft. Allebei = per sleutel
+     * samenvoegen ([Plan.MERGE]). Nog geen servertijd bewaard (eerste keer met build 97, of een oude backend): zoals
+     * vroeger de tijd in de gegevens tegen de lokale tijd.
+     */
+    private fun plan(section: String, row: Long?, at: Long): Plan {
+        val local = localAt(section) ?: return Plan.ADOPT
+        val known = srvAt(section)
+        if (known == null || row == null) return when {
+            at > local -> Plan.ADOPT
+            local > at -> Plan.UPLOAD
+            else -> Plan.NONE
+        }
+        val pending = isPending(section)
+        return when {
+            row <= known -> if (pending) Plan.UPLOAD else Plan.NONE
+            !pending -> Plan.ADOPT
+            else -> Plan.MERGE
+        }
+    }
+
+    /** Server en lokaal zijn gelijk: alleen de tijden bijwerken. */
+    private fun unchanged(section: String, row: Long?) {
+        if (row != null) setSrvAt(section, row)
+        if (!isPending(section)) localAt(section)?.let { setAckAt(section, it) }
+    }
+
+    /**
+     * Per sleutel samenvoegen: [fresh] van de server, plus wat hier gewijzigd is ten opzichte van [old] (de vorige
+     * serverversie). Sleutels uit [removable] die hier weg zijn en op de server niet gewijzigd, gaan ook weg.
+     * Zonder [old] wint lokaal (zoals vroeger).
+     */
+    private fun threeWay(old: Map<String, JsonElement>?, local: Map<String, JsonElement>, fresh: Map<String, JsonElement>,
+                         removable: Set<String>): Map<String, JsonElement> {
+        if (old == null) return fresh + local
+        val out = LinkedHashMap(fresh)
+        for ((k, v) in local) if (old[k] != v) out[k] = v
+        for ((k, v) in old) if (k in removable && k !in local && fresh[k] == v) out.remove(k)
+        return out
+    }
+
     @Serializable
     private data class Meta(
         /** veld → item → wanneer het lokaal (het laatst) toegevoegd is */
@@ -161,10 +244,31 @@ object StateSync {
 
     private val metaDir: File get() = File(AppState.appContext.filesDir, "statesync").apply { mkdirs() }
     private fun metaFile(id: String) = File(metaDir, "${id.lowercase()}.json")
-    private fun readMeta(id: String): Meta =
-        runCatching { Http.json.decodeFromString(Meta.serializer(), metaFile(id).readText()) }.getOrDefault(Meta())
+    /**
+     * build 97: metabestanden in het geheugen (kleine letters id → meta) en schrijven op de schrijf-thread van [Store];
+     * [metaLock] beschermt lezen-wijzigen-schrijven (hooks op de main thread, samenvoegen op Dispatchers.Default).
+     */
+    private val metaLock = Any()
+    private val metaCache = HashMap<String, Meta>()
+
+    private fun readMeta(id: String): Meta = synchronized(metaLock) {
+        metaCache.getOrPut(id.lowercase()) {
+            runCatching { Http.json.decodeFromString(Meta.serializer(), metaFile(id).readText()) }.getOrDefault(Meta())
+        }
+    }
     private fun writeMeta(id: String, m: Meta) {
-        runCatching { metaFile(id).writeText(Http.json.encodeToString(Meta.serializer(), m)) }
+        val f = metaFile(id)
+        synchronized(metaLock) {
+            metaCache[id.lowercase()] = m
+            Store.enqueueIO { f.writeText(Http.json.encodeToString(Meta.serializer(), m)) }
+        }
+    }
+    private fun deleteMeta(id: String) {
+        val f = metaFile(id)
+        synchronized(metaLock) {
+            metaCache[id.lowercase()] = Meta()
+            Store.enqueueIO { f.delete() }
+        }
     }
 
     // MARK: hooks
@@ -188,7 +292,7 @@ object StateSync {
     /** Een instelling uit [settingKeys] (of het kinderslot) is gewijzigd. */
     fun settingsChanged() {
         if (applying > 0 || settingsQuiet > 0) return
-        setLocalAt(SETTINGS, System.currentTimeMillis())
+        bumpLocal(SETTINGS)
         markDirty(SETTINGS)
     }
 
@@ -197,7 +301,7 @@ object StateSync {
         if (applying > 0) return
         when {
             key == "trakt.tokens" || key == "opensubtitles.session" -> {
-                setLocalAt(CONNECTIONS, System.currentTimeMillis())
+                bumpLocal(CONNECTIONS)
                 markDirty(CONNECTIONS)
             }
             key == "parental.pin" -> Store.mainProfileID?.let { pinChanged(it) }
@@ -207,16 +311,14 @@ object StateSync {
 
     private fun pinChanged(id: String) {
         if (Store.profiles.none { it.id == id }) return
-        val m = readMeta(id)
-        writeMeta(id, m.copy(pinAt = System.currentTimeMillis()))
+        synchronized(metaLock) { writeMeta(id, readMeta(id).copy(pinAt = System.currentTimeMillis())) }
         markDirty("profile:$id")
     }
 
     /** Kijkvoorkeuren van dit profiel gewijzigd. */
     fun prefsChanged(id: String) {
         if (applying > 0) return
-        val m = readMeta(id)
-        writeMeta(id, m.copy(prefsAt = System.currentTimeMillis()))
+        synchronized(metaLock) { writeMeta(id, readMeta(id).copy(prefsAt = System.currentTimeMillis())) }
         markDirty("profile:$id")
     }
 
@@ -247,7 +349,7 @@ object StateSync {
 
     fun remindersChanged() {
         if (applying > 0) return
-        setLocalAt(REMINDERS, System.currentTimeMillis())
+        bumpLocal(REMINDERS)
         markDirty(REMINDERS)
     }
 
@@ -255,7 +357,7 @@ object StateSync {
     fun profileDeleted(id: String) {
         val key = id.lowercase()
         dirty.remove("profile:$id")
-        runCatching { metaFile(id).delete() }
+        deleteMeta(id)
         val names = (listOfNotNull(sectionNames.remove(key)) + "$PROFILE$id").distinct()
         if (!active) return
         AppScope.launch { quietly { lock.withLock { names.forEach { Account.deleteState(it) } } } }
@@ -263,7 +365,7 @@ object StateSync {
 
     /** Trakt-tokens zijn net ververst: meteen (zonder wachten) naar het account. */
     fun traktRefreshed() {
-        setLocalAt(CONNECTIONS, System.currentTimeMillis())
+        bumpLocal(CONNECTIONS)
         dirty.remove(CONNECTIONS)
         if (!active) return
         AppScope.launch { quietly { lock.withLock { uploadSimple(CONNECTIONS) } } }
@@ -322,7 +424,12 @@ object StateSync {
             IntroMarkers.reload()
         }
         runCatching { prefs.edit().clear().apply() }
-        runCatching { metaDir.listFiles()?.forEach { it.delete() } }
+        // build 97: eerst wachtende schrijfopdrachten, dan de metabestanden en het geheugen leeg
+        Store.flushWrites()
+        synchronized(metaLock) {
+            metaCache.clear()
+            runCatching { metaDir.listFiles()?.forEach { it.delete() } }
+        }
     }
 
     // MARK: synchroniseren
@@ -402,20 +509,39 @@ object StateSync {
         }
     }
 
+    /**
+     * Lokale wijziging van connections, settings of reminders naar de server. build 97: eerst de serverversie opnieuw
+     * lezen en samenvoegen (net als bij profielen), zodat een oude kopie nooit wijzigingen van elders overschrijft.
+     */
     private suspend fun uploadSimple(section: String): Boolean {
-        val data = when (section) {
+        if (section != CONNECTIONS && section != SETTINGS && section != REMINDERS) return true
+        val got = Account.getState(listOf(section)) ?: return false
+        return when (section) {
+            CONNECTIONS -> mergeConnections(got[section])
+            SETTINGS -> mergeSettings(got[section])
+            else -> mergeReminders(got[section])
+        }
+    }
+
+    /** Onderdeel uploaden zoals het nu lokaal is, of [merged] (al samengevoegd). true = opgeslagen. */
+    private suspend fun putSimple(section: String, merged: JsonObject? = null): Boolean {
+        val stamp = localAt(section)
+        val data = merged ?: when (section) {
             CONNECTIONS -> connectionsJson()
             SETTINGS -> settingsJson()
             REMINDERS -> remindersJson()
             else -> return true
         }
-        val ok = Account.putState(section, data) != null
-        if (ok) when (section) {
+        val upd = Account.putState(section, data) ?: return false
+        when (section) {
             CONNECTIONS -> serverConnections = data
             SETTINGS -> { serverSettings = data; rememberSharedViewing(data) }
             REMINDERS -> serverReminders = data
         }
-        return ok
+        // build 97: deze lokale versie staat nu op de server, met deze servertijd
+        if (stamp != null) setAckAt(section, stamp)
+        time(JsonPrimitive(upd))?.let { setSrvAt(section, it) }
+        return true
     }
 
     /** Profiel uploaden: eerst de serverversie lezen en samenvoegen (zodat wijzigingen van elders niet verloren gaan). */
@@ -453,11 +579,12 @@ object StateSync {
 
     // MARK: connections
 
-    private fun connectionsJson(): JsonObject {
+    /** build 97: [base] = serverversie om op te bouwen, [old] = de vorige serverversie (per sleutel samenvoegen). */
+    private fun connectionsJson(base: JsonObject? = serverConnections, old: JsonObject? = base): JsonObject {
         val t = Trakt.currentTokens
         val os = OpenSubtitles.currentSession
-        val base = serverConnections ?: JsonObject(emptyMap())
-        return JsonObject(base + mapOf(
+        val b = base ?: JsonObject(emptyMap())
+        val local = mapOf(
             "trakt" to (t?.let {
                 JsonObject(mapOf(
                     "accessToken" to JsonPrimitive(it.accessToken),
@@ -473,6 +600,8 @@ object StateSync {
                     "baseURL" to JsonPrimitive(url),
                 ))
             } ?: JsonNull),
+        )
+        return JsonObject(threeWay(old, local, b, emptySet()) + mapOf(
             "updatedAt" to JsonPrimitive(iso(localAt(CONNECTIONS) ?: System.currentTimeMillis())),
         ))
     }
@@ -499,32 +628,46 @@ object StateSync {
         return keptLocal
     }
 
-    private suspend fun mergeConnections(sec: Account.StateSection?) {
+    /** true = gelukt (of niets te doen); false = uploaden mislukt. */
+    private suspend fun mergeConnections(sec: Account.StateSection?): Boolean {
         val data = sec?.data as? JsonObject
         val local = localAt(CONNECTIONS)
         val hasLocal = Trakt.currentTokens != null || OpenSubtitles.currentSession != null
         if (data == null) {
             if (hasLocal || local != null) {
-                if (local == null) setLocalAt(CONNECTIONS, System.currentTimeMillis())
-                uploadSimple(CONNECTIONS)
+                if (local == null) bumpLocal(CONNECTIONS)
+                return putSimple(CONNECTIONS)
             }
-            return
+            return true
         }
-        serverConnections = data
+        val old = serverConnections
         val at = sectionAt(data, sec.updatedAt)
-        when {
-            local == null -> {
-                // eerste keer op dit apparaat (of van vóór build 44): server overnemen, maar lokale koppelingen
-                // die de server nog niet heeft niet weggooien
-                val kept = withContext(Dispatchers.Main) { applyConnections(data, keepLocalWhereServerEmpty = true) }
-                if (kept) { setLocalAt(CONNECTIONS, System.currentTimeMillis()); uploadSimple(CONNECTIONS) }
-                else setLocalAt(CONNECTIONS, at)
-            }
-            at > local -> {
+        val row = rowAt(sec)
+        if (local == null) {
+            // eerste keer op dit apparaat (of van vóór build 44): server overnemen, maar lokale koppelingen
+            // die de server nog niet heeft niet weggooien
+            serverConnections = data
+            val kept = withContext(Dispatchers.Main) { applyConnections(data, keepLocalWhereServerEmpty = true) }
+            if (kept) { bumpLocal(CONNECTIONS); return putSimple(CONNECTIONS) }
+            adopted(CONNECTIONS, at, row)
+            return true
+        }
+        return when (plan(CONNECTIONS, row, at)) {
+            Plan.ADOPT -> {
+                serverConnections = data
                 withContext(Dispatchers.Main) { applyConnections(data, keepLocalWhereServerEmpty = false) }
-                setLocalAt(CONNECTIONS, at)
+                adopted(CONNECTIONS, at, row)
+                true
             }
-            local > at -> uploadSimple(CONNECTIONS)
+            Plan.UPLOAD -> { serverConnections = data; putSimple(CONNECTIONS) }
+            Plan.MERGE -> {
+                // build 97: hier én elders gewijzigd: Trakt en OpenSubtitles elk apart (wat hier gewijzigd is wint)
+                val merged = connectionsJson(base = data, old = old)
+                serverConnections = data
+                withContext(Dispatchers.Main) { applyConnections(merged, keepLocalWhereServerEmpty = false) }
+                putSimple(CONNECTIONS, merged)
+            }
+            Plan.NONE -> { serverConnections = data; unchanged(CONNECTIONS, row); true }
         }
     }
 
@@ -539,14 +682,19 @@ object StateSync {
             val sec = got[CONNECTIONS] ?: return false
             val data = sec.data as? JsonObject ?: return false
             val at = sectionAt(data, sec.updatedAt)
+            val row = rowAt(sec)
             val local = localAt(CONNECTIONS)
-            if (local != null && at <= local) return false
+            val known = srvAt(CONNECTIONS)
+            // build 97: servertijd van de regel tegen die van de laatst verwerkte versie (niet de klok van dit apparaat)
+            if (known != null && row != null) { if (row <= known) return false }
+            else if (local != null && at <= local) return false
             val server = traktFrom(data["trakt"] as? JsonObject)
             if (server == null && local == null) return false
-            if (server == Trakt.currentTokens) { setLocalAt(CONNECTIONS, at); return false }
+            // zelfde tokens: niets te doen (de gewone sync neemt eventuele andere wijzigingen over)
+            if (server == Trakt.currentTokens) return false
             serverConnections = data
             withContext(Dispatchers.Main) { applyConnections(data, keepLocalWhereServerEmpty = false) }
-            setLocalAt(CONNECTIONS, at)
+            adopted(CONNECTIONS, at, row)
             true
         } catch (e: CancellationException) { throw e } catch (_: Exception) { false }
     }
@@ -608,17 +756,27 @@ object StateSync {
         ).filterKeys { main || it !in sharedViewingKeys }
     }
 
-    private fun settingsJson(): JsonObject {
-        val base = serverSettings ?: JsonObject(emptyMap())
-        val shared = (base["shared"] as? JsonObject ?: JsonObject(emptyMap())) + sharedSettings()
-        val oldAndroid = base["android"] as? JsonObject ?: JsonObject(emptyMap())
+    /**
+     * build 97: [base] = serverversie om op te bouwen, [old] = de vorige serverversie. Per sleutel (in `shared` en in
+     * `android.prefs`) wint wat hier gewijzigd is ten opzichte van [old]; de rest komt uit [base].
+     */
+    private fun settingsJson(base0: JsonObject? = serverSettings, old: JsonObject? = base0): JsonObject {
+        val base = base0 ?: JsonObject(emptyMap())
+        val emptyObj = JsonObject(emptyMap())
+        val baseShared = base["shared"] as? JsonObject ?: emptyObj
+        val oldShared = old?.let { it["shared"] as? JsonObject ?: emptyObj }
+        val shared = threeWay(oldShared, sharedSettings(), baseShared, emptySet())
+        val baseAndroid = base["android"] as? JsonObject ?: emptyObj
+        val basePrefs = baseAndroid["prefs"] as? JsonObject ?: emptyObj
+        val oldPrefs = old?.let { (it["android"] as? JsonObject)?.get("prefs") as? JsonObject ?: emptyObj }
         var raw = settingKeys.filter { it !in sharedOnlyKeys }.mapNotNull { k -> rawJson(k)?.let { k to it } }.toMap()
         // build 91: een ander profiel dan het hoofdprofiel laat ook de ruwe kijkvoorkeuren zoals de server ze had
         if (!Store.canManage) {
-            val oldPrefs = oldAndroid["prefs"] as? JsonObject ?: JsonObject(emptyMap())
-            raw = raw.filterKeys { it !in rawViewingKeys } + oldPrefs.filterKeys { it in rawViewingKeys }
+            val ref = oldPrefs ?: basePrefs
+            raw = raw.filterKeys { it !in rawViewingKeys } + ref.filterKeys { it in rawViewingKeys }
         }
-        val android = oldAndroid + mapOf("prefs" to JsonObject(raw))
+        val prefs = threeWay(oldPrefs, raw, basePrefs, settingKeys)
+        val android = baseAndroid + mapOf("prefs" to JsonObject(prefs))
         return JsonObject(base + mapOf(
             "shared" to JsonObject(shared),
             "android" to JsonObject(android),
@@ -728,28 +886,41 @@ object StateSync {
         }
     }
 
-    private suspend fun mergeSettings(sec: Account.StateSection?) {
+    /** true = gelukt (of niets te doen); false = uploaden mislukt. */
+    private suspend fun mergeSettings(sec: Account.StateSection?): Boolean {
         val data = sec?.data as? JsonObject
         val local = localAt(SETTINGS)
         if (data == null) {
             if (hasLocalSettings() || local != null) {
-                if (local == null) setLocalAt(SETTINGS, System.currentTimeMillis())
-                uploadSimple(SETTINGS)
+                if (local == null) bumpLocal(SETTINGS)
+                return putSimple(SETTINGS)
             }
-            return
+            return true
         }
-        serverSettings = data
+        val old = serverSettings
         rememberSharedViewing(data)
         val at = sectionAt(data, sec.updatedAt)
-        when {
-            local == null || at > local -> {
+        val row = rowAt(sec)
+        return when (plan(SETTINGS, row, at)) {
+            Plan.ADOPT -> {
+                serverSettings = data
                 markersDiffer = false
                 withContext(Dispatchers.Main) { applySettings(data) }
-                setLocalAt(SETTINGS, at)
+                adopted(SETTINGS, at, row)
                 // intro-markeringen die alleen hier stonden: meteen meesturen
-                if (markersDiffer) { markersDiffer = false; setLocalAt(SETTINGS, System.currentTimeMillis()); uploadSimple(SETTINGS) }
+                if (markersDiffer) { markersDiffer = false; bumpLocal(SETTINGS); putSimple(SETTINGS) } else true
             }
-            local > at -> uploadSimple(SETTINGS)
+            Plan.UPLOAD -> { serverSettings = data; putSimple(SETTINGS) }
+            Plan.MERGE -> {
+                // build 97: hier én elders gewijzigd: per instelling samenvoegen in plaats van de hele sectie te overschrijven
+                val merged = settingsJson(data, old)
+                serverSettings = data
+                markersDiffer = false
+                withContext(Dispatchers.Main) { applySettings(merged) }
+                markersDiffer = false
+                putSimple(SETTINGS, merged)
+            }
+            Plan.NONE -> { serverSettings = data; unchanged(SETTINGS, row); true }
         }
     }
 
@@ -786,28 +957,50 @@ object StateSync {
         }.distinctBy { it.id }
     }
 
-    private suspend fun mergeReminders(sec: Account.StateSection?) {
+    /** true = gelukt (of niets te doen); false = uploaden mislukt. */
+    private suspend fun mergeReminders(sec: Account.StateSection?): Boolean {
         val data = sec?.data as? JsonObject
         val local = localAt(REMINDERS)
         if (data == null) {
             if (Store.reminders.isNotEmpty() || local != null) {
-                if (local == null) setLocalAt(REMINDERS, System.currentTimeMillis())
-                uploadSimple(REMINDERS)
+                if (local == null) bumpLocal(REMINDERS)
+                return putSimple(REMINDERS)
             }
-            return
+            return true
         }
-        serverReminders = data
+        val old = serverReminders
         val at = sectionAt(data, sec.updatedAt)
-        when {
-            local == null && Store.reminders.isNotEmpty() && parseReminders(data).isEmpty() -> {
-                setLocalAt(REMINDERS, System.currentTimeMillis()); uploadSimple(REMINDERS)
-            }
-            local == null || at > local -> {
+        val row = rowAt(sec)
+        if (local == null && Store.reminders.isNotEmpty() && parseReminders(data).isEmpty()) {
+            serverReminders = data
+            bumpLocal(REMINDERS)
+            return putSimple(REMINDERS)
+        }
+        return when (plan(REMINDERS, row, at)) {
+            Plan.ADOPT -> {
+                serverReminders = data
                 val list = parseReminders(data)
                 withContext(Dispatchers.Main) { applyingChanges { Reminders.applySynced(list) } }
-                setLocalAt(REMINDERS, at)
+                adopted(REMINDERS, at, row)
+                true
             }
-            local > at -> uploadSimple(REMINDERS)
+            Plan.UPLOAD -> { serverReminders = data; putSimple(REMINDERS) }
+            Plan.MERGE -> {
+                // build 97: per herinnering samenvoegen: hier toegevoegd/gewijzigd of verwijderd wint, de rest van de server
+                val before = old?.let { o -> parseReminders(o).associateBy { it.id } }
+                val fresh = parseReminders(data).associateBy { it.id }
+                val out = LinkedHashMap(fresh)
+                val mine = Store.reminders.associateBy { it.id }
+                if (before == null) out.putAll(mine) else {
+                    for ((id, r) in before) if (id !in mine && fresh[id] == r) out.remove(id)
+                    for ((id, r) in mine) if (before[id] != r) out[id] = r
+                }
+                val list = out.values.toList()
+                serverReminders = data
+                withContext(Dispatchers.Main) { applyingChanges { Reminders.applySynced(list) } }
+                putSimple(REMINDERS)
+            }
+            Plan.NONE -> { serverReminders = data; unchanged(REMINDERS, row); true }
         }
     }
 
@@ -888,7 +1081,11 @@ object StateSync {
      * - Profielen die hier verwijderd zijn, gaan ook van de server. Profielen die alleen op de server staan, blijven daar.
      * Lokaal toepassen en uploaden als het resultaat afwijkt van de server. true = gelukt.
      */
-    private suspend fun mergeCollections(sec: Account.StateSection?, present: Boolean): Boolean {
+    private suspend fun mergeCollections(sec: Account.StateSection?, present: Boolean): Boolean =
+        // build 97: lezen, samenvoegen en vergelijken buiten de main thread (Collections zelf alleen op main)
+        withContext(Dispatchers.Default) { mergeCollectionsOffMain(sec, present) }
+
+    private suspend fun mergeCollectionsOffMain(sec: Account.StateSection?, present: Boolean): Boolean {
         val data = sec?.data as? JsonObject
         val cutoff = System.currentTimeMillis() - REMOVED_DAYS * 24 * 3_600_000L
         fun alive(c: BingrCollection) = !c.deleted || (c.deletedAt ?: c.updatedAt) >= cutoff
@@ -1009,8 +1206,13 @@ object StateSync {
         val home: Item<HomeLayout>? = null,
     )
 
-    /** Huidige lokale stand van een profiel vergelijken met het metabestand en verschillen vastleggen (met tijd). */
-    private fun recordLocal(id: String): Meta {
+    /**
+     * Huidige lokale stand van een profiel vergelijken met het metabestand en verschillen vastleggen (met tijd).
+     * build 97: onder [metaLock], want dit gebeurt op de main thread (hooks) en op Dispatchers.Default (samenvoegen).
+     */
+    private fun recordLocal(id: String): Meta = synchronized(metaLock) { recordLocalLocked(id) }
+
+    private fun recordLocalLocked(id: String): Meta {
         val now = System.currentTimeMillis()
         val d = Store.profileData(id)
         val m = readMeta(id)
@@ -1311,7 +1513,10 @@ object StateSync {
         val byId = all.entries.filter { it.key.startsWith(PROFILE) }.groupBy { it.key.removePrefix(PROFILE).lowercase() }
         // metabestanden van profielen die hier niet meer bestaan
         val ids = Store.profiles.map { it.id.lowercase() }.toSet()
-        runCatching { metaDir.listFiles()?.forEach { f -> if (f.nameWithoutExtension !in ids) f.delete() } }
+        // build 97: via de schrijf-thread (na wachtende metabestanden) en ook uit het geheugen
+        synchronized(metaLock) { metaCache.keys.retainAll(ids) }
+        val dir = metaDir
+        Store.enqueueIO { dir.listFiles()?.forEach { f -> if (f.nameWithoutExtension !in ids) f.delete() } }
         for (p in Store.profiles.toList()) {
             val list = byId[p.id.lowercase()]?.map { it.key to it.value } ?: emptyList()
             try { mergeProfile(p.id, list) } catch (e: CancellationException) { throw e } catch (_: Exception) { }
@@ -1322,12 +1527,20 @@ object StateSync {
      * Eén profiel samenvoegen (zie de regels bovenaan) en lokaal toepassen. Upload als het resultaat afwijkt van de
      * server. true = gelukt.
      */
-    private suspend fun mergeProfile(id: String, sections: List<Pair<String, Account.StateSection>>): Boolean {
+    private suspend fun mergeProfile(id: String, sections: List<Pair<String, Account.StateSection>>): Boolean =
+        // build 97: lezen, vergelijken en JSON maken buiten de main thread; toepassen blijft op main (zie hieronder)
+        withContext(Dispatchers.Default) { mergeProfileOffMain(id, sections) }
+
+    private suspend fun mergeProfileOffMain(id: String, sections: List<Pair<String, Account.StateSection>>): Boolean {
         val key = id.lowercase()
         // voorkeur: de naam die de server al heeft (exact, anders een andere schrijfwijze)
         val name = sections.firstOrNull { it.first == "$PROFILE$id" }?.first ?: sections.firstOrNull()?.first
             ?: sectionNames[key] ?: "$PROFILE$id"
         sectionNames[key] = name
+        // build 97: stand van het actieve profiel bij het begin; is die bij het toepassen anders (intussen hier gewijzigd),
+        // dan niets overschrijven: die wijziging start zelf een nieuwe upload (en samenvoeging)
+        val activeAtStart = id == Store.activeProfileID
+        val snapshot = if (activeAtStart) Store.profileData(id) else null
         val meta = recordLocal(id)
         val local = localState(id, meta)
         var server: PState? = null
@@ -1369,7 +1582,8 @@ object StateSync {
             recent = present("recentChannels").entries.sortedByDescending { it.value.at }.map { it.key },
             history = merged.history.values.mapNotNull { it.value }.sortedByDescending { it.date },
         )
-        withContext(Dispatchers.Main) {
+        val stillSame = withContext(Dispatchers.Main) {
+            if (snapshot != null && (Store.activeProfileID != id || Store.profileData(id) != snapshot)) return@withContext false
             if (Store.profiles.any { it.id == id }) applyingChanges {
                 val cur = Store.profileData(id)
                 // profiel-id in de items houden zoals lokaal (oude items zonder profiel horen bij het hoofdaccount)
@@ -1389,7 +1603,9 @@ object StateSync {
                 merged.home?.value?.let { h -> Store.applySyncedHomeLayout(id, h) }
                 Unit
             }
+            true
         }
+        if (!stillSame) return false
         // metabestand bijwerken naar het resultaat
         writeMeta(id, Meta(
             present = (setFields.associateWith { f -> present(f).mapValues { it.value.at } } +
