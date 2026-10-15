@@ -324,8 +324,8 @@
 
   // MARK: abonnement (build 88)
 
-  /** Slotje met "Lifetime": overal hetzelfde naast iets dat bij Lifetime hoort (alleen met Gratis). */
-  S.lifetimeBadge = function () { return h('span.life-badge', [U.icon('lock'), h('span', L('Lifetime'))]); };
+  /** "Lifetime" met het Lifetime-icoon: overal hetzelfde naast iets dat bij Lifetime hoort (alleen met Gratis). */
+  S.lifetimeBadge = function () { return h('span.life-badge', [U.icon('lifetime'), h('span', L('Lifetime'))]); };
 
   /** feature open → fn(), anders het upgradevenster. */
   S.gate = function (feature, fn) { if (A.allowed(feature)) fn(); else S.upgrade(feature); };

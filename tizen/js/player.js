@@ -1286,7 +1286,7 @@
       errorBox.appendChild(list);
       var row = h('div.modal-buttons');
       row.appendChild(U.button(L('Try again'), function () { errorBox.style.display = 'none'; start(resumePos); }, { primary: true }));
-      if (free) row.appendChild(U.button(L('Upgrade to Lifetime'), function () { B.screens.upgrade('streams'); }, { icon: 'lock' }));
+      if (free) row.appendChild(U.button(L('Upgrade to Lifetime'), function () { B.screens.upgrade('streams'); }, { icon: 'lifetime' }));
       row.appendChild(U.button(L('Close'), close));
       errorBox.appendChild(row);
       errorBox.style.display = 'flex';

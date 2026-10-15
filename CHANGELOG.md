@@ -4,6 +4,15 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 104
+_15 oktober 2026_
+
+### Alle apps en de website
+
+**Verbeterd**
+
+- Nieuw Lifetime-icoon: een rode badge met vinkje bij je abonnement, de Lifetime-labels en de knop om te upgraden
+
 ## Versie 1.0.0 · Build 103
 _15 oktober 2026_
 

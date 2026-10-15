@@ -45,6 +45,8 @@ object Theme {
     val elevated = Color(0xFF232323)
     val secondary = Color(0xFFB3B3B3)
     val imdb = Color(0xFFF5C518)
+    /** Bingr-rood, vast (ook bij een andere accentkleur): o.a. het Lifetime-icoon (build 104) */
+    val brandRed = Color(0xFFE50914)
     val green = Color(0xFF46D369)
 
     /** Op TV alles groter (zoals tvScaled op iOS) */

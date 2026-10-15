@@ -172,7 +172,7 @@
       // build 88: Gratis → met Lifetime meer apparaten
       free ? h('p', L('Or upgrade to Lifetime to use Bingr on up to %d devices.', A.LIFETIME.devices)) : null,
       list,
-      h('div.modal-buttons', [free ? U.button(L('Upgrade to Lifetime'), function () { S.upgrade('devices'); }, { icon: 'lock' }) : null, U.button(L('Cancel'), onCancel)])
+      h('div.modal-buttons', [free ? U.button(L('Upgrade to Lifetime'), function () { S.upgrade('devices'); }, { icon: 'lifetime' }) : null, U.button(L('Cancel'), onCancel)])
     ])]);
     return { el: el, onBack: function () { onCancel(); return true; } };
   };
@@ -1448,7 +1448,7 @@
       item(U.icon('person'), L('Account & devices'), function () { U.push(S.devices()); });
       // build 88: abonnement (Gratis / Lifetime)
       var ent = A.entitlements();
-      if (ent) item(U.icon('star'), L('Subscription') + ': ' + (ent.free ? L('Free') : L('Lifetime')), function () { S.upgrade(null); });
+      if (ent) item(U.icon('lifetime'), L('Subscription') + ': ' + (ent.free ? L('Free') : L('Lifetime')), function () { S.upgrade(null); });
     }
     // build 75: support.bingr.online als QR-code
     item(U.icon('help'), L('Support'), function () { S.support(); });
@@ -2227,7 +2227,7 @@
         U.clear(list.track); list.track.appendChild(h('div.state.dim', e.message || L('Something went wrong. Please try again.')));
         // build 88: hoort bij Lifetime (403 feature_locked) → knop naar het upgradevenster
         if (e && e.locked) {
-          var up = U.button(L('Upgrade to Lifetime'), function () { S.upgrade(e.feature); }, { icon: 'lock', primary: true });
+          var up = U.button(L('Upgrade to Lifetime'), function () { S.upgrade(e.feature); }, { icon: 'lifetime', primary: true });
           list.track.appendChild(h('div.state', [up]));
           if (U.top() === s) U.focus(up, true);
         }

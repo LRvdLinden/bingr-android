@@ -24,7 +24,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Text
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -341,7 +340,7 @@ fun SettingsScreen() {
                     S2NavRow(L("Account & devices"), Icons.Default.AccountCircle) { MyBingrNav.page = MyBingrPage.ACCOUNT }
                     // build 88: abonnement (Gratis / Lifetime); tik = vergelijking en upgraden
                     Entitlements.current?.let { e ->
-                        S2NavRow(L("Subscription"), Icons.Default.WorkspacePremium,
+                        S2NavRow(L("Subscription"), leading = { LifetimeMark(tvs(20)) },
                             value = if (e.isFree) L("Free") else L("Lifetime")) { Upgrade.show(null) }
                     }
                 }
