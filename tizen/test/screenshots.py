@@ -177,6 +177,14 @@ def run(page_setup, mode, steps):
                 ok = r is True or r == 1
                 RESULTS.append((st[2], ok, '' if ok else str(r)))
                 print('EXPECT', st[2], 'OK' if ok else 'FOUT => ' + str(r))
+            elif st[0] == 'hold':
+                # build 102: OK ingedrukt houden (~0,9 s, met herhaalde keydowns zoals een afstandsbediening)
+                page.keyboard.down('Enter')
+                for _ in range(6):
+                    page.wait_for_timeout(150)
+                    page.keyboard.down('Enter')
+                page.keyboard.up('Enter')
+                page.wait_for_timeout(st[1] if len(st) > 1 else 300)
             elif st[0] == 'eval':
                 try:
                     r = page.evaluate(st[1])
@@ -199,8 +207,11 @@ window.__avTracks = window.__avTracks || [{index: 1, type: 'AUDIO', extra_info: 
   var st = 'NONE', cur = {AUDIO: 1, TEXT: null}, t = 0, timer = null, ls = null;
   function log(x) { window.__av.push(x); }
   webapis.avplay = {
-    open: function (u) { log('open'); st = 'IDLE'; t = 0; },
-    setDisplayRect: function () {}, setDisplayMethod: function () {}, setListener: function (l) { ls = l; },
+    open: function (u) { log('open'); window.__avUrl = u; st = 'IDLE'; t = 0; },
+    // build 102: beeldverhouding en snelheid (Opties in de speler) worden gelogd; de luisteraar voor nep-ondertitels
+    setDisplayRect: function (x, y, w, h) { if (x || w !== 1920) log('rect:' + x + ':' + w); }, setDisplayMethod: function (m) { log('method:' + m); },
+    setListener: function (l) { ls = l; window.__avListener = l; },
+    setSpeed: function (r) { log('speed:' + r); },
     setTimeoutForBuffering: function () {}, setBufferingParam: function (a, b, c) { log('buf:' + a + ':' + c); },
     prepareAsync: function (ok) { log('prepare'); setTimeout(function () { st = 'READY'; ok(); }, 150); },
     play: function () { log('play'); st = 'PLAYING'; clearInterval(timer); timer = setInterval(function () { t += 250; }, 250); },
@@ -605,6 +616,103 @@ if __name__ == '__main__':
             ('eval', 'B.app.switchProfile(); 1'), ('wait', 600), ('key', 'Enter', 400), ('wait', 1500),
             ('expect', '["epg", "library", "profileData", "profiles", "connections"].map(function (e) { return B.listenerCount(e); }).join(",") === window.__l0', 'geen extra luisteraars na 3x wisselen'),
         ])
+    if which in ('all', 'details'):
+        # build 102: ronde avatars (Apple TV) en rijke detailpagina's: TMDB-beschrijving, genres/regisseur, Acteurs met
+        # ronde foto's (OK = acteurspagina, Terug = zelfde acteur), Aanbevelingen (bibliotheek = titel, anders Zoeken)
+        ROUND = ('Array.prototype.every.call(document.querySelectorAll(".avatar"), function (a) { var cs = getComputedStyle(a); '
+                 'return cs.borderTopLeftRadius === "50%" && cs.borderBottomRightRadius === "50%" && a.offsetWidth === a.offsetHeight; }) '
+                 '&& document.querySelectorAll(".avatar").length > 0')
+        CAST = 'document.querySelectorAll(".dt-cast .cast-card.f")'
+        RECS = 'document.querySelectorAll(".dt-recs .row-track > .f")'
+        fb.TMDB_LANGS.clear()
+        run(SIGNED_IN, 'normal', [
+            ('wait', 2500), ('shot', 'd01-profiles-round'),
+            ('expect', ROUND, 'Wie kijkt er?: alle avatars rond (borderRadius 50%)'),
+            ('expect', 'getComputedStyle(document.querySelector(".prof .avatar")).borderRadius === "50%"', 'avatar: borderRadius 50%'),
+            ('expect', '(function(){var f = B.ui.focused.querySelector(".avatar"); var cs = getComputedStyle(f); return cs.boxShadow.indexOf("6px") >= 0 && cs.transform !== "none";})()', 'focusring rond om de cirkel en groter'),
+            ('key', 'Enter', 400), ('wait', 2500),
+            ('expect', ROUND, 'menu: avatar rond'),
+            ('eval', 'B.lang', 'taal'),
+            # film: Iron Valley
+            ('eval', 'window.__mv = B.lib.lib.movies.filter(function (m) { return m.title.indexOf("Iron Valley") === 0; })[0]; B.ui.push(B.screens.detail("movie", window.__mv)) && 1'),
+            ('wait', 2500), ('shot', 'd02-movie-detail'),
+            ('expect', 'document.querySelector(".dt-credits").textContent.indexOf("Sofia Lang") >= 0 && document.querySelector(".dt-credits").textContent.indexOf(B.L("Genres")) >= 0', 'film: genres en regisseur'),
+            ('expect', 'document.querySelector(".dt-meta").textContent.indexOf(B.L("%d min", 112)) >= 0', 'film: speelduur uit de afspeellijst'),
+            ('expect', 'B.lang === "en" || document.querySelector(".dt-plot").textContent === "TMDB-beschrijving in het Nederlands."', 'film: beschrijving in de app-taal (TMDB)'),
+            ('expect', 'document.querySelector(".dt-cast .row-title").textContent === B.L("Actors") && %s.length === 10' % CAST, 'film: rij Acteurs met 10 focusbare kaarten'),
+            ('expect', 'document.querySelector(".dt-recs .row-title").textContent === B.L("Recommendations") && %s.length === 6' % RECS, 'film: rij Aanbevelingen (6)'),
+            ('expect', 'document.querySelectorAll(".dt-recs .card.rec-out").length === 3 && document.querySelectorAll(".dt-recs .card:not(.rec-out)").length === 3', 'film: 3 in de bibliotheek, 3 zoeken'),
+            ('wait', 1500),
+            ('expect', '%s[1].querySelector(".img.loaded") === null && %s[1].querySelector(".img-fallback").textContent === "TH"' % (CAST, CAST), 'foto mislukt: initialen'),
+            ('expect', '!!%s[0].querySelector(".img.loaded") && getComputedStyle(%s[0].querySelector(".cast-pic")).borderTopLeftRadius === "50%%"' % (CAST, CAST), 'castfoto geladen en rond'),
+            # build 102: tweede regel knoppen (Afvinken/Collectie) en de rij Andere bronnen (Stremio) staan ertussen
+            ('walk', 'ArrowDown ArrowDown ArrowDown', 'film: omlaag naar Acteurs'),
+            ('expect', 'B.ui.focused.classList.contains("cast-card") && B.ui.focused === %s[0]' % CAST, 'film: focus op de eerste acteur'),
+            ('walk', 'ArrowRight ArrowRight', 'film: door de acteurs'), ('shot', 'd03-movie-actors'),
+            ('expect', 'B.ui.focused === %s[2]' % CAST, 'film: derde acteur'),
+            ('walk', 'Enter', 'acteur openen'), ('wait', 1800), ('shot', 'd04-person'),
+            ('expect', 'B.ui.top().el.classList.contains("person") && document.querySelector(".ps-name").textContent === "Robin Vale"', 'acteurspagina open'),
+            ('expect', 'getComputedStyle(document.querySelector(".ps-pic")).borderTopLeftRadius === "50%"', 'acteur: ronde foto'),
+            ('expect', 'document.querySelector(".ps-facts").textContent.indexOf("1984") >= 0 && document.querySelector(".ps-facts").textContent.indexOf("Utrecht") >= 0', 'acteur: geboren'),
+            ('expect', 'document.querySelectorAll(".ps-have .row-track > .f").length === 2 && document.querySelector(".ps-have .row-title").textContent === B.L("Available in Bingr")', 'acteur: Beschikbaar in Bingr (2)'),
+            ('expect', 'document.querySelectorAll(".ps-rest .row-track > .f").length === 2', 'acteur: Niet in je afspeellijsten (2, zonder talkshow)'),
+            ('expect', 'B.ui.focused === document.querySelector(".ps-have .f")', 'acteur: focus op de eerste titel'),
+            ('walk', 'ArrowDown ArrowRight ArrowUp ArrowUp', 'acteur: rondlopen'),
+            ('expect', 'B.ui.focused.classList.contains("ps-biobox")', 'acteur: biografie focusbaar'),
+            ('walk', 'Enter', 'biografie uitklappen'), ('wait', 300),
+            ('expect', 'B.ui.focused.classList.contains("open")', 'biografie open'),
+            ('walk', 'ArrowDown', 'biografie scrollen'), ('wait', 300), ('shot', 'd05-person-bio'),
+            ('expect', 'document.querySelector(".ps-bio-text").style.transform.indexOf("-160px") >= 0 && B.ui.focused.classList.contains("ps-biobox")', 'omlaag scrollt de tekst'),
+            ('walk', 'ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown', 'uit de biografie naar de rijen'),
+            ('expect', '!B.ui.focused.classList.contains("ps-biobox")', 'weer in de rijen'),
+            ('walk', '10009', 'acteur: terug'),
+            ('expect', 'B.ui.top().el.classList.contains("detail") && B.ui.focused === %s[2]' % CAST, 'terug: focus op dezelfde acteur'),
+            ('walk', 'ArrowDown', 'film: omlaag naar Aanbevelingen'),
+            ('expect', 'B.ui.focused.parentNode.parentNode.parentNode.classList.contains("dt-recs")', 'film: focus in Aanbevelingen'),
+            ('walk', 'ArrowRight ArrowRight', 'film: door de aanbevelingen'), ('shot', 'd06-movie-recs'),
+            # aanbeveling die niet in de bibliotheek staat: Zoeken met de titel; Terug = weer hier
+            ('eval', 'B.ui.focus(document.querySelector(".dt-recs .rec-out")); 1'),
+            ('walk', 'Enter', 'aanbeveling zoeken'), ('wait', 600), ('shot', 'd07-rec-search'),
+            ('expect', 'B.ui.top().el.classList.contains("search-layer") && document.querySelector(".search-layer .search-query").textContent === "Starfall Express"', 'zoeken met de titel'),
+            ('walk', '10009', 'zoeken: terug'),
+            ('expect', 'B.ui.top().el.classList.contains("detail") && B.ui.focused === document.querySelector(".dt-recs .rec-out")', 'terug uit zoeken: zelfde kaart'),
+            # aanbeveling in de bibliotheek: opent die titel
+            ('eval', 'B.ui.focus(document.querySelector(".dt-recs .card:not(.rec-out)")); 1'),
+            ('walk', 'Enter', 'aanbeveling openen'), ('wait', 1500),
+            ('expect', 'B.ui.top().el.classList.contains("detail") && B.ui.top().el.querySelector(".dt-title").textContent.indexOf("Neon District") === 0', 'aanbeveling opent de titel'),
+            ('walk', '10009', 'aanbeveling: terug'),
+            ('walk', 'ArrowUp ArrowUp ArrowUp', 'film: terug naar de knoppen'),
+            ('expect', 'B.ui.focused.classList.contains("btn") && document.querySelector(".dt-body")._pos === 0', 'knoppen: pagina weer bovenaan'),
+            ('walk', '10009', 'film: terug'),
+            # serie: Midnight Harbor
+            ('eval', 'B.ui.push(B.screens.detail("series", B.lib.lib.series.filter(function (s) { return s.title === "Midnight Harbor"; })[0])) && 1'),
+            ('wait', 2500), ('shot', 'd08-series-detail'),
+            ('expect', 'document.querySelector(".dt-credits").textContent.indexOf("Drama, Thriller") >= 0 && document.querySelector(".dt-credits").textContent.indexOf(B.L("Director")) < 0', 'serie: genres, geen regisseur'),
+            ('expect', '%s.length === 3 && %s.length === 3' % (CAST, RECS), 'serie: Acteurs (3) en Aanbevelingen (3)'),
+            ('expect', 'document.querySelector(".dt-cast").textContent.indexOf("Kapitein Mara") >= 0', 'serie: rol uit aggregate_credits'),
+            ('walk', 'ArrowDown ArrowDown ArrowDown', 'serie: knoppen → seizoenen → afleveringen → acteurs'),
+            ('expect', 'B.ui.focused.classList.contains("cast-card") && B.ui.focused.parentNode.parentNode.parentNode.classList.contains("dt-cast")', 'serie: focus in de rij Acteurs'), ('shot', 'd09-series-actors'),
+            ('walk', 'ArrowDown ArrowRight', 'serie: aanbevelingen'), ('shot', 'd10-series-recs'),
+            ('walk', 'ArrowUp Enter', 'serie: acteur openen'), ('wait', 1500),
+            ('expect', 'B.ui.top().el.classList.contains("person")', 'serie: acteurspagina'),
+            ('walk', '10009', 'serie: terug van acteur'),
+            ('expect', 'B.ui.focused.classList.contains("cast-card")', 'serie: focus terug op de acteur'),
+            ('walk', 'ArrowUp ArrowUp ArrowUp 10009', 'serie: omhoog en terug'),
+            ('expect', 'B.ui.top().el.classList.contains("main")', 'terug op het hoofdscherm'),
+        ])
+        valid = {'en-US', 'nl-NL', 'de-DE', 'fr-FR', 'es-ES', 'it-IT', 'pt-PT', 'pl-PL', 'tr-TR', 'ar-SA', 'zh-CN'}
+        RESULTS.append(('TMDB-talen zijn geldige locales', bool(fb.TMDB_LANGS) and all(l in valid for l in fb.TMDB_LANGS), str(sorted(set(fb.TMDB_LANGS)))))
+        # profiel met leeftijdsgrens (Kids): alleen aanbevelingen uit de eigen bibliotheek, geen "Niet in je afspeellijsten"
+        run(SIGNED_IN, 'normal', [
+            ('wait', 2500), ('key', 'ArrowRight ArrowRight Enter', 400), ('wait', 3000),
+            ('expect', 'B.app.profile && B.data.ageLimit(B.app.profile) != null', 'profiel met leeftijdsgrens'),
+            ('eval', 'B.ui.push(B.screens.detail("movie", B.lib.lib.movies[0])) && 1'), ('wait', 2500), ('shot', 'd11-kids-detail'),
+            ('expect', '%s.length > 0 && document.querySelectorAll(".rec-out").length === 0' % CAST, 'kids: acteurs, geen aanbevelingen buiten de bibliotheek'),
+            ('eval', 'B.ui.focus(%s[0]); 1' % CAST), ('walk', 'Enter', 'kids: acteur'), ('wait', 1500), ('shot', 'd12-kids-person'),
+            ('expect', 'B.ui.top().el.classList.contains("person") && !document.querySelector(".ps-rest") && document.querySelectorAll(".rec-out").length === 0', 'kids: geen "Niet in je afspeellijsten"'),
+            ('walk', '10009', 'kids: terug'),
+            ('expect', 'B.ui.focused === %s[0]' % CAST, 'kids: focus terug op de acteur'),
+        ])
     if which in ('all', 'prefs'):
         # kijkvoorkeuren: oude waarden (bool, subtitleLanguage "off"), voorkeur per profiel, openstaande instellingen
         run(SIGNED_IN, 'normal', [
@@ -725,6 +833,255 @@ if __name__ == '__main__':
             ('expect', 'document.querySelector(".stats .state").textContent.indexOf("2026") >= 0', 'lege staat met datum'),
             ('walk', 'ArrowDown ArrowDown ArrowDown 10009', 'leeg: terug'),
         ])
+
+    if which in ('all', 'playeropts'):
+        # build 102: Opties in de speler (snelheid, ondertitelgrootte, beeld, slaaptimer), ondertiteltiming van sporen uit de
+        # stream, live pauzeren/terugspoelen/terug naar live (zender met terugkijken) en de nieuwe instellingen (gesynchroniseerd)
+        PICK = 'var c = Array.prototype.filter.call(B.ui.top().el.querySelectorAll(".choice"), function (x) { return x.textContent.indexOf(%s) >= 0; })[0]; if (c) B.ui.focus(c, true); !!c'
+        BTN = 'var b = Array.prototype.filter.call(document.querySelectorAll(".pl-buttons .btn"), function (x) { return %s; })[0]; if (b) B.ui.focus(b, true); !!b'
+        ROW = 'var r = Array.prototype.filter.call(document.querySelectorAll(".st-row.f"), function (x) { return x.firstChild.textContent === %s; })[0]; if (r) B.ui.focus(r, true); !!r'
+        def T(k, *a):
+            return 'B.L(%s)' % ', '.join([json.dumps(k)] + [json.dumps(x) for x in a])
+        def pick(expr, name):
+            return [('expect', PICK % expr, 'kies: ' + name), ('key', 'Enter', 400)]
+        OPTS = [('expect', BTN % ('x.textContent === ' + T('Options')), 'knop Opties'), ('key', 'Enter', 400),
+                ('expect', 'B.ui.top().modal === true && B.ui.top().el.querySelector("h2").textContent === ' + T('Options'), 'Opties-paneel open')]
+        steps = [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 3000),
+            ('eval', 'B.player.playVOD(B.player.movieItem(B.lib.lib.byId["xv5"].item), {resume: 0}) || 1'), ('wait', 2500),
+            ('eval', 'window.__av = []; 1'),
+        ] + OPTS + [('shot', '80-player-options')] + pick(T('Speed'), 'snelheid') + pick('"1.5"', '1.5×') + [
+            ('expect', 'window.__av.indexOf("speed:1.5") >= 0 && B.player.current.state().rate === 1.5', 'setSpeed(1.5)'),
+            ('expect', 'B.ui.top().modal === true && B.ui.focused.textContent.indexOf(' + T('Speed') + ') >= 0', 'terug in Opties op Snelheid'),
+        ] + pick(T('Subtitle size'), 'ondertitelgrootte') + pick(T('Large'), 'groot') + [
+            ('expect', 'B.data.shared("subtitleSize") === "large" && document.querySelector(".pl-sub").style.fontSize === "58px"', 'ondertitels groot (gedeeld)'),
+        ] + pick(T('Picture'), 'beeld') + pick('"4:3"', '4:3') + [
+            ('expect', 'window.__av.indexOf("method:PLAYER_DISPLAY_MODE_FULL_SCREEN") >= 0 && window.__av.indexOf("rect:240:1440") >= 0', '4:3: setDisplayRect + setDisplayMethod'),
+        ] + pick(T('Picture'), 'beeld') + pick(T('Fill'), 'vullen') + [
+            ('expect', 'window.__av.indexOf("method:PLAYER_DISPLAY_MODE_CROPPED_FULL") >= 0 && B.player.current.state().aspect === "fill"', 'vullen: CROPPED_FULL'),
+        ] + pick(T('Sleep timer'), 'slaaptimer') + pick(T('In %d minutes', 15), '15 min') + [
+            ('expect', 'B.player.current.state().sleepAt > Date.now() + 14 * 60000', 'slaaptimer 15 min'),
+            ('shot', '81-player-options-set'),
+            ('key', 'Escape', 300),
+            ('eval', 'B.player.current.sleepIn(31) || 1'), ('wait', 2200),
+            ('expect', 'document.querySelector(".toast") && document.querySelector(".toast").textContent === ' + T('Sleep timer: playback stops in 30 seconds.'), 'slaaptimer: melding 30 s vooraf'),
+            ('eval', 'window.__av = []; B.player.current.sleepIn(1) || 1'), ('wait', 2500),
+            ('expect', '!B.player.current && window.__av.indexOf("pause") >= 0 && window.__av.indexOf("close") >= 0', 'slaaptimer: gepauzeerd en gesloten'),
+            # ondertiteltiming van een spoor uit de stream: alleen later; tekst komt met vertraging
+            ('eval', 'B.player.playVOD(B.player.movieItem(B.lib.lib.byId["xv5"].item), {resume: 0}) || 1'), ('wait', 2500),
+            ('expect', 'B.player.current.state().rate === 1 || B.player.current.state().rate === 1.5', 'opties blijven in de sessie of zijn nieuw'),
+            ('expect', BTN % ('x.textContent === ' + T('Subtitles')), 'knop Ondertitels'), ('key', 'Enter', 400),
+        ] + pick('B.clang.name("eng")', 'Engels spoor') + [
+            ('expect', BTN % ('x.textContent === ' + T('Subtitles')), 'knop Ondertitels'), ('key', 'Enter', 400),
+        ] + pick(T('Subtitle timing'), 'ondertiteltiming') + [
+            ('expect', '!Array.prototype.some.call(B.ui.top().el.querySelectorAll(".choice"), function (x) { return x.textContent.indexOf("−") >= 0; })', 'AVPlay: alleen later (geen −)'),
+            ('shot', '82-subtitle-timing'),
+        ] + pick('"+2 s"', '+2 s') + [
+            ('expect', 'B.player.current.state().subDelay === 2', 'vertraging 2 s'),
+            ('eval', 'window.__avListener.onsubtitlechange(1500, "Hallo daar"); 1'), ('wait', 400),
+            ('expect', 'document.querySelector(".pl-sub").textContent === ""', 'tekst nog niet getoond'),
+            ('wait', 2400),
+            ('expect', 'document.querySelector(".pl-sub").textContent === "Hallo daar"', 'tekst na 2 s getoond'),
+            ('eval', 'B.player.current.close() || 1'), ('wait', 500),
+            # live met terugkijken: pauzeren, −10, terug naar live
+            ('eval', 'B.player.playChannel(B.lib.lib.channels[0], B.lib.lib.channels) && 1'), ('wait', 2500),
+            ('expect', 'B.player.current.state().canTimeshift === true', 'zender met terugkijken: timeshift'),
+            ('expect', 'document.querySelector(".pl-golive") && document.querySelector(".pl-golive").textContent === ' + T('LIVE'), 'LIVE-knop'),
+            ('expect', BTN % ('x.textContent === ' + T('Options')), 'live: knop Opties'), ('key', 'Enter', 400),
+            ('expect', '!Array.prototype.some.call(B.ui.top().el.querySelectorAll(".choice"), function (x) { return x.textContent.indexOf(' + T('Speed') + ') >= 0; })', 'live: geen snelheid'),
+            ('key', 'Escape', 300),
+            ('tv', '10252'), ('wait', 300),
+            ('expect', 'webapis.avplay.getState() === "PAUSED"', 'live gepauzeerd'),
+            ('eval', 'window.__av = []; 1'),
+            ('tv', '412'), ('wait', 2000),
+            ('expect', 'window.__avUrl.indexOf("/timeshift/") >= 0 && B.player.current.state().shiftStart != null && B.player.current.state().behind >= 9', 'terugspoelen: terugkijkstream'),
+            ('expect', 'document.querySelector(".pl-golive").textContent.indexOf("−") === 0 && document.querySelector(".pl-golive").textContent.indexOf(' + T('Back to live') + ') > 0', 'label −mm:ss · Terug naar live'),
+            ('shot', '83-live-timeshift'),
+            ('tv', '412'), ('wait', 1800),
+            ('expect', 'B.player.current.state().behind >= 19', 'nog eens −10'),
+            ('eval', 'B.ui.focus(document.querySelector(".pl-golive"), true); 1'), ('key', 'Enter', 400), ('wait', 1500),
+            ('expect', 'window.__avUrl.indexOf("/timeshift/") < 0 && B.player.current.state().shiftStart == null && B.player.current.state().behind === 0', 'terug naar live'),
+            ('expect', 'document.querySelector(".pl-golive").textContent === ' + T('LIVE'), 'weer LIVE'),
+            ('eval', 'B.ui.focus(document.querySelector(".pl-buttons .btn")); 1'),
+            ('key', 'ArrowRight ArrowRight ArrowRight ArrowRight ArrowRight ArrowRight ArrowRight ArrowRight ArrowRight ArrowRight', 120),
+            ('expect', 'var bs = document.querySelectorAll(".pl-buttons .btn"), l = bs[bs.length - 1]; B.ui.focused === l && l.getBoundingClientRect().right <= 1920 && l.getBoundingClientRect().left >= 0', 'laatste knop in beeld (rij schuift mee)'),
+            ('shot', '83b-live-buttons-scrolled'),
+            ('eval', 'B.player.current.close() || 1'), ('wait', 500),
+            # instellingen: ondertitelgrootte, startscherm, tabbladen, intromuziek, playlists verversen
+            ('eval', 'B.ui.top().show("settings", true) || 1'), ('wait', 600),
+            ('expect', ROW % T('Subtitle size'), 'instelling ondertitelgrootte'), ('key', 'Enter', 400),
+        ] + pick(T('Small'), 'klein') + [
+            ('expect', ROW % T('Show Movies'), 'instelling Films tonen'), ('key', 'Enter', 600),
+            ('expect', 'JSON.stringify(B.data.shared("hiddenTabs")) === \'["movies"]\' && !Array.prototype.some.call(document.querySelectorAll(".nav-item"), function (x) { return x.textContent === ' + T('Movies') + '; })', 'Films verborgen in het menu'),
+            ('expect', 'B.ui.focused && B.ui.focused.firstChild.textContent === ' + T('Show Movies'), 'focus blijft op Films tonen'),
+            ('expect', ROW % T('Start screen'), 'instelling startscherm'), ('key', 'Enter', 400),
+            ('expect', '!Array.prototype.some.call(B.ui.top().el.querySelectorAll(".choice"), function (x) { return x.textContent === ' + T('Movies') + '; })', 'startscherm: geen verborgen tab'),
+        ] + pick(T('Live TV'), 'Live TV') + [
+            ('expect', 'B.app.startPage() === "live"', 'startscherm live'),
+            ('expect', ROW % T('Intro sound'), 'instelling intromuziek'), ('key', 'Enter', 400),
+            ('expect', 'B.data.shared("introMusic") === false', 'intromuziek uit'),
+            ('expect', ROW % T('Update playlists'), 'instelling verversen'), ('key', 'Enter', 400),
+        ] + pick(T('Every 6 hours'), 'elke 6 uur') + [
+            ('expect', 'B.data.shared("refreshInterval") === "sixHours" && B.lib.refreshDue(7 * 3600000) && !B.lib.refreshDue(3600000)', 'verversen elke 6 uur'),
+            ('shot', '84-settings-interface'),
+            ('wait', 1500),
+        ]
+        run(SIGNED_IN + AVSTUB, 'normal', steps)
+        reqs = [json.loads(l) for l in open(os.path.join(OUT, 'requests.jsonl')).read().splitlines() if l.strip()] if os.path.exists(os.path.join(OUT, 'requests.jsonl')) else []
+        sets = [r for r in reqs if r.get('action') == 'put_state' and r.get('section') == 'settings']
+        last = (sets[-1].get('data') or {}).get('shared', {}) if sets else {}
+        want = {'subtitleSize': 'small', 'hiddenTabs': ['movies'], 'startScreen': 'live', 'introMusic': False, 'refreshInterval': 'sixHours'}
+        RESULTS.append(('put_state settings: gedeelde sleutels', all(last.get(k) == v for k, v in want.items()), str({k: last.get(k) for k in want})))
+
+    if which in ('all', 'parity'):
+        # build 102: gelijk met de Apple TV — contextmenu (lang OK / Tools), bekeken, collecties, detailpagina (trailer,
+        # beoordelingen, voortgang, Andere bronnen), Voor jou, Top 10 uit trending, Bekijk allemaal met sorteren,
+        # zoeken (personen, tv-gids, categorieën, andere afspeellijsten), Live TV (Evenementen, zoeken)
+        fb.MODE['parity'] = True
+        MID = '(function (t) { return B.lib.lib.movies.filter(function (m) { return m.title === t; })[0].id; })'
+        FOC = 'B.ui.focus(Array.prototype.filter.call(document.querySelectorAll(".f"), function (x) { return %s; })[0]) || 1'
+        PICK = 'B.ui.focus(Array.prototype.filter.call(document.querySelectorAll(".ctx-layer .pm-item"), function (x) { return x._mk === "%s"; })[0]) || 1'
+        CTX = '!!document.querySelector(".ctx-layer") && B.ui.top().el.classList.contains("ctx-layer")'
+        TOPDETAIL = 'B.ui.top().el.classList.contains("detail") && B.ui.top().el.querySelector(".dt-title").textContent.indexOf("%s") === 0'
+        run(SIGNED_IN, 'normal', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 7000), ('shot', 'p01-home'),
+            ('expect', '!!document.querySelector(".hero-meta .imdb-badge") && document.querySelector(".hero-meta").textContent.indexOf("7.8") >= 0', 'billboard: IMDb-badge'),
+            ('expect', 'document.querySelector(".hero-meta").textContent.indexOf("min") >= 0 && document.querySelector(".hero-meta .hero-tags").textContent.indexOf(" • ") >= 0', 'billboard: genre en speelduur'),
+            ('expect', '!!document.querySelector(".row-block.foryou") && document.querySelector(".row-block.foryou .row-title").textContent === B.L("For you") && document.querySelectorAll(".row-block.foryou .card.poster:not(.see-all)").length >= 3', 'Home: rij Voor jou'),
+            ('expect', 'Array.prototype.some.call(document.querySelectorAll(".row-block.foryou .card.poster"), function (c) { return c._key === "movie:" + %s("Desert Wind"); })' % MID, 'Voor jou: Trakt-aanbeveling uit je bibliotheek'),
+            ('expect', 'B.lib.lib.byId[document.querySelectorAll(".top10row")[1].querySelector(".card.top10")._key.split(":")[1]].item.title === "Paper Moons"', 'Top 10 films: trending (TMDB) als eerste'),
+            ('expect', 'B.lib.lib.byId[document.querySelectorAll(".top10row")[0].querySelector(".card.top10")._key.split(":")[1]].item.title === "Golden Fields"', 'Top 10 series: trending'),
+            # Bekijk allemaal (Top 10 films) → raster met sorteren
+            ('eval', FOC % 'x.classList.contains("see-all") && x.closest(".top10row") === document.querySelectorAll(".top10row")[1]'), ('shot', 'p02-see-all-card'),
+            ('walk', 'Enter', 'Bekijk allemaal openen'), ('wait', 600), ('shot', 'p03-grid'),
+            ('expect', 'B.ui.top().el.classList.contains("gridpage") && document.querySelectorAll(".gridpage .vgrid .card.poster").length >= 6', 'rasterpagina met alle titels'),
+            ('eval', 'window.__o1 = B.ui.top().order().join(); 1'),
+            ('walk', 'ArrowUp', 'raster: omhoog naar sorteren'),
+            ('expect', 'B.ui.focused.classList.contains("cat-pill")', 'focus op de sorteerknoppen'),
+            ('eval', FOC % 'x._sort === "za"'), ('walk', 'Enter', 'sorteren Z–A'), ('wait', 400), ('shot', 'p04-grid-za'),
+            ('expect', '(function () { var t = B.ui.top().order().map(function (id) { return B.lib.lib.byId[id].item.title; }); for (var i = 1; i < t.length; i++) if (t[i - 1].localeCompare(t[i]) < 0) return t.join("|"); return B.ui.top().order().join() !== window.__o1; })()', 'Z–A: andere volgorde, aflopend'),
+            ('eval', FOC % 'x._sort === "az"'), ('walk', 'Enter', 'sorteren A–Z'), ('wait', 300),
+            ('expect', '(function () { var t = B.ui.top().order().map(function (id) { return B.lib.lib.byId[id].item.title; }); for (var i = 1; i < t.length; i++) if (t[i - 1].localeCompare(t[i]) > 0) return t.join("|"); return true; })()', 'A–Z: oplopend'),
+            ('walk', '10009', 'raster: terug'),
+            ('expect', 'B.ui.top().el.classList.contains("main")', 'terug op Home'),
+            # contextmenu op een filmkaart: lang OK
+            ('eval', FOC % ('x._key === "movie:" + %s("Silent Peak") && !x.closest(".top10row")' % MID)),
+            ('hold',), ('shot', 'p05-context-menu'),
+            ('expect', CTX, 'lang OK: contextmenu open'),
+            ('expect', '["open", "mylist", "coll", "watched"].every(function (k) { return Array.prototype.some.call(document.querySelectorAll(".ctx-layer .pm-item"), function (x) { return x._mk === k; }); })', 'menu: details, Mijn lijst, collectie, bekeken'),
+            ('walk', 'ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown', 'menu: focus blijft in het menu'),
+            ('expect', 'B.ui.top().el.contains(B.ui.focused)', 'focus gevangen in het menu'),
+            ('eval', PICK % 'mylist'), ('key', 'Enter', 500),
+            ('expect', 'B.data.inSet("myList", B.data.key(B.lib.source.id, %s("Silent Peak")))' % MID, 'menu: toegevoegd aan Mijn lijst'),
+            ('expect', '!document.querySelector(".ctx-layer")', 'menu dicht na kiezen'),
+            ('hold',), ('eval', PICK % 'watched'), ('key', 'Enter', 500),
+            ('expect', 'B.data.isWatched(%s("Silent Peak"))' % MID, 'menu: gemarkeerd als bekeken'),
+            ('hold',), ('eval', PICK % 'coll'), ('key', 'Enter', 500), ('shot', 'p06-choose-collection'),
+            ('eval', 'B.ui.focus(Array.prototype.filter.call(document.querySelectorAll(".choose-list .choice"), function (x) { return x.textContent.indexOf("Filmavond") >= 0; })[0]) || 1'),
+            ('key', 'Enter', 600),
+            ('expect', 'B.data.collectionsFor(B.app.profile.id).filter(function (c) { return c.id === "c2"; })[0].items.some(function (i) { return i.id === %s("Silent Peak") && i.type === "movie"; })' % MID, 'collectie Filmavond: film toegevoegd'),
+            # Tools-toets opent hetzelfde menu, Terug sluit
+            ('tv', '10135', 400), ('expect', CTX, 'Tools-toets: contextmenu'),
+            ('walk', '10009', 'menu: Terug'), ('expect', '!document.querySelector(".ctx-layer") && B.ui.focused._key === "movie:" + %s("Silent Peak")' % MID, 'Terug: menu dicht, focus op de kaart'),
+            # kort OK opent gewoon de titel
+            ('walk', 'Enter', 'kort OK: titel openen'), ('wait', 800),
+            ('expect', TOPDETAIL % 'Silent Peak', 'kort OK opent de detailpagina'),
+            ('walk', '10009', 'detail: terug'),
+            # Verder kijken: weghalen
+            ('eval', FOC % 'x._ctx && x._ctx.progressKey === "xv3"'), ('hold',),
+            ('expect', 'Array.prototype.some.call(document.querySelectorAll(".ctx-layer .pm-item"), function (x) { return x._mk === "continue"; })', 'Verder kijken: Verwijderen uit Verder kijken'),
+            ('eval', PICK % 'continue'), ('key', 'Enter', 800),
+            ('expect', '!B.data.progress("xv3")', 'voortgang gewist'),
+            ('wait', 4000),
+            # detailpagina film: Iron Valley
+            ('eval', 'B.ui.push(B.screens.detail("movie", B.lib.lib.byId[%s("Iron Valley")].item)) && 1' % MID), ('wait', 6000), ('shot', 'p07-movie-detail'),
+            ('expect', '!!document.querySelector(".dt-trailer-btn")', 'detail: knop Trailer'),
+            ('expect', '(function () { var t = document.querySelector(".dt-ratings").textContent; return ["IMDb", "7.8", "TMDB", "7.4", "Trakt", "81%"].every(function (w) { return t.indexOf(w) >= 0; }) || t; })()', 'detail: beoordelingen IMDb/TMDB/Trakt'),
+            ('expect', '!!document.querySelector(".dt-coll-btn") && !!document.querySelector(".dt-watched-btn")', 'detail: knoppen Collectie en Afvinken'),
+            ('expect', 'document.querySelectorAll(".kb-stack .kb-layer").length === 3', 'detail: 3 achtergronden (Ken Burns)'),
+            ('expect', 'Array.prototype.some.call(document.querySelectorAll(".dt-alts .card.other-src .src-badge"), function (b) { return b.textContent === "Jellyfin thuis"; })', 'detail: Andere bronnen (Jellyfin)'),
+            ('eval', FOC % 'x.classList.contains("dt-watched-btn")'), ('walk', 'Enter', 'film afvinken'), ('wait', 300),
+            ('expect', 'B.data.isWatched(%s("Iron Valley")) && document.querySelector(".dt-watched-btn").classList.contains("on")' % MID, 'film bekeken'),
+            ('walk', 'Enter', 'film weer niet bekeken'), ('wait', 300),
+            ('expect', '!B.data.isWatched(%s("Iron Valley"))' % MID, 'film niet bekeken'),
+            ('eval', FOC % 'x.classList.contains("dt-trailer-btn")'), ('walk', 'Enter', 'trailer openen'), ('wait', 500), ('shot', 'p08-trailer'),
+            ('expect', 'B.ui.top().isTrailer === true && !!document.querySelector(".trailer-full iframe")', 'trailer beeldvullend'),
+            ('walk', '10009', 'trailer: terug'),
+            ('expect', TOPDETAIL % 'Iron Valley', 'terug op de detailpagina'),
+            ('walk', '10009', 'film: terug'),
+            # serie: voortgang, seizoen afvinken, aflevering-menu
+            ('eval', 'B.ui.push(B.screens.detail("series", B.lib.lib.series.filter(function (s) { return s.title === "Midnight Harbor"; })[0])) && 1'), ('wait', 3500), ('shot', 'p09-series-detail'),
+            ('expect', 'document.querySelectorAll(".dt-sprogress").length === 2 && document.querySelector(".dt-sprogress").textContent.indexOf("%") >= 0', 'serie: voortgang serie en seizoen'),
+            ('expect', 'document.querySelector(".dt-trailer-btn").textContent === B.L("Trailer season %d", 1)', 'serie: trailer van het seizoen'),
+            ('eval', FOC % 'x.classList.contains("season-mark")'), ('walk', 'Enter', 'seizoen afvinken'), ('wait', 400), ('shot', 'p10-season-marked'),
+            ('expect', '(function () { var s = B.lib.lib.series.filter(function (x) { return x.title === "Midnight Harbor"; })[0]; return B.lib.episodeCache[s.id].episodes.filter(function (e) { return e.season === 1; }).every(function (e) { return B.data.isWatched(e.id); }); })()', 'heel seizoen bekeken'),
+            ('expect', 'document.querySelector(".dt-sprogress").textContent.indexOf("50%") >= 0 || document.querySelector(".dt-sprogress").textContent', 'voortgang serie bijgewerkt'),
+            ('eval', FOC % 'x.classList.contains("ep-card")'), ('hold',),
+            ('expect', CTX + ' && Array.prototype.some.call(document.querySelectorAll(".ctx-layer .pm-item"), function (x) { return x._mk === "watched"; })', 'aflevering: contextmenu met bekeken'),
+            ('eval', PICK % 'watched'), ('key', 'Enter', 400),
+            ('expect', '!B.data.isWatched(B.ui.focused._key.slice(3))', 'aflevering weer niet bekeken'),
+            ('walk', '10009', 'serie: terug'),
+            # Films: sorteren
+            ('eval', 'B.ui.top().show("movies", true) || 1'), ('wait', 800),
+            ('eval', FOC % 'x._sort === "za" && x.closest(".ct-sorts")'), ('walk', 'Enter', 'Films: Z–A'), ('wait', 400), ('shot', 'p11-movies-za'),
+            ('expect', '(function () { var c = document.querySelector(".ct-gridbox .card.poster"); var t = B.lib.lib.byId[c._key.split(":")[1]].item.title; return B.lib.lib.movies.every(function (m) { return m.title.localeCompare(t) <= 0; }) || t; })()', 'Films: Z–A eerst de laatste titel'),
+            # Live TV: Evenementen en zoeken
+            ('eval', 'B.ui.top().show("live", true) || 1'), ('wait', 1000),
+            ('expect', '!!Array.prototype.filter.call(document.querySelectorAll(".lv-group"), function (x) { return x._key === "⚡"; })[0]', 'Live TV: groep Evenementen'),
+            ('eval', FOC % 'x._key === "⚡"'), ('wait', 600), ('shot', 'p12-live-events'),
+            ('expect', '(function () { var r = document.querySelectorAll(".lv-vlist .lv-chan"); return r[0].textContent.indexOf("Ajax – PSV") >= 0 && !!r[0].querySelector(".live-badge") && r[1].textContent.indexOf("Feyenoord – AZ") >= 0 && r[3].textContent.indexOf("Old Fight Night") >= 0 || Array.prototype.map.call(r, function (x) { return x.textContent; }).join("|"); })()', 'Evenementen: op begintijd, LIVE, verlopen onderaan'),
+            ('eval', 'document.querySelector(".lv-vlist").__x = 1; B.ui.focus(document.querySelector(".lv-vlist .lv-chan.f")) || 1'), ('hold',),
+            ('expect', '["fav", "mv", "coll"].every(function (k) { return Array.prototype.some.call(document.querySelectorAll(".ctx-layer .pm-item"), function (x) { return x._mk === k; }); })', 'zender: contextmenu (favoriet, multiview, collectie)'),
+            ('walk', '10009', 'zendermenu: terug'),
+            ('eval', FOC % 'x.classList.contains("lv-search-btn")'), ('walk', 'Enter', 'Live TV: zoeken'), ('wait', 300),
+            ('expect', 'B.ui.top().el.classList.contains("chan-search")', 'zoekscherm zender/programma'),
+            ('eval', 'B.ui.top().setQuery("voetbal") || 1'), ('wait', 1500), ('shot', 'p13-live-search'),
+            ('expect', 'document.querySelectorAll(".chan-search .search-progs .card.prog").length > 0', 'Live TV zoeken: programma uit de gids'),
+            ('eval', 'B.ui.top().setQuery("npo") || 1'), ('wait', 800),
+            ('expect', 'document.querySelectorAll(".chan-search .card.chan").length >= 3', 'Live TV zoeken: zenders'),
+            ('walk', '10009', 'zoeken: terug'),
+            # Zoeken: personen, tv-gids, categorieën en andere afspeellijsten
+            ('eval', 'B.ui.top().show("search", true) || 1'), ('wait', 400),
+            ('eval', 'B.ui.top().page().setQuery("robin") || 1'), ('wait', 2000), ('shot', 'p14-search-person'),
+            ('expect', 'document.querySelectorAll(".search-people .cast-card").length === 1 && document.querySelector(".search-people .cast-name").textContent === "Robin Vale"', 'zoeken: persoon'),
+            ('eval', FOC % 'x.classList.contains("person-hit")'), ('walk', 'Enter', 'persoon openen'), ('wait', 1800),
+            ('expect', 'B.ui.top().el.classList.contains("person")', 'persoonspagina'),
+            ('walk', '10009', 'persoon: terug'),
+            ('eval', 'B.ui.top().page().setQuery("voetbal") || 1'), ('wait', 1500),
+            ('expect', 'document.querySelectorAll(".search-results .search-progs .card.prog").length > 0', 'zoeken: programma in de tv-gids'),
+            ('eval', FOC % 'x.classList.contains("prog")'), ('walk', 'Enter', 'programma openen'), ('wait', 300),
+            ('expect', 'B.ui.top().modal === true', 'programmavenster'),
+            ('walk', '10009', 'programma: terug'),
+            ('eval', 'B.ui.top().page().setQuery("actie") || 1'), ('wait', 1200),
+            ('expect', 'document.querySelectorAll(".search-cats .search-cat").length >= 1', 'zoeken: categorieën/genres'),
+            ('eval', 'B.ui.top().page().setQuery("northern") || 1'), ('wait', 6000), ('shot', 'p15-search-other-source'),
+            ('expect', 'Array.prototype.some.call(document.querySelectorAll(".search-others .card.other-src .src-badge"), function (b) { return b.textContent === "Jellyfin thuis"; })', 'zoeken: titel uit een andere afspeellijst'),
+            ('eval', FOC % 'x.classList.contains("other-src")'), ('walk', 'Enter', 'andere bron openen'), ('wait', 6000), ('shot', 'p16-switched-source'),
+            ('expect', 'B.lib.source.name === "Jellyfin thuis" && B.ui.top().el.classList.contains("detail") && B.ui.top().el.querySelector(".dt-title").textContent === "Northern Lights"', 'gewisseld van bron en titel geopend'),
+            ('walk', '10009', 'andere bron: terug'),
+        ])
+        reqs = [json.loads(l) for l in open(os.path.join(OUT, 'requests.jsonl')).read().splitlines() if l.strip()] if os.path.exists(os.path.join(OUT, 'requests.jsonl')) else []
+        prof = [r for r in reqs if r.get('action') == 'put_state' and str(r.get('section', '')).lower() == 'profile.' + fb.MAIN.lower()]
+        def ids(r, f):
+            return [x.get('id') for x in ((r.get('data') or {}).get(f) or []) if isinstance(x, dict) and not x.get('removed')]
+        RESULTS.append(('put_state: Mijn lijst bevat de film', any(fb.SRC + '|xv8' in ids(r, 'myList') for r in prof), str([ids(r, 'myList') for r in prof][-1:])))
+        RESULTS.append(('put_state: bekeken bevat de film', any('xv8' in ids(r, 'watched') for r in prof), str([ids(r, 'watched') for r in prof][-1:])))
+        RESULTS.append(('put_state: seizoen bekeken (ep-sleutels)', any(('ep:xs1|1-8') in ids(r, 'watched') for r in prof), ''))
+        RESULTS.append(('put_state: voortgang gewist (removed.progress)', any('xv3' in (((r.get('data') or {}).get('removed') or {}).get('progress') or {}) for r in prof), ''))
+        cols = [r for r in reqs if r.get('action') == 'put_state' and r.get('section') == 'collections']
+        def c2(r):
+            b = ((r.get('data') or {}).get('profiles') or {}).get(fb.MAIN) or {}
+            return [c for c in b.get('items', []) if c.get('id') == 'c2']
+        RESULTS.append(('put_state: collectie (version 2, eigen emmer)', any(r['data'].get('version') == 2 and c2(r) and {'type': 'movie', 'id': 'xv8'} in c2(r)[0].get('items', []) for r in cols), str(cols[-1:])[:300]))
+        tk = [r for r in reqs if 'trakt' in r]
+        RESULTS.append(('Trakt: watchlist en geschiedenis', any(r['trakt'] == '/sync/watchlist' for r in tk) and any(r['trakt'] == '/sync/history' for r in tk) and any(r['trakt'] == '/sync/history/remove' for r in tk), str([r['trakt'] for r in tk])))
+        # kinderprofiel: Top 10 uit populaire kids-titels
+        run(SIGNED_IN, 'normal', [
+            ('wait', 2500), ('key', 'ArrowRight ArrowRight Enter', 400), ('wait', 6000), ('shot', 'p17-kids-home'),
+            ('expect', 'B.app.profile.kids === true && document.querySelectorAll(".top10row .row-title")[0].textContent === B.L("Top 10 kids series")', 'kids: Top 10 kids'),
+            ('expect', 'B.lib.lib.byId[document.querySelectorAll(".top10row")[0].querySelector(".card.top10")._key.split(":")[1]].item.title === "Dragon Tales"', 'kids: populaire kids-serie eerst'),
+        ])
+        fb.MODE['parity'] = False
 
     if RESULTS or PAGEERRORS:
         print('\n== Samenvatting ==')

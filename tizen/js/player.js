@@ -118,6 +118,32 @@
     } catch (e) { /* stil */ }
     return out;
   };
+  // build 102: snelheid (setSpeed; niet elke tv of stream kan het, dan false), beeldverhouding en live-venster
+  AVEngine.prototype.setRate = function (r) {
+    if (AVEngine.owner !== this) return false;
+    try { webapis.avplay.setSpeed(r); return true; } catch (e) { B.log('setSpeed', e && (e.name || e.message)); return false; }
+  };
+  AVEngine.prototype.setAspect = function (a) {
+    if (AVEngine.owner !== this) return;
+    var av = webapis.avplay;
+    // fit = hele beeld met zwarte randen; fill = scherm vullen (bijsnijden); 16:9 en 4:3 = uitrekken naar die verhouding
+    var r = a === 'r43' ? { x: 240, y: 0, w: 1440, h: 1080 } : { x: 0, y: 0, w: 1920, h: 1080 };
+    try { av.setDisplayRect(r.x, r.y, r.w, r.h); } catch (e) { /* stil */ }
+    var mode = a === 'fit' ? 'PLAYER_DISPLAY_MODE_LETTER_BOX' : (a === 'fill' ? 'PLAYER_DISPLAY_MODE_CROPPED_FULL' : 'PLAYER_DISPLAY_MODE_FULL_SCREEN');
+    try { av.setDisplayMethod(mode); } catch (e) {
+      // oudere tv zonder CROPPED_FULL: automatisch
+      try { av.setDisplayMethod(a === 'fill' ? 'PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO' : 'PLAYER_DISPLAY_MODE_LETTER_BOX'); } catch (e2) { /* stil */ }
+    }
+  };
+  /** build 102: terugspoelbaar venster van een live-stream (HLS met DVR), {start, end} in seconden; anders null. */
+  AVEngine.prototype.liveWindow = function () {
+    try {
+      var p = String(webapis.avplay.getStreamingProperty('GET_LIVE_DURATION') || '').split('|');
+      var a = parseFloat(p[0]), b = parseFloat(p[1]);
+      if (p.length === 2 && b > a) return { start: a / 1000, end: b / 1000 };
+    } catch (e) { /* niet ondersteund */ }
+    return null;
+  };
   AVEngine.prototype.setRect = function (r) { try { webapis.avplay.setDisplayRect(Math.round(r.x), Math.round(r.y), Math.round(r.w), Math.round(r.h)); } catch (e) { /* stil */ } };
   AVEngine.prototype.selectAudio = function (i) { try { webapis.avplay.setSelectTrack('AUDIO', i); } catch (e) { /* stil */ } };
   AVEngine.prototype.selectText = function (i) {
@@ -174,7 +200,30 @@
     this.stopped = true;
     if (this.v._engine && this.v._engine !== this) return;
     try { this.v.pause(); this.v.removeAttribute('src'); this.v.load(); } catch (e) { /* stil */ }
-    if (!this.own) this.v.style.display = 'none';
+    if (!this.own) { this.v.style.display = 'none'; this.setAspect('fit'); }
+  };
+  // build 102: snelheid, beeldverhouding (object-fit), live-venster (seekable) en ondertiteltiming (cues verschuiven)
+  HTMLEngine.prototype.setRate = function (r) { try { this.v.playbackRate = r; return true; } catch (e) { return false; } };
+  HTMLEngine.prototype.setAspect = function (a) {
+    var st = this.v.style;
+    st.objectFit = a === 'fill' ? 'cover' : (a === 'r169' || a === 'r43' ? 'fill' : '');
+    st.left = a === 'r43' ? '240px' : '';
+    st.width = a === 'r43' ? '1440px' : '';
+  };
+  HTMLEngine.prototype.liveWindow = function () {
+    var v = this.v;
+    if (isFinite(v.duration) || !v.seekable || !v.seekable.length) return null;
+    var a = v.seekable.start(0), b = v.seekable.end(v.seekable.length - 1);
+    return b > a ? { start: a, end: b } : null;
+  };
+  HTMLEngine.prototype.shiftText = function (delta) {
+    var tt = this.v.textTracks;
+    if (!tt || !delta) return;
+    for (var k = 0; k < tt.length; k++) {
+      var cues = tt[k].cues;
+      if (!cues) continue;
+      for (var c = 0; c < cues.length; c++) { try { cues[c].startTime += delta; cues[c].endTime += delta; } catch (e) { /* stil */ } }
+    }
   };
   HTMLEngine.prototype.setRect = B.noop;
   HTMLEngine.prototype.time = function () { return this.v.currentTime || 0; };
@@ -232,6 +281,19 @@
    * ctx: {channels: [...], index, episodes: [...], series, resume: seconden|null, sourceId}
    */
   B.player = {};
+  /**
+   * build 102: ondertitelgrootte (settings.shared.subtitleSize: small / medium / large, = iOS en Android; oud: 0/1/2).
+   * Zonder instelling medium (de grootte van vóór build 102).
+   */
+  B.player.SIZES = ['small', 'medium', 'large'];
+  var SUB_PX = { small: 38, medium: 46, large: 58 };
+  B.player.subtitleSize = function () {
+    var v = String(D.shared('subtitleSize', 'medium')).toLowerCase();
+    if (/^[0-2]$/.test(v)) v = B.player.SIZES[+v];
+    return SUB_PX[v] ? v : 'medium';
+  };
+  B.player.subtitlePx = function () { return SUB_PX[B.player.subtitleSize()]; };
+  B.player.sizeLabel = function (z) { return z === 'small' ? L('Small') : z === 'large' ? L('Large') : L('Medium'); };
   B.player.open = function (item, ctx) {
     ctx = ctx || {};
     if (B.preview) B.preview.stop();
@@ -249,6 +311,12 @@
     var suspended = false, bgPos = 0, bgPaused = false, pauseAfterOpen = false;
     // build 97: laatst bekende afspeelpositie (voor "Opnieuw proberen" na een fout; engine.time() is dan vaak 0)
     var lastPos = 0, markerTimer = null, markerScreen = null;
+    // build 102: opties (snelheid, beeld, slaaptimer) gelden voor deze spelersessie, ook na zappen of de volgende aflevering
+    var rate = 1, aspect = 'fit', sleepAt = 0, sleepEnd = false, sleepWarned = false;
+    // build 102: timing van ondertitels uit de stream (AVPlay: alleen later tonen, met een wachtrij op mediatijd)
+    var subDelay = 0, subQueue = [], subTimer = null;
+    // build 102: live terugspoelen (= canTimeshift op tvOS): shiftStart = kloktijd (ms) waar de terugkijkstream begint
+    var shiftStart = null, shiftTarget = null, shiftTimer = null, livePausedAt = 0, liveBtn = null;
 
     var video = h('div.pl-stage');
     var subtitle = h('div.pl-sub');
@@ -307,11 +375,23 @@
       }
       var keep = U.focused && btnRow.contains(U.focused) ? U.focused._k : null;
       U.clear(btnRow);
-      function add(b, k) { b._k = k; btnRow.appendChild(b); }
+      btnRow._shift = 0; btnRow.style.transform = '';
+      // build 102: meer knoppen dan er passen (live met terugspoelen): de rij schuift mee met de focus
+      function add(b, k) { b._k = k; b.onFocus = function () { fitRow(b); }; btnRow.appendChild(b); }
       add(U.button('', togglePlay, { icon: engine && !engine.playing ? 'play' : 'pause', cls: 'round pl-play' }), 'play');
       if (!isLive()) add(U.button('', function () { jump(-10); }, { icon: 'replay', cls: 'round' }), 'back10');
+      // build 102: live pauzeren en terugspoelen als de zender terugkijken heeft of de stream een live-venster
+      liveBtn = null;
+      if (isLive() && canTimeshift()) {
+        add(U.button('\u221210', function () { liveJump(-10); }, { icon: 'replay' }), 'lback');
+        add(U.button('+30', function () { liveJump(30); }, { icon: 'next' }), 'lfwd');
+        liveBtn = U.button(L('LIVE'), function () { goLive(); }, { icon: 'live', cls: 'pl-golive' });
+        add(liveBtn, 'golive');
+        updateLive();
+      }
       add(U.button(L('Audio'), chooseAudio, { icon: 'audio' }), 'audio');
       add(U.button(L('Subtitles'), chooseText, { icon: 'subs' }), 'subs');
+      add(U.button(L('Options'), function () { optionsPanel(); }, { icon: 'gear' }), 'opts');
       if (item.type === 'episode' && nextEpisode()) add(U.button(L('Next episode'), function () { playNext(); }, { icon: 'next' }), 'next');
       if (item.type === 'episode' && item.seriesID && Lib.source) add(U.button(L('Intro & credits'), function () { markerPanel(); }, { icon: 'flag' }), 'intro');
       if (isLive() && item.channel) {
@@ -320,7 +400,15 @@
         add(U.button(L('Other source'), function () { chooseBackup(); }, { icon: 'layers' }), 'backup');
         if ((ctx.channels || []).length > 1) add(U.button(L('Multiview'), function () { var list = ctx.channels, idx = ctx.index || 0; close(); B.multiview.open(list, idx); }, { icon: 'grid' }), 'mv');
       }
-      if (keep) { var again = null; Array.prototype.forEach.call(btnRow.children, function (b) { if (b._k === keep) again = b; }); if (again) U.focus(again, true); }
+      if (keep) { var again = null; Array.prototype.forEach.call(btnRow.children, function (b) { if (b._k === keep) again = b; }); if (again) { U.focus(again, true); fitRow(again); } }
+    }
+    function fitRow(b) {
+      var w = btnRow.parentNode ? btnRow.parentNode.clientWidth : 0;
+      if (!w) return;
+      var cur = btnRow._shift || 0, left = b.offsetLeft, right = left + b.offsetWidth;
+      if (right - cur > w) cur = right - w;
+      if (left < cur) cur = left;
+      if (cur !== (btnRow._shift || 0)) { btnRow._shift = cur; btnRow.style.transform = cur ? 'translateX(' + (-cur) + 'px)' : ''; }
     }
 
     function updateTime() {
@@ -328,11 +416,15 @@
       var t = engine.time(), d = engine.duration();
       if (isLive()) {
         var nn = item.channel ? Lib.nowNext(item.channel) : {};
+        // build 102: achter live (terugspoelen of pauze): de balk staat op de plek die nu speelt, rechts −mm:ss
+        var behind = behindLive();
+        var wall = Date.now() - behind * 1000;
         if (nn.now) {
-          var frac = (Date.now() - nn.now.start) / (nn.now.end - nn.now.start);
+          var frac = (wall - nn.now.start) / (nn.now.end - nn.now.start);
           bar.firstChild.style.width = (B.clamp(frac, 0, 1) * 100) + '%';
-          tCur.textContent = B.fmtTime(nn.now.start); tDur.textContent = B.fmtTime(nn.now.end);
-        } else { bar.firstChild.style.width = '100%'; tCur.textContent = L('LIVE'); tDur.textContent = ''; }
+          tCur.textContent = B.fmtTime(nn.now.start); tDur.textContent = behind > 5 ? '\u2212' + B.fmtDur(behind) : B.fmtTime(nn.now.end);
+        } else { bar.firstChild.style.width = '100%'; tCur.textContent = L('LIVE'); tDur.textContent = behind > 5 ? '\u2212' + B.fmtDur(behind) : ''; }
+        updateLive();
         return;
       }
       bar.firstChild.style.width = (d > 0 ? B.clamp(t / d, 0, 1) * 100 : 0) + '%';
@@ -367,6 +459,10 @@
       showOverlay(true);
       clearExtSubs();
       scrobbled = false; stopSent = false;
+      // build 102: niets van de vorige titel of zender meenemen (timeshift, pauze, ondertiteltiming)
+      shiftStart = null; shiftTarget = null; livePausedAt = 0; clearTimeout(shiftTimer);
+      subQueue = []; subDelay = 0; sleepWarned = false;
+      applySubSize();
       // tegelijk kijken: op de achtergrond; bij "te veel schermen" stopt de speler alsnog
       streamStart().then(function (ok) {
         mark('stream_start');
@@ -392,7 +488,8 @@
         ended: function () { onEnded(); },
         // build 97: alleen fouten van de engine die nu speelt (een oude poging telt niet meer)
         error: function (msg) { if (engine === my && !closed) fail(new Error(msg)); },
-        subtitle: function (t) { subtitle.innerHTML = B.esc(String(t || '').replace(/<[^>]+>/g, '')).replace(/\n/g, '<br>'); }
+        // build 102: via de wachtrij (ondertiteltiming); zonder vertraging meteen
+        subtitle: function (t) { if (engine === my) embeddedSub(t); }
       };
       var useAV = hasAVPlay() && !item.forceHTML;
       engine = useAV ? new AVEngine(events) : new HTMLEngine(events);
@@ -404,6 +501,9 @@
         attempts = 0;
         spinner.style.display = 'none';
         if (pauseAfterOpen) { pauseAfterOpen = false; my.pause(); }
+        // build 102: gekozen snelheid en beeldverhouding ook op de nieuwe engine (zappen, volgende aflevering)
+        if (aspect !== 'fit') my.setAspect(aspect);
+        if (rate !== 1) applyRate(true);
         renderInfo();
         showOverlay(true);
         // na het eerste beeld, niets hiervan houdt de start op
@@ -558,6 +658,8 @@
       if (closed || limited || suspended) return;
       B.log('player error', e && e.message);
       spinner.style.display = 'none';
+      // build 102: terugkijkstream (live terugspoelen) lukt niet: de nieuwe poging is gewoon live
+      if (shiftStart != null) { shiftStart = null; livePausedAt = 0; }
       // één stille nieuwe poging
       if (attempts < 1) {
         attempts++;
@@ -610,7 +712,18 @@
 
     function togglePlay() {
       if (!engine) return;
-      if (engine.playing) { engine.pause(); scrobble('pause'); } else { engine.play(); scrobble('start'); }
+      if (engine.playing) {
+        engine.pause(); scrobble('pause');
+        // build 102: live gepauzeerd: onthouden wanneer (verder kijken via terugkijken, = tvOS pausedAt)
+        if (isLive() && shiftStart == null && !livePausedAt) livePausedAt = Date.now();
+      } else if (isLive() && livePausedAt && shiftStart == null && Date.now() - livePausedAt > 10000 && !hasLiveWindow() && canShiftCatchup()) {
+        openShift(livePausedAt);
+      } else {
+        engine.play(); scrobble('start');
+        if (rate !== 1) applyRate(false);
+        // zonder terugkijken en zonder live-venster gaat de stream gewoon verder (live)
+        if (isLive() && shiftStart == null && !hasLiveWindow()) livePausedAt = 0;
+      }
       renderInfo();
       var pb = btnRow.querySelector('.pl-play');
       if (pb) U.focus(pb);
@@ -618,6 +731,7 @@
     }
     function jump(s) {
       if (!engine || isLive()) return;
+      subQueue = [];
       if (extCues) renderExtSub();
       var d = engine.duration();
       var t = B.clamp(engine.time() + s, 0, d > 0 ? d - 2 : engine.time() + s);
@@ -698,7 +812,8 @@
       var tr = engine.tracks();
       var opts = [{ value: -1, label: L('Off') }].concat(tr.text.map(function (t) { return { value: t.index, label: t.label }; }));
       if (!isLive()) opts.push({ value: -2, label: 'OpenSubtitles…' });
-      if (extCues) opts.push({ value: -3, label: L('Subtitle timing') + ' (' + (extOffset > 0 ? '+' : '') + extOffset + ' s)' });
+      // build 102: timing ook voor ondertitels uit de stream (niet alleen OpenSubtitles)
+      if (extCues || tr.currentText != null) opts.push({ value: -3, label: L('Subtitle timing') + ' (' + fmtOffset(extCues ? extOffset : subDelay) + ')' });
       var cur = extCues ? -2 : (tr.currentText == null ? -1 : tr.currentText);
       U.choose(L('Subtitles'), opts, cur, function (v) {
         if (v === -2) { openSubtitles(); return; }
@@ -708,10 +823,210 @@
         engine.selectText(v < 0 ? null : v);
       });
     }
+    function fmtOffset(x) { return x === 0 ? L('In sync') : (x > 0 ? '+' : '\u2212') + Math.abs(x) + ' s'; }
+    /**
+     * build 102: ondertiteltiming −10…+10 s (= tvOS subtitleDelay; + = later). OpenSubtitles en HTML5-sporen kunnen
+     * beide kanten op; ondertitels die AVPlay uit de stream levert alleen later (eerder dan de tv ze geeft kan niet).
+     */
     function chooseOffset() {
+      if (!engine) return;
+      var ext = !!extCues, onlyLater = !ext && !engine.shiftText;
+      var cur = ext ? extOffset : subDelay;
       var o = [];
-      for (var x = -10; x <= 10; x += 0.5) o.push({ value: x, label: (x > 0 ? '+' : '') + x + ' s' });
-      U.choose(L('Subtitle timing'), o, extOffset, function (v) { extOffset = v; renderExtSub(); });
+      for (var x = onlyLater ? 0 : -10; x <= 10; x += 0.5) o.push({ value: x, label: fmtOffset(x) });
+      U.choose(L('Subtitle timing'), o, cur, function (v) {
+        if (ext) { extOffset = v; renderExtSub(); return; }
+        setSubDelay(v);
+      });
+      U.toast(onlyLater ? L('Subtitles from the stream can only be shown later, not earlier.') : L('Subtitles too early or too late? Shift them in steps of half a second.'), 5000);
+    }
+    function showSubText(t) { subtitle.innerHTML = B.esc(String(t || '').replace(/<[^>]+>/g, '')).replace(/\n/g, '<br>'); }
+    /** build 102: tekst van AVPlay (onsubtitlechange): meteen, of na subDelay seconden mediatijd. */
+    function embeddedSub(t) {
+      if (!(subDelay > 0) || !engine) { showSubText(t); return; }
+      subQueue.push({ at: engine.time() + subDelay, text: t });
+      if (subQueue.length > 300) subQueue.shift();
+      if (!subTimer) subTimer = setInterval(flushSubs, 200);
+    }
+    function flushSubs() {
+      if (closed || !engine) return;
+      var now = engine.time();
+      while (subQueue.length && subQueue[0].at <= now) showSubText(subQueue.shift().text);
+      if (!subQueue.length && !(subDelay > 0)) { clearInterval(subTimer); subTimer = null; }
+    }
+    function setSubDelay(v) {
+      var delta = v - subDelay;
+      subDelay = v;
+      if (engine && engine.shiftText) engine.shiftText(delta);
+      subQueue.forEach(function (c) { c.at += delta; });
+      if (subQueue.length && !subTimer) subTimer = setInterval(flushSubs, 200);
+    }
+
+    // MARK: opties (build 102: snelheid, ondertitelgrootte, beeld, slaaptimer; = OptionsPanel op tvOS)
+
+    var RATES = [0.75, 1, 1.25, 1.5, 2];
+    var ASPECTS = ['fit', 'fill', 'r169', 'r43'];
+    function rateLabel(r) { return r === 1 ? L('Normal') : String(r) + '\u00d7'; }
+    function aspectLabel(a) { return a === 'fit' ? L('Fit') : a === 'fill' ? L('Fill') : a === 'r169' ? '16:9' : '4:3'; }
+    function sleepLabel() {
+      if (sleepEnd) return L('End of episode');
+      if (sleepAt) return L('In %d minutes', Math.max(1, Math.ceil((sleepAt - Date.now()) / 60000)));
+      return L('Off');
+    }
+    function applySubSize() {
+      var px = B.player.subtitlePx();
+      subtitle.style.fontSize = px + 'px';
+      // HTML5-sporen tekent de browser zelf (::cue)
+      var st = document.getElementById('bingr-cue-size');
+      if (!st) { st = document.createElement('style'); st.id = 'bingr-cue-size'; document.head.appendChild(st); }
+      st.textContent = '#html-video::cue { font-size: ' + Math.round(px * 0.8) + 'px; }';
+    }
+    function applyRate(quiet) {
+      if (!engine || isLive()) return;
+      if (!engine.setRate(rate) && rate !== 1) {
+        rate = 1;
+        if (!quiet) U.toast(L('This stream does not support another speed.'));
+      }
+    }
+    function optionsPanel(focusKey) {
+      if (!engine) return;
+      var opts = [];
+      if (!isLive()) opts.push({ value: 'speed', label: L('Speed') + ':  ' + rateLabel(rate) });
+      opts.push({ value: 'size', label: L('Subtitle size') + ':  ' + B.player.sizeLabel(B.player.subtitleSize()) });
+      opts.push({ value: 'aspect', label: L('Picture') + ':  ' + aspectLabel(aspect) });
+      opts.push({ value: 'sleep', label: L('Sleep timer') + ':  ' + sleepLabel() });
+      var s = U.choose(L('Options'), opts, null, function (v) {
+        if (v === 'speed') {
+          U.choose(L('Speed'), RATES.map(function (r) { return { value: r, label: rateLabel(r) }; }), rate, function (r) {
+            rate = r; applyRate(false); optionsPanel('speed');
+          });
+        } else if (v === 'size') {
+          var cur = B.player.subtitleSize();
+          U.choose(L('Subtitle size'), B.player.SIZES.map(function (z) { return { value: z, label: B.player.sizeLabel(z) }; }), cur, function (z) {
+            if (z !== cur) D.setShared('subtitleSize', z);
+            applySubSize(); optionsPanel('size');
+          });
+        } else if (v === 'aspect') {
+          U.choose(L('Picture'), ASPECTS.map(function (a) { return { value: a, label: aspectLabel(a) }; }), aspect, function (a) {
+            aspect = a; if (engine) engine.setAspect(a); optionsPanel('aspect');
+          });
+        } else if (v === 'sleep') {
+          var so = [0, 15, 30, 45, 60, 90].map(function (m) { return { value: m, label: m ? L('In %d minutes', m) : L('Off') }; });
+          if (item.type === 'episode' || item.type === 'movie') so.push({ value: -1, label: L('End of episode') });
+          var now0 = sleepEnd ? -1 : (sleepAt ? null : 0);
+          U.choose(L('Sleep timer'), so, now0, function (m) { setSleep(m); optionsPanel('sleep'); });
+        }
+      });
+      if (focusKey) {
+        var idx = 0;
+        opts.forEach(function (o, i) { if (o.value === focusKey) idx = i; });
+        var rows = s.el.querySelectorAll('.choice');
+        if (rows[idx]) U.focus(rows[idx], true);
+      }
+    }
+    /** Slaaptimer: m minuten (0 = uit, −1 = einde van de aflevering/film). */
+    function setSleep(m) {
+      sleepWarned = false;
+      sleepEnd = m === -1;
+      sleepAt = m > 0 ? Date.now() + m * 60000 : 0;
+      B.log('slaaptimer ' + m);
+    }
+    /** Elke seconde: 30 s vooraf een melding, daarna pauzeren en de speler sluiten. */
+    function checkSleep() {
+      if (!engine || (!sleepAt && !sleepEnd)) return;
+      var left = null;
+      if (sleepAt) left = (sleepAt - Date.now()) / 1000;
+      else if (!isLive()) { var d = engine.duration(); if (d > 60) left = d - engine.time(); }
+      if (left == null) return;
+      if (left <= 30 && !sleepWarned) { sleepWarned = true; U.toast(L('Sleep timer: playback stops in 30 seconds.'), 6000); }
+      if (sleepAt && left <= 0) {
+        sleepAt = 0;
+        try { engine.pause(); } catch (e) { /* stil */ }
+        close();
+      }
+    }
+
+    // MARK: live terugspoelen (build 102, = canTimeshift / seek(by:) / goLive op tvOS)
+
+    function canShiftCatchup() {
+      var now = Date.now();
+      return !!(item.channel && Lib.canCatchup(item.channel, { start: now - 60000, end: now + 3600000 }));
+    }
+    function liveWin() { return isLive() && shiftStart == null && engine && engine.liveWindow ? engine.liveWindow() : null; }
+    function hasLiveWindow() { var w = liveWin(); return !!(w && w.end - w.start > 30); }
+    function canTimeshift() { return isLive() && !!engine && (shiftStart != null || hasLiveWindow() || canShiftCatchup()); }
+    /** Seconden achter live. */
+    function behindLive() {
+      if (!isLive() || !engine) return 0;
+      if (shiftTarget != null) return Math.max(0, (Date.now() - shiftTarget) / 1000);
+      if (shiftStart != null) return Math.max(0, (Date.now() - (shiftStart + engine.time() * 1000)) / 1000);
+      var w = liveWin();
+      if (w && w.end - w.start > 30) { var b = w.end - engine.time(); return b > 8 ? b : 0; }
+      return livePausedAt ? (Date.now() - livePausedAt) / 1000 : 0;
+    }
+    function updateLive() {
+      if (!liveBtn) return;
+      var b = behindLive();
+      var txt = b > 5 ? '\u2212' + B.fmtDur(b) + '  \u00b7  ' + L('Back to live') : L('LIVE');
+      var lab = liveBtn.querySelector('.lbl') || liveBtn.lastChild;
+      if (lab && lab.nodeType === 3) { if (lab.nodeValue !== txt) lab.nodeValue = txt; }
+      else if (lab && lab.textContent !== txt) lab.textContent = txt;
+      liveBtn.classList.toggle('behind', b > 5);
+    }
+    function liveJump(s) {
+      if (!canTimeshift()) return;
+      var w = liveWin();
+      if (w && w.end - w.start > 30) {
+        var t = B.clamp(engine.time() + s, w.start, w.end);
+        engine.seek(w.end - t < 10 ? w.end : t);
+        subQueue = []; updateTime(); showOverlay(); return;
+      }
+      var now = Date.now();
+      var cur = shiftTarget != null ? shiftTarget : (shiftStart != null ? shiftStart + engine.time() * 1000 : (livePausedAt || now));
+      var target = Math.min(cur + s * 1000, now);
+      if (now - target < 10000) { goLive(); return; }
+      // binnen de terugkijkstream die al speelt: gewoon spoelen
+      if (shiftStart != null && shiftTarget == null) {
+        var d = engine.duration(), off = (target - shiftStart) / 1000;
+        if (off >= 0 && d > 0 && off < d - 5) { engine.seek(off); subQueue = []; updateTime(); showOverlay(); return; }
+      }
+      // anders na een korte pauze in de toetsen één nieuwe terugkijkstream (niet per druk)
+      shiftTarget = target;
+      clearTimeout(shiftTimer);
+      shiftTimer = setTimeout(function () { var t2 = shiftTarget; shiftTarget = null; openShift(t2); }, 700);
+      updateTime(); showOverlay();
+    }
+    function openShift(from) {
+      if (closed || suspended || !item.channel || from == null) return;
+      var gen = startGen, ch = item.channel;
+      // Xtream: de terugkijk-URL begint op een hele minuut; daarna naar de juiste seconde spoelen
+      var begin = Lib.source && Lib.source.kind === 'Xtream Codes' ? Math.floor(from / 60000) * 60000 : from;
+      spinner.style.display = 'flex';
+      Lib.catchupURL(ch, { start: begin, end: Date.now() + 3 * 3600000 }).then(function (u) {
+        if (closed || suspended || gen !== startGen || item.channel !== ch) return;
+        if (!u) { spinner.style.display = 'none'; U.toast(L('Something went wrong. Please try again.')); return; }
+        shiftStart = begin; livePausedAt = 0; subQueue = [];
+        B.log('timeshift ' + Math.round((Date.now() - from) / 1000) + ' s');
+        return openURL(u, 0).then(function () {
+          if (!closed && engine && shiftStart === begin && from - begin > 2000) engine.seek((from - begin) / 1000);
+          updateTime();
+        });
+      }).catch(function (e) { if (gen === startGen) fail(e); });
+    }
+    function goLive() {
+      clearTimeout(shiftTimer); shiftTarget = null;
+      if (!engine || !isLive()) return;
+      var w = liveWin();
+      if (w && w.end - w.start > 30) { engine.seek(w.end); livePausedAt = 0; if (!engine.playing) engine.play(); renderInfo(); updateTime(); return; }
+      if (shiftStart == null && !livePausedAt) { updateTime(); return; }
+      shiftStart = null; livePausedAt = 0; subQueue = [];
+      var gen = startGen;
+      spinner.style.display = 'flex';
+      Lib.resolveURL(item, true).then(function (u) {
+        if (closed || gen !== startGen) return;
+        if (!u) throw new Error('no_url');
+        return openURL(u, 0);
+      }).catch(function (e) { if (gen === startGen) fail(e); });
     }
     /** OpenSubtitles: zoeken (IMDb-id of titel), kiezen, downloaden en zelf tonen boven de video. */
     function openSubtitles() {
@@ -883,6 +1198,8 @@
     function onEnded() {
       saveProgress(true, true);
       if (!isLive() && !isCatchup() && engine && !stopSent) { stopSent = true; B.trakt.scrobble('stop', item, 1); }
+      // build 102: slaaptimer "einde van de aflevering": niet door naar de volgende
+      if (sleepEnd) { sleepEnd = false; close(); return; }
       if (item.type === 'episode' && nextEpisode()) { nextDismissed = false; showNextCard(); return; }
       close();
     }
@@ -1036,8 +1353,10 @@
         case 'pause': if (engine && engine.playing) togglePlay(); return true;
         case 'playpause': togglePlay(); return true;
         case 'stop': close(); return true;
-        case 'ff': jump(30); return true;
-        case 'rw': jump(-30); return true;
+        // build 102: live met terugkijken of live-venster: −10 / +30 (zoals tvOS)
+        case 'ff': if (isLive()) liveJump(30); else jump(30); return true;
+        case 'rw': if (isLive()) liveJump(-10); else jump(-30); return true;
+        case 'blue': optionsPanel(); return true;
         case 'chup': if (isLive()) zap(-1); return true;
         case 'chdown': if (isLive()) zap(1); return true;
         case 'red': if (item.type === 'episode') markerPanel(); return true;
@@ -1074,6 +1393,7 @@
     function tick() {
       if (!engine || closed) return;
       updateTime();
+      checkSleep();
       if (!isLive()) { var tp = engine.time(); if (tp > 0) lastPos = tp; }
       if (engine.playing) {
         watchedSeconds += 1;
@@ -1091,7 +1411,7 @@
           // build 97: ook de focus-markering weghalen
           if (U.focused === skipBtn) { skipBtn.classList.remove('focused'); U.focused = null; }
         }
-        if (item.type === 'episode' && d > 120) {
+        if (item.type === 'episode' && d > 120 && !sleepEnd) {
           var credits = marker && marker.creditsStart != null ? marker.creditsStart : d - 25;
           if (t >= credits && !nextShown) showNextCard();
         }
@@ -1107,6 +1427,7 @@
       clearInterval(tickTimer); clearInterval(pingTimer); clearInterval(countdownTimer);
       clearTimeout(overlayTimer); clearTimeout(zapTimer); clearTimeout(digitTimer);
       clearInterval(extTimer); clearInterval(markerTimer); markerTimer = null;
+      clearInterval(subTimer); subTimer = null; clearTimeout(shiftTimer);
     }
     function close() {
       if (closed) return;
@@ -1121,6 +1442,12 @@
       if (ctx.onClose) ctx.onClose();
     }
     screen.close = close;
+    // build 102: stand van de opties en live terugspoelen (voor tests en het logboek)
+    screen.state = function () {
+      return { rate: rate, aspect: aspect, sleepAt: sleepAt, sleepEnd: sleepEnd, subDelay: subDelay, shiftStart: shiftStart,
+        behind: Math.round(behindLive()), canTimeshift: canTimeshift(), engine: engine ? engine.name : null };
+    };
+    screen.sleepIn = function (sec) { sleepWarned = false; sleepEnd = false; sleepAt = Date.now() + sec * 1000; };
     /**
      * App naar de achtergrond (Home-toets, andere app, bron wisselen): Tizen verwacht dat AVPlay dan wordt vrijgegeven.
      * Voortgang bewaren, stream_stop, de speler sluiten en onthouden waar we waren.
@@ -1135,6 +1462,7 @@
       startGen++; // lopende start (URL ophalen, prepare) negeren
       clearInterval(pingTimer); clearInterval(countdownTimer); clearTimeout(zapTimer); clearTimeout(digitTimer);
       clearInterval(markerTimer); markerTimer = null;
+      clearTimeout(shiftTimer); shiftTarget = null;
       // build 97: paneel "Intro & aftiteling" sluiten (de engine is zo weg; na terugkomen start de speler opnieuw)
       if (markerScreen) { if (U.top() === markerScreen) U.pop(); markerScreen = null; }
       zapIndex = null; digitBuffer = ''; zapBanner.style.display = 'none';

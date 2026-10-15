@@ -27,7 +27,7 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 python3 "$HERE/make_strings.py"
 cp "$TIZEN/config.xml" "$TIZEN/index.html" "$TIZEN/icon.png" "$STAGE/"
-cp -R "$TIZEN/css" "$TIZEN/js" "$TIZEN/img" "$STAGE/"
+cp -R "$TIZEN/css" "$TIZEN/js" "$TIZEN/img" "$TIZEN/audio" "$STAGE/"  # build 102: audio = intromuziek
 python3 - "$STAGE/config.xml" "$TV" <<'PY'
 import re, sys
 p, v = sys.argv[1], sys.argv[2]

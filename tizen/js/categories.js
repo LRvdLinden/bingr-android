@@ -44,6 +44,7 @@
     g.m.forEach(function (id) { (BY_MOVIE[id] = BY_MOVIE[id] || []).push(g.slug); });
     g.t.forEach(function (id) { (BY_TV[id] = BY_TV[id] || []).push(g.slug); });
   });
+  S.genreList = GENRES; // build 102: zoeken op genre (js/parity.js)
   var SERVER_PALETTE = GENRES.filter(function (g) { return g.slug !== 'horror' && g.slug !== 'thriller'; });
   function hash(s) { var x = 0; s = String(s || '').toLowerCase(); for (var i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) | 0; return x; }
   function serverColors(name) { var n = SERVER_PALETTE.length; return SERVER_PALETTE[((hash(name) % n) + n) % n].c; }

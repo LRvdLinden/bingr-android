@@ -82,6 +82,17 @@
       return r.status >= 200 && r.status < 300 ? r.json : null;
     });
   }
+  // build 102: TMDB ook voor de detailpagina en de pagina van een acteur/actrice (js/details.js, = AR.tmdb op bingr.online)
+  AR.tmdb = tmdb;
+  // build 102: geldige TMDB-locales voor language= (en-EN, nl en ar-AR bestaan niet als locale)
+  var TMDB_LANG = { en: 'en-US', nl: 'nl-NL', de: 'de-DE', fr: 'fr-FR', es: 'es-ES', it: 'it-IT', pt: 'pt-PT', pl: 'pl-PL',
+    tr: 'tr-TR', ar: 'ar-SA', 'zh-Hans': 'zh-CN' };
+  AR.tmdbLang = function () {
+    var l = B.lang || 'en';
+    if (B.has(TMDB_LANG, l)) return TMDB_LANG[l];
+    return l.length === 2 ? l + '-' + l.toUpperCase() : l;
+  };
+  AR.hasKey = function () { return !!apiKey(); };
   /** = TMDB.ageInfo op Android. null = netwerkfout (niets opslaan, later opnieuw). */
   AR.ageInfo = function (imdb, title, year, isShow) {
     var now = Date.now();
@@ -165,7 +176,8 @@
     return ok.length ? String(ok[0].key) : null;
   }
   function videos(path, base) {
-    return tmdb(path, [['language', base], ['include_video_language', base + ',en,null']]).then(function (r) {
+    // build 102: language als geldige locale (nl-NL); include_video_language blijft ISO 639-1 (nl,en,null)
+    return tmdb(path, [['language', AR.tmdbLang()], ['include_video_language', base + ',en,null']]).then(function (r) {
       var list = (r && r.results) || [];
       if (bestVideo(list, base) || base === 'en') return list;
       // sommige antwoorden negeren include_video_language: dan nog een keer in het Engels

@@ -14,7 +14,9 @@ Downloaden: [bingr.online](https://bingr.online/#download). Installeren en bijwe
 - **Live TV** met categorieën, favorieten, recente zenders, nu/straks uit de tv-gids, een **voorbeeld** van de zender waar je op staat en een **gids-raster** (tot 7 dagen terug)
 - **Films** en **Series** met categorieën, detailpagina met seizoenen en afleveringen, voortgang in procenten en automatisch de huidige aflevering
 - **Categorieën** (Netflix-stijl): tegels per genre (TMDB) en per categorie van je server, met een collage van posters; per categorie Alles/Films/Series en sorteren op Populair, Nieuwste, A–Z of Beoordeling; te openen via het profielmenu (avatar) en de rij **Categorieën** op Home (vijf rijen onder Nu live, aan/uit in de startscherm-indeling)
-- **Zoeken** met schermtoetsenbord
+- **Zoeken** met schermtoetsenbord, ook naar personen (TMDB), programma's in de tv-gids, categorieën/genres en titels in je andere afspeellijsten (wisselt van bron bij openen)
+- **Contextmenu** (OK ingedrukt houden of de Tools-toets): Mijn lijst, aan een collectie toevoegen (of een nieuwe maken), bekeken/niet bekeken, uit Verder kijken halen; bij zenders favoriet, tv-gids, terugkijk-correctie en multiview
+- **Zoals op de Apple TV**: rij *Voor jou* (Trakt) en Top 10 uit TMDB/Trakt trending (kinderprofiel: populaire kidstitels), *Bekijk allemaal* met sorteren (ook op Films en Series), billboard met IMDb-score, genre en speelduur, detailpagina met trailer, beoordelingen (IMDb/TMDB/Trakt), voortgang per serie en seizoen, heel seizoen afvinken, *Andere bronnen* en wisselende achtergronden; Live TV met *Evenementen* (PPV, op begintijd, LIVE) en je collecties als groep
 - **Speler** met Samsung AVPlay (HLS, TS, MP4), terugval op HTML5-video, hervatten, audio- en ondertitelsporen, zappen met CH+/CH− of omhoog/omlaag (met vertraging) en cijfertoetsen, **intro overslaan**, **volgende aflevering** met aftellen, reservebron bij een live-fout, foutscherm met *Probeer opnieuw* / *Andere bron*
 - **Servers beheren op de tv** (Instellingen → Jouw servers, alleen het hoofdprofiel): toevoegen, wijzigen en verwijderen van M3U (+ EPG-URL), Xtream Codes (met test van de inlog en *Toch opslaan*), Stalker/MAC-portal, Plex (koppelcode op plex.tv/link), Jellyfin, Emby en Stremio (add-ons en/of Stremio-account). Hoofdserver kiezen. Wijzigingen gaan meteen naar je account en verschijnen op je andere apparaten. Tekst invoeren met een schermtoetsenbord dat met de pijltjes werkt (lay-outs voor tekst, URL en MAC-adres).
 - **Plex, Jellyfin, Emby en Stremio**: bladeren en afspelen (films, series met seizoenen en afleveringen, Stremio met *Kies een bron*), met dezelfde id's als de andere apps, zodat voortgang, Mijn lijst en collecties gewoon meegaan
@@ -39,7 +41,7 @@ Beperkingen die blijven:
 
 - Multiview: alleen de tegel met geluid speelt `.ts`-streams; de andere tegels hebben HLS of MP4 nodig (bij Xtream: zet *Live TV als HLS* aan). Kan een tegel niet spelen, dan zie je nu/straks en kun je hem met OK het geluid geven.
 - MAC-portals werken alleen als het portal het MAC-adres ook als parameter accepteert (een tv-app mag geen eigen cookie meesturen); terugkijken bij Stalker hangt af van het portal (archief per programma of `utc`-parameter).
-- Downloaden, casten en het wijzigen van profielen, collecties of de startscherm-indeling doe je in de andere apps of op bingr.online; op de tv zie je het resultaat.
+- Downloaden, casten en het wijzigen van profielen, slimme collecties of de startscherm-indeling doe je in de andere apps of op bingr.online; op de tv zie je het resultaat. Handmatige collecties maken en vullen kan wel op de tv (contextmenu).
 - Stremio speelt alleen bronnen met een gewone URL (geen torrents).
 - Inloggen bij Jellyfin/Emby gebeurt met gebruikersnaam en wachtwoord; Bingr bewaart alleen de sessie, niet het wachtwoord.
 

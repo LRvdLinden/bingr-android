@@ -96,9 +96,9 @@
 
   // MARK: filteren (= Playlists.apply)
 
-  function context() {
+  function context(other) {
     var p = B.app && B.app.profile;
-    var src = Lib.source;
+    var src = other || Lib.source;
     return {
       custom: D.customization(src), playlist: src ? src.id : '',
       ageLimit: D.ageLimit(p), strict: D.strict(p),
@@ -315,7 +315,7 @@
 
   // MARK: laden en cachen
 
-  var LIB_TTL = 12 * 3600000, EPG_TTL = 4 * 3600000;
+  var EPG_TTL = 4 * 3600000; // build 102: de lijst zelf volgt Lib.refreshDue
   /** Gewenste gidskanalen met per kanaal de ondergrens: zenders met terugkijken tot 3 dagen terug, de rest 3 uur. */
   function wantedEpg(lib) {
     var w = {}, now = Date.now();
@@ -398,11 +398,44 @@
         Lib.loading = false;
         Lib.applyFilters();
         loadEpg(src, Lib.raw, false);
-        if (Date.now() - cached.at > LIB_TTL) Lib.refresh(src, my);
+        // build 102: verversen volgens settings.shared.refreshInterval (= RefreshPolicy op iOS en Android)
+        if (Lib.refreshDue(Date.now() - cached.at)) Lib.refresh(src, my);
         return;
       }
       return Lib.refresh(src, my);
     });
+  };
+  /**
+   * build 102: verversbeleid van de playlists (settings.shared.refreshInterval, raw value gelijk op iOS en Android):
+   * manual | launch | sixHours | daily | weekly; zonder instelling daily. ageMs = leeftijd van de cache.
+   */
+  Lib.REFRESH = ['manual', 'launch', 'sixHours', 'daily', 'weekly'];
+  Lib.refreshPolicy = function () {
+    var v = String(D.shared('refreshInterval', 'daily') || 'daily');
+    return Lib.REFRESH.indexOf(v) >= 0 ? v : 'daily';
+  };
+  Lib.refreshDue = function (ageMs) {
+    if (ageMs == null) return true;
+    switch (Lib.refreshPolicy()) {
+      case 'manual': return false;
+      case 'launch': return ageMs > 60000;
+      case 'sixHours': return ageMs > 6 * 3600000;
+      case 'weekly': return ageMs > 7 * 86400000;
+      default: return ageMs > 86400000;
+    }
+  };
+  /** build 102: tijdens het gebruik: is de cache van de actieve server oud volgens het beleid? Dan op de achtergrond verversen. */
+  Lib.refreshIfDue = function () {
+    var src = Lib.source;
+    if (!src || Lib.loading) return Promise.resolve(false);
+    var p = Lib.refreshPolicy();
+    if (p === 'manual' || p === 'launch') return Promise.resolve(false);
+    return B.idb.get('lib:' + src.id).then(function (c) {
+      if (Lib.source !== src || Lib.loading || !c || !Lib.refreshDue(Date.now() - c.at)) return false;
+      B.log('playlist verversen (' + p + ')');
+      Lib.refresh(src);
+      return true;
+    }, function () { return false; });
   };
   Lib.refresh = function (src, my) {
     my = my || gen;
@@ -531,6 +564,20 @@
     if (src.kind === 'Stalker / MAC-portal') return new P.Stalker(src).liveChannels();
     return Promise.resolve([]);
   }
+  /** build 102: bibliotheek van een andere bron gefilterd voor dit profiel (zoeken in andere afspeellijsten, "Andere bronnen"). */
+  Lib.filterFor = function (src, raw) {
+    var lib = Lib.apply({ channels: raw.channels || [], movies: raw.movies || [], series: raw.series || [], epg: {} }, context(src));
+    lib.epg = {};
+    return lib;
+  };
+  /** build 102: bibliotheek van een andere bron ophalen en cachen (zoals Lib.refresh, maar zonder te wisselen). */
+  Lib.fetchOther = function (src) {
+    return fetchLibrary(src).then(function (lib) {
+      lib.epg = B.media.isMediaServer(src.kind) ? (lib.epg || {}) : {};
+      B.idb.set('lib:' + src.id, { at: Date.now(), lib: lib });
+      return lib;
+    });
+  };
   /** Andere servers op de achtergrond laden (voor de reservebron), één tegelijk; build 97: alleen hun zenders, en opnieuw na 6 uur. */
   Lib.warmOthers = function () {
     var cur = Lib.source ? Lib.source.id : null;

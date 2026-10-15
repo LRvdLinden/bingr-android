@@ -49,6 +49,86 @@
     return s;
   };
 
+  /** build 102: tabblad verborgen via settings.shared.hiddenTabs ("live", "movies", "series"; = iOS en Android). */
+  app.hiddenTabs = function () {
+    var l = D.shared('hiddenTabs', []);
+    return l && l.length != null ? Array.prototype.map.call(l, function (x) { return String(x).toLowerCase(); }) : [];
+  };
+  app.tabHidden = function (key) { return app.hiddenTabs().indexOf(key) >= 0; };
+
+  // MARK: intromuziek (build 102, = SplashTune op tvOS: audio/bingr_tune.m4a bij het starten; settings.shared.introMusic)
+
+  app.introMusic = function () { return B.bool(D.shared('introMusic', true)) !== false; };
+  function playIntro() {
+    if (!app.introMusic()) return;
+    try {
+      var a = new Audio('audio/bingr_tune.m4a');
+      a.volume = 1;
+      var p = a.play();
+      if (p && p.catch) p.catch(function (e) { B.log('intro', e && e.name); });
+      // na afloop vrijgeven
+      a.onended = function () { a.removeAttribute('src'); try { a.load(); } catch (e) { /* stil */ } };
+    } catch (e) { B.log('intro', e && e.message); }
+  }
+
+  // MARK: playlists verversen tijdens het gebruik (build 102, settings.shared.refreshInterval)
+
+  var refreshTimer = null;
+  function startRefreshTimer() {
+    clearInterval(refreshTimer);
+    refreshTimer = setInterval(checkRefresh, 10 * 60000);
+  }
+  function checkRefresh() {
+    // niet tijdens het kijken (parsen van een grote lijst kost op een oude tv beeld); later opnieuw
+    if (!app.profile || document.hidden || B.player.current || (B.multiview && B.multiview.current)) return;
+    B.whenQuiet(function () { if (app.profile && !B.player.current) Lib.refreshIfDue(); }, 3000);
+  }
+
+  // MARK: instellingen (build 102): rijen voor het instellingenscherm, gedeeld via settings.shared
+
+  var POLICY_LABELS = { manual: 'Manually', launch: 'Every time the app opens', sixHours: 'Every 6 hours', daily: 'Daily', weekly: 'Weekly' };
+  /** Ondertitelgrootte (settings.shared.subtitleSize), in de sectie Audio en ondertitels. */
+  app.subtitleSettingRows = function (row, render) {
+    var cur = B.player.subtitleSize();
+    row(L('Subtitle size'), B.player.sizeLabel(cur), function () {
+      U.choose(L('Subtitle size'), B.player.SIZES.map(function (z) { return { value: z, label: B.player.sizeLabel(z) }; }), cur, function (z) {
+        D.setShared('subtitleSize', z); render();
+      });
+    });
+  };
+  /** Startscherm, tabbladen tonen/verbergen, intromuziek en playlists verversen (sectie Weergave). */
+  app.interfaceSettingRows = function (row, onOff, render) {
+    var tabs = [['home', 'Home'], ['live', 'Live TV'], ['movies', 'Movies'], ['series', 'Series']];
+    var start = app.startPage();
+    var startLabel = '';
+    tabs.forEach(function (t) { if (t[0] === start) startLabel = L(t[1]); });
+    row(L('Start screen'), startLabel, function () {
+      U.choose(L('Start screen'), tabs.filter(function (t) { return t[0] === 'home' || !app.tabHidden(t[0]); }).map(function (t) { return { value: t[0], label: L(t[1]) }; }), start, function (v) {
+        D.setShared('startScreen', v); render();
+      });
+    });
+    [['live', 'Show Live TV'], ['movies', 'Show Movies'], ['series', 'Show Series']].forEach(function (t) {
+      var shown = !app.tabHidden(t[0]);
+      row(L(t[1]), onOff(shown), function () {
+        var list = app.hiddenTabs().filter(function (x) { return x !== t[0]; });
+        if (shown) list.push(t[0]);
+        D.setShared('hiddenTabs', list);
+        // menu opnieuw opbouwen (zelfde rij blijft gekozen)
+        app.rebuild(L(t[1]));
+      });
+    });
+    var intro = app.introMusic();
+    row(L('Intro sound'), onOff(intro), function () { D.setShared('introMusic', !intro); if (!intro) playIntro(); render(); });
+    var pol = Lib.refreshPolicy();
+    row(L('Update playlists'), L(POLICY_LABELS[pol]), function () {
+      U.choose(L('Update playlists'), Lib.REFRESH.map(function (k) { return { value: k, label: L(POLICY_LABELS[k]) }; }), pol, function (v) {
+        D.setShared('refreshInterval', v);
+        Lib.refreshIfDue();
+        render();
+      });
+    });
+  };
+
   // profielfoto's: één keer per pad+versie ophalen (per pad alleen de nieuwste versie)
   // build 100: data:-URL's (niets vrij te geven); een mislukte poging wordt niet onthouden: de volgende keer dat de foto
   // nodig is (na minstens 20 s) opnieuw proberen. Vroeger bleef een fout bij het opstarten (netwerk van de tv nog niet
@@ -88,6 +168,7 @@
     document.addEventListener('keyup', U.onKeyUp, true);
     document.addEventListener('visibilitychange', onVisibility);
     U.push(S.splash());
+    if (A.isSignedIn()) playIntro();
     B.on('signedOut', function () { toLogin(); });
     B.on('sessionInvalid', function () { A.revokedSignOut(); });
     // build 97: geen vaste wachttijd meer voor het splashscherm: door zodra de app klaar is (na één frame)
@@ -185,6 +266,7 @@
     D.syncState().then(function () { if (app.profile === p) { Lib.applyFilters(); B.trakt.refresh(false); } });
     B.reminders.start();
     setTimeout(checkAnnouncements, 1500);
+    startRefreshTimer();
   }
 
   // MARK: mededelingen van de beheerder (build 62)
@@ -264,11 +346,16 @@
   };
 
   /** Na een taalwissel de schermen opnieuw opbouwen. */
-  app.rebuild = function () {
+  /** focusLabel (build 102): na het opbouwen de focus op de instelling met deze naam. */
+  app.rebuild = function (focusLabel) {
     if (!app.profile) { showProfiles(); return; }
     var main = S.main();
     U.reset(main);
     main.show('settings', true);
+    if (focusLabel) {
+      var rows = main.el.querySelectorAll('.st-row.f');
+      for (var i = 0; i < rows.length; i++) if (rows[i].firstChild && rows[i].firstChild.textContent === focusLabel) { U.focus(rows[i], true); break; }
+    }
   };
 
   // MARK: heartbeat en achtergrond
@@ -315,6 +402,8 @@
       A.fetchEntitlements(false);
       // build 75: terug op de tv → Trakt-vinkjes bijwerken (alleen als Trakt iets nieuws meldt), zoals iOS/Android
       if (app.profile) B.trakt.refresh(false);
+      // build 102: playlists verversen als ze intussen oud zijn geworden
+      setTimeout(checkRefresh, 5000);
       if (B.player.current) B.player.current.resumeFromBackground();
       if (B.multiview.current) B.multiview.current.resumeFromBackground();
     }

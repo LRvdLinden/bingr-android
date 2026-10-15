@@ -100,6 +100,8 @@
     // wereldbol: andere taal(versie)
     globe: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3c2.6 2.6 3.8 5.6 3.8 9s-1.2 6.4-3.8 9c-2.6-2.6-3.8-5.6-3.8-9S9.4 5.6 12 3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
     flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
+    // build 102: bekeken markeren (oog)
+    eye: '<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="currentColor"/>',
     // profielmenu (build 72)
     person: '<circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     people: '<circle cx="9" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17" cy="9" r="2.8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2.5 20c0-3.8 2.9-6 6.5-6s6.5 2.2 6.5 6M15.5 14.2c3.3-.4 6 1.5 6 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
@@ -355,7 +357,9 @@
     37: 'left', 38: 'up', 39: 'right', 40: 'down', 13: 'enter', 10009: 'back', 8: 'back', 27: 'back', 461: 'back',
     415: 'play', 19: 'pause', 10252: 'playpause', 413: 'stop', 417: 'ff', 412: 'rw', 427: 'chup', 428: 'chdown',
     33: 'chup', 34: 'chdown', 457: 'info', 403: 'red', 404: 'green', 405: 'yellow', 406: 'blue', 10182: 'exit',
-    65376: 'done', 65385: 'cancel', 32: 'playpause'
+    65376: 'done', 65385: 'cancel', 32: 'playpause',
+    // build 102: Tools-toets van de Samsung-afstandsbediening (contextmenu van een kaart); 93 = contextmenu-toets in de test-browser
+    10135: 'tools', 93: 'tools'
   };
   U.keyName = function (e) {
     var c = e.keyCode;
@@ -369,7 +373,7 @@
       if (!window.tizen || !tizen.tvinputdevice) return;
       var names = { MediaPlayPause: 'playpause', MediaPlay: 'play', MediaPause: 'pause', MediaStop: 'stop',
         MediaFastForward: 'ff', MediaRewind: 'rw', ChannelUp: 'chup', ChannelDown: 'chdown', Info: 'info',
-        ColorF0Red: 'red', ColorF1Green: 'green', ColorF2Yellow: 'yellow', ColorF3Blue: 'blue' };
+        ColorF0Red: 'red', ColorF1Green: 'green', ColorF2Yellow: 'yellow', ColorF3Blue: 'blue', Tools: 'tools' };
       var digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
       tizen.tvinputdevice.getSupportedKeys().forEach(function (k) {
         var isDigit = digits.indexOf(k.name) >= 0;
@@ -384,7 +388,42 @@
   var lastHandled = 0;
   /** Ingedrukt gehouden pijltjes: hooguit één stap per ~75 ms, zodat de tv het tekenen bijhoudt. */
   U.REPEAT_MS = 75;
-  U.onKeyUp = function () { B.keyRepeating = false; };
+  /**
+   * build 102: lang indrukken (OK ~0,7 s, zoals een contextmenu op de Apple TV) op een element met _menu opent dat menu.
+   * OK op zo'n element werkt dan bij het loslaten. Een gemiste keyup (komt op sommige tv's voor) mag niets blokkeren:
+   * na 0,7 s zonder herhaalde toets telt het als een gewone druk. Ingedrukt houden geeft herhaalde keydowns.
+   */
+  U.LONG_MS = 700;
+  var hold = null;
+  function holdFire() {
+    var hd = hold;
+    if (!hd || hd.done) return;
+    hd.done = true;
+    if (hd.el !== U.focused || !document.body.contains(hd.el)) { hold = null; return; }
+    if (hd.repeat) { if (hd.el._menu) hd.el._menu(); }
+    else { hold = null; if (hd.el.onEnter) hd.el.onEnter(); }
+  }
+  function holdStart(el) {
+    if (hold) clearTimeout(hold.timer);
+    hold = { el: el, repeat: false, done: false, timer: setTimeout(holdFire, U.LONG_MS) };
+  }
+  U.onKeyUp = function (e) {
+    B.keyRepeating = false;
+    if (!hold || !e || U.keyName(e) !== 'enter') return;
+    var hd = hold;
+    hold = null;
+    clearTimeout(hd.timer);
+    if (e.preventDefault) { e.preventDefault(); e.stopPropagation(); }
+    if (hd.done) return;
+    if (hd.el === U.focused && document.body.contains(hd.el) && hd.el.onEnter) hd.el.onEnter();
+  };
+  /** Contextmenu van het element met de focus (Tools-toets of lang OK); true als er een is. */
+  U.openMenu = function () {
+    var f = U.focused;
+    if (!f || !f._menu) return false;
+    f._menu();
+    return true;
+  };
   // build 97: geen keyup (app naar de achtergrond, venster kwijt): niet blijven denken dat er een toets ingedrukt is
   try {
     window.addEventListener('blur', function () { B.keyRepeating = false; });
@@ -409,6 +448,24 @@
     var handled = false;
     // focus in een laag onder het bovenste scherm telt niet (geen toetsen naar een verborgen scherm)
     if (U.focused && top && !top.el.contains(U.focused)) U.blur();
+    // build 102: OK op een kaart met een contextmenu: pas bij loslaten (kort) of na 0,7 s ingedrukt (menu)
+    if (name === 'enter' && hold) {
+      // nog ingedrukt (herhaling): niets anders doen, ook niet in het menu dat net openging
+      if (e.repeat || (hold.el === U.focused && !hold.done)) {
+        if (hold.el === U.focused) hold.repeat = true;
+        e.preventDefault(); e.stopPropagation();
+        return;
+      }
+      // nieuwe druk terwijl het loslaten van de vorige gemist is
+      clearTimeout(hold.timer);
+      hold = null;
+    }
+    if (name === 'enter' && U.focused && U.focused._menu && top && top.el.contains(U.focused)) {
+      if (!e.repeat) holdStart(U.focused);
+      e.preventDefault(); e.stopPropagation();
+      return;
+    }
+    if (name === 'tools' && U.openMenu()) { e.preventDefault(); e.stopPropagation(); return; }
     if (U.focused && U.focused.onKey) handled = U.focused.onKey(name, e) === true;
     if (!handled && top && top.onKey) handled = top.onKey(name, e) === true;
     if (!handled) {

@@ -235,8 +235,10 @@
     function draw() {
       U.clear(row);
       D.profiles.forEach(function (p) {
-        var tile = h('div.prof.f', [S.avatar(p, 'big'), h('div.prof-name', p.name),
-          D.pinFor(p) ? h('div.prof-lock', [U.icon('lock')]) : null,
+        // build 102: ronde avatar met de naam eronder en het slotje naast de naam; hoofdprofiel met een rond
+        // poppetje rechtsonder (zoals AvatarTile op de Apple TV)
+        var tile = h('div.prof.f', [S.avatar(p, 'big'), h('div.prof-name', [h('span', p.name), D.pinFor(p) ? U.icon('lock', 'prof-lock') : null]),
+          D.isMain(p) && D.profiles.length > 1 ? h('div.prof-main', [U.icon('person')]) : null,
           p.kids ? h('div.prof-kids', L('Kids')) : null]);
         if (B.store.get('lastProfile', null) === p.id) tile.classList.add('autofocus');
         tile.onEnter = function () {
@@ -270,6 +272,8 @@
     card.onEnter = function () { openItem(type, x); };
     card.onFocus = opts.onFocus || null;
     card._key = type + ':' + x.id;
+    // build 102: lang OK / Tools = contextmenu (Mijn lijst, collectie, bekeken, Verder kijken), zoals op de Apple TV
+    if ((type === 'movie' || type === 'series') && B.parity) B.parity.attachMenu(card, { type: type, item: x, progressKey: opts.progressKey || null, collection: opts.collection || null });
     return card;
   }
   S.posterCard = posterCard;
@@ -336,7 +340,7 @@
     }
   }
   function pct(p) { return Math.round(B.clamp((Date.now() - p.start) / (p.end - p.start), 0, 1) * 100) + '%'; }
-  function channelCard(ch, list) {
+  function channelCard(ch, list, opts) {
     var nn = Lib.nowNext(ch);
     var card = h('div.card.chan.f', [
       h('div.chan-logo', [U.img(ch.logo, 'logo-img', ch.name)]),
@@ -345,6 +349,8 @@
     if (nn.now) card.appendChild(h('div.card-progress', [h('div', { style: { width: pct(nn.now) } })]));
     card.onEnter = function () { B.player.playChannel(ch, list || [ch]); };
     card._key = 'channel:' + ch.id;
+    // build 102: contextmenu (favoriet, gids, collectie, terugkijk-correctie, multiview)
+    if (B.parity) B.parity.attachMenu(card, { type: 'channel', item: ch, list: list || [ch], collection: (opts && opts.collection) || null });
     return card;
   }
   S.channelCard = channelCard;
@@ -354,6 +360,7 @@
     watchedMarks(card, x, type);
     card.onEnter = function () { openItem(type, x); };
     card._key = type + ':' + x.id;
+    if (B.parity) B.parity.attachMenu(card, { type: type, item: x });
     return card;
   }
   function openItem(type, x) {
@@ -362,8 +369,10 @@
   }
   S.openItem = openItem;
 
-  function rowBlock(title, cards, cls) {
+  /** build 102: seeAll = functie → kaart "Bekijk allemaal" aan het eind van de rij (rasterpagina met sorteren). */
+  function rowBlock(title, cards, cls, seeAll) {
     if (!cards.length) return null;
+    if (seeAll && B.parity) cards = cards.concat([B.parity.seeAllCard(seeAll)]);
     var scroller = h('div.row-scroll.sx.fm', { 'data-pad': '70' }, [h('div.row-track', cards)]);
     return h('div.row-block' + (cls ? '.' + cls : ''), [h('div.row-title', title), scroller]);
   }
@@ -403,6 +412,8 @@
     nav.appendChild(profileTile);
     var items = {};
     NAV.forEach(function (n) {
+      // build 102: tabbladen die verborgen zijn (settings.shared.hiddenTabs) niet in het menu
+      if (B.app.tabHidden(n[0])) return;
       var it = h('div.nav-item.f', [U.icon(n[1]), h('span.nav-label', L(n[2]))]);
       it.onEnter = function () { show(n[0], true); };
       it.onFocus = function () { nav.classList.add('open'); };
@@ -499,10 +510,22 @@
     function rerender() {
       var pg = pages[current];
       if (!pg) return;
-      var f = U.focused, key = f && f._key, rowT = null;
+      var f = U.focused;
+      // build 102: menu/keuzevenster erboven (contextmenu): de focus van dit scherm is de kaart van vóór het menu
+      var fromLast = !(f && pg.el.contains(f)) && screen.lastFocus && pg.el.contains(screen.lastFocus);
+      if (fromLast) f = screen.lastFocus;
+      var key = f && f._key, rowT = null;
       var hadFocus = !!(f && pg.el.contains(f));
       if (f && f.closest) { var rb = f.closest('.row-block'); var t = rb && rb.querySelector('.row-title'); rowT = t ? t.textContent : null; }
       (pg.onData || pg.refresh)();
+      if (fromLast) {
+        if (document.body.contains(f)) return;
+        var t0 = null, all0 = pg.el.querySelectorAll('.f');
+        for (var j = 0; j < all0.length && key && !t0; j++) if (all0[j]._key === key) t0 = all0[j];
+        // U.pop zet de focus straks op lastFocus
+        screen.lastFocus = t0 || null;
+        return;
+      }
       if (!hadFocus || (U.focused && document.body.contains(U.focused) && pg.el.contains(U.focused))) return;
       var target = null, all = pg.el.querySelectorAll('.f');
       for (var i = 0; i < all.length && key; i++) {
@@ -569,7 +592,8 @@
         var cands = lib.movies.filter(function (m) { return m.poster; }).slice(0, 400);
         if (!cands.length) cands = lib.series.filter(function (s) { return s.poster; }).slice(0, 400);
         if (!cands.length) return null;
-        var top = Lib.top10(lib.movies.length ? lib.movies : lib.series);
+        // build 102: billboard uit de Top 10 van vandaag (trending, = quickHero op tvOS)
+        var top = B.parity ? B.parity.top10(lib.movies.length ? 'movie' : 'series') : Lib.top10(lib.movies.length ? lib.movies : lib.series);
         var pick = top.length ? top[Math.floor(Math.random() * Math.min(5, top.length))] : cands[Math.floor(Math.random() * cands.length)];
         return { item: pick, type: lib.movies.indexOf(pick) >= 0 ? 'movie' : 'series' };
       });
@@ -585,30 +609,39 @@
       if (x.year) meta.push(String(x.year));
       if (x.rating) meta.push('★ ' + (Math.round(x.rating * 10) / 10));
       if (x.group) meta.push(x.group);
+      var metaEl = h('div.hero-meta', meta.join('  ·  '));
+      // build 102: IMDb-badge, genre en speelduur uit de metadata (= HeroBanner op tvOS), op de achtergrond
+      if (B.parity) setTimeout(function () { B.parity.heroMeta(x, hf.type, metaEl); }, 0);
       return h('div.row-block.hero', [
         h('div.hero-bg', [U.img(x.poster, 'hero-img', null, true)]),
         h('div.hero-poster', [U.img(x.poster, 'poster-img', x.title, true)]),
         h('div.hero-shade'),
         h('div.hero-info', [
           h('div.hero-kind', hf.type === 'series' ? L('SERIES') : L('FILM')),
-          h('h1.hero-title', x.title), h('div.hero-meta', meta.join('  ·  ')),
+          h('h1.hero-title', x.title), metaEl,
           x.plot ? h('p.hero-plot', x.plot) : null,
           h('div.hero-buttons.fm', [playBtn, info])
         ])
       ]);
     }
+    /** build 102: "Bekijk allemaal" (rasterpagina met sorteren) voor een rij; entries = [{type, item}]. */
+    function seeAll(title, list) {
+      if (!B.parity || !list || !list.length) return null;
+      return function () { B.parity.openGrid(title, list); };
+    }
+    function entries(list, type) { return list.map(function (x) { return { type: type, item: x }; }); }
     function continueRow() {
       var lib = Lib.lib, cards = [];
       var byTitle = Lib.memo('seriesByTitle', function () { var m = {}; lib.series.forEach(function (s) { if (!m[s.title]) m[s.title] = s; }); return m; });
       D.progressList().forEach(function (pe) {
         if (cards.length >= 20) return;
         var hit = lib.byId[pe.key];
-        if (hit && hit.type === 'movie') cards.push(posterCard(hit.item, 'movie', { progress: pe.e.fraction }));
+        if (hit && hit.type === 'movie') cards.push(posterCard(hit.item, 'movie', { progress: pe.e.fraction, progressKey: pe.key }));
         else if (!hit) {
           // aflevering: serie zoeken via de titel
           var s = byTitle[pe.e.title];
           if (s && !cards.some(function (c) { return c._sid === s.id; })) {
-            var c = posterCard(s, 'series', { progress: pe.e.fraction });
+            var c = posterCard(s, 'series', { progress: pe.e.fraction, progressKey: pe.key });
             c._sid = s.id;
             cards.push(c);
           }
@@ -617,14 +650,14 @@
       return rowBlock(L('Continue watching'), cards);
     }
     function myListRow() {
-      var lib = Lib.lib, src = Lib.source ? Lib.source.id : '', cards = [];
+      var lib = Lib.lib, src = Lib.source ? Lib.source.id : '', cards = [], all = [];
       D.setList('myList').forEach(function (k) {
         var parts = k.split('|');
-        if (parts[0] !== src || cards.length >= 40) return;
+        if (parts[0] !== src) return;
         var hit = lib.byId[parts.slice(1).join('|')];
-        if (hit && hit.type !== 'channel') cards.push(posterCard(hit.item, hit.type));
+        if (hit && hit.type !== 'channel') { all.push(hit); if (cards.length < 40) cards.push(posterCard(hit.item, hit.type)); }
       });
-      return rowBlock(L('My List'), cards);
+      return rowBlock(L('My List'), cards, null, seeAll(L('My List'), all));
     }
     function liveRow() {
       var lib = Lib.lib, src = Lib.source ? Lib.source.id : '', chans = [];
@@ -644,26 +677,42 @@
         'continue': continueRow, 'mylist': myListRow, 'live': liveRow,
         'top10': function () {
           var out = [];
-          var ms = Lib.top10(lib.movies), ss = Lib.top10(lib.series);
+          // build 102: Top 10 uit TMDB/Trakt trending (kinderprofiel: populaire animatie/familie), gekoppeld aan je lijst
+          var P = B.parity;
+          var ms = P ? P.top10('movie') : Lib.top10(lib.movies), ss = P ? P.top10('series') : Lib.top10(lib.series);
           var kids = B.app.profile.kids;
-          var sb = rowBlock(kids ? L('Top 10 kids series') : L('Top 10 series today'), ss.map(function (s, i) { return top10Card(s, 'series', i); }), 'top10row');
-          var mb = rowBlock(kids ? L('Top 10 kids movies') : L('Top 10 movies today'), ms.map(function (m, i) { return top10Card(m, 'movie', i); }), 'top10row');
+          var st = kids ? L('Top 10 kids series') : L('Top 10 series today'), mt = kids ? L('Top 10 kids movies') : L('Top 10 movies today');
+          var sb = rowBlock(st, ss.map(function (s, i) { return top10Card(s, 'series', i); }), 'top10row',
+            P ? function () { P.openGrid(st, P.top10('series', true).map(function (x) { return { type: 'series', item: x }; })); } : null);
+          var mb = rowBlock(mt, ms.map(function (m, i) { return top10Card(m, 'movie', i); }), 'top10row',
+            P ? function () { P.openGrid(mt, P.top10('movie', true).map(function (x) { return { type: 'movie', item: x }; })); } : null);
           if (sb) out.push(sb);
           if (mb) out.push(mb);
           return out;
         },
-        'recent': function () { return rowBlock(L('Recently added'), Lib.recent(lib.movies, 30).map(function (m) { return posterCard(m, 'movie'); })); },
-        'movies': function () { return rowBlock(L('Movies'), lib.movies.slice(0, 30).map(function (m) { return posterCard(m, 'movie'); })); },
-        'series': function () { return rowBlock(L('Series'), lib.series.slice(0, 30).map(function (s) { return posterCard(s, 'series'); })); },
+        // build 102: "Voor jou" (= forYouRow op tvOS), alfabetisch, films en series door elkaar
+        'foryou': function () {
+          // zonder wat intussen voortgang heeft of bekeken is
+          var list = (B.parity ? B.parity.forYou() : []).filter(function (e) {
+            return !D.progress(e.item.id) && !(e.type === 'movie' && B.parity.movieWatched(e.item));
+          });
+          return rowBlock(L('For you'), list.map(function (e) { return posterCard(e.item, e.type); }), 'foryou', seeAll(L('For you'), list));
+        },
+        'recent': function () {
+          var all = Lib.recent(lib.movies, 200);
+          return rowBlock(L('Recently added'), all.slice(0, 30).map(function (m) { return posterCard(m, 'movie'); }), null, seeAll(L('Recently added'), entries(all, 'movie')));
+        },
+        'movies': function () { return rowBlock(L('Movies'), lib.movies.slice(0, 30).map(function (m) { return posterCard(m, 'movie'); }), null, seeAll(L('Movies'), entries(lib.movies, 'movie'))); },
+        'series': function () { return rowBlock(L('Series'), lib.series.slice(0, 30).map(function (s) { return posterCard(s, 'series'); }), null, seeAll(L('Series'), entries(lib.series, 'series'))); },
         'categories': function () {
           var out = [];
           var mg = Lib.byGroup('movie'), sg = Lib.byGroup('series');
           lib.movieGroups.slice(0, 8).forEach(function (g) {
-            var r = rowBlock(g, (mg[g] || []).slice(0, 30).map(function (m) { return posterCard(m, 'movie'); }));
+            var r = rowBlock(g, (mg[g] || []).slice(0, 30).map(function (m) { return posterCard(m, 'movie'); }), null, seeAll(g, entries(mg[g] || [], 'movie')));
             if (r) out.push(r);
           });
           lib.seriesGroups.slice(0, 6).forEach(function (g) {
-            var r = rowBlock(g, (sg[g] || []).slice(0, 30).map(function (s) { return posterCard(s, 'series'); }));
+            var r = rowBlock(g, (sg[g] || []).slice(0, 30).map(function (s) { return posterCard(s, 'series'); }), null, seeAll(g, entries(sg[g] || [], 'series')));
             if (r) out.push(r);
           });
           return out;
@@ -677,7 +726,9 @@
         b['collection:' + c.id] = function () {
           var items = Lib.collectionItems(c, 40);
           var chans = items.filter(function (x) { return x.type === 'channel'; }).map(function (x) { return x.item; });
-          return rowBlock(c.name, items.map(function (x) { return x.type === 'channel' ? channelCard(x.item, chans) : posterCard(x.item, x.type); }));
+          // build 102: uit een handmatige collectie weghalen kan via het contextmenu; "Bekijk allemaal" = hele collectie
+          return rowBlock(c.name, items.map(function (x) { return x.type === 'channel' ? channelCard(x.item, chans, { collection: c }) : posterCard(x.item, x.type, { collection: c }); }), null,
+            seeAll(c.name, Lib.collectionItems(c, 500)));
         };
       });
       return b;
@@ -710,7 +761,7 @@
     }
     function order(b) {
       var colls = Object.keys(b).filter(function (k) { return k.indexOf('collection:') === 0; });
-      var o = ['continue', 'mylist', 'top10', 'live', 'recent'].concat(colls).concat(['categories']);
+      var o = ['continue', 'mylist', 'foryou', 'top10', 'live', 'recent'].concat(colls).concat(['categories']);
       var layout = homeLayout();
       var auto = autoTiles();
       if (layout) {
@@ -725,10 +776,16 @@
         });
         colls.forEach(function (k) { if (!known[k]) o.push(k); });
         if (!known.categories && o.indexOf('categories') < 0) o.push('categories');
+        // build 102: "Voor jou" nog niet in de indeling (oudere indeling): standaard na Mijn lijst / Verder kijken
+        if (!known.foryou) {
+          var fa = 0;
+          ['continue', 'mylist'].forEach(function (k) { var j = o.indexOf(k); if (j >= fa) fa = j + 1; });
+          o.splice(fa, 0, 'foryou');
+        }
         if (!known.live) {
           // geen "live" in de indeling: op de standaardplek (na Verder kijken, Mijn lijst en Top 10)
           var at = 0;
-          ['continue', 'mylist', 'top10'].forEach(function (k) { var j = o.indexOf(k); if (j >= at) at = j + 1; });
+          ['continue', 'mylist', 'foryou', 'top10'].forEach(function (k) { var j = o.indexOf(k); if (j >= at) at = j + 1; });
           o.splice(at, 0, '@live');
         }
       } else o.splice(o.indexOf('live') + 1, 0, '@live');
@@ -780,6 +837,7 @@
     /** Alles opnieuw: de bovenste rijen meteen, de rest in stukjes (scrollen blijft vloeiend). */
     function render() {
       var my = ++buildJob;
+      built = false;
       U.clear(track);
       blocks = {};
       U.scrollTo(scroller, 0);
@@ -802,7 +860,7 @@
           holder.forEach(function (n) { n._row = k; track.insertBefore(n, end); });
         }
         if (i < keys.length) B.idle(step, 300);
-        else buildCats();
+        else { built = true; buildCats(); if (B.parity) loadExtras(); }
       }
       step();
     }
@@ -845,7 +903,28 @@
     });
     pg.destroy = function () { offCats(); };
     pg.refresh = render;
-    pg.onData = function () { pg.stale = false; refreshRows(['continue', 'mylist', 'live']); };
+    // build 102: ook de collectierijen (toevoegen via het contextmenu) en Voor jou (bekeken/voortgang)
+    pg.onData = function () {
+      pg.stale = false;
+      var colls = Object.keys(builders()).filter(function (k) { return k.indexOf('collection:') === 0; });
+      // nieuwe collectie (net gemaakt): de rij op zijn plek invoegen
+      if (built) colls.forEach(function (k) { if (!blocks[k]) blocks[k] = []; });
+      refreshRows(['continue', 'mylist', 'live', 'foryou'].concat(colls));
+    };
+    var built = false;
+    /** build 102: Top 10 (trending) en Voor jou op de achtergrond; daarna alleen die rijen opnieuw. */
+    var extrasJob = 0;
+    function loadExtras() {
+      var my = ++extrasJob, P = B.parity;
+      P.loadTrending().then(function (changed) {
+        if (my !== extrasJob || !document.body.contains(scroller)) return;
+        if (changed) refreshRows(['top10']);
+        return P.loadForYou().then(function (ch2) {
+          if (my !== extrasJob || !document.body.contains(scroller)) return;
+          if (ch2 || changed) B.whenQuiet(function () { if (document.body.contains(scroller)) refreshRows(['foryou']); }, 300);
+        });
+      }).catch(B.noop);
+    }
     pg.onEpg = function () { refreshRows(['live']); };
     pg.focusIn = function () { var f = track.querySelector('.f.autofocus') || track.querySelector('.f'); if (f) { U.focus(f); return true; } return false; };
     pg.onBack = function () {
@@ -869,7 +948,9 @@
     var preview = h('div.lv-preview', [pvVideo, pvInfo, pvHint]);
     var guideBtn = U.button(L('TV guide'), function () { U.push(S.guide(currentList, list ? list.index() : 0)); }, { icon: 'guide', cls: 'lv-guide-btn' });
     var mvBtn = U.button(L('Multiview'), function () { B.multiview.open(currentList, list ? list.index() : 0); }, { icon: 'grid', cls: 'lv-mv-btn' });
-    var el = h('div.page.live', [h('div.lv-head', [h('h1', L('Live TV')), h('div.lv-head-btns', [mvBtn, guideBtn])]), h('div.lv-cols', [groupsEl, chansBox, preview])]);
+    // build 102: zender of programma zoeken (= zoekveld in LiveTVView op tvOS)
+    var searchBtn = S.channelSearch ? U.button(L('Search channel or program'), function () { S.channelSearch(); }, { icon: 'search', cls: 'lv-search-btn' }) : null;
+    var el = h('div.page.live', [h('div.lv-head', [h('h1', L('Live TV')), h('div.lv-head-btns', [searchBtn, mvBtn, guideBtn])]), h('div.lv-cols', [groupsEl, chansBox, preview])]);
     var pg = { el: el };
     var currentList = [], currentGroup = null, lastChan = null, list = null;
     var src = Lib.source ? Lib.source.id : '';
@@ -880,9 +961,26 @@
       if (favs.length) out.push({ key: '★', label: L('Favorites') });
       if (D.setList('recentChannels').some(function (k) { return k.split('|')[0] === src; })) out.push({ key: '⟲', label: L('Recent') });
       out.push({ key: '*', label: L('All channels') });
+      // build 102: Evenementen (PPV/EVENT, op begintijd) en je collecties met zenders (= LiveTVView op tvOS)
+      if (B.parity && B.parity.events().length) out.push({ key: '⚡', label: '⚡ ' + L('Events') });
+      channelCollections().forEach(function (c) { out.push({ key: '▤' + c.id, label: '▤ ' + c.name }); });
       lib.channelGroups.forEach(function (g) { out.push({ key: g, label: g }); });
       return out;
     }
+    function channelCollections() {
+      return D.collectionsFor(B.app.profile.id).filter(function (c) {
+        if (c.sourceID && String(c.sourceID).toLowerCase() !== String(src).toLowerCase()) return false;
+        return c.kind === 'smart' ? (!Array.isArray(c.types) || !c.types.length || c.types.indexOf('channel') >= 0)
+          : (c.items || []).some(function (it) { return it && it.type === 'channel'; });
+      });
+    }
+    function collectionFor(key) {
+      if (String(key).charAt(0) !== '▤') return null;
+      var id = key.slice(1), hit = null;
+      D.collectionsFor(B.app.profile.id).forEach(function (c) { if (c.id === id) hit = c; });
+      return hit;
+    }
+    var events = {};
     function channelsFor(key) {
       function fromKeys(keys) {
         var out = [];
@@ -897,6 +995,12 @@
       if (key === '★') return fromKeys(D.setList('favorites'));
       if (key === '⟲') return fromKeys(D.setList('recentChannels'));
       if (key === '*') return lib.channels;
+      if (key === '⚡') {
+        events = {};
+        return (B.parity ? B.parity.events() : []).map(function (e) { events[e.ch.id] = e.ev; return e.ch; });
+      }
+      var coll = collectionFor(key);
+      if (coll) return Lib.collectionItems(coll, 500).filter(function (x) { return x.type === 'channel'; }).map(function (x) { return x.item; });
       return Lib.byGroup('channel')[key] || [];
     }
     var selectSoon = B.debounce(function (key) { if (currentGroup !== key) selectGroup(key); }, 220);
@@ -932,11 +1036,14 @@
       if (!ch) return h('div.lv-chan');
       var nn = Lib.nowNext(ch);
       var fav = D.inSet('favorites', D.key(src, ch.id));
-      var row = h('div.lv-chan.f', [
+      // build 102: in Evenementen de wedstrijd, de begintijd en LIVE zodra hij bezig is
+      var ev = currentGroup === '⚡' ? events[ch.id] : null;
+      var live = ev && B.parity.eventLive(ev);
+      var row = h('div.lv-chan.f' + (ev ? '.event' : ''), [
         h('div.lv-num', ch.number != null ? String(ch.number) : ''),
         h('div.lv-logo', [U.img(ch.logo, 'logo-img', '')]),
-        h('div.lv-text', [h('div.lv-name', [ch.name, fav ? h('span.lv-fav', ' ★') : null, ch.catchupDays > 0 ? h('span.lv-cu', ' ⟲') : null]),
-          h('div.lv-now.dim', nn.now ? nn.now.title : '')])
+        h('div.lv-text', [h('div.lv-name', [live ? h('span.live-badge', L('LIVE')) : null, ev ? ev.title : ch.name, fav ? h('span.lv-fav', ' ★') : null, ch.catchupDays > 0 ? h('span.lv-cu', ' ⟲') : null]),
+          h('div.lv-now.dim', ev ? (B.parity.eventWhen(ev) || ch.name) : (nn.now ? nn.now.title : ''))])
       ]);
       if (nn.now) row.appendChild(h('div.lv-bar', [h('div', { style: { width: pct(nn.now) } })]));
       row._key = 'channel:' + ch.id;
@@ -947,6 +1054,8 @@
         if (name === 'info' || name === 'blue') { U.push(S.guide(currentList, i)); return true; }
         return false;
       };
+      // build 102: lang OK / Tools = contextmenu van de zender
+      if (B.parity) B.parity.attachMenu(row, { type: 'channel', item: ch, list: currentList, collection: collectionFor(currentGroup) });
       return row;
     }
     function toggleFav(ch) {
@@ -1179,7 +1288,24 @@
     var gridBox = h('div.ct-gridbox');
     var title = h('h1', type === 'movie' ? L('Movies') : L('Series'));
     var count = h('span.ct-count.dim');
-    var el = h('div.page.catalog', [h('div.ct-head', [title, count]), h('div.ct-cols', [groupsEl, gridBox])]);
+    // build 102: sorteren (Standaard, A–Z, Z–A, Nieuwste, Hoogst gewaardeerd), zoals CategoryView op tvOS
+    var sortBox = h('div.ct-sorts');
+    var sort = B.store.get('catalog.sort.' + type, 'default');
+    function drawSorts() {
+      U.clear(sortBox);
+      if (!B.parity) return;
+      sortBox.appendChild(B.parity.sortPills(sort, function (k) {
+        sort = k;
+        B.store.set('catalog.sort.' + type, k);
+        drawSorts();
+        var cur = groupKey;
+        groupKey = null;
+        select(cur);
+        var a = sortBox.querySelector('.cat-pill.active');
+        if (a) U.focus(a, true);
+      }));
+    }
+    var el = h('div.page.catalog', [h('div.ct-head', [title, count, sortBox]), h('div.ct-cols', [groupsEl, gridBox])]);
     var pg = { el: el };
     var list = [], groupKey = null, grid = null;
     var COLS = 5, CW = 238, CH = 345;
@@ -1192,7 +1318,10 @@
       if (st) { gridBox.appendChild(st); return; }
       var all = [{ key: '*', label: L('All') }];
       if (Lib.recent(items(), 1).length) all.push({ key: '+', label: L('Recently added') });
+      // build 102: je collecties met films/series als groep (= LiveTVView/CategoryView op tvOS)
+      collections().forEach(function (c) { all.push({ key: '▤' + c.id, label: '▤ ' + c.name }); });
       groups().forEach(function (g) { all.push({ key: g, label: g }); });
+      drawSorts();
       var last = B.store.get('catalog.' + type, null);
       all.forEach(function (g) {
         var it = h('div.ct-group.f', g.label);
@@ -1212,14 +1341,18 @@
       B.store.set('catalog.' + type, key);
       Array.prototype.forEach.call(groupsEl.track.children, function (c) { c.classList.toggle('active', c._key === key); });
       var all = items();
-      list = key === '*' ? all : key === '+' ? Lib.recent(all, 60) : (Lib.byGroup(type)[key] || []);
+      var coll = String(key).charAt(0) === '▤' ? collectionById(key.slice(1)) : null;
+      list = key === '*' ? all : key === '+' ? Lib.recent(all, 60) : coll ? Lib.collectionItems(coll, 2000).filter(function (x) { return x.type === type; }).map(function (x) { return x.item; })
+        : (Lib.byGroup(type)[key] || []);
+      if (B.parity) list = B.parity.sort(list, sort);
       count.textContent = list.length ? '  ' + list.length : '';
       if (!grid) {
         U.clear(gridBox);
         grid = U.vgrid({ count: list.length, cols: COLS, cellW: CW, cellH: CH, height: 880, render: function (i) {
           var x = list[i];
           var p = type === 'movie' ? D.progress(x.id) : null;
-          return posterCard(x, type, { progress: p ? p.fraction : null });
+          var c2 = String(groupKey).charAt(0) === '▤' ? collectionById(groupKey.slice(1)) : null;
+          return posterCard(x, type, { progress: p ? p.fraction : null, collection: c2 });
         } });
         gridBox.appendChild(grid.el);
       } else grid.reset(list.length);
@@ -1227,6 +1360,14 @@
       if (empty) gridBox.removeChild(empty);
       if (!list.length) gridBox.appendChild(h('div.state.dim', L('Nothing here yet')));
     }
+    function collections() {
+      var prof = B.app.profile;
+      return prof ? D.collectionsFor(prof.id).filter(function (c) {
+        if (c.kind === 'smart') return !Array.isArray(c.types) || !c.types.length || c.types.indexOf(type) >= 0;
+        return (c.items || []).some(function (it) { return it && it.type === type; });
+      }) : [];
+    }
+    function collectionById(id) { var hit = null; D.collectionsFor(B.app.profile.id).forEach(function (c) { if (c.id === id) hit = c; }); return hit; }
     pg.refresh = render;
     pg.focusIn = function () {
       if (grid && list.length) { grid.focusIndex(grid.index()); return true; }
@@ -1340,7 +1481,10 @@
     query.classList.add('placeholder');
     var el = h('div.page.search', [h('div.search-left', [query, kb]), results]);
     var pg = { el: el };
+    var gen = 0, stopExtras = null;
     function run(v) {
+      var my = ++gen;
+      if (stopExtras) { stopExtras(); stopExtras = null; }
       U.clear(results.track);
       U.scrollTo(results, 0);
       if (!v.trim()) return;
@@ -1349,10 +1493,23 @@
       var b = rowBlock(L('Movies'), r.movies.map(function (m) { return posterCard(m, 'movie'); }));
       var c = rowBlock(L('Live TV'), r.channels.map(function (ch) { return channelCard(ch, r.channels); }), 'live');
       [b, a, c].forEach(function (x) { if (x) results.track.appendChild(x); });
-      if (!a && !b && !c) results.track.appendChild(h('div.state.dim', L('No results for “%@”', v)));
+      var empty = null;
+      if (!a && !b && !c) results.track.appendChild(empty = h('div.state.dim', L('No results for “%@”', v)));
+      // build 102: ook personen (TMDB), categorieën/genres, de tv-gids en je andere afspeellijsten (= SearchView op tvOS)
+      if (B.parity) stopExtras = B.parity.searchExtras(v, results.track, function () { return my === gen && document.body.contains(results); }, empty);
     }
+    pg.destroy = function () { gen++; if (stopExtras) stopExtras(); };
     pg.focusIn = function () { var k = kb.querySelector('.key'); if (k) { U.focus(k); return true; } return false; };
     pg.refresh = function () { run(kb.getValue()); };
+    // build 102: zoeken met een titel van buitenaf (aanbevelingen en acteurspagina, S.searchFor in details.js)
+    pg.setQuery = function (v) {
+      v = v || '';
+      kb.setValue(v);
+      query.textContent = v || L('Search');
+      query.classList.toggle('placeholder', !v);
+      clearTimeout(timer);
+      run(v);
+    };
     return pg;
   };
 
@@ -1370,11 +1527,24 @@
     var epsTrack = h('div.row-track');
     epsEl.appendChild(epsTrack);
     var body = vScroller('.dt-body', { 'data-pad': '60' });
-    body.track.appendChild(h('div.dt-info', [h('div.dt-kind', type === 'series' ? L('SERIES') : L('FILM')), h('h1.dt-title', x.title), meta, langEl, plot, buttons]));
-    if (type === 'series') body.track.appendChild(h('div.dt-episodes', [seasonsEl, epsEl]));
+    // build 102: genres en regisseur onder de beschrijving, rijen Acteurs en Aanbevelingen onderaan (js/details.js)
+    var creditsEl = h('div.dt-credits');
+    var extraEl = h('div.dt-extra');
+    // build 102: beoordelingen (IMDb/TMDB/Trakt/afspeellijst), voortgang van de serie en "Andere bronnen" (= DetailView op tvOS)
+    var ratingsEl = h('div.dt-ratings-slot');
+    var sprogEl = h('div.dt-sprog');
+    var altEl = h('div.dt-alt-slot');
+    var P = B.parity;
+    // build 102: de poster schuift mee met de pagina (anders ligt hij over de rijen onderaan)
+    body.track.appendChild(h('div.dt-poster', [U.img(x.poster, 'poster-img', x.title, true)]));
+    body.track.appendChild(h('div.dt-info', [h('div.dt-kind', type === 'series' ? L('SERIES') : L('FILM')), h('h1.dt-title', x.title), meta, langEl, plot, creditsEl, buttons, ratingsEl]));
+    if (type === 'series') body.track.appendChild(h('div.dt-episodes', [sprogEl, seasonsEl, epsEl]));
+    body.track.appendChild(altEl);
+    body.track.appendChild(extraEl);
+    body.track.appendChild(h('div.dt-end'));
     var bg = h('div.dt-bg', [h('div.dt-kb', [U.img(x.poster, 'hero-img', null, true)])]);
-    var el = layer('detail', [bg, h('div.dt-shade'),
-      h('div.dt-poster', [U.img(x.poster, 'poster-img', x.title, true)]), body]);
+    var el = layer('detail', [bg, h('div.dt-shade'), body]);
+    var alive = true;
     var episodes = [], season = null, currentEp = null;
     var stremio = Lib.source && Lib.source.kind === 'Stremio';
 
@@ -1512,7 +1682,10 @@
     function onTrailerVisibility() { if (document.hidden) stopTrailer(); }
     document.addEventListener('visibilitychange', onTrailerVisibility);
 
+    var metaExtra = null;
     function metaText(extra) {
+      // build 102: speelduur/genre blijven staan als de pagina opnieuw getekend wordt (terug van een acteur)
+      if (extra) metaExtra = extra; else extra = metaExtra;
       var parts = [];
       if (x.year) parts.push(String(x.year));
       if (x.rating) parts.push('★ ' + (Math.round(x.rating * 10) / 10));
@@ -1558,9 +1731,11 @@
     function listButton() {
       var on = D.inSet('myList', listKey);
       var b = U.button(L('My List'), function () {
-        D.toggleSet('myList', listKey);
+        // build 102: hoofdprofiel met Trakt: ook op de Trakt-watchlist
+        if (P) P.toggleMyList(type, x); else D.toggleSet('myList', listKey);
         var nb = listButton();
         buttons.replaceChild(nb, b);
+        nb.onFocus = toTop;
         U.focus(nb);
       }, { icon: on ? 'check' : 'list' });
       return b;
@@ -1596,8 +1771,31 @@
       }
       if (tr.playing) buttons.appendChild(U.button(tr.muted ? L('Sound on') : L('Sound off'), trailerToggleMute, { icon: tr.muted ? 'volumeOff' : 'volume' }));
       if (versions.length) buttons.appendChild(U.button(L('Other language'), chooseVersion, { icon: 'globe' }));
+      // build 102: trailer beeldvullend met geluid (serie: trailer van het gekozen seizoen, zoals tvOS)
+      if (trailerKey) {
+        var tl = type === 'series' && trailerSeason != null ? L('Trailer season %d', trailerSeason) : L('Trailer');
+        var tb = U.button(tl, function () { stopTrailer(); P.playTrailer(trailerKey); }, { icon: 'play', cls: 'dt-trailer-btn' });
+        buttons.appendChild(tb);
+      }
       buttons.appendChild(listButton());
+      if (P) {
+        // build 102: bekeken (film) en aan een collectie toevoegen
+        if (type === 'movie') {
+          var w = P.movieWatched(x);
+          buttons.appendChild(U.button(w ? L('Watched') : L('Mark watched'), function () {
+            P.setMovieWatched(x, !w);
+            U.toast(w ? L('Marked as unwatched') : L('Marked as watched'));
+            drawButtonsKeepFocus();
+            var again = buttons.querySelector('.dt-watched-btn');
+            if (again) U.focus(again, true);
+          }, { icon: w ? 'check' : 'eye', cls: 'dt-watched-btn' + (w ? ' on' : '') }));
+        }
+        buttons.appendChild(U.button(L('Collection'), function () { P.chooseCollection(type, x); }, { icon: 'grid', cls: 'dt-coll-btn' }));
+      }
+      // build 102: terug bij de knoppen = weer helemaal naar boven (titel en beschrijving in beeld)
+      Array.prototype.forEach.call(buttons.querySelectorAll('.f'), function (b) { if (!b.onFocus) b.onFocus = toTop; });
     }
+    function toTop() { U.scrollTo(body, 0); }
     function playEpisode(ep) {
       stopTrailer();
       B.player.playVOD(B.player.episodeItem(ep, x), { episodes: episodes, series: x });
@@ -1626,10 +1824,25 @@
       var track = h('div.row-track');
       seasons().forEach(function (sn) {
         var t = h('div.season-tab.f' + (sn === season ? '.active' : ''), L('Season %d', sn));
-        t.onFocus = function () { if (season !== sn) { season = sn; drawSeasons(); drawEpisodes(null); } };
+        t.onFocus = function () { if (season !== sn) { season = sn; drawSeasons(); drawEpisodes(null); drawProgress(); lookupTrailer(sn); } };
         t.onEnter = function () { var f = epsTrack.querySelector('.f'); if (f) U.focus(f); };
         track.appendChild(t);
       });
+      // build 102: heel seizoen (niet) bekeken, ook naar Trakt (= vinkje naast de seizoenen op tvOS)
+      var list = episodes.filter(function (e) { return e.season === season; });
+      if (P && list.length) {
+        var all = list.every(epWatched);
+        var mk = h('div.season-tab.season-mark.f' + (all ? '.on' : ''), [U.icon('check'), h('span', all ? L('Mark season as unwatched') : L('Mark whole season watched'))]);
+        mk.onEnter = function () {
+          P.setEpisodesWatched(x, list, !all);
+          U.toast(all ? L('Marked as unwatched') : L('Marked as watched'));
+          drawSeasons(); drawEpisodes(null); drawProgress();
+          var again = seasonsEl.querySelector('.season-mark');
+          if (again) U.focus(again, true);
+        };
+        mk._key = 'season-mark';
+        track.appendChild(mk);
+      }
       seasonsEl.appendChild(track);
       var act = seasonsEl.querySelector('.active');
       seasonsEl._last = act;
@@ -1653,6 +1866,21 @@
         card.onEnter = function () { playEpisode(e); };
         card.onFocus = function () { if (currentEp !== e) { currentEp = e; if (stremio) drawButtonsKeepFocus(); } };
         card._key = 'ep:' + e.id;
+        // build 102: lang OK / Tools: afspelen of (niet) bekeken (= contextMenu van de afleveringskaart op tvOS)
+        if (P) card._menu = function () {
+          var wd = epWatched(e);
+          P.menu('S' + e.season + ':E' + e.number + '  ' + e.title.replace(/^.*?S\d+\s*E\d+\s*[-:]?\s*/i, ''), [
+            { key: 'play', icon: 'play', label: L('Play'), fn: function () { playEpisode(e); } },
+            { key: 'watched', icon: 'check', label: wd ? L('Mark as unwatched') : L('Mark as watched'), fn: function () {
+              P.setEpisodesWatched(x, [e], !wd);
+              U.toast(wd ? L('Marked as unwatched') : L('Marked as watched'));
+              drawSeasons(); drawEpisodes(e); drawProgress();
+              var c2 = epsTrack.querySelector('.ep-card.f'), all2 = epsTrack.querySelectorAll('.ep-card.f');
+              for (var i2 = 0; i2 < all2.length; i2++) if (all2[i2]._key === 'ep:' + e.id) c2 = all2[i2];
+              if (c2) U.focus(c2, true);
+            } }
+          ]);
+        };
         if (focusEp && e.id === focusEp.id) target = card;
         epsTrack.appendChild(card);
       });
@@ -1660,6 +1888,30 @@
       epsEl._last = target || epsTrack.querySelector('.f');
       return target;
     }
+    /** build 102: hoeveel van de serie en van dit seizoen je gezien hebt (= watchedFraction op tvOS). */
+    function drawProgress() {
+      U.clear(sprogEl);
+      if (!P || !episodes.length) return;
+      var f = P.fraction(x, episodes);
+      if (f > 0) sprogEl.appendChild(P.progressLine(L('%d%% of the series watched', Math.round(f * 100)), f));
+      var list = episodes.filter(function (e) { return e.season === season; });
+      var fs = P.fraction(x, list);
+      if (seasons().length > 1 && fs > 0) sprogEl.appendChild(P.progressLine(L('Season %d · %d%% watched', season, Math.round(fs * 100)), fs));
+    }
+    // build 102: trailer voor de knop (film; serie: van het gekozen seizoen, anders van de serie)
+    var trailerKey = null, trailerSeason = null, trailerAsk = 0;
+    function lookupTrailer(sn) {
+      var my = ++trailerAsk;
+      if (!P || !B.ageRatings.hasKey()) return;
+      B.ageRatings.trailer(x, isShow, isShow ? sn : null).then(function (k) {
+        if (!alive || my !== trailerAsk) return;
+        var changed = k !== trailerKey;
+        trailerKey = k || null;
+        trailerSeason = isShow ? sn : null;
+        if (changed || isShow) drawButtonsKeepFocus();
+      }, B.noop);
+    }
+    var kb = null;
     function drawButtonsKeepFocus() { var f = U.focused; drawButtons(); if (f && !document.body.contains(f)) { var b = buttons.querySelector('.f'); if (b) U.focus(b, true); } }
     function loadEpisodes() {
       if (type !== 'series') return;
@@ -1669,12 +1921,15 @@
         var info = r.info || {};
         if (info.plot && !x.plot) plot.textContent = info.plot;
         if (info.genre) metaText([info.genre]);
+        loadDetails(r.info);
         scheduleTrailer();
         if (!episodes.length) { U.clear(epsTrack); epsTrack.appendChild(h('div.state.dim', L('No episodes found'))); return; }
         currentEp = pickCurrent();
         season = currentEp ? currentEp.season : seasons()[0];
         drawSeasons();
         var card = drawEpisodes(currentEp);
+        drawProgress();
+        lookupTrailer(season);
         drawButtons();
         // automatisch naar de huidige aflevering
         if (card) U.reveal(card);
@@ -1685,6 +1940,7 @@
     function loadMovieInfo() {
       if (type !== 'movie') return;
       Lib.movieInfo(x).then(function (info) {
+        loadDetails(info);
         if (!info) return;
         if (info.plot && !x.plot) plot.textContent = info.plot;
         var extra = [];
@@ -1692,6 +1948,39 @@
         if (info.genre) extra.push(info.genre);
         metaText(extra);
       });
+    }
+    /**
+     * build 102: beschrijving in de app-taal (TMDB), genres/regisseur/speelduur, Acteurs (ronde foto's; OK = pagina van
+     * de acteur) en Aanbevelingen (in je bibliotheek = de titel, anders Zoeken). Eén keer per pagina; nooit blokkerend.
+     */
+    var detailsLoaded = false;
+    function loadDetails(info) {
+      if (detailsLoaded || !B.details) return;
+      detailsLoaded = true;
+      B.details.load(x, isShow, info).then(function (d) {
+        if (!alive || !d) return;
+        if (d.overview) plot.textContent = d.overview;
+        metaText(d.runtime ? [d.runtime] : []);
+        U.clear(creditsEl);
+        U.append(creditsEl, B.details.credits(d));
+        U.clear(extraEl);
+        B.details.sections(d, extraEl);
+        if (!P) return;
+        // build 102: beoordelingen, achtergronden die in elkaar overlopen (als er geen trailer speelt) en Andere bronnen
+        B.details.ratings(x, isShow, d).then(function (list) {
+          if (!alive) return;
+          U.clear(ratingsEl);
+          var blk = B.details.ratingsBlock(list);
+          if (blk) ratingsEl.appendChild(blk);
+        });
+        if (d.backdrops && d.backdrops.length && !kb) kb = P.kenBurns(bg, d.backdrops);
+      }, B.noop);
+      if (P) P.alternatives(type, x).then(function (list) {
+        if (!alive || !list.length) return;
+        U.clear(altEl);
+        var r = rowBlock(L('Other sources'), list.map(P.otherCard), 'dt-alts');
+        if (r) altEl.appendChild(r);
+      }, B.noop);
     }
     drawButtons();
     var s = {
@@ -1704,17 +1993,18 @@
             var keep = currentEp; currentEp = pickCurrent() || keep;
             season = currentEp ? currentEp.season : season;
             drawSeasons(); var c = drawEpisodes(currentEp);
+            drawProgress();
             if (c) U.focus(c);
           }
         }
       },
       onHide: function () { stopTrailer(); },
       onBack: function () { U.pop(); return true; },
-      destroy: function () { stopTrailer(); document.removeEventListener('visibilitychange', onTrailerVisibility); }
+      destroy: function () { alive = false; stopTrailer(); if (kb) kb.stop(); document.removeEventListener('visibilitychange', onTrailerVisibility); U.forgetImgs(el); }
     };
     loadEpisodes();
     loadMovieInfo();
-    if (type === 'movie') scheduleTrailer();
+    if (type === 'movie') { scheduleTrailer(); lookupTrailer(null); }
     return s;
   };
 
@@ -1819,6 +2109,7 @@
           setViewing('subtitleLanguage', 'streamSubtitleLanguage', v);
         });
       });
+      B.app.subtitleSettingRows(row, render); // build 102: ondertitelgrootte
 
       section('Trakt & OpenSubtitles');
       var T = B.trakt, OS = B.opensubtitles;
@@ -1845,6 +2136,7 @@
       section(L('Interface'));
       var autoTr = D.local('autoplayTrailers', true) !== false;
       row(L('Play trailers automatically'), onOff(autoTr), function () { D.setLocal('autoplayTrailers', !autoTr); render(); });
+      B.app.interfaceSettingRows(row, onOff, render); // build 102: startscherm, tabbladen, intromuziek, verversen
 
       section(L('App'));
       var lang = D.shared('appLanguage', '') || '';

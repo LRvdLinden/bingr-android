@@ -20,7 +20,9 @@ DYNAMIC = ['Search', 'Home', 'Live TV', 'Movies', 'Series', 'My List', 'Settings
            'Categories', 'All', 'Popular', 'Newest', 'A–Z', 'Rating',
            'Action', 'Adventure', 'Comedy', 'Drama', 'Thriller', 'Crime', 'Science Fiction', 'Fantasy', 'Horror',
            'Mystery', 'Romance', 'Animation', 'Family', 'Kids', 'Documentary', 'History', 'War', 'Western', 'Music',
-           'Reality', 'Soap']
+           'Reality', 'Soap',
+           # build 102: sorteren (js/parity.js, via een variabele)
+           'Default', 'Z–A', 'Highest rated']
 
 PAT = [re.compile(r'\bL\(\s*"((?:[^"\\]|\\.)*)"'), re.compile(r"\bL\(\s*'((?:[^'\\]|\\.)*)'")]
 

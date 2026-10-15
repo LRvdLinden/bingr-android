@@ -388,6 +388,109 @@
   Trakt.resolveImdb = function (item) {
     return Promise.resolve().then(function () { return item ? resolveImdb(item) : null; }).catch(function () { return null; });
   };
+
+  // MARK: build 102: bekeken, watchlist, vergelijkbaar, aanbevelingen en trending (= TraktSync.swift)
+
+  /** IMDb-id van een film of serie uit de bibliotheek (index, anders zoeken bij Trakt). */
+  function imdbOf(x, show) {
+    var i = Trakt.imdbFor(x, show);
+    if (i) return Promise.resolve(i);
+    return Trakt.resolveImdb({ title: x.rawTitle || x.title, year: x.year || null, type: show ? 'episode' : 'movie', imdbID: x.imdbID || null });
+  }
+  Trakt.imdbOf = imdbOf;
+  /**
+   * build 102: film of aflevering als (niet) bekeken naar je Trakt-geschiedenis (= setWatched in TraktSync).
+   * item = {title, year, type: 'movie'|'episode', season, episode} zoals de speler het gebruikt; alleen ingelogd.
+   */
+  Trakt.setWatched = function (item, watched) {
+    if (!Trakt.isLoggedIn() || !item) return Promise.resolve(false);
+    return resolveImdb(item).then(function (imdb) {
+      if (!imdb) return false;
+      var isEp = item.type === 'episode' && item.season != null && item.episode != null;
+      var body;
+      if (isEp) {
+        body = { shows: [{ ids: { imdb: imdb }, seasons: [{ number: item.season, episodes: [{ number: item.episode }] }] }] };
+        var set = watchedShows[imdb] = watchedShows[imdb] || {};
+        var k = item.season + '-' + item.episode;
+        if (watched) set[k] = true; else delete set[k];
+        cacheT.shows[imdb] = Object.keys(set);
+      } else {
+        body = { movies: [{ ids: { imdb: imdb } }] };
+        if (watched) watchedMovies[imdb] = true; else delete watchedMovies[imdb];
+        cacheT.movies = Object.keys(watchedMovies);
+      }
+      saveCache();
+      B.emit('trakt');
+      return post(watched ? '/sync/history' : '/sync/history/remove', body).then(function () { return true; }, function () { return false; });
+    }).catch(function () { return false; });
+  };
+  /** build 102: heel seizoen of hele serie in één keer (= setWatched(show:episodes:)). eps = [{season, number}]. */
+  Trakt.setWatchedEpisodes = function (series, eps, watched) {
+    if (!Trakt.isLoggedIn() || !series || !eps || !eps.length) return Promise.resolve(false);
+    return imdbOf(series, true).then(function (imdb) {
+      if (!imdb) return false;
+      var bySeason = {};
+      var set = watchedShows[imdb] = watchedShows[imdb] || {};
+      eps.forEach(function (e) {
+        (bySeason[e.season] = bySeason[e.season] || []).push({ number: e.number });
+        if (watched) set[e.season + '-' + e.number] = true; else delete set[e.season + '-' + e.number];
+      });
+      cacheT.shows[imdb] = Object.keys(set);
+      saveCache();
+      B.emit('trakt');
+      var seasons = Object.keys(bySeason).map(function (s) { return { number: +s, episodes: bySeason[s] }; });
+      return post(watched ? '/sync/history' : '/sync/history/remove', { shows: [{ ids: { imdb: imdb }, seasons: seasons }] })
+        .then(function () { return true; }, function () { return false; });
+    }).catch(function () { return false; });
+  };
+  /** build 102: Mijn lijst van het hoofdprofiel ook op de Trakt-watchlist (= setWatchlist). */
+  Trakt.setWatchlist = function (x, show, on) {
+    if (!Trakt.isLoggedIn() || !x) return Promise.resolve(false);
+    return imdbOf(x, show).then(function (imdb) {
+      if (!imdb) return false;
+      var body = {};
+      body[show ? 'shows' : 'movies'] = [{ ids: { imdb: imdb } }];
+      return post(on ? '/sync/watchlist' : '/sync/watchlist/remove', body).then(function () { return true; }, function () { return false; });
+    }).catch(function () { return false; });
+  };
+  /** Titels als {title, year} uit een lijst van Trakt (films/series of {movie}/{show}-items). */
+  function media(list) {
+    return (Array.isArray(list) ? list : []).map(function (x) { return x && (x.movie || x.show) ? (x.movie || x.show) : x; })
+      .filter(function (m) { return m && m.title; }).map(function (m) { return { title: m.title, year: m.year || null, imdb: (m.ids && m.ids.imdb) || null }; });
+  }
+  /** build 102: lijkt op (werkt zonder inloggen; alleen met de client-id van de server). */
+  Trakt.related = function (imdb, shows) {
+    if (!Trakt.ready() || !imdb) return Promise.resolve([]);
+    return get('/' + (shows ? 'shows' : 'movies') + '/' + imdb + '/related', [['limit', '20']], false).then(media, function () { return []; });
+  };
+  /** build 102: persoonlijke aanbevelingen (alleen ingelogd). */
+  Trakt.recommendations = function (shows) {
+    if (!Trakt.isLoggedIn()) return Promise.resolve([]);
+    return get(shows ? '/recommendations/shows' : '/recommendations/movies', [['limit', '50'], ['ignore_collected', 'false']]).then(media, function () { return []; });
+  };
+  /** build 102: trending vandaag (zonder inloggen). */
+  Trakt.trending = function (shows) {
+    if (!Trakt.ready()) return Promise.resolve([]);
+    return get(shows ? '/shows/trending' : '/movies/trending', [['limit', '100']], false).then(media, function () { return []; });
+  };
+  /** build 102: Trakt-score (0…10) van een titel, of null. */
+  var ratings = {};
+  Trakt.rating = function (imdb, shows) {
+    if (!Trakt.ready() || !imdb) return Promise.resolve(null);
+    var k = (shows ? 's' : 'm') + imdb;
+    if (!ratings[k]) {
+      ratings[k] = get('/' + (shows ? 'shows' : 'movies') + '/' + imdb, [['extended', 'full']], false).then(function (r) {
+        var v = r && B.num(r.rating);
+        return v > 0 ? v : null;
+      }, function () { delete ratings[k]; return null; });
+    }
+    return ratings[k];
+  };
+  /** build 102: bekeken films en series (IMDb-id's) als zaadjes voor "Voor jou". */
+  Trakt.watchedSeeds = function () {
+    if (!Trakt.isLoggedIn()) return { movies: [], shows: [] };
+    return { movies: Object.keys(watchedMovies), shows: Object.keys(watchedShows) };
+  };
   /**
    * Scrobble start/pause/stop (progress 0…1). Bij stop ≥ 80% telt het als gezien; mislukt de scrobble dan,
    * dan via /sync/history. Live en terugkijken worden niet gescrobbled.

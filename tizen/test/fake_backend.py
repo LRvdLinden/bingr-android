@@ -119,6 +119,8 @@ def state():
                                     {'key': 'categories', 'visible': True}], 'updatedAt': t(400)},
             'updatedAt': t(10)}, 'updatedAt': t(10)},
         'profile.' + SAM.lower(): {'data': {'pin': '1234', 'pinUpdatedAt': t(100)}, 'updatedAt': t(100)},
+        **({'connections': {'data': {'trakt': {'accessToken': 'trakt-at', 'refreshToken': 'trakt-rt', 'expiresAt': iso(now + timedelta(days=60)),
+                                                'username': 'leon'}, 'updatedAt': t(500)}, 'updatedAt': t(500)}} if MODE.get('parity') else {}),
         'collections': {'data': {'version': 2, 'migratedAt': t(1000), 'updatedAt': t(60), 'items': [], 'profiles': {
             MAIN: {'items': [
                 {'id': 'c1', 'name': 'Sport live', 'image': {'symbol': 'sportscourt', 'colorIndex': 2}, 'kind': 'smart', 'query': 'sport, espn',
@@ -153,6 +155,22 @@ def sources():
 MODE = {'big': False}
 
 
+def event_channels():
+    """build 102: PPV-zenders voor de groep Evenementen (bezig, straks, morgen, verlopen), lokale tijd."""
+    now = datetime.now().replace(second=0, microsecond=0)
+    f = lambda d: d.strftime('%Y-%m-%d %H:%M')
+    return [('PPV 02: Feyenoord v AZ ' + f(now + timedelta(hours=3)), now + timedelta(hours=3)),
+            ('PPV 04: Old Fight Night ' + f(now - timedelta(hours=30)), now - timedelta(hours=30)),
+            ('PPV 01: Ajax vs PSV ' + f(now - timedelta(hours=1)), now - timedelta(hours=1)),
+            ('EVENT 03 | UFC 300 ' + f(now + timedelta(days=1)), now + timedelta(days=1))]
+
+
+# build 102: trending (Top 10) en Trakt-gegevens voor het scenario 'parity'
+TREND_MOVIES = [('Paper Moons', 2021), ('Iron Valley', 2020), ('Neon District', 2018), ('Golden Fields', 2017), ('Silent Peak', 2022),
+                ('Frozen Lake', 2024), ('Onbekende Film', 2020)]
+TREND_TV = ['Golden Fields', 'Midnight Harbor', 'Space Kids', 'The Last Signal', 'Dragon Tales', 'Neon District']
+
+
 def xtream(action, params):
     if MODE['big'] and action in ('get_live_streams', 'get_vod_streams'):
         # grote bibliotheek voor de prestatietest: 6000 zenders, 25000 films
@@ -165,11 +183,20 @@ def xtream(action, params):
     if not action:
         return {'user_info': {'auth': 1, 'username': 'demo', 'status': 'Active'}, 'server_info': {}}
     if action == 'get_live_categories':
-        return [{'category_id': k, 'category_name': v} for k, v in GROUPS_LIVE.items()]
+        cats = [{'category_id': k, 'category_name': v} for k, v in GROUPS_LIVE.items()]
+        if MODE.get('parity'):
+            cats.append({'category_id': '9', 'category_name': 'PPV Events'})
+        return cats
     if action == 'get_live_streams':
-        return [{'stream_id': i + 1, 'num': i + 1, 'name': n, 'stream_icon': 'http://img.test/l%02d.png' % i, 'category_id': g,
-                 'epg_channel_id': 'ch%d.nl' % (i + 1), 'tv_archive': 1 if i < 6 else 0, 'tv_archive_duration': 3 if i < 6 else 0}
-                for i, (n, g) in enumerate(CHANNELS)]
+        out = [{'stream_id': i + 1, 'num': i + 1, 'name': n, 'stream_icon': 'http://img.test/l%02d.png' % i, 'category_id': g,
+                'epg_channel_id': 'ch%d.nl' % (i + 1), 'tv_archive': 1 if i < 6 else 0, 'tv_archive_duration': 3 if i < 6 else 0}
+               for i, (n, g) in enumerate(CHANNELS)]
+        if MODE.get('parity'):
+            # build 102: evenementzenders (PPV), begintijd in de naam (lokale tijd)
+            for j, (n, dt) in enumerate(event_channels()):
+                out.append({'stream_id': 201 + j, 'num': 201 + j, 'name': n, 'stream_icon': 'http://img.test/l%02d.png' % (j % 20), 'category_id': '9',
+                            'epg_channel_id': '', 'tv_archive': 0})
+        return out
     if action == 'get_vod_categories':
         return [{'category_id': k, 'category_name': v} for k, v in VOD_GROUPS.items()]
     if action == 'get_vod_streams':
@@ -235,7 +262,7 @@ def device_auth(body, mode):
     if a == 'heartbeat':
         return 200, {'ok': True}
     if a == 'config':
-        return 200, {'tmdbAPIKey': 'tmdb-test', 'omdbAPIKey': '', 'traktClientID': 'trakt-id', 'traktClientSecret': 'trakt-secret',
+        return 200, {'tmdbAPIKey': 'tmdb-test', 'omdbAPIKey': 'omdb-test' if MODE.get('parity') else '', 'traktClientID': 'trakt-id', 'traktClientSecret': 'trakt-secret',
                      'openSubtitlesAPIKey': 'os-key'}
     if a == 'get_sources':
         return 200, SAVED['sources'] if SAVED.get('sources') else sources()
@@ -390,6 +417,84 @@ def make_media(out):
 JSON = {'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json'}
 
 
+# build 102: talen waarmee TMDB is aangeroepen (moeten geldige locales zijn: nl-NL, en-US, …)
+TMDB_LANGS = []
+BIO = ('Robin Vale (geboren in Utrecht) is een Nederlandse actrice die bekend werd door haar rollen in spannende series en '
+       'onafhankelijke films. Ze studeerde aan de toneelschool in Amsterdam en speelde jarenlang in het theater voordat ze '
+       'haar doorbraak beleefde op televisie. ') * 10
+
+
+def tmdb_details(path, q, lang):
+    """Detailpagina en acteurspagina (build 102): /movie/{id} en /tv/{id} met credits en aanbevelingen, /person/…"""
+    parts = path.split('/')
+    app = q.get('append_to_response', [''])[0]
+    nl = (lang or '').startswith('nl')
+    if path.endswith('/videos'):
+        if MODE.get('parity'):
+            return {'results': [{'site': 'YouTube', 'type': 'Trailer', 'key': 'parityTrl01', 'iso_639_1': 'en', 'official': True}]}
+        return {'results': []}
+    if len(parts) == 4 and parts[2] == 'movie' and 'credits' in app:
+        mid = int(parts[3])
+        return {'id': mid, 'original_language': 'en', 'runtime': 118, 'vote_average': 7.43, 'vote_count': 1200,
+                'external_ids': {'imdb_id': 'tt0000006'}, 'backdrop_path': '/p05.jpg',
+                'images': {'backdrops': [{'file_path': '/p06.jpg'}, {'file_path': '/p07.jpg'}]},
+                'overview': 'TMDB-beschrijving in het Nederlands.' if nl else 'TMDB overview in English.',
+                'genres': [{'id': 28, 'name': 'Actie'}, {'id': 18, 'name': 'Drama'}],
+                'credits': {'cast': [{'id': 501, 'name': 'Robin Vale', 'character': 'Mara', 'profile_path': '/p10.jpg'},
+                                     {'id': 502, 'name': 'Tom Hardy Jr', 'character': 'Jack', 'profile_path': '/missing.jpg'},
+                                     {'id': 503, 'name': 'Ana de Lima', 'character': 'Inspecteur', 'profile_path': None}] +
+                                    [{'id': 510 + i, 'name': 'Acteur %d' % i, 'character': 'Rol %d' % i, 'profile_path': '/p%02d.jpg' % (12 + i)} for i in range(7)],
+                            'crew': [{'job': 'Director', 'name': 'Sofia Lang'}, {'job': 'Writer', 'name': 'X'}]},
+                'recommendations': {'results': [
+                    {'title': 'Neon District', 'release_date': '2018-03-01', 'poster_path': '/p03.jpg'},
+                    {'title': 'Oceaan Diep', 'original_title': 'Ocean Deep', 'release_date': '2019-05-01', 'poster_path': '/p04.jpg'},
+                    {'title': 'Starfall Express', 'release_date': '2019-01-01', 'poster_path': '/p20.jpg'},
+                    {'title': 'Paper Moons', 'release_date': '2021-01-01', 'poster_path': '/p06.jpg'},
+                    {'title': 'The Quiet Sea', 'release_date': '2016-01-01', 'poster_path': None},
+                    {'title': 'Iron Valley', 'release_date': '1999-01-01', 'poster_path': '/p05.jpg'}]}}
+    if len(parts) == 4 and parts[2] == 'tv' and 'credits' in app:
+        tid = int(parts[3])
+        return {'id': tid, 'original_language': 'en', 'episode_run_time': [45], 'created_by': [{'name': 'Kees Maker'}], 'vote_average': 8.1, 'vote_count': 300,
+                'external_ids': {'imdb_id': 'tt1000001'}, 'backdrop_path': '/p00.jpg', 'images': {'backdrops': [{'file_path': '/p01.jpg'}]},
+                'overview': 'TMDB-beschrijving van de serie.' if nl else 'TMDB series overview.',
+                'genres': [{'id': 18, 'name': 'Drama'}, {'id': 9648, 'name': 'Mysterie'}],
+                'aggregate_credits': {'cast': [{'id': 501, 'name': 'Robin Vale', 'roles': [{'character': 'Kapitein Mara'}], 'profile_path': '/p10.jpg'},
+                                               {'id': 520, 'name': 'Jan Smit', 'roles': [{'character': 'Bootsman'}], 'profile_path': '/p11.jpg'},
+                                               {'id': 521, 'name': 'Lotte Berg', 'roles': [], 'profile_path': None}]},
+                'recommendations': {'results': [
+                    {'name': 'The Last Signal', 'first_air_date': '2021-01-01', 'poster_path': '/p01.jpg'},
+                    {'name': 'Draakverhalen', 'original_name': 'Dragon Tales', 'first_air_date': '2010-01-01', 'poster_path': '/p22.jpg'},
+                    {'name': 'Unknown Waters', 'first_air_date': '2020-01-01', 'poster_path': '/p19.jpg'}]}}
+    if path == '/3/search/person':
+        # build 102 (parity): alleen bij een passende zoekterm (zoeken toont anders altijd een persoon)
+        if MODE.get('parity') and 'robin' not in (q.get('query', [''])[0] or '').lower() and 'vale' not in (q.get('query', [''])[0] or '').lower():
+            return {'results': []}
+        return {'results': [{'id': 501, 'name': 'Robin Vale', 'known_for_department': 'Acting', 'profile_path': '/p10.jpg'}]}
+    if path in ('/3/trending/movie/day', '/3/discover/movie') and MODE.get('parity'):
+        if q.get('page', ['1'])[0] != '1':
+            return {'results': []}
+        kids = path.startswith('/3/discover')
+        lst = [('Space Kids', 2015)] if kids else TREND_MOVIES
+        return {'results': [{'title': t, 'release_date': '%d-05-01' % y} for t, y in lst]}
+    if path in ('/3/trending/tv/day', '/3/discover/tv') and MODE.get('parity'):
+        if q.get('page', ['1'])[0] != '1':
+            return {'results': []}
+        lst = ['Dragon Tales', 'Space Kids'] if path.startswith('/3/discover') else TREND_TV
+        return {'results': [{'name': t} for t in lst]}
+    if len(parts) == 4 and parts[2] == 'person':
+        return {'id': int(parts[3]), 'name': 'Robin Vale', 'known_for_department': 'Acting', 'birthday': '1984-06-12',
+                'place_of_birth': 'Utrecht, Nederland', 'deathday': None, 'profile_path': '/p10.jpg', 'biography': BIO if nl or not lang else BIO}
+    if len(parts) == 5 and parts[2] == 'person' and parts[4] == 'combined_credits':
+        return {'cast': [
+            {'media_type': 'movie', 'id': 9001, 'title': 'Iron Valley', 'release_date': '2020-02-01', 'poster_path': '/p05.jpg', 'popularity': 50, 'character': 'Mara'},
+            {'media_type': 'tv', 'id': 9002, 'name': 'Midnight Harbor', 'first_air_date': '2020-01-01', 'poster_path': '/p00.jpg', 'popularity': 40, 'character': 'Kapitein'},
+            {'media_type': 'movie', 'id': 9003, 'title': 'Starfall Express', 'release_date': '2019-01-01', 'poster_path': '/p20.jpg', 'popularity': 30},
+            {'media_type': 'movie', 'id': 9004, 'title': 'Glass Rivers', 'release_date': '2015-01-01', 'poster_path': '/p21.jpg', 'popularity': 20},
+            {'media_type': 'tv', 'id': 9005, 'name': 'Late Night Show', 'genre_ids': [10767], 'popularity': 99, 'character': 'Herself'},
+            {'media_type': 'movie', 'id': 9001, 'title': 'Iron Valley', 'release_date': '2020-02-01', 'popularity': 50}]}
+    return None
+
+
 def other(url, method, body, img_dir):
     """Antwoord voor de andere testdomeinen: (status, headers, bytes) of None."""
     u = urllib.parse.urlparse(url)
@@ -406,7 +511,7 @@ def other(url, method, body, img_dir):
         if path == '/Users/u1/Items':
             t = q.get('IncludeItemTypes', [''])[0]
             if t == 'Movie':
-                return j({'Items': [{'Id': 'm%d' % i, 'Name': TITLES[i], 'ProductionYear': 2010 + i, 'Genres': ['Drama' if i % 2 else 'Animatie'],
+                return j({'Items': [{'Id': 'm%d' % i, 'Name': TITLES[i], 'ProductionYear': (2015 + i % 10) if MODE.get('parity') else 2010 + i, 'Genres': ['Drama' if i % 2 else 'Animatie'],
                                      'CommunityRating': 7.1, 'Overview': 'Jellyfin-film.', 'DateCreated': '2026-10-0%dT10:00:00.0000000Z' % (i % 9 + 1),
                                      'ProviderIds': {'Imdb': 'tt00%05d' % i}} for i in range(8)]})
             if t == 'Series':
@@ -459,7 +564,19 @@ def other(url, method, body, img_dir):
             return j({'streams': [{'name': '1080p', 'title': 'Test-bron', 'url': 'http://video.test/clip.mp4'},
                                   {'name': 'Torrent', 'infoHash': 'abc'}]})
         return 404, JSON, b'{}'
+    if host == 'image.tmdb.org':
+        # build 102: foto's en posters van TMDB (/t/p/w185/p03.jpg → img/p03.jpg); 'missing' geeft 404 (terugval op initialen)
+        f = os.path.join(img_dir, os.path.basename(path))
+        if 'missing' not in path and os.path.exists(f):
+            return 200, {'Access-Control-Allow-Origin': '*', 'Content-Type': 'image/jpeg'}, open(f, 'rb').read()
+        return 404, JSON, b'{}'
     if host == 'api.themoviedb.org':
+        lang = q.get('language', [None])[0]
+        if lang:
+            TMDB_LANGS.append(lang)
+        d = tmdb_details(path, q, lang)
+        if d is not None:
+            return j(d)
         if path in ('/3/search/movie', '/3/search/tv'):
             kids = any(w in qs for w in ['dragon', 'space kids', 'golden'])
             if not qs:
@@ -477,6 +594,22 @@ def other(url, method, body, img_dir):
         if path.startswith('/3/movie/') or path.startswith('/3/tv/'):
             return j({'id': int(path.split('/')[3]), 'original_language': 'en'})
         return j({})
+    if host == 'www.omdbapi.com':
+        return j({'Response': 'True', 'imdbID': q.get('i', ['tt0000006'])[0], 'imdbRating': '7.8', 'Genre': 'Action, Drama', 'Runtime': '112 min'})
+    if host == 'api.trakt.tv' and MODE.get('parity'):
+        if path.endswith('/related'):
+            return j([{'title': 'Ocean Deep', 'year': 2019, 'ids': {'imdb': 'tt0000004'}}, {'title': 'Silent Peak', 'year': 2022, 'ids': {}},
+                      {'title': 'Midnight Harbor', 'ids': {}}])
+        if path.startswith('/recommendations/'):
+            return j([{'title': 'Desert Wind', 'year': 2021}] if path.endswith('movies') else [{'title': 'The Last Signal'}])
+        if path in ('/movies/trending', '/shows/trending'):
+            return j([])
+        if path.startswith('/sync/watchlist'):
+            with open(os.path.join(os.path.dirname(img_dir), 'requests.jsonl'), 'a') as f:
+                f.write(json.dumps({'trakt': path, 'body': json.loads(body or '{}')}) + '\n')
+            return j({'added': {}}, 201)
+        if (path.startswith('/movies/tt') or path.startswith('/shows/tt')) and path.count('/') == 2:
+            return j({'title': 'x', 'rating': 8.13})
     if host in ('api.trakt.tv', 'auth.trakt.tv'):
         if path == '/oauth/device/code':
             return j({'device_code': 'dev123', 'user_code': '7F3K2Q9M', 'verification_url': 'https://trakt.tv/activate', 'expires_in': 600, 'interval': 1})
