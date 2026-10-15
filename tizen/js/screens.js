@@ -190,12 +190,20 @@
     else el.appendChild(h('span.avatar-emoji', av.value));
     var photo = p && p.photo && p.photo.path;
     if (photo) {
-      B.app.photo(photo, p.photo.updated).then(function (url) {
-        if (!url) return;
-        el.style.backgroundImage = 'url("' + url + '")';
-        el.style.backgroundSize = 'cover';
-        el.classList.add('has-photo');
-      });
+      // build 100: lukt het niet (netwerk of inlog nog niet klaar), dan na 25 s nog een keer, zolang de avatar in beeld is
+      var tries = 0;
+      var load = function () {
+        B.app.photo(photo, p.photo.updated).then(function (url) {
+          if (!url) {
+            if (++tries < 4) setTimeout(function () { if (document.body.contains(el)) load(); }, 25000);
+            return;
+          }
+          el.style.backgroundImage = 'url("' + url + '")';
+          el.style.backgroundSize = 'cover';
+          el.classList.add('has-photo');
+        });
+      };
+      load();
     }
     return el;
   };

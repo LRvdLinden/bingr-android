@@ -68,8 +68,25 @@ def make_images(out):
         im.save(os.path.join(out, 'l%02d.png' % i))
 
 
+def photo_file(img_dir):
+    """Een echte kleine JPEG als profielfoto (build 100)."""
+    f = os.path.join(img_dir, 'profile-photo.jpg')
+    if not os.path.exists(f):
+        from PIL import Image
+        Image.new('RGB', (256, 256), (200, 40, 60)).save(f, 'JPEG', quality=80)
+    return f
+
+
 def profiles():
     now = datetime.now(timezone.utc)
+    if MODE.get('photo'):
+        lst = _profiles(now)
+        lst[0] = dict(lst[0], photo={'path': 'user-1/' + MAIN.lower() + '.jpg', 'updated': iso(now)})
+        return lst
+    return _profiles(now)
+
+
+def _profiles(now):
     return [
         {'id': MAIN, 'name': 'Léon', 'avatar': {'symbol': 'popcorn', 'colorIndex': 0, 'emoji': '🍿'}, 'kids': False, 'ageLimit': None,
          'isMain': True, 'order': 0, 'photo': None, 'updatedAt': iso(now), 'accentColor': 'red'},

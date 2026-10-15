@@ -391,16 +391,26 @@
     }, function () { return false; });
   };
 
-  /** Profielfoto (Storage-bucket avatars) als object-URL; null bij een fout. */
+  /**
+   * Profielfoto (Storage-bucket avatars) als data:-URL; null bij een fout.
+   * Build 100: data:-URL in plaats van een blob:-URL (werkt op elke tv-browser als CSS-achtergrond en hoeft niet
+   * vrijgegeven te worden); fouten komen in het log, zodat ze in de diagnose te zien zijn.
+   */
   A.photoURL = function (path) {
     return A.validAccessToken().then(function (token) {
       var url = B.config.supabaseUrl + '/storage/v1/object/authenticated/avatars/' +
         String(path).split('/').map(encodeURIComponent).join('/');
       return B.http(url, { headers: { 'apikey': B.config.supabaseKey, 'Authorization': 'Bearer ' + token }, binary: true, timeout: 20000 });
     }).then(function (r) {
-      if (r.status < 200 || r.status >= 300 || !r.buffer || !r.buffer.byteLength) return null;
-      return URL.createObjectURL(new Blob([r.buffer], { type: 'image/jpeg' }));
-    }, function () { return null; });
+      if (r.status < 200 || r.status >= 300 || !r.buffer || !r.buffer.byteLength) {
+        B.log('profielfoto: HTTP ' + r.status);
+        return null;
+      }
+      var u8 = new Uint8Array(r.buffer), bin = '';
+      for (var i = 0; i < u8.length; i += 8192) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+      var type = u8[0] === 0x89 && u8[1] === 0x50 ? 'image/png' : 'image/jpeg';
+      return 'data:' + type + ';base64,' + btoa(bin);
+    }, function (e) { B.log('profielfoto: ' + ((e && e.message) || e)); return null; });
   };
 
   // MARK: servers en state-onderdelen

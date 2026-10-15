@@ -4,6 +4,15 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 100
+_15 oktober 2026_
+
+### Samsung TV (Tizen)
+
+**Opgelost**
+
+- Samsung TV: profielfoto's uit je account worden weer getoond; lukt het ophalen bij het opstarten niet, dan probeert de app het vanzelf opnieuw
+
 ## Versie 1.0.0 · Build 99
 _15 oktober 2026_
 

@@ -6,7 +6,7 @@ from playwright.sync_api import sync_playwright
 sys.path.insert(0, os.path.dirname(__file__))
 import fake_backend as fb
 
-TIZEN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TIZEN = os.environ.get('BINGR_TIZEN_DIR') or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # build 100: ook het gebouwde pakket
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/bingr-shots'
 IMG = os.path.join(OUT, 'img')
 os.makedirs(OUT, exist_ok=True)
@@ -79,6 +79,17 @@ def run(page_setup, mode, steps):
                     return route.fulfill(status=200, headers=hdr, body='{}')
                 if u.path.startswith('/auth/v1/logout'):
                     return route.fulfill(status=204, headers=hdr, body='')
+                # profielfoto's (build 100): bucket avatars, alleen met een Bearer-token
+                if u.path.startswith('/storage/v1/object/authenticated/avatars/'):
+                    # eerste aanvraag mislukt (zoals een tv waarvan het netwerk nog niet klaar is): de app moet het opnieuw proberen
+                    if fb.MODE.get('photo_fail_first') and not fb.MODE.get('photo_failed'):
+                        fb.MODE['photo_failed'] = True
+                        return route.fulfill(status=503, headers=hdr, body='{}')
+                    if not (req.headers.get('authorization') or '').startswith('Bearer '):
+                        return route.fulfill(status=400, headers=hdr, body='{"error":"missing auth"}')
+                    with open(os.path.join(OUT, 'requests.jsonl'), 'a') as f:
+                        f.write(json.dumps({'storage': u.path}) + '\n')
+                    return route.fulfill(status=200, path=fb.photo_file(IMG), headers={'Access-Control-Allow-Origin': '*', 'Content-Type': 'image/jpeg'})
                 if u.path.startswith('/rest/v1/account_data'):
                     if req.method == 'GET':
                         return route.fulfill(status=200, headers=hdr, body=json.dumps([{'profiles': fb.profiles(), 'updated_at': 'x'}]))
@@ -215,6 +226,20 @@ if __name__ == '__main__':
     if which in ('all', 'qr'):
         run('', 'approve', [('wait', 6000), ('shot', '02c-after-qr'),
                             ('eval', 'JSON.stringify({auth: !!localStorage.getItem("bingr.auth"), reg: localStorage.getItem("bingr.deviceRegistered"), dev: localStorage.getItem("bingr.deviceId"), profiles: B.data.profiles.length})')])
+    if which in ('all', 'photo'):
+        # build 100: profielfoto uit het account op "Wie kijkt er?" en in het menu
+        fb.MODE['photo'] = True
+        run(SIGNED_IN, 'normal', [('wait', 3000), ('shot', '04p-profiles-photo'),
+            ('expect', 'document.querySelectorAll(".avatar.has-photo").length >= 1', 'profielfoto zichtbaar op Wie kijkt er?'),
+            ('key', 'Enter', 400), ('wait', 2500),
+            ('expect', 'document.querySelectorAll(".avatar.has-photo").length >= 1 || !!document.querySelector(".has-photo")', 'profielfoto ook na kiezen')])
+        # eerste poging mislukt → na ~25 s alsnog de foto
+        fb.MODE['photo_fail_first'] = True; fb.MODE['photo_failed'] = False
+        run(SIGNED_IN, 'normal', [('wait', 3000),
+            ('expect', 'document.querySelectorAll(".avatar.has-photo").length === 0', 'eerste poging mislukt: nog geen foto'),
+            ('wait', 27000),
+            ('expect', 'document.querySelectorAll(".avatar.has-photo").length >= 1', 'profielfoto na nieuwe poging')])
+        fb.MODE['photo'] = False; fb.MODE['photo_fail_first'] = False
     if which in ('all', 'limit'):
         run(SIGNED_IN.replace("'true'", "'false'"), 'limit', [('wait', 2500), ('shot', '03-device-limit')])
     if which in ('all', 'app'):

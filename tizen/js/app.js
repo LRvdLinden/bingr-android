@@ -49,18 +49,20 @@
     return s;
   };
 
-  // profielfoto's: één keer per pad+versie ophalen
-  // build 97: per pad alleen de nieuwste versie; de object-URL van een vervangen of verwijderde foto vrijgeven
+  // profielfoto's: één keer per pad+versie ophalen (per pad alleen de nieuwste versie)
+  // build 100: data:-URL's (niets vrij te geven); een mislukte poging wordt niet onthouden: de volgende keer dat de foto
+  // nodig is (na minstens 20 s) opnieuw proberen. Vroeger bleef een fout bij het opstarten (netwerk van de tv nog niet
+  // klaar, inlog die net vernieuwd werd) tot een herstart hangen: geen foto.
   var photos = {};
-  function revoke(p) { p.then(function (u) { if (u) { try { URL.revokeObjectURL(u); } catch (e) { /* stil */ } } }, B.noop); }
+  function revoke() { /* data:-URL's: niets vrij te geven */ }
   app.photo = function (path, updated) {
     var k = String(updated || '');
     var cur = photos[path];
-    if (cur && cur.k === k) return cur.p;
-    if (cur) revoke(cur.p);
-    var p = A.photoURL(path);
-    photos[path] = { k: k, p: p };
-    return p;
+    if (cur && cur.k === k && (cur.ok !== false || Date.now() - cur.at < 20000)) return cur.p;
+    var entry = { k: k, at: Date.now(), ok: null };
+    entry.p = A.photoURL(path).then(function (u) { entry.ok = !!u; entry.at = Date.now(); return u; });
+    photos[path] = entry;
+    return entry.p;
   };
   /** build 97: foto's van profielen die er niet meer zijn (of geen foto meer hebben) vrijgeven. */
   function prunePhotos() {
