@@ -463,8 +463,9 @@
    */
   var ent = null, entOwner = null, entAt = 0, entBusy = null;
   A.UPGRADE_URL = 'https://bingr.online/upgrade/';
-  A.FREE = { streams: 2, devices: 8, servers: 1 };
-  A.LIFETIME = { streams: 6, devices: 15 };
+  // gelijktijdige kijkers: Bingr-telling op de server, los van de limiet van de IPTV-provider
+  A.FREE = { streams: 1, devices: 8, servers: 1 };
+  A.LIFETIME = { streams: 3, devices: 15 };
 
   function parseEnt(j) {
     if (!j || typeof j !== 'object' || !j.plan) return null;
@@ -596,7 +597,7 @@
     return authed(body).then(function (r) {
       if (!r) return { failed: true };
       var j = r.json || {};
-      if (r.status === 403 && (r.errorCode === 'stream_limit' || j.streams)) return { limit: j.limit || 6, streams: parseStreams(j.streams), plan: j.plan || null };
+      if (r.status === 403 && (r.errorCode === 'stream_limit' || j.streams)) return { limit: j.limit || A.LIFETIME.streams, streams: parseStreams(j.streams), plan: j.plan || null };
       return r.ok ? { ok: true } : { failed: true };
     });
   };
@@ -618,7 +619,7 @@
     return authed({ action: 'list_streams' }).then(function (r) {
       checkLocked(r);
       if (!r || !r.ok) throw generic();
-      return { limit: r.json.limit || 6, streams: parseStreams(r.json.streams) };
+      return { limit: r.json.limit || A.LIFETIME.streams, streams: parseStreams(r.json.streams) };
     });
   };
   A.watchLog = function (days) {

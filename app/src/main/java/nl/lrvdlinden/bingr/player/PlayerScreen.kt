@@ -243,6 +243,11 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         bind()
         nextUp = null
         player.creditsStart = IntroMarkers.get(IntroMarkers.keyFor(itm))?.creditsStart
+        // limiet van de IPTV-provider (alleen Xtream; bij M3U e.d. null): vóór het afspelen alvast ophalen
+        // (blokkeert niets), en bij een mislukte stream opnieuw controleren voor de juiste foutmelding
+        val providerSrc = Playlists.source
+        scope.launch { runCatching { ProviderLimit.prime(providerSrc) } }
+        player.providerLimitCheck = { ProviderLimit.failureMessage(providerSrc) }
         // live-zender werkt niet (ook niet na een stille nieuwe poging): automatisch naar een andere server
         player.onLiveFailure = {
             scope.launch {

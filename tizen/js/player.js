@@ -2,7 +2,7 @@
  * Speler: Samsung AVPlay (webapis.avplay) voor HLS, TS en MP4, met HTML5 <video> als terugval.
  * Regelt hervatten, voortgang (gesynchroniseerd zoals de andere apps), audio- en ondertitelsporen,
  * zappen met vertraging, intro overslaan (introMarkers), volgende aflevering met aftellen,
- * stream_start/ping/stop (max. 6 tegelijk), kijkgeschiedenis, reservebron bij een live-fout en een foutscherm.
+ * stream_start/ping/stop (limiet van het abonnement), kijkgeschiedenis, reservebron bij een live-fout en een foutscherm.
  */
 (function () {
   'use strict';
@@ -463,6 +463,8 @@
       shiftStart = null; shiftTarget = null; livePausedAt = 0; clearTimeout(shiftTimer);
       subQueue = []; subDelay = 0; sleepWarned = false;
       applySubSize();
+      // limiet van de IPTV-provider (alleen Xtream) alvast ophalen; blokkeert niets
+      B.providers.providerLimit.prime(Lib.source);
       // tegelijk kijken: op de achtergrond; bij "te veel schermen" stopt de speler alsnog
       streamStart().then(function (ok) {
         mark('stream_start');
@@ -699,7 +701,13 @@
       if (engine) engine.stop();
       U.clear(errorBox);
       errorBox.appendChild(h('h2', L("Can't play this")));
-      errorBox.appendChild(h('p', isLive() ? L('This channel is not available right now.') : L('This title could not be loaded.')));
+      var msg = h('p', isLive() ? L('This channel is not available right now.') : L('This title could not be loaded.'));
+      errorBox.appendChild(msg);
+      // provider vol (alle verbindingen van het Xtream-abonnement in gebruik)? Dan die melding i.p.v. de algemene
+      var g = startGen;
+      B.providers.providerLimit.failureMessage(Lib.source).then(function (m) {
+        if (m && !closed && g === startGen && errorBox.style.display !== 'none' && msg.parentNode === errorBox) msg.textContent = m;
+      }, B.noop);
       var row = h('div.modal-buttons');
       row.appendChild(U.button(L('Try again'), function () { attempts = 0; triedBackup = false; start(resumePos); }, { primary: true }));
       if (isLive()) row.appendChild(U.button(L('Other source'), chooseBackup, { icon: 'layers' }));
@@ -1274,7 +1282,8 @@
       if (engine) engine.stop();
       U.clear(errorBox);
       errorBox.appendChild(h('h2', L('Too many people are watching')));
-      errorBox.appendChild(h('p', L('Your account can be used on up to %d screens at the same time.', r.limit)));
+      errorBox.appendChild(h('p', r.limit === 1 ? L('Your account can be used on 1 screen at a time.')
+        : L('Your account can be used on up to %d screens at the same time.', r.limit)));
       // build 88: Gratis → met Lifetime meer schermen tegelijk
       var free = r.plan ? String(r.plan).toLowerCase() === 'free' : A.isFree();
       if (free) errorBox.appendChild(h('p', L('Upgrade to Lifetime to watch on up to %d screens at the same time.', A.LIFETIME.streams)));

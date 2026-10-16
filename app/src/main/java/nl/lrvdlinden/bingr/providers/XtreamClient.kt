@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -54,6 +55,19 @@ class XtreamClient(source: PlaylistSource, val password: String) {
         val u = api() ?: throw Net.badURL()
         val r = Net.json(u)
         if (r.jO("user_info").jI("auth") != 1) throw authError
+        ProviderConnections.from(r.jO("user_info"))?.let { ProviderLimit.store(server, username, it) }
+    }
+
+    /**
+     * Verbindingslimiet van de provider (user_info.max_connections / active_cons), of null als de server die niet
+     * meestuurt. Korte time-out: alleen om bij een mislukte stream de juiste foutmelding te kiezen.
+     */
+    suspend fun connections(): ProviderConnections? {
+        val u = api() ?: return null
+        val r = runCatching { withTimeoutOrNull(6_000) { Net.json(u) } }.getOrNull() ?: return null
+        val c = ProviderConnections.from(r.jO("user_info")) ?: return null
+        ProviderLimit.store(server, username, c)
+        return c
     }
 
     private suspend fun list(action: String): List<JsonElement> {
@@ -178,5 +192,63 @@ class XtreamClient(source: PlaylistSource, val password: String) {
         val f = SimpleDateFormat("yyyy-MM-dd:HH-mm", Locale.US).apply { timeZone = TimeZone.getDefault() }
         val minutes = ((end - start) / 60_000).toInt()
         return "$server/timeshift/$username/$password/$minutes/${f.format(java.util.Date(start))}/$sid.ts"
+    }
+}
+
+/**
+ * Limiet van de IPTV-provider (Xtream). Staat los van de streamlimiet van Bingr (eigen telling op de server, zie
+ * CONTRACT.md); die wordt hier nooit uit afgeleid. Alleen om bij een mislukte stream te kunnen zeggen dat de provider
+ * vol zit, in plaats van een algemene fout. Niet vooraf blokkeren: active_cons loopt bij providers achter.
+ */
+data class ProviderConnections(
+    /** max_connections; 0 = onbekend of onbeperkt */
+    val max: Int,
+    /** active_cons */
+    val active: Int,
+) {
+    /** Alle verbindingen van de provider in gebruik */
+    val atLimit: Boolean get() = max > 0 && active >= max
+
+    /** Melding als het afspelen mislukt en de provider vol zit */
+    val message: String
+        get() = if (max == 1)
+            L("Your IPTV subscription allows 1 connection at a time and it is in use. This is a limit of your provider, not of Bingr.")
+        else L("Your IPTV subscription allows up to %d connections at the same time and they are all in use. This is a limit of your provider, not of Bingr.", max)
+
+    companion object {
+        fun from(userInfo: JsonObject?): ProviderConnections? {
+            val m = userInfo.jI("max_connections") ?: return null
+            return ProviderConnections(m, userInfo.jI("active_cons") ?: 0)
+        }
+    }
+}
+
+/** Laatst bekende providerlimiet per server + gebruikersnaam (geheugen, niet bewaard). */
+object ProviderLimit {
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Pair<ProviderConnections, Long>>()
+
+    fun store(server: String, username: String, c: ProviderConnections) {
+        cache["$server|$username"] = c to System.currentTimeMillis()
+    }
+
+    private fun client(s: PlaylistSource?): XtreamClient? =
+        s?.takeIf { it.kind == PlaylistKind.XTREAM }?.let { XtreamClient(it, Store.secret(it.passwordKey) ?: "") }
+
+    /** Vóór het afspelen: de limiet van de provider alvast ophalen (alleen Xtream; blokkeert niets). */
+    suspend fun prime(s: PlaylistSource?) {
+        val x = client(s) ?: return
+        val t = cache["${x.server}|${x.username}"]?.second
+        if (t != null && System.currentTimeMillis() - t < 60_000) return
+        x.connections()
+    }
+
+    /**
+     * Na een mislukte stream: opnieuw controleren. Geeft de melding als alle verbindingen van de provider in gebruik
+     * zijn, anders null (dan blijft de gewone foutmelding staan). M3U e.d.: altijd null.
+     */
+    suspend fun failureMessage(s: PlaylistSource?): String? {
+        val x = client(s) ?: return null
+        val c = x.connections() ?: cache["${x.server}|${x.username}"]?.first ?: return null
+        return if (c.atLimit) c.message else null
     }
 }

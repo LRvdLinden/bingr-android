@@ -4,6 +4,21 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 105
+_16 oktober 2026_
+
+### Alle apps, de website en de server
+
+**Verbeterd**
+
+- Nieuwe kijklimieten: met Gratis kijk je op 1 scherm tegelijk, met Lifetime op 3 schermen tegelijk
+
+### Alle apps en de website
+
+**Nieuw**
+
+- Start een stream niet omdat alle verbindingen van je IPTV-abonnement in gebruik zijn, dan zegt Bingr dat nu duidelijk: het is een limiet van je provider, niet van Bingr
+
 ## Versie 1.0.0 · Build 104
 _15 oktober 2026_
 

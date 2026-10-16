@@ -116,6 +116,11 @@ class PlayerController(item: PlayableItem) {
     private var backupPending = false
     /** Live-zender kan niet spelen na de stille poging: PlayerScreen zoekt een reservebron (anders [showFailure]). */
     var onLiveFailure: (() -> Unit)? = null
+    /**
+     * Limiet van de IPTV-provider controleren als het afspelen mislukt: geeft een melding als alle verbindingen van de
+     * provider (Xtream) in gebruik zijn, anders null. Staat los van de streamlimiet van Bingr.
+     */
+    var providerLimitCheck: (suspend () -> String?)? = null
     private var pausedAt: Long? = null
     private var timeshiftStart: Long? = null        // begin van de catch-up-stream die nu speelt (epoch-ms)
     private var externalCues: List<SubtitleCue> = emptyList()
@@ -396,10 +401,20 @@ class PlayerController(item: PlayableItem) {
 
     /** Foutmelding tonen (Opnieuw / Andere bron / Andere speler); de timer stopt. */
     fun showFailure() {
-        errorText = L("This stream can't be played right now."); reconnecting = false; isBuffering = false
+        val generic = L("This stream can't be played right now.")
+        errorText = generic; reconnecting = false; isBuffering = false
         retryPending = false; backupPending = false
         if (!isLive) lastGoodPosition.takeIf { it > 0.0 }?.let { item = item.copy(resumeAt = it) }
         timer?.cancel(); timer = null
+        // provider vol (alle verbindingen in gebruik)? Dan die melding in plaats van de algemene fout
+        val u = url
+        val check = providerLimitCheck
+        if (check != null && u != null && u.startsWith("http", ignoreCase = true)) {
+            scope.launch {
+                val m = runCatching { check() }.getOrNull() ?: return@launch
+                if (!stopped && !dismissed && url == u && errorText == generic) errorText = m
+            }
+        }
     }
 
     /** Kan er met de andere engine geprobeerd worden ("Andere speler")? */

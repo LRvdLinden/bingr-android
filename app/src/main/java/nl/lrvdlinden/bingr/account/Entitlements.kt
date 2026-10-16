@@ -56,10 +56,11 @@ object Entitlements {
     const val DEFAULT_PRICE_EN = "€4.99"
 
     /** Limieten van de abonnementen voor de vergelijking (de server is leidend voor je eigen plan). */
-    const val FREE_STREAMS = 2
+    // gelijktijdige kijkers: Bingr-telling op de server, los van de limiet van de IPTV-provider
+    const val FREE_STREAMS = 1
     const val FREE_DEVICES = 8
     const val FREE_SERVERS = 1
-    const val LIFETIME_STREAMS = 6
+    const val LIFETIME_STREAMS = 3
     const val LIFETIME_DEVICES = 15
 
     /** Huidig abonnement; null = onbekend (gedraagt zich als Lifetime). */

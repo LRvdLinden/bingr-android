@@ -176,7 +176,8 @@ fun StreamLimitScreen(info: Account.StreamList, onRetry: () -> Unit, onClose: ()
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(tvs(8))) {
                     Text(L("Too many people are watching"), color = Color.White, fontSize = tsp(26), fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center)
-                    Text(L("Your account can be used on up to %d screens at the same time.", data.limit),
+                    Text(if (data.limit == 1) L("Your account can be used on 1 screen at a time.")
+                         else L("Your account can be used on up to %d screens at the same time.", data.limit),
                         color = Theme.secondary, fontSize = tsp(15), textAlign = TextAlign.Center)
                     // build 88: Gratis → met Lifetime meer schermen tegelijk
                     if (data.isFree) {

@@ -137,10 +137,68 @@
     return B.query(this.server + '/player_api.php', q);
   };
   Xtream.prototype.authenticate = function () {
+    var self = this;
     return B.getJSON(this.api(), null, 30000).then(function (r) {
       if (!r || !r.user_info || B.int(r.user_info.auth) !== 1) throw new Error(L("Couldn't sign in to the server. Check the server, username and password."));
+      var c = providerConnections(r.user_info);
+      if (c) P.providerLimit.store(self.server, self.username, c);
       return r;
     });
+  };
+  /**
+   * Verbindingslimiet van de provider (user_info.max_connections / active_cons), of null als de server die niet
+   * meestuurt. Korte time-out: alleen om bij een mislukte stream de juiste foutmelding te kiezen.
+   */
+  Xtream.prototype.connections = function () {
+    var self = this;
+    return B.getJSON(this.api(), null, 6000).then(function (r) {
+      var c = providerConnections(r && r.user_info);
+      if (c) P.providerLimit.store(self.server, self.username, c);
+      return c;
+    }, function () { return null; });
+  };
+
+  /*
+   * Limiet van de IPTV-provider (Xtream). Staat los van de streamlimiet van Bingr (eigen telling op de server);
+   * die wordt hier nooit uit afgeleid. Alleen om bij een mislukte stream te zeggen dat de provider vol zit, in plaats
+   * van een algemene fout. Niet vooraf blokkeren: active_cons loopt bij providers achter.
+   */
+  function providerConnections(u) {
+    if (!u) return null;
+    var max = B.int(u.max_connections);
+    if (max == null) return null;
+    return { max: max, active: B.int(u.active_cons) || 0 };
+  }
+  function providerAtLimit(c) { return !!c && c.max > 0 && c.active >= c.max; }
+  function providerMessage(c) {
+    return c.max === 1
+      ? L('Your IPTV subscription allows 1 connection at a time and it is in use. This is a limit of your provider, not of Bingr.')
+      : L('Your IPTV subscription allows up to %d connections at the same time and they are all in use. This is a limit of your provider, not of Bingr.', c.max);
+  }
+  P.providerLimit = {
+    cache: {},
+    store: function (server, username, c) { this.cache[server + '|' + username] = { c: c, at: Date.now() }; },
+    client: function (src) {
+      return src && src.kind === 'Xtream Codes' ? new Xtream(src, B.data.secret(src, 'password')) : null;
+    },
+    /** Vóór het afspelen: de limiet van de provider alvast ophalen (alleen Xtream; blokkeert niets). */
+    prime: function (src) {
+      var x = this.client(src);
+      if (!x) return;
+      var e = this.cache[x.server + '|' + x.username];
+      if (e && Date.now() - e.at < 60000) return;
+      x.connections().then(B.noop, B.noop);
+    },
+    /** Na een mislukte stream: melding als alle verbindingen van de provider in gebruik zijn, anders null (M3U: null). */
+    failureMessage: function (src) {
+      var self = this, x = this.client(src);
+      if (!x) return Promise.resolve(null);
+      return x.connections().then(function (c) {
+        var e = self.cache[x.server + '|' + x.username];
+        c = c || (e && e.c);
+        return providerAtLimit(c) ? providerMessage(c) : null;
+      }, function () { return null; });
+    }
   };
   function items(j) {
     if (Array.isArray(j)) return j;
