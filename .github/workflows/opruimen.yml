@@ -1,0 +1,21 @@
+name: Opruimen
+
+# Handmatig: verwijdert branches met buildpakketten die nooit openbaar op GitHub hadden mogen staan (CLAUDE.md).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  branches:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Branches met pakketten verwijderen
+        run: |
+          for b in tmp-pkg; do
+            if git ls-remote --exit-code origin "refs/heads/$b" >/dev/null; then
+              git push origin --delete "$b" && echo "::notice::branch $b verwijderd"
+            else echo "::notice::branch $b bestaat niet (meer)"; fi
+          done
