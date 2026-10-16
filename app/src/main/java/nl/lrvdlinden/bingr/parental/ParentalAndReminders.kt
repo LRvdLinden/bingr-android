@@ -232,7 +232,11 @@ object ParentalControl {
 /**
  * Herinneringen voor programma's: melding 2 minuten voor de start (AlarmManager + [ReminderReceiver]).
  * Op TV verschijnen meldingen niet altijd: [due] is dan het herinneringsbanner-signaal in de app
- * (start met [startChecking], zoals ReminderCenter op Apple TV).
+ * (start met [startChecking], zoals ReminderCenter op Apple TV; de banner staat in BingrRoot).
+ *
+ * Per profiel (zie docs/ACCOUNT.md → "Herinneringen per profiel" in iptv-ios-appletv): elk profiel zet, ziet en
+ * verwijdert alleen zijn eigen herinneringen ([idFor], [isMine]); [Store.reminders] bevat die van alle profielen en
+ * meldingen/banners komen voor allemaal, met de profielnaam erbij ([displayTitle]).
  */
 object Reminders {
     const val CHANNEL_ID = "reminders"
@@ -261,11 +265,74 @@ object Reminders {
         runCatching { Store.reminders.filter { it.start > System.currentTimeMillis() }.forEach { schedule(ctx, it) } }
     }
 
+    // MARK: per profiel
+
+    /**
+     * ID per profiel: het hoofdprofiel houdt "<zender>-<start in s>" (zoals oudere apps), elk ander profiel
+     * "p:<profiel-ID in kleine letters>:<zender>-<start>". Zo kunnen twee profielen hetzelfde programma onthouden.
+     */
+    fun makeID(channelID: String, start: Long, profileID: String?): String {
+        val base = "$channelID-${start / 1000}"
+        val main = Store.mainProfileID
+        if (profileID == null || (main != null && profileID.equals(main, ignoreCase = true))) return base
+        return "p:${profileID.lowercase()}:$base"
+    }
+
+    /** Profiel uit de ID ("p:<profiel>:…"); null = geen profiel in de ID. */
+    fun profileFromID(id: String): String? {
+        if (!id.startsWith("p:")) return null
+        val end = id.indexOf(':', 2)
+        return if (end > 2) id.substring(2, end) else null
+    }
+
+    /** Profiel van deze herinnering (null = hoofdprofiel). Ook als een oudere app `profileID` niet meeschreef. */
+    fun owner(r: ProgramReminder): String? = r.profileID ?: profileFromID(r.id)
+
+    /** Het actieve profiel, of het hoofdprofiel als er (nog) niemand gekozen is. */
+    private val currentProfile: String? get() = Store.activeProfileID ?: Store.mainProfileID
+
+    /** ID van de herinnering van het actieve profiel voor dit programma. */
+    fun idFor(channelID: String, start: Long): String = makeID(channelID, start, currentProfile)
+
+    /** Hoort deze herinnering bij het actieve profiel? (Zonder profiel = hoofdprofiel; ID's zonder hoofdlettergevoeligheid.) */
+    fun isMine(r: ProgramReminder): Boolean {
+        val active = Store.activeProfileID ?: return true
+        val o = owner(r) ?: return Store.isMain(active)
+        return o.equals(active, ignoreCase = true)
+    }
+
+    /** Titel voor melding/banner: met de profielnaam als het account meer profielen heeft ("Voor Emma: Journaal"). */
+    fun displayTitle(r: ProgramReminder): String {
+        if (Store.profiles.size <= 1) return r.title
+        val id = owner(r) ?: Store.mainProfileID ?: return r.title
+        val name = Store.profiles.firstOrNull { it.id.equals(id, ignoreCase = true) }?.name?.trim().orEmpty()
+        return if (name.isEmpty()) r.title else L("For %@: %@", name, r.title)
+    }
+
+    /**
+     * Mag de banner deze zender openen? Eigen herinnering altijd (de bibliotheek is al gefilterd); die van een ander
+     * profiel niet als het actieve profiel een leeftijdsgrens heeft.
+     */
+    fun canWatch(r: ProgramReminder): Boolean = isMine(r) || Store.activeProfile?.effectiveAgeLimit == null
+
+    /** Herinnering voor het actieve profiel (elk profiel heeft zijn eigen herinneringen, ook een kinderprofiel). */
     fun add(channel: Channel, program: EPGProgram, playlistID: String) {
-        val r = ProgramReminder(id = "${channel.id}-${program.start / 1000}", playlistID = playlistID,
-            channelID = channel.id, channelName = channel.name, title = program.title, start = program.start)
+        val owner = currentProfile
+        val r = ProgramReminder(id = idFor(channel.id, program.start), playlistID = playlistID,
+            channelID = channel.id, channelName = channel.name, title = program.title, start = program.start,
+            profileID = owner?.takeUnless { Store.isMain(it) }?.lowercase())
         Store.addReminder(r)
         schedule(AppState.appContext, r)
+    }
+
+    /** Een profiel is verwijderd (hier of op een ander apparaat): zijn herinneringen en alarmen gaan weg. */
+    fun profileDeleted(profileID: String) {
+        val gone = Store.reminders.filter { owner(it)?.equals(profileID, ignoreCase = true) == true }
+        if (gone.isEmpty()) return
+        val ctx = AppState.appContext
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        gone.forEach { r -> runCatching { am.cancel(pending(ctx, r)) } }
+        gone.forEach { Store.removeReminder(it.id) }
     }
 
     fun remove(id: String) {
@@ -329,15 +396,22 @@ object Reminders {
         }
     }
 
-    /** In-app controle elke 20 s (TV): zet [due] als een herinnering (bijna) begint. */
+    /**
+     * In-app controle elke 20 s: zet [due] als een herinnering (van welk profiel ook) (bijna) begint. Alleen als de
+     * app in beeld is (zoals op Samsung TV): anders gaat de herinnering niet ongezien uit de lijst.
+     */
     fun startChecking() {
         checker?.cancel()
         checker = AppScope.launch {
             while (isActive) {
+                val visible = MainActivity.current?.lifecycle?.currentState
+                    ?.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED) == true
                 val now = System.currentTimeMillis()
-                Store.reminders.firstOrNull { it.start <= now + 60_000 && it.start > now - 300_000 }?.let { r ->
-                    due = r
-                    Store.removeReminder(r.id)
+                if (visible && due == null) {
+                    Store.reminders.firstOrNull { it.start <= now + 60_000 && it.start > now - 300_000 }?.let { r ->
+                        due = r
+                        Store.removeReminder(r.id)
+                    }
                 }
                 delay(20_000)
             }
@@ -348,7 +422,8 @@ object Reminders {
     @SuppressLint("MissingPermission")
     fun showNotification(ctx: Context, intent: Intent) {
         val id = intent.getStringExtra(EXTRA_ID) ?: return
-        val title = intent.getStringExtra(EXTRA_TITLE) ?: ""
+        // met de profielnaam (ook voor een profiel dat nu niet actief is); de herinnering zelf heeft de nieuwste naam
+        val title = Store.reminders.firstOrNull { it.id == id }?.let { displayTitle(it) } ?: intent.getStringExtra(EXTRA_TITLE) ?: ""
         val channelName = intent.getStringExtra(EXTRA_CHANNEL_NAME) ?: ""
         ensureChannel(ctx)
         val open = Intent(ctx, MainActivity::class.java).apply {

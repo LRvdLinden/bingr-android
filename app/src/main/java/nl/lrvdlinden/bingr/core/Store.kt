@@ -381,6 +381,7 @@ object Store {
         for (id in gone) {
             Collections.profileDeleted(id, fromSync = true)
             Downloads.profileDeleted(id)
+            Reminders.profileDeleted(id)
             runCatching { photoFile(id).delete() }
             setSecret("profile.$id.pin", null)
             runCatching { File(dir, "profile-$id").deleteRecursively() }
@@ -436,6 +437,8 @@ object Store {
         Collections.profileDeleted(p.id)
         // en zijn downloads (build 60): anders blijven ze onzichtbaar opslag innemen
         Downloads.profileDeleted(p.id)
+        // en zijn herinneringen (met de alarmen); de verwijdering gaat mee naar het account
+        Reminders.profileDeleted(p.id)
         profiles = profiles.filterNot { it.id == p.id }
         write("profiles", profiles)
         ProfileSync.profilesChanged()

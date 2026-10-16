@@ -13,13 +13,19 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Theaters
@@ -44,6 +50,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -67,6 +74,11 @@ fun BingrRoot() {
                     AppState.Stage.MAIN -> MainScreen()
                 }
             }
+        }
+        // herinnering die nu begint (van elk profiel, met de profielnaam), zoals de banner op Apple TV; onder de speler
+        val due = Reminders.due
+        if (due != null && limit == null && AppState.stage != AppState.Stage.SPLASH) {
+            key(due.id) { ReminderBanner(due) }
         }
         if (AppState.showMultiview) {
             FullLayer(Modifier.blockFocus(AppState.playing != null || limit != null)) {
@@ -93,6 +105,52 @@ fun BingrRoot() {
         }
         // build 88: upgraden naar Lifetime (boven alles, ook boven de speler en "Too many devices")
         UpgradeDialogHost()
+    }
+}
+
+// MARK: herinnering
+
+/**
+ * Banner bovenin als een herinnering begint (= reminderBanner in BingrApp.swift). Verdwijnt na 20 s.
+ * "Watch" alleen als [Reminders.canWatch]: een kinderprofiel opent geen zender via de herinnering van een ander profiel.
+ */
+@Composable
+private fun ReminderBanner(r: ProgramReminder) {
+    LaunchedEffect(r.id) {
+        delay(20_000)
+        if (Reminders.due?.id == r.id) Reminders.due = null
+    }
+    Box(Modifier.fillMaxWidth().statusBarsPadding().padding(top = 10.dp, start = Theme.edge, end = Theme.edge),
+        contentAlignment = Alignment.TopCenter) {
+        Row(
+            Modifier.widthIn(max = 760.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                .background(Theme.elevated).padding(tvs(14)),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(tvs(14))
+        ) {
+            Icon(Icons.Default.Notifications, null, tint = Theme.red, modifier = Modifier.size(tvs(22)))
+            Column(Modifier.weight(1f)) {
+                Text(Reminders.displayTitle(r), color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(L("Starts now on %@", r.channelName), color = Theme.secondary, fontSize = tsp(12),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (Reminders.canWatch(r)) {
+                NetflixButton(L("Watch"), Icons.Default.PlayArrow, kind = NetflixKind.PLAY) {
+                    Reminders.due = null
+                    val c = Playlists.library.channels.firstOrNull { it.id == r.channelID }
+                    if (c != null) {
+                        AppState.play(Playables.channel(c, Playlists.library.nowPlaying(c)), zap = Playlists.library.channels)
+                    } else {
+                        Store.playlists.firstOrNull { it.id == r.playlistID }?.let { AppState.open(it, thenShow = r.channelID) }
+                    }
+                }
+            }
+            Box(Modifier.size(tvs(36)).clip(RoundedCornerShape(18.dp)).focusLift(onClick = { Reminders.due = null }),
+                contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Close, L("Close"), tint = Color.White, modifier = Modifier.size(tvs(20)))
+            }
+        }
     }
 }
 

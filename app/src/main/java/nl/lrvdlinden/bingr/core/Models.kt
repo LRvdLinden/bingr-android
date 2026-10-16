@@ -307,12 +307,15 @@ data class ParentalSettings(
 
 @Serializable
 data class ProgramReminder(
+    /** "<zender>-<start in s>"; bij een ander profiel dan het hoofdprofiel "p:<profiel>:<zender>-<start>" (zie [Reminders.makeID]) */
     val id: String,
     val playlistID: String,
     val channelID: String,
     val channelName: String,
     val title: String,
     val start: Long,
+    /** Van welk profiel (kleine letters); null = hoofdprofiel, of van vóór de herinneringen per profiel */
+    val profileID: String? = null,
 )
 
 @Serializable

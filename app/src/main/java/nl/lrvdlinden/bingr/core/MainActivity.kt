@@ -32,6 +32,8 @@ class MainActivity : ComponentActivity() {
             this, pipReceiver, IntentFilter(ACTION_PIP), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
         )
         setContent { BingrTheme { BingrRoot() } }
+        // herinneringen (van alle profielen) als banner in de app, ook op TV waar meldingen niet altijd verschijnen
+        Reminders.startChecking()
         // meldingen (herinneringen, downloads): één keer vragen, alleen op telefoon/tablet (op TV niet)
         if (Build.VERSION.SDK_INT >= 33 && !AppState.isTV && !Prefs.bool("notifications.asked") &&
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {

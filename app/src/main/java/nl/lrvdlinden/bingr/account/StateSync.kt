@@ -927,16 +927,20 @@ object StateSync {
     // MARK: reminders
 
     private fun remindersJson(): JsonObject {
-        val base = serverReminders ?: JsonObject(emptyMap())
+        // één lijst: `items`; een oudere `reminders`/`list` (van iOS) niet laten staan, anders leest iOS die verouderde lijst
+        val base = (serverReminders ?: JsonObject(emptyMap())).filterKeys { it != "reminders" && it != "list" }
         val items = Store.reminders.map { r ->
-            JsonObject(mapOf(
+            val m = linkedMapOf<String, JsonElement>(
                 "id" to JsonPrimitive(r.id),
                 "playlistID" to JsonPrimitive(r.playlistID),
                 "channelID" to JsonPrimitive(r.channelID),
                 "channelName" to JsonPrimitive(r.channelName),
                 "title" to JsonPrimitive(r.title),
                 "start" to JsonPrimitive(iso(r.start)),
-            ))
+            )
+            // per profiel (zie docs/ACCOUNT.md → "Herinneringen per profiel"): alleen bij een ander profiel dan het hoofdprofiel
+            r.profileID?.let { m["profileID"] = JsonPrimitive(it.lowercase()) }
+            JsonObject(m)
         }
         return JsonObject(base + mapOf(
             "items" to JsonArray(items),
@@ -953,6 +957,8 @@ object StateSync {
                 id = id, playlistID = r.jS("playlistID") ?: "", channelID = r.jS("channelID") ?: "",
                 channelName = r.jS("channelName") ?: "", title = r.jS("title") ?: "",
                 start = time(r["start"]) ?: return@mapNotNull null,
+                // profiel: het veld, anders uit de ID ("p:<profiel>:…"), anders het hoofdprofiel (null)
+                profileID = (r.jS("profileID")?.takeIf { it.isNotEmpty() } ?: Reminders.profileFromID(id))?.lowercase(),
             )
         }.distinctBy { it.id }
     }

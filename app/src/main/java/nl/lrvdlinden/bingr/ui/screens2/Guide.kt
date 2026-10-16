@@ -73,7 +73,8 @@ private fun s2GuideStart(now: Long): Long = Calendar.getInstance().apply {
     set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
 }.timeInMillis
 
-private fun s2ReminderID(channel: Channel, p: EPGProgram) = "${channel.id}-${p.start / 1000}"
+/** Herinnering van het actieve profiel voor dit programma (elk profiel heeft zijn eigen herinneringen). */
+private fun s2ReminderID(channel: Channel, p: EPGProgram) = Reminders.idFor(channel.id, p.start)
 
 /** TV-gids als raster: zenders verticaal, tijd horizontaal (14 uur), rode "nu"-lijn; maximaal 150 zenders. */
 @Composable

@@ -4,6 +4,28 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 106
+_16 oktober 2026_
+
+### Alle apps
+
+**Nieuw**
+
+- Herinneringen per profiel: elk profiel, ook een kinderprofiel, zet, ziet en verwijdert zijn eigen herinneringen. De melding komt ook als een ander profiel open staat, met de naam erbij ("Voor Emma: …")
+
+### iOS, iPadOS, tvOS, macOS, Android en Android TV
+
+**Opgelost**
+
+- Herinneringen die je op Android zet, verdwijnen niet meer na het synchroniseren met een iPhone, iPad, Mac of Apple TV
+- Verwijder je een profiel, dan gaan ook zijn herinneringen weg
+
+### Android en Android TV
+
+**Verbeterd**
+
+- Begint een programma met een herinnering, dan verschijnt er een melding in beeld met Kijk, ook op Android TV, Google TV en Fire TV
+
 ## Versie 1.0.0 · Build 105
 _16 oktober 2026_
 
