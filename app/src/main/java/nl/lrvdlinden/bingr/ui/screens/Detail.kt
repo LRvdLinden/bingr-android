@@ -530,7 +530,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                             if (inMyList) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             tint = if (inMyList) Theme.red else Color.White
                         ) { toggleMyList() }
-                        // build 111: ook niet voor titels uit TMDB (Binnenkort / Nieuw op streamingdiensten)
+                        // build 111: ook niet voor titels uit TMDB (Binnenkort op Bingr / Nieuw op Bingr)
                         if (!target.id.startsWith("rec-") && !DiscoverItem.isExternal(target.id)) DetailCircleButton(Icons.AutoMirrored.Filled.PlaylistAdd) { addToCollection = true }
                         if (tv && heroTrailer.visible) {
                             DetailCircleButton(if (heroTrailer.muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp) {
@@ -590,8 +590,8 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                 }
                 // taal van deze versie (build 59): uit de titel/categorie, anders de originele taal (TMDB)
                 language?.longName?.let { CreditLine(L("Language"), it) }
-                // build 111: titel uit TMDB (Binnenkort / Nieuw op streamingdiensten): niet in je afspeellijst, datum en
-                // de verplichte bronvermelding
+                // build 111: titel uit TMDB (Binnenkort op Bingr / Nieuw op Bingr): niet in je afspeellijst en de datum
+                // (build 112: bronvermelding staat in Instellingen → Over)
                 remember(target.id) { DiscoverStore.detailNote(target.id) }?.let {
                     Text(it, color = Theme.secondary, fontSize = tsp(12), modifier = Modifier.widthIn(max = 700.dp).fillMaxWidth())
                 }

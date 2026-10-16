@@ -850,6 +850,8 @@ html.mv-hole .layer.multiview { background: transparent; }
 .lv-preview { flex: 1; min-width: 0; }
 .lv-pv-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* build 111: rijen Binnenkort / Nieuw op streamingdiensten (TMDB): bronvermelding onder de rij, regels op de detailpagina */
-.row-attr { margin: 10px 0 0 6px; font-size: 18px; color: #8c8c8c; }
+/* build 111: rijen Binnenkort op Bingr / Nieuw op Bingr (TMDB): regels op de detailpagina; build 112: bronvermelding
+   (TMDB, JustWatch) niet meer onder de rij maar in Instellingen → Over (.st-note) */
+.st-note { margin: 4px 0 0; padding: 12px 28px; border-radius: 10px; font-size: 19px; line-height: 1.45; color: #8c8c8c; }
+.st-note.focused { background: #121212; color: #ddd; }
 .discover-detail .dt-note { margin-top: 24px; font-size: 21px; line-height: 1.5; }

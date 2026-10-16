@@ -2,10 +2,11 @@
  * Build 111: rijen op Home (= Discover.swift / Discover.kt in de apps en js/discover.js van de webspeler)
  *  - "Nieuw toegevoegd": films én series uit je eigen bron, de laatste 30 dagen (Xtream `added` / `last_modified`),
  *    nieuwste eerst, max. 30; zonder datum (M3U) blijft de rij weg.
- *  - "Binnenkort" en "Nieuw op streamingdiensten": titels uit TMDB (sleutel van de server), regio van de app-taal.
+ *  - "Binnenkort op Bingr" en "Nieuw op Bingr" (namen sinds build 112): titels uit TMDB (sleutel van de server), regio van de app-taal.
  *    Nooit namen of logo's van streamingdiensten (we vragen alleen "flatrate" op, zonder aanbieders te tonen).
- *    Staat een titel in je bibliotheek, dan opent die; anders een detailpagina met Mijn lijst. Bronvermelding
- *    "Gegevens: TMDB" (en "via JustWatch" bij watch-provider-gegevens) klein onder de rij en op de detailpagina.
+ *    Staat een titel in je bibliotheek, dan opent die; anders een detailpagina met Mijn lijst. Build 112: "Nieuw op
+ *    Bingr" alleen met titels uit je bibliotheek (meteen afspeelbaar; niets = geen rij). De bronvermelding (TMDB,
+ *    JustWatch) staat niet meer onder de rijen en op de detailpagina, maar één keer in Instellingen → Over.
  *    12 uur bewaard; koppelen aan je bibliotheek via de titelindex van js/details.js.
  * Sleutels in de Home-indeling: "upcoming" en "streaming". Geschreven voor Chromium M56 (ES2017, geen ?. ?? of spread).
  */
@@ -18,9 +19,14 @@
   var X = B.discover = {};
 
   X.KINDS = ['upcoming', 'streaming'];
-  X.title = function (kind) { return kind === 'upcoming' ? L('Coming soon') : L('New on streaming'); };
-  /** Verplichte bronvermelding (TMDB-voorwaarden); watch-provider-gegevens komen van JustWatch. */
-  X.attribution = function (kind) { return kind === 'upcoming' ? L('Data: TMDB') : L('Data: TMDB · via JustWatch'); };
+  /** Getoonde naam (build 112: "Binnenkort op Bingr" / "Nieuw op Bingr"); de sleutels blijven upcoming/streaming. */
+  X.title = function (kind) { return kind === 'upcoming' ? L('Coming soon to Bingr') : L('New on Bingr'); };
+  /** Build 112: "Nieuw op Bingr" alleen met titels uit de eigen bibliotheek (meteen afspeelbaar). */
+  X.onlyLibrary = function (kind) { return kind === 'streaming'; };
+  /** Build 112: bronvermelding van TMDB en JustWatch, één keer in Instellingen → Over (niet meer onder de rijen). */
+  X.attribution = function () {
+    return L('Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Availability data: JustWatch.');
+  };
 
   // MARK: id's ("tmdb-movie-123" / "tmdb-tv-123", zelfde als de apps; ook in Mijn lijst)
 
@@ -172,10 +178,11 @@
   var stamp = 0;
   /**
    * Kaarten van een rij: [{type, item, external, t}] — item uit je bibliotheek als hij daar staat, anders de TMDB-titel.
-   * Profielen met een leeftijdsgrens zien alleen titels uit hun (gefilterde) bibliotheek. Max. 30, geen dubbele.
+   * Profielen met een leeftijdsgrens zien alleen titels uit hun (gefilterde) bibliotheek, en Nieuw op Bingr (build 112)
+   * altijd. Max. 30, geen dubbele.
    */
   X.entries = function (kind) {
-    var kids = kidsProfile(), only = ageLimited(), ready = idxReady();
+    var kids = kidsProfile(), only = ageLimited() || X.onlyLibrary(kind), ready = idxReady();
     var c = saved(kind, kids);
     var key = 'disc:' + kind + ':' + (kids ? 'k' : '') + (only ? 'a' : '') + ':' + (c ? c.at : 0) + ':' + ready + ':' + stamp;
     return Lib.memo(key, function () {
@@ -273,21 +280,19 @@
 
   // MARK: rijen op Home
 
+  /** Korte datum ("17 okt", "Oct 17"; in de app-taal), alleen bij Binnenkort op Bingr; zonder punt achter de maand. */
   function dateLabel(t) {
     if (t.kind !== 'upcoming' || !t.date) return null;
-    try { return new Date(t.date + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' }); } catch (e) { return t.date; }
+    try { return new Date(t.date + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' }).replace(/\.$/, ''); } catch (e) { return t.date; }
   }
-  /** Rij met de bronvermelding eronder, of null als hij leeg is. */
+  /** Rij, of null als hij leeg is (build 112: zonder bronvermelding eronder; die staat in Instellingen → Over). */
   X.row = function (kind) {
     var list = X.entries(kind);
-    var cards = list.map(function (e) { return S.posterCard(e.item, e.type, { label: e.external ? dateLabel(e.t) : null }); });
-    var row = S.rowBlock(X.title(kind), cards, 'discover-row');
-    if (!row) return null;
-    row.appendChild(h('div.row-attr', X.attribution(kind)));
-    return row;
+    var cards = list.map(function (e) { return S.posterCard(e.item, e.type, { badge: e.external ? dateLabel(e.t) : null }); });
+    return S.rowBlock(X.title(kind), cards, 'discover-row');
   };
 
-  /** Regels op de detailpagina van een TMDB-titel: niet in je afspeellijst, de datum, en de bronvermelding. */
+  /** Regels op de detailpagina van een TMDB-titel: niet in je afspeellijst en de datum (build 112: zonder bronvermelding). */
   X.note = function (id) {
     var t = X.known(id);
     var first = L('Not in your playlists');
@@ -296,7 +301,7 @@
       try { d = new Date(t.date + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { /* stil */ }
       first += ' · ' + L('Release date: %@', d).replace('%@', d);
     }
-    return [first, t && t.kind === 'streaming' ? X.attribution('streaming') : X.attribution('upcoming')];
+    return [first];
   };
 
   // MARK: detailpagina van een TMDB-titel (vanuit S.detail)

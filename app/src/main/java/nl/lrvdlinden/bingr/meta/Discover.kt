@@ -15,22 +15,27 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// MARK: Home: "Binnenkort" en "Nieuw op streamingdiensten" (TMDB) — build 111, = Discover.swift
+// MARK: Home: "Binnenkort op Bingr" en "Nieuw op Bingr" (TMDB) — build 111 (namen build 112), = Discover.swift
 //
 // Twee rijen op Home met titels uit TMDB: wat binnenkort uitkomt en wat net nieuw is op streamingdiensten in de regio
 // (TMDB watch providers, gegevens van JustWatch). Nooit namen of logo's van streamingdiensten: we vragen alleen
 // "flatrate" op, zonder de aanbieders te tonen. Staat een titel in je bibliotheek (titel + jaar), dan opent die; anders
-// een detailpagina met Mijn lijst. 12 uur bewaard; netwerk en koppelen op de achtergrond. Zelfde sleutels als iOS/web.
+// een detailpagina met Mijn lijst. Build 112: "Nieuw op Bingr" alleen met titels uit je bibliotheek; de bronvermelding
+// (TMDB, JustWatch) staat in Instellingen → Over in plaats van onder de rijen. 12 uur bewaard; netwerk en koppelen op de achtergrond. Zelfde sleutels als iOS/web.
 
 enum class DiscoverKind(val key: String) {
     UPCOMING("upcoming"), STREAMING("streaming");
 
-    val title: String get() = if (this == UPCOMING) L("Coming soon") else L("New on streaming")
-    /** Verplichte bronvermelding (TMDB-voorwaarden); watch-provider-gegevens komen van JustWatch */
-    val attribution: String get() = if (this == UPCOMING) L("Data: TMDB") else L("Data: TMDB · via JustWatch")
+    /** Getoonde naam (build 112: "Binnenkort op Bingr" / "Nieuw op Bingr"); de sleutels blijven upcoming/streaming */
+    val title: String get() = if (this == UPCOMING) L("Coming soon to Bingr") else L("New on Bingr")
+    /** Build 112: "Nieuw op Bingr" alleen met titels uit de eigen bibliotheek (meteen afspeelbaar) */
+    val onlyLibrary: Boolean get() = this == STREAMING
 
     companion object {
         fun of(key: String): DiscoverKind? = entries.firstOrNull { it.key == key }
+        /** Build 112: bronvermelding van TMDB en JustWatch, één keer in Instellingen → Over (niet meer onder de rijen) */
+        val attribution: String
+            get() = L("Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Availability data: JustWatch.")
     }
 }
 
@@ -54,14 +59,17 @@ data class DiscoverItem(
     val poster: String? get() = TMDB.image(posterPath, "w342")
     val releaseDate: Date? get() = date?.let { runCatching { dayFormat().parse(it.take(10)) }.getOrNull() }
 
-    /** Korte datum op de poster ("14 nov."), alleen bij Binnenkort */
+    /**
+     * Korte datum op de poster ("17 okt", "Oct 17"; in de app-taal), alleen bij Binnenkort op Bingr. Build 112: als rood
+     * label linksboven (PosterLabel, zoals SERIE/FILM), zonder punt achter de afgekorte maand.
+     */
     val dateLabel: String?
         get() {
             if (kind != DiscoverKind.UPCOMING.key) return null
             val d = releaseDate ?: return null
             val loc = Localizer.locale
             val pattern = android.text.format.DateFormat.getBestDateTimePattern(loc, "dMMM")
-            return SimpleDateFormat(pattern, loc).format(d)
+            return SimpleDateFormat(pattern, loc).format(d).trim().removeSuffix(".")
         }
 
     /** Detailpagina voor een titel die niet in je bibliotheek staat (zoals de aanbevelingen in DetailScreen) */
@@ -301,7 +309,7 @@ object DiscoverStore {
         found.isNotEmpty()
     }
 
-    /** Regel op de detailpagina van een TMDB-titel: niet in je afspeellijst, de datum en de bronvermelding. */
+    /** Regel op de detailpagina van een TMDB-titel: niet in je afspeellijst en de datum (build 112: zonder bronvermelding). */
     fun detailNote(id: String): String? {
         if (!DiscoverItem.isExternal(id)) return null
         val item = DiscoverKnown.item(id)
@@ -310,7 +318,6 @@ object DiscoverStore {
             val df = java.text.DateFormat.getDateInstance(java.text.DateFormat.LONG, Localizer.locale)
             first += " · " + L("Release date: %@", df.format(d))
         }
-        val attribution = if (item?.kind == DiscoverKind.STREAMING.key) DiscoverKind.STREAMING.attribution else DiscoverKind.UPCOMING.attribution
-        return first + "\n" + attribution
+        return first
     }
 }

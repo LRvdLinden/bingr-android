@@ -745,7 +745,8 @@ fun SettingsScreen() {
 
         // MARK: over
         item {
-            S2Section(L("About")) {
+            // build 112: verplichte bronvermelding van TMDB en JustWatch (stond eerder onder de Home-rijen)
+            S2Section(L("About"), footer = DiscoverKind.attribution) {
                 S2Row(L("Version"), value = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                 S2Row(L("IMDb data"), value = if (Secrets.isSet(Secrets.omdbAPIKey)) L("Active (OMDb)") else L("No OMDb key"))
             }

@@ -367,8 +367,8 @@ object HomeLayouts {
         "top10" -> "Top 10"
         "foryou" -> L("For you")
         "recent" -> L("Recently added")
-        "upcoming" -> L("Coming soon")
-        "streaming" -> L("New on streaming")
+        "upcoming" -> L("Coming soon to Bingr")   // build 112: was "Binnenkort"
+        "streaming" -> L("New on Bingr")          // build 112: was "Nieuw op streamingdiensten"
         "live" -> L("Live TV")
         "movies" -> L("Movies")
         "series" -> L("Series")

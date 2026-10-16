@@ -915,7 +915,7 @@ if __name__ == '__main__':
             ('expect', 'var bs = document.querySelectorAll(".pl-buttons .btn"), l = bs[bs.length - 1]; B.ui.focused === l && l.getBoundingClientRect().right <= 1920 && l.getBoundingClientRect().left >= 0', 'laatste knop in beeld (rij schuift mee)'),
             ('shot', '83b-live-buttons-scrolled'),
             ('eval', 'B.player.current.close() || 1'), ('wait', 500),
-            # instellingen: ondertitelgrootte, startscherm, tabbladen, intromuziek, playlists verversen
+            # instellingen: ondertitelgrootte, startscherm, tabbladen, playlists verversen (geen intromuziek meer: altijd aan)
             ('eval', 'B.ui.top().show("settings", true) || 1'), ('wait', 600),
             ('expect', ROW % T('Subtitle size'), 'instelling ondertitelgrootte'), ('key', 'Enter', 400),
         ] + pick(T('Small'), 'klein') + [
@@ -926,8 +926,7 @@ if __name__ == '__main__':
             ('expect', '!Array.prototype.some.call(B.ui.top().el.querySelectorAll(".choice"), function (x) { return x.textContent === ' + T('Movies') + '; })', 'startscherm: geen verborgen tab'),
         ] + pick(T('Live TV'), 'Live TV') + [
             ('expect', 'B.app.startPage() === "live"', 'startscherm live'),
-            ('expect', ROW % T('Intro sound'), 'instelling intromuziek'), ('key', 'Enter', 400),
-            ('expect', 'B.data.shared("introMusic") === false', 'intromuziek uit'),
+            ('expect', '!Array.prototype.some.call(B.ui.top().el.querySelectorAll(".st-row"), function (x) { return x.firstChild && x.firstChild.textContent === ' + T('Intro sound') + '; })', 'geen instelling intromuziek'),
             ('expect', ROW % T('Update playlists'), 'instelling verversen'), ('key', 'Enter', 400),
         ] + pick(T('Every 6 hours'), 'elke 6 uur') + [
             ('expect', 'B.data.shared("refreshInterval") === "sixHours" && B.lib.refreshDue(7 * 3600000) && !B.lib.refreshDue(3600000)', 'verversen elke 6 uur'),
@@ -938,7 +937,7 @@ if __name__ == '__main__':
         reqs = [json.loads(l) for l in open(os.path.join(OUT, 'requests.jsonl')).read().splitlines() if l.strip()] if os.path.exists(os.path.join(OUT, 'requests.jsonl')) else []
         sets = [r for r in reqs if r.get('action') == 'put_state' and r.get('section') == 'settings']
         last = (sets[-1].get('data') or {}).get('shared', {}) if sets else {}
-        want = {'subtitleSize': 'small', 'hiddenTabs': ['movies'], 'startScreen': 'live', 'introMusic': False, 'refreshInterval': 'sixHours'}
+        want = {'subtitleSize': 'small', 'hiddenTabs': ['movies'], 'startScreen': 'live', 'refreshInterval': 'sixHours'}
         RESULTS.append(('put_state settings: gedeelde sleutels', all(last.get(k) == v for k, v in want.items()), str({k: last.get(k) for k in want})))
 
     if which in ('all', 'parity'):
@@ -1132,7 +1131,7 @@ if __name__ == '__main__':
         fb.MODE['ios_profile'] = False
 
     if which in ('all', 'discover'):
-        # build 111: Home: Nieuw toegevoegd (films én series, 30 dagen), Binnenkort en Nieuw op streamingdiensten (TMDB),
+        # build 111: Home: Nieuw toegevoegd (films én series, 30 dagen), Binnenkort op Bingr en Nieuw op Bingr (TMDB; namen build 112),
         # bronvermelding, koppelen aan de bibliotheek, detailpagina van een TMDB-titel met Mijn lijst
         fb.MODE['discover'] = True
         del fb.DISCOVER_REQS[:]
@@ -1140,21 +1139,31 @@ if __name__ == '__main__':
         KEYS = '(function (t) { var r = %s(t); return r ? Array.prototype.map.call(r.querySelectorAll(".card.poster:not(.see-all)"), function (c) { return c._key; }) : null; })' % ROW
         run(SIGNED_IN, 'normal', [
             ('wait', 2500), ('key', 'Enter', 400), ('wait', 7000),
-            ('eval', 'JSON.stringify({up: %s("Coming soon"), st: %s("New on streaming"), rec: %s("Recently added")})' % (KEYS, KEYS, KEYS), 'rijen'),
-            ('expect', '!!%s("Coming soon") && !!%s("New on streaming") && !!%s("Recently added")' % (ROW, ROW, ROW), 'Home: rijen Nieuw toegevoegd, Binnenkort en Nieuw op streamingdiensten'),
-            ('expect', 'B.L("Coming soon") === "Binnenkort" && B.L("New on streaming") === "Nieuw op streamingdiensten" && B.L("Recently added") === "Nieuw toegevoegd"', 'NL-teksten'),
-            ('expect', '%s("Coming soon").join() === "series:tmdb-tv-8001,movie:tmdb-movie-7001,movie:tmdb-movie-7002"' % KEYS, 'Binnenkort: op datum, zonder uitgekomen titels en zonder poster'),
-            ('expect', '%s("Coming soon").querySelector(".row-attr").textContent === B.L("Data: TMDB")' % ROW, 'Binnenkort: bronvermelding TMDB'),
-            ('expect', '%s("New on streaming").querySelector(".row-attr").textContent === B.L("Data: TMDB · via JustWatch")' % ROW, 'Nieuw op streamingdiensten: bronvermelding TMDB · via JustWatch'),
-            ('expect', '(function (k) { return k.indexOf("movie:" + B.lib.lib.movies.filter(function (m) { return m.title === "Iron Valley"; })[0].id) >= 0 && k.indexOf("series:xs1") >= 0 && k.indexOf("movie:tmdb-movie-7102") >= 0; })(%s("New on streaming"))' % KEYS, 'Nieuw op streamingdiensten: titels uit de bibliotheek gekoppeld'),
+            ('eval', 'JSON.stringify({up: %s("Coming soon to Bingr"), st: %s("New on Bingr"), rec: %s("Recently added")})' % (KEYS, KEYS, KEYS), 'rijen'),
+            ('expect', '!!%s("Coming soon to Bingr") && !!%s("New on Bingr") && !!%s("Recently added")' % (ROW, ROW, ROW), 'Home: rijen Nieuw toegevoegd, Binnenkort op Bingr en Nieuw op Bingr'),
+            ('expect', 'B.L("Coming soon to Bingr") === "Binnenkort op Bingr" && B.L("New on Bingr") === "Nieuw op Bingr" && B.L("Recently added") === "Nieuw toegevoegd"', 'NL-teksten'),
+            ('expect', '%s("Coming soon to Bingr").join() === "series:tmdb-tv-8001,movie:tmdb-movie-7001,movie:tmdb-movie-7002"' % KEYS, 'Binnenkort op Bingr: op datum, zonder uitgekomen titels en zonder poster'),
+            # build 112: geen bronvermelding meer onder de rijen (staat in Instellingen → Over)
+            ('expect', '!document.querySelector(".row-attr") && !/JustWatch|Gegevens: TMDB/.test(document.querySelector(".page.home, .home") ? document.querySelector(".page.home, .home").textContent : document.body.textContent)', 'geen bronvermelding onder de rijen'),
+            # build 112: Nieuw op Bingr alleen titels uit de bibliotheek (Mirror Lake / Neon Nights zonder match vallen weg)
+            ('expect', '(function (k) { return k.indexOf("movie:" + B.lib.lib.movies.filter(function (m) { return m.title === "Iron Valley"; })[0].id) >= 0 && k.indexOf("series:xs1") >= 0 && !k.some(function (x) { return x.indexOf(":tmdb-") >= 0; }); })(%s("New on Bingr"))' % KEYS, 'Nieuw op Bingr: alleen titels uit de bibliotheek'),
             ('expect', '(function (k) { return k.indexOf("series:xs2") >= 0 && k.indexOf("series:xs1") >= 0 && k.indexOf("series:xs3") < 0 && k.some(function (x) { return x.indexOf("movie:") === 0; }); })(%s("Recently added"))' % KEYS, 'Nieuw toegevoegd: films en series van de laatste 30 dagen'),
+            # build 112: datum als rood label linksboven (zelfde .card-badge als "N BEKEKEN", accentkleur), korte datum zonder punt
+            ('expect', '(function (r) { var c = r.querySelector(".card.poster"), b = c.querySelector(".card-badges > .card-badge"); '
+                       'var want = new Date(Date.now() + 5 * 864e5).toLocaleDateString("nl", { day: "numeric", month: "short" }).replace(/\\.$/, ""); '
+                       'var t = document.createElement("div"); t.style.background = "var(--accent)"; document.body.appendChild(t); '
+                       'var acc = getComputedStyle(t).backgroundColor; document.body.removeChild(t); '
+                       'var cb = c.getBoundingClientRect(), bb = b.getBoundingClientRect(); '
+                       'return !!b && b.textContent === want && !c.querySelector(".card-label") && getComputedStyle(b).backgroundColor === acc '
+                       '&& bb.left - cb.left < 20 && bb.top - cb.top < 20; })(%s("Coming soon to Bingr"))' % ROW, 'Binnenkort op Bingr: datum als rood label linksboven'),
+            ('eval', '%s("Coming soon to Bingr").querySelector(".card-badge").textContent' % ROW, 'datumlabel'),
             ('expect', '!/netflix|disney|prime video|hbo|videoland|apple tv|skyshowtime/i.test(document.body.textContent)', 'geen namen van streamingdiensten'),
-            ('eval', 'B.ui.focus(%s("Coming soon").querySelector(".card.poster")) || 1' % ROW), ('wait', 600), ('shot', 'd01-home-coming-soon'),
+            ('eval', 'B.ui.focus(%s("Coming soon to Bingr").querySelector(".card.poster")) || 1' % ROW), ('wait', 600), ('shot', 'd01-home-coming-soon'),
             ('key', 'ArrowDown', 500), ('shot', 'd02-home-streaming'),
-            ('eval', 'B.ui.focus(%s("Coming soon").querySelectorAll(".card.poster")[1]) || 1' % ROW), ('wait', 300),
+            ('eval', 'B.ui.focus(%s("Coming soon to Bingr").querySelectorAll(".card.poster")[1]) || 1' % ROW), ('wait', 300),
             ('key', 'Enter', 600), ('wait', 1500), ('shot', 'd03-tmdb-detail'),
             ('expect', 'B.ui.top().el.classList.contains("discover-detail") && B.ui.top().el.querySelector(".dt-title").textContent === "Starfall Express"', 'TMDB-titel: eigen detailpagina'),
-            ('expect', 'B.ui.top().el.querySelector(".dt-note").textContent.indexOf(B.L("Not in your playlists")) === 0 && B.ui.top().el.querySelector(".dt-note").textContent.indexOf(B.L("Data: TMDB")) > 0', 'detail: niet in je afspeellijst en bronvermelding'),
+            ('expect', 'B.ui.top().el.querySelector(".dt-note").textContent.indexOf(B.L("Not in your playlists")) === 0 && !/TMDB|JustWatch/.test(B.ui.top().el.querySelector(".dt-note").textContent)', 'detail: niet in je afspeellijst, zonder bronvermelding'),
             ('key', 'Enter', 600),
             ('expect', 'B.data.inSet("myList", B.lib.source.id + "|tmdb-movie-7001")', 'detail: op Mijn lijst gezet'),
             ('key', 'Escape', 600), ('wait', 1200),
@@ -1162,6 +1171,12 @@ if __name__ == '__main__':
             ('eval', 'B.ui.focus(%s("My List").querySelector(".card.poster")) || 1' % ROW), ('wait', 500), ('shot', 'd04-home-mylist'),
             ('eval', 'B.ui.top().show("mylist", true) || 1'), ('wait', 600), ('shot', 'd05-mylist-page'),
             ('expect', 'Array.prototype.some.call(document.querySelectorAll(".card.poster"), function (c) { return c._key === "movie:tmdb-movie-7001"; })', 'pagina Mijn lijst toont de TMDB-titel'),
+            # build 112: bronvermelding van TMDB en JustWatch één keer in Instellingen → Over
+            ('eval', 'B.ui.top().show("settings", true) || 1'), ('wait', 600),
+            ('expect', '(function (n) { return n.length === 1 && n[0].textContent === "Film- en seriegegevens: TMDB. Deze app gebruikt de TMDB-API maar wordt niet door TMDB ondersteund of gecertificeerd. Beschikbaarheidsgegevens: JustWatch." && n[0].previousSibling.textContent.indexOf("Bingr ") === 0; })(document.querySelectorAll(".page.settings .st-note"))', 'Instellingen → Over: bronvermelding TMDB en JustWatch'),
+            ('key', ' '.join(['ArrowDown'] * 45), 60), ('wait', 600), ('shot', 'd06-settings-about'),
+            ('expect', 'B.ui.focused && B.ui.focused.classList.contains("st-note")', 'Instellingen: met omlaag tot de bronvermelding'),
+            ('expect', '(function (n) { var r = n.getBoundingClientRect(); return r.bottom <= window.innerHeight && r.top >= 0; })(document.querySelector(".page.settings .st-note"))', 'Instellingen → Over: bronvermelding in beeld met de afstandsbediening'),
         ])
         RESULTS.append(('TMDB: regio NL (series zonder regio) en taal nl-NL', bool(fb.DISCOVER_REQS) and all((r[1] == 'NL' or r[0] == 'upcoming-tv') and r[2] == 'nl-NL' for r in fb.DISCOVER_REQS), str(fb.DISCOVER_REQS[:6])))
         fb.MODE['discover'] = False

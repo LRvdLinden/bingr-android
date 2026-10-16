@@ -292,6 +292,8 @@
     var p = opts.progress;
     if (p != null) card.appendChild(h('div.card-progress', [h('div', { style: { width: Math.round(B.clamp(p, 0, 1) * 100) + '%' } })]));
     if (opts.label) card.appendChild(h('div.card-label', opts.label));
+    // build 112: rood label linksboven (zelfde stijl als "N BEKEKEN"), bv. de datum bij Binnenkort op Bingr
+    card._topBadge = opts.badge || null;
     langStrip(card, x, type);
     watchedMarks(card, x, type);
     card.onEnter = function () { openItem(type, x); };
@@ -357,12 +359,15 @@
     card._wm = { x: x, type: type };
     var old = card.querySelectorAll('.card-check, .card-badges');
     for (var i = 0; i < old.length; i++) card.removeChild(old[i]);
+    // linksboven: eerst het label van de kaart (build 112, bv. de datum), daaronder "N BEKEKEN"
+    var badges = card._topBadge ? [h('div.card-badge', card._topBadge)] : [];
     if (type === 'movie') {
       if (D.isWatched(x.id) || B.trakt.isMovieWatched(x)) card.appendChild(h('div.card-check', [U.icon('check')]));
     } else if (type === 'series') {
       var n = watchedEpisodeCount(x);
-      if (n > 0) card.appendChild(h('div.card-badges', [h('div.card-badge', L('%d WATCHED', n))]));
+      if (n > 0) badges.push(h('div.card-badge', L('%d WATCHED', n)));
     }
+    if (badges.length) card.appendChild(h('div.card-badges', badges));
   }
   function pct(p) { return Math.round(B.clamp((Date.now() - p.start) / (p.end - p.start), 0, 1) * 100) + '%'; }
   function channelCard(ch, list, opts) {
@@ -682,7 +687,7 @@
         var hit = lib.byId[parts.slice(1).join('|')];
         if (hit && hit.type !== 'channel') { all.push(hit); if (cards.length < 40) cards.push(posterCard(hit.item, hit.type)); }
       });
-      // build 111: TMDB-titels (Binnenkort / Nieuw op streamingdiensten) die niet in je bibliotheek staan
+      // build 111: TMDB-titels (Binnenkort op Bingr / Nieuw op Bingr) die niet in je bibliotheek staan
       if (B.discover) B.discover.myListHits().forEach(function (hit) { all.push(hit); if (cards.length < 40) cards.push(posterCard(hit.item, hit.type)); });
       return rowBlock(L('My List'), cards, null, seeAll(L('My List'), all));
     }
@@ -730,7 +735,7 @@
           var list = B.discover ? B.discover.recentTitles() : entries(Lib.recent(lib.movies, 30), 'movie');
           return rowBlock(L('Recently added'), list.map(function (e) { return posterCard(e.item, e.type); }), null, seeAll(L('Recently added'), list));
         },
-        // build 111: Binnenkort / Nieuw op streamingdiensten (TMDB), met bronvermelding onder de rij
+        // build 111: Binnenkort op Bingr / Nieuw op Bingr (TMDB), met bronvermelding onder de rij
         'upcoming': function () { return B.discover ? B.discover.row('upcoming') : null; },
         'streaming': function () { return B.discover ? B.discover.row('streaming') : null; },
         'movies': function () { return rowBlock(L('Movies'), lib.movies.slice(0, 30).map(function (m) { return posterCard(m, 'movie'); }), null, seeAll(L('Movies'), entries(lib.movies, 'movie'))); },
@@ -792,7 +797,7 @@
     }
     function order(b) {
       var colls = Object.keys(b).filter(function (k) { return k.indexOf('collection:') === 0; });
-      // build 111: Binnenkort / Nieuw op streamingdiensten (TMDB) na Nieuw toegevoegd
+      // build 111: Binnenkort op Bingr / Nieuw op Bingr (TMDB) na Nieuw toegevoegd
       var o = ['continue', 'mylist', 'foryou', 'top10', 'live', 'recent', 'upcoming', 'streaming'].concat(colls).concat(['categories']);
       var layout = homeLayout();
       var auto = autoTiles();
@@ -814,7 +819,7 @@
           ['continue', 'mylist'].forEach(function (k) { var j = o.indexOf(k); if (j >= fa) fa = j + 1; });
           o.splice(fa, 0, 'foryou');
         }
-        // build 111: Binnenkort / Nieuw op streamingdiensten nog niet in de indeling: standaard aan, na Nieuw toegevoegd
+        // build 111: Binnenkort op Bingr / Nieuw op Bingr nog niet in de indeling: standaard aan, na Nieuw toegevoegd
         // (of na Verder kijken / Mijn lijst / Voor jou als die rij uit staat)
         ['upcoming', 'streaming'].forEach(function (k, n) {
           if (known[k]) return;
@@ -1571,7 +1576,7 @@
   // MARK: detailpagina (film of serie, met seizoenen en afleveringen)
 
   S.detail = function (type, x) {
-    // build 111: titel uit TMDB (Binnenkort / Nieuw op streamingdiensten), niet in je bibliotheek
+    // build 111: titel uit TMDB (Binnenkort op Bingr / Nieuw op Bingr), niet in je bibliotheek
     if (B.discover && B.discover.isExternal(x.id)) return B.discover.detail(type, x);
     var src = Lib.source ? Lib.source.id : '';
     var listKey = D.key(src, x.id);
@@ -2193,7 +2198,7 @@
       section(L('Interface'));
       var autoTr = D.local('autoplayTrailers', true) !== false;
       row(L('Play trailers automatically'), onOff(autoTr), function () { D.setLocal('autoplayTrailers', !autoTr); render(); });
-      B.app.interfaceSettingRows(row, onOff, render); // build 102: startscherm, tabbladen, intromuziek, verversen
+      B.app.interfaceSettingRows(row, onOff, render); // build 102: startscherm, tabbladen, verversen
 
       section(L('App'));
       var lang = D.shared('appLanguage', '') || '';
@@ -2232,6 +2237,13 @@
       }
       section(L('About'));
       row('Bingr ' + B.config.version + ' (build ' + B.config.build + ')', 'Samsung TV · Tizen', null);
+      // build 112: verplichte bronvermelding van TMDB en JustWatch (stond eerder onder de Home-rijen); focusbaar, zodat de
+      // afstandsbediening tot onderaan (Over) kan scrollen
+      if (B.discover) {
+        var note = h('div.st-note.f', B.discover.attribution());
+        note.onEnter = B.noop;
+        list.track.appendChild(note);
+      }
       if (fLabel) focusLabel(fLabel);
     }
     function focusLabel(t) {

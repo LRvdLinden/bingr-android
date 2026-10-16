@@ -522,7 +522,7 @@ fun HomeScreen(filter: Filter) {
         continueItems(filter, index, pid, progress, traktContinue)
     }
     val myList = Store.myList
-    // build 111: plus TMDB-titels (Binnenkort / Nieuw op streamingdiensten) die niet in je bibliotheek staan; alleen
+    // build 111: plus TMDB-titels (Binnenkort op Bingr / Nieuw op Bingr) die niet in je bibliotheek staan; alleen
     // zonder leeftijdsgrens (die profielen zien alleen hun eigen, gefilterde bibliotheek)
     var knownTick by remember { mutableStateOf(0) }
     val external = Store.activeProfile?.effectiveAgeLimit == null
@@ -553,7 +553,7 @@ fun HomeScreen(filter: Filter) {
     val collections = Collections.visible
     val layoutRows = remember(Store.activeHomeLayout, collections) { HomeLayouts.effective(Store.activeHomeLayout, collections) }
 
-    // build 111: Binnenkort / Nieuw op streamingdiensten (TMDB): alleen de rijen die in de indeling aan staan; eerst wat
+    // build 111: Binnenkort op Bingr / Nieuw op Bingr (TMDB): alleen de rijen die in de indeling aan staan; eerst wat
     // bewaard is, daarna het netwerk (12 uur bewaard), koppelen aan je bibliotheek op de achtergrond
     val discoverKinds = remember(layoutRows, filter) {
         if (filter != Filter.ALL) emptyList() else DiscoverKind.entries.filter { k -> layoutRows.any { it.key == k.key && it.visible } }
@@ -571,12 +571,13 @@ fun HomeScreen(filter: Filter) {
         val out = HashMap<DiscoverKind, List<DiscoverEntry>>()
         for (k in discoverKinds) {
             val cached = withContext(Dispatchers.IO) { DiscoverStore.cached(k, kidsProfile) }
-            if (cached.isNotEmpty()) out[k] = DiscoverStore.match(cached, matcher, onlyLibrary)
+            // build 112: Nieuw op Bingr alleen met titels uit je bibliotheek (k.onlyLibrary)
+            if (cached.isNotEmpty()) out[k] = DiscoverStore.match(cached, matcher, onlyLibrary || k.onlyLibrary)
         }
         if (out != discover) discover = out.toMap()
         for (k in discoverKinds) {
             val items = screensSafe { DiscoverStore.get(k, kidsProfile) } ?: emptyList()
-            out[k] = DiscoverStore.match(items, matcher, onlyLibrary)
+            out[k] = DiscoverStore.match(items, matcher, onlyLibrary || k.onlyLibrary)
         }
         if (out != discover) discover = out.toMap()
     }
@@ -648,7 +649,7 @@ fun HomeScreen(filter: Filter) {
                         val all = index.recent
                         if (all.isNotEmpty()) MovieRow(L("Recently added"), all.take(30), all, pid)
                     }.also { shown(index.recent.isNotEmpty()) }
-                    // build 111: Binnenkort / Nieuw op streamingdiensten (TMDB)
+                    // build 111: Binnenkort op Bingr / Nieuw op Bingr (TMDB)
                     "upcoming", "streaming" -> if (filter == Filter.ALL) {
                         val kind = DiscoverKind.of(key)
                         val list = kind?.let { discover[it] }.orEmpty()
@@ -826,8 +827,9 @@ private fun TargetRow(title: String, items: List<DetailTarget>, pid: String?) {
 }
 
 /**
- * Build 111: rij Binnenkort / Nieuw op streamingdiensten (TMDB). Titels uit je bibliotheek openen die titel; de rest
- * een detailpagina met Mijn lijst. Verplichte bronvermelding klein onder de rij (TMDB; watch providers via JustWatch).
+ * Build 111: rij Binnenkort op Bingr / Nieuw op Bingr (TMDB). Titels uit je bibliotheek openen die titel; de rest
+ * een detailpagina met Mijn lijst. Build 112: Nieuw op Bingr alleen met bibliotheektitels; geen bronvermelding meer onder
+ * de rij (staat in Instellingen → Over).
  */
 @Composable
 private fun DiscoverRow(kind: DiscoverKind, list: List<DiscoverEntry>, pid: String?) {
@@ -842,7 +844,7 @@ private fun DiscoverRow(kind: DiscoverKind, list: List<DiscoverEntry>, pid: Stri
                 }
             }
         }
-        Text(kind.attribution, color = Theme.secondary, fontSize = tsp(11), modifier = Modifier.padding(horizontal = Theme.edge))
+        // build 112: geen bronvermelding meer onder de rij (staat in Instellingen → Over)
     }
 }
 
@@ -853,7 +855,9 @@ private fun ExternalPoster(item: DiscoverItem, pid: String?) {
     PosterCard(
         item.title, item.poster,
         modifier = Modifier.focusLift(onLongClick = { menu = true }) { openDetail(item.target) },
-        badge = item.dateLabel
+        // build 112: datum als rood label linksboven (zoals SERIE/FILM)
+        badge = item.dateLabel,
+        badgeTopStart = true
     )
     if (menu && pid != null) {
         val inList = Store.inMyList(pid, item.id)

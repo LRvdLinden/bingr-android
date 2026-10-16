@@ -66,11 +66,10 @@
   };
   app.tabHidden = function (key) { return app.hiddenTabs().indexOf(key) >= 0; };
 
-  // MARK: intromuziek (build 102, = SplashTune op tvOS: audio/bingr_tune.m4a bij het starten; settings.shared.introMusic)
+  // MARK: intromuziek (build 102, = SplashTune op tvOS: audio/bingr_tune.m4a bij het starten)
+  // Altijd aan: de instelling is vervallen; settings.shared.introMusic wordt niet meer gelezen of geschreven.
 
-  app.introMusic = function () { return B.bool(D.shared('introMusic', true)) !== false; };
   function playIntro() {
-    if (!app.introMusic()) return;
     try {
       var a = new Audio('audio/bingr_tune.m4a');
       a.volume = 1;
@@ -106,7 +105,7 @@
       });
     });
   };
-  /** Startscherm, tabbladen tonen/verbergen, intromuziek en playlists verversen (sectie Weergave). */
+  /** Startscherm, tabbladen tonen/verbergen en playlists verversen (sectie Weergave). */
   app.interfaceSettingRows = function (row, onOff, render) {
     var tabs = [['home', 'Home'], ['live', 'Live TV'], ['movies', 'Movies'], ['series', 'Series']];
     var start = app.startPage();
@@ -127,8 +126,6 @@
         app.rebuild(L(t[1]));
       });
     });
-    var intro = app.introMusic();
-    row(L('Intro sound'), onOff(intro), function () { D.setShared('introMusic', !intro); if (!intro) playIntro(); render(); });
     var pol = Lib.refreshPolicy();
     row(L('Update playlists'), L(POLICY_LABELS[pol]), function () {
       U.choose(L('Update playlists'), Lib.REFRESH.map(function (k) { return { value: k, label: L(POLICY_LABELS[k]) }; }), pol, function (v) {
