@@ -42,6 +42,24 @@ jobs:
             echo "::warning::Secret BINGR_KEYSTORE_BASE64 ontbreekt: APK krijgt een tijdelijke sleutel en kan niet over een vorige versie heen worden geïnstalleerd."
           fi
 
+      # Pushmeldingen (FCM): google-services.json uit het secret GOOGLE_SERVICES_JSON (nooit in de repo of in het log).
+      # Ontbreekt het, dan bouwt de app zonder push en registreert hij niets.
+      - name: Firebase-configuratie klaarzetten
+        env:
+          GSJ: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GSJ" ]; then
+            printf '%s' "$GSJ" > app/google-services.json
+            if python3 -c 'import json,sys; d=json.load(open("app/google-services.json")); sys.exit(0 if any(c.get("client_info",{}).get("android_client_info",{}).get("package_name")=="nl.lrvdlinden.bingr" for c in d.get("client",[])) else 1)'; then
+              echo "::notice::Pushmeldingen aan (google-services.json uit het secret)"
+            else
+              rm -f app/google-services.json
+              echo "::warning::Secret GOOGLE_SERVICES_JSON is geen geldige google-services.json voor nl.lrvdlinden.bingr: APK zonder pushmeldingen."
+            fi
+          else
+            echo "::warning::Secret GOOGLE_SERVICES_JSON ontbreekt: APK zonder pushmeldingen."
+          fi
+
       - name: APK bouwen
         env:
           BINGR_KEYSTORE_PASSWORD: ${{ secrets.BINGR_KEYSTORE_PASSWORD }}

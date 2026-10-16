@@ -5,7 +5,7 @@ Native Android-versie van Bingr (zelfde functies als de iOS/tvOS-app in `../Shar
 ## Regels voor alle code
 
 - Kotlin, Jetpack Compose (Material3), minSdk 24, compileSdk 35. **Alle Kotlin-bestanden in package `nl.lrvdlinden.bingr`** (mappen zijn alleen ordening), dus geen imports tussen eigen bestanden nodig.
-- Alleen de dependencies uit `app/build.gradle.kts` (Compose, Media3 1.5.1, libvlc-all 3.5.1, OkHttp 4.12, kotlinx-serialization-json 1.7.3, coroutines 1.9, Coil 2.7 (`coil.compose.AsyncImage`), Cast framework 21.5, mediarouter 1.7). Geen andere toevoegen.
+- Alleen de dependencies uit `app/build.gradle.kts` (Compose, Media3 1.5.1, libvlc-all 3.5.1, OkHttp 4.12, kotlinx-serialization-json 1.7.3, coroutines 1.9, Coil 2.7 (`coil.compose.AsyncImage`), Cast framework 21.5, mediarouter 1.7, Firebase Messaging via de Firebase BoM voor pushmeldingen; de google-services-plugin alleen als `app/google-services.json` er is, dat in CI uit het secret `GOOGLE_SERVICES_JSON` komt en nooit in de repo staat). Geen andere toevoegen.
 - Teksten altijd via `L("English text")` / `L("Format %d", n)` — sleutels zijn **exact dezelfde Engelse teksten als in de Swift-code** (`L("...")` daar), zodat `Shared/Resources/Translations.json` werkt. iOS `%@` wordt automatisch `%s`. Gebruik zo veel mogelijk bestaande sleutels; nieuwe Engelse teksten worden later vertaald (lijst ze in je eindrapport).
 - State voor de UI: Compose-state in singletons (`var x by mutableStateOf(...)`), zoals `Store` en `AppState`. Netwerk/IO in `suspend`-functies (OkHttp via `Http`, op Dispatchers.IO). Nooit blokkeren op de main thread. Langlopend app-werk: `AppScope.launch { }`.
 - Tijden = epoch-ms (`Long`), URL's = `String`.

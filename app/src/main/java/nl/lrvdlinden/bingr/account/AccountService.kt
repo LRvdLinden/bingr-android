@@ -109,6 +109,8 @@ object Account {
         ProfileSync.reset()
         SourceSync.reset()
         StateSync.reset()
+        // pushmeldingen horen bij de sessie: lokaal als afgemeld zien (en zo nodig lokale herinneringen terug)
+        Push.signedOut()
     }
 
     /** user.id uit de sessie (of het `sub` van het access_token). */
@@ -336,6 +338,8 @@ object Account {
      */
     suspend fun signOut() = working {
         if (configured && accessToken != null) {
+            // pushmeldingen: dit apparaat eerst afmelden bij `push` (mag mislukken; remove_device ruimt het ook op)
+            runCatching { Push.unregisterNow() }
             runCatching { deviceCall("remove_device", deviceId) }
         }
         val token = accessToken
@@ -520,28 +524,6 @@ object Account {
     /** Extra velden bij register_device en heartbeat (build 62); oudere backends negeren ze. */
     private fun versionFields(): Map<String, String> = mapOf("app_version" to appVersion, "os_version" to osVersion.trim())
 
-    data class Announcement(val id: String, val title: String, val body: String, val createdAt: Long?)
-
-    /** announcements {lang}: berichten van de beheerder; fouten → lege lijst (stil). */
-    suspend fun announcements(lang: String): List<Announcement> {
-        if (!isSignedIn || !configured) return emptyList()
-        val r = try {
-            deviceCall("announcements", deviceId, mapOf("lang" to lang))
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            return emptyList()
-        }
-        if (!r.ok) return emptyList()
-        return r.json.jList("items").mapNotNull { a ->
-            val id = a.jS("id")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-            val title = a.jS("title")?.trim().orEmpty()
-            val body = a.jS("body")?.trim().orEmpty()
-            if (title.isEmpty() && body.isEmpty()) return@mapNotNull null
-            Announcement(id, title, body, Net.parseISODate(a.jS("created_at")))
-        }
-    }
-
     /** register_device; 403 device_limit → [DeviceLimitException]. */
     suspend fun registerDevice() {
         val r = deviceCall("register_device", deviceId, mapOf("name" to deviceDisplayName, "platform" to devicePlatform) + versionFields())
@@ -638,7 +620,8 @@ object Account {
                     when (e) {
                         androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
                             deviceCheck()
-                            Announcements.check()
+                            // pushmeldingen: toestemming ingetrokken, nieuwe build of taal → (af)melden bij `push`
+                            Push.sync()
                             // abonnement (build 88): na een upgrade op bingr.online gaan de sloten meteen open
                             Entitlements.launchFetch()
                             heartbeatJob?.cancel()
@@ -903,6 +886,22 @@ object Account {
             }
         }
         return null
+    }
+
+    /**
+     * Aanvraag aan de Edge Function `push` (docs/PUSH.md in iptv-ios-appletv) met een geldig access_token; bij 401 één
+     * keer vernieuwen. true = 2xx. Geen sessie, netwerkfout of fout van de server = false (stil).
+     */
+    internal suspend fun pushCall(body: JsonElement): Boolean {
+        if (!isSignedIn || !configured) return false
+        var token = runCatching { validAccessToken() }.getOrNull() ?: return false
+        repeat(2) { attempt ->
+            val r = try { post("/functions/v1/push", body, bearer = token) } catch (e: AccountException) { return false }
+            if (r.code != 401 || attempt == 1) return r.ok
+            if (refresh() != RefreshResult.OK) return false
+            token = accessToken ?: return false
+        }
+        return false
     }
 
     /** get_sources (versleuteld bewaard door de Edge Function). null = mislukt. */

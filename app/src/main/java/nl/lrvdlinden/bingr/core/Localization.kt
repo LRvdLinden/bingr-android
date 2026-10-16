@@ -77,6 +77,8 @@ object Localizer {
         overrideState = code
         Prefs.put("app.language", code)
         language = resolve(code)
+        // pushmeldingen komen in de app-taal: opnieuw registreren met de nieuwe `lang`
+        Push.sync()
     }
 
     fun resolve(o: String): String {

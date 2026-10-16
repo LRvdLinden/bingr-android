@@ -18,6 +18,12 @@ val localProps = Properties().apply {
 }
 fun key(name: String): String = (System.getenv(name) ?: localProps.getProperty(name) ?: "").trim().replace("\"", "")
 
+// Pushmeldingen (FCM, docs/PUSH.md in iptv-ios-appletv): app/google-services.json komt in CI uit het secret
+// GOOGLE_SERVICES_JSON en staat nooit in de repo (.gitignore). Zonder dat bestand bouwt de app gewoon, zonder push:
+// de google-services-plugin wordt dan niet toegepast, Firebase start niet en de app registreert niets.
+val hasGoogleServices = file("google-services.json").exists()
+if (hasGoogleServices) apply(plugin = "com.google.gms.google-services")
+
 android {
     namespace = "nl.lrvdlinden.bingr"
     compileSdk = 35
@@ -36,6 +42,7 @@ android {
         buildConfigField("String", "TMDB_API_KEY", "\"${key("TMDB_API_KEY").ifEmpty { key("TMDB_ACCESS_TOKEN") }}\"")
         // Bingr-account (Supabase): alleen ingebouwd, niet in de app aan te passen
         buildConfigField("String", "SUPABASE_URL", "\"${key("SUPABASE_URL").ifEmpty { "https://vjewsncmsxmhmhnoxwqx.supabase.co" }}\"")
+        buildConfigField("boolean", "PUSH_CONFIGURED", hasGoogleServices.toString())
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${key("SUPABASE_ANON_KEY").ifEmpty { "sb_publishable_lpIup6Omq5kW2k3oICGZ4g_HPGac5A3" }}\"")
     }
 
@@ -125,6 +132,10 @@ dependencies {
 
     // Downloads op de achtergrond (build 52): hervat na netwerkverlies en herstart
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // Pushmeldingen (FCM); zonder google-services.json zit de bibliotheek erin maar start Firebase niet (zie boven)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
 }
 
 // Lint na assembleRelease (zie lint { } hierboven): rapport in het CI-log, fouten blokkeren de APK niet

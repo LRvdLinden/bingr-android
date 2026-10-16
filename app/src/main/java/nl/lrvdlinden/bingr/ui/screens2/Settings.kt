@@ -64,6 +64,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lan
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
@@ -709,6 +710,21 @@ fun SettingsScreen() {
                 if (AppIcon.canChoose) {
                     S2Dropdown(L("App icon"), AppIcon.options.map { it.key to L(it.titleKey) }, AppIcon.current) { k ->
                         if (k != AppIcon.current) iconConfirm = k
+                    }
+                }
+            }
+        }
+
+        // MARK: pushmeldingen (docs/PUSH.md): per apparaat, alleen telefoon/tablet met Firebase in de build en een account
+        if (!AppState.isTV && Push.configured && Account.isSignedIn) {
+            item {
+                S2Section(L("Notifications"),
+                    L("Get a notification when a new version of Bingr is available, when a program you set a reminder for is about to start, and for messages from Bingr.")) {
+                    val pushOn = Push.enabled
+                    S2Toggle(L("Push notifications"), pushOn, icon = Icons.Default.Notifications) { Push.enabled = it }
+                    if (pushOn && !Push.permitted) {
+                        S2Row(L("Notifications are turned off for Bingr in Android settings."), tint = Theme.secondary)
+                        S2Row(L("Open notification settings"), icon = Icons.Default.Settings, onClick = { Push.openSystemSettings(ctx) })
                     }
                 }
             }

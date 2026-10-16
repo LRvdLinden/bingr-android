@@ -15,3 +15,5 @@ captures/
 tizen/.buildResult/
 tizen/.sign/
 __pycache__/
+# Firebase-configuratie (pushmeldingen): komt in CI uit het secret GOOGLE_SERVICES_JSON, nooit in de repo
+app/google-services.json

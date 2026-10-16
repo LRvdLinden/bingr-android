@@ -92,13 +92,19 @@ fun BingrRoot() {
         if (limit != null) {
             FullLayer { TooManyDevicesScreen(limit) }
         }
-        // mededelingen van de beheerder (build 62): pas in het hoofdscherm en niet over de speler heen
-        val announcement = Announcements.queue.firstOrNull()
-        if (announcement != null && !covered && AppState.stage == AppState.Stage.MAIN) {
-            key(announcement.id) { AnnouncementDialog(announcement) }
+        // beheerberichten komen als pushmelding (docs/PUSH.md in iptv-ios-appletv); de in-app mededelingen van build 62 zijn weg.
+        // In het hoofdscherm: één keer uitleg + toestemming voor meldingen (Android 13+), daarna een tik op een melding afhandelen
+        if (!covered && AppState.stage == AppState.Stage.MAIN && Push.showPrimer) {
+            NotificationPrimerDialog()
         }
         LaunchedEffect(AppState.stage) {
-            if (AppState.stage == AppState.Stage.MAIN) Announcements.check()
+            if (AppState.stage == AppState.Stage.MAIN) {
+                Push.mainShown()
+                PushNav.consume()
+            }
+        }
+        LaunchedEffect(PushNav.pending) {
+            if (PushNav.pending != null && AppState.stage == AppState.Stage.MAIN) PushNav.consume()
         }
         LaunchedEffect(limit != null) {
             if (limit != null) { AppState.playing = null; AppState.showMultiview = false }

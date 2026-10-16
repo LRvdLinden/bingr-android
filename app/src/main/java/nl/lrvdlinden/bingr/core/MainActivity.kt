@@ -34,12 +34,25 @@ class MainActivity : ComponentActivity() {
         setContent { BingrTheme { BingrRoot() } }
         // herinneringen (van alle profielen) als banner in de app, ook op TV waar meldingen niet altijd verschijnen
         Reminders.startChecking()
-        // meldingen (herinneringen, downloads): één keer vragen, alleen op telefoon/tablet (op TV niet)
-        if (Build.VERSION.SDK_INT >= 33 && !AppState.isTV && !Prefs.bool("notifications.asked") &&
-            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            Prefs.put("notifications.asked", true)
-            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
-        }
+        // meldingen (pushmeldingen, herinneringen, downloads): niet meer meteen bij het starten vragen, maar na inloggen in
+        // het hoofdscherm met uitleg (Push.mainShown → NotificationPrimerDialog), alleen op telefoon/tablet
+        // tik op een pushmelding of een bingr://-link (niet opnieuw na het herstellen van de activity)
+        if (savedInstanceState == null) PushNav.handle(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        PushNav.handle(intent)
+    }
+
+    /** Android 13+: systeemvraag om meldingen; het antwoord gaat naar [Push.permissionResult]. */
+    private val notificationPermission =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { Push.permissionResult() }
+
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33 || AppState.isTV) return
+        runCatching { notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
     }
 
     override fun onResume() {

@@ -280,16 +280,6 @@
   };
   function versionFields() { return { app_version: A.appVersion(), os_version: A.osVersion() }; }
 
-  /** announcements {lang} → [{id, title, body, createdAt}]; fouten → lege lijst (stil). */
-  A.announcements = function (lang) {
-    return deviceCall('announcements', A.deviceId(), { lang: lang }).then(function (r) {
-      if (!r || !r.ok || !r.json) return [];
-      return (r.json.items || []).filter(function (a) { return a && a.id && (a.title || a.body); }).map(function (a) {
-        return { id: String(a.id), title: String(a.title || '').trim(), body: String(a.body || '').trim(), createdAt: B.parseISO(a.created_at) || 0 };
-      });
-    }, function () { return []; });
-  };
-
   /** register_device → 'ok' | {limit, devices} (te veel apparaten) | 'failed'. */
   A.registerDevice = function () {
     return deviceCall('register_device', A.deviceId(), B.assign({ name: A.deviceDisplayName(), platform: B.config.platform }, versionFields())).then(function (r) {

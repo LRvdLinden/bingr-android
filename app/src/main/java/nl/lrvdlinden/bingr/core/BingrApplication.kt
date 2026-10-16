@@ -46,6 +46,8 @@ class BingrApplication : Application(), ImageLoaderFactory {
         AppIcon.init()
         Downloads.init(this)
         Reminders.createChannel(this)
+        // pushmeldingen (alleen telefoon/tablet en alleen met Firebase in de build): kanalen voor releases en berichten
+        if (Push.supported) Push.ensureChannels(this)
         ExternalDisplay.init(this)
     }
 }

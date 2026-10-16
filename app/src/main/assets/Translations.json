@@ -894,7 +894,18 @@
   "Enter your last name.": "أدخل اسم عائلتك.",
   "Enter your password to confirm.": "أدخل كلمة المرور للتأكيد.",
   "Incorrect password.": "كلمة المرور غير صحيحة.",
-  "Too many attempts. Wait a few minutes and try again.": "محاولات كثيرة جدًا. انتظر بضع دقائق ثم حاول مرة أخرى."
+  "Too many attempts. Wait a few minutes and try again.": "محاولات كثيرة جدًا. انتظر بضع دقائق ثم حاول مرة أخرى.",
+  "Notifications": "الإشعارات",
+  "Push notifications": "الإشعارات الفورية",
+  "Get a notification when a new version of Bingr is available, when a program you set a reminder for is about to start, and for messages from Bingr.": "احصل على إشعار عند توفر إصدار جديد من Bingr، وعندما يوشك برنامج ضبطت له تذكيرًا على البدء، وللرسائل من Bingr.",
+  "Notifications are turned off for Bingr in Android settings.": "إشعارات Bingr متوقفة في إعدادات Android.",
+  "Open notification settings": "فتح إعدادات الإشعارات",
+  "New versions": "إصدارات جديدة",
+  "Messages from Bingr": "رسائل من Bingr",
+  "Allow notifications?": "السماح بالإشعارات؟",
+  "Bingr can let you know when a new version is available, when a program you set a reminder for is about to start, and when there's a message from Bingr. You can change this any time in Settings.": "يمكن لـ Bingr إعلامك عند توفر إصدار جديد، وعندما يوشك برنامج ضبطت له تذكيرًا على البدء، وعند وجود رسالة من Bingr. يمكنك تغيير ذلك في أي وقت من الإعدادات.",
+  "Not now": "ليس الآن",
+  "Continue": "متابعة"
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -1791,7 +1802,18 @@
   "Enter your last name.": "Gib deinen Nachnamen ein.",
   "Enter your password to confirm.": "Gib zur Bestätigung dein Passwort ein.",
   "Incorrect password.": "Falsches Passwort.",
-  "Too many attempts. Wait a few minutes and try again.": "Zu viele Versuche. Warte ein paar Minuten und versuche es erneut."
+  "Too many attempts. Wait a few minutes and try again.": "Zu viele Versuche. Warte ein paar Minuten und versuche es erneut.",
+  "Notifications": "Mitteilungen",
+  "Push notifications": "Push-Mitteilungen",
+  "Get a notification when a new version of Bingr is available, when a program you set a reminder for is about to start, and for messages from Bingr.": "Erhalte eine Mitteilung, wenn eine neue Version von Bingr verfügbar ist, wenn eine Sendung, für die du eine Erinnerung gesetzt hast, gleich beginnt, und bei Nachrichten von Bingr.",
+  "Notifications are turned off for Bingr in Android settings.": "Mitteilungen für Bingr sind in den Android-Einstellungen ausgeschaltet.",
+  "Open notification settings": "Mitteilungseinstellungen öffnen",
+  "New versions": "Neue Versionen",
+  "Messages from Bingr": "Nachrichten von Bingr",
+  "Allow notifications?": "Mitteilungen erlauben?",
+  "Bingr can let you know when a new version is available, when a program you set a reminder for is about to start, and when there's a message from Bingr. You can change this any time in Settings.": "Bingr kann dir Bescheid geben, wenn eine neue Version verfügbar ist, wenn eine Sendung, für die du eine Erinnerung gesetzt hast, gleich beginnt, und wenn es eine Nachricht von Bingr gibt. Du kannst das jederzeit in den Einstellungen ändern.",
+  "Not now": "Nicht jetzt",
+  "Continue": "Weiter"
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -2688,7 +2710,18 @@
   "Enter your last name.": "Introduce tus apellidos.",
   "Enter your password to confirm.": "Introduce tu contraseña para confirmar.",
   "Incorrect password.": "Contraseña incorrecta.",
-  "Too many attempts. Wait a few minutes and try again.": "Demasiados intentos. Espera unos minutos y vuelve a intentarlo."
+  "Too many attempts. Wait a few minutes and try again.": "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.",
+  "Notifications": "Notificaciones",
+  "Push notifications": "Notificaciones push",
+  "Get a notification when a new version of Bingr is available, when a program you set a reminder for is about to start, and for messages from Bingr.": "Recibe una notificación cuando haya una nueva versión de Bingr, cuando esté a punto de empezar un programa para el que pusiste un recordatorio y para los mensajes de Bingr.",
+  "Notifications are turned off for Bingr in Android settings.": "Las notificaciones de Bingr están desactivadas en los ajustes de Android.",
+  "Open notification settings": "Abrir ajustes de notificaciones",
+  "New versions": "Nuevas versiones",
+  "Messages from Bingr": "Mensajes de Bingr",
+  "Allow notifications?": "¿Permitir notificaciones?",
+  "Bingr can let you know when a new version is available, when a program you set a reminder for is about to start, and when there's a message from Bingr. You can change this any time in Settings.": "Bingr puede avisarte cuando haya una nueva versión, cuando esté a punto de empezar un programa para el que pusiste un recordatorio y cuando haya un mensaje de Bingr. Puedes cambiarlo en cualquier momento en Ajustes.",
+  "Not now": "Ahora no",
+  "Continue": "Continuar"
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -3585,7 +3618,18 @@
   "Enter your last name.": "Saisissez votre nom.",
   "Enter your password to confirm.": "Saisissez votre mot de passe pour confirmer.",
   "Incorrect password.": "Mot de passe incorrect.",
-  "Too many attempts. Wait a few minutes and try again.": "Trop de tentatives. Patientez quelques minutes, puis réessayez."
+  "Too many attempts. Wait a few minutes and try again.": "Trop de tentatives. Patientez quelques minutes, puis réessayez.",
+  "Notifications": "Notifications",
+  "Push notifications": "Notifications push",
+  "Get a notification when a new version of Bingr is available, when a program you set a reminder for is about to start, and for messages from Bingr.": "Recevez une notification lorsqu'une nouvelle version de Bingr est disponible, lorsqu'un programme pour lequel vous avez défini un rappel va commencer, et pour les messages de Bingr.",
+  "Notifications are turned off for Bingr in Android settings.": "Les notifications de Bingr sont désactivées dans les réglages d'Android.",
+  "Open notification settings": "Ouvrir les réglages des notifications",
+  "New versions": "Nouvelles versions",
+  "Messages from Bingr": "Messages de Bingr",
+  "Allow notifications?": "Autoriser les notifications ?",
+  "Bingr can let you know when a new version is available, when a program you set a reminder for is about to start, and when there's a message from Bingr. You can change this any time in Settings.": "Bingr peut vous prévenir lorsqu'une nouvelle version est disponible, lorsqu'un programme pour lequel vous avez défini un rappel va commencer et lorsqu'il y a un message de Bingr. Vous pouvez modifier cela à tout moment dans les Réglages.",
+  "Not now": "Pas maintenant",
+  "Continue": "Continuer"
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -4482,7 +4526,18 @@
   "Enter your last name.": "Inserisci il tuo cognome.",
   "Enter your password to confirm.": "Inserisci la password per confermare.",
   "Incorrect password.": "Password errata.",
-  "Too many attempts. Wait a few minutes and try again.": "Troppi tentativi. Attendi qualche minuto e riprova."
+  "Too many attempts. Wait a few minutes and try again.": "Troppi tentativi. Attendi qualche minuto e riprova.",
+  "Notifications": "Notifiche",
+  "Push notifications": "Notifiche push",
+  "Get a notification when a new version of Bingr is available, when a program you set a reminder for is about to start, and for messages from Bingr.": "Ricevi una notifica quando è disponibile una nuova versione di Bingr, quando sta per iniziare un programma per cui hai impostato un promemoria e per i messaggi di Bingr.",
+  "Notifications are turned off for Bingr in Android settings.": "Le notifiche di Bingr sono disattivate nelle impostazioni di Android.",
+  "Open notification settings": "Apri impostazioni notifiche",
+  "New versions": "Nuove versioni",
+  "Messages from Bingr": "Messaggi da Bingr",
+  "Allow notifications?": "Consentire le notifiche?",
+  "Bingr can let you know when a new version is available, when a program you set a reminder for is about to start, and when there's a message from Bingr. You can change this any time in Settings.": "Bingr può avvisarti quando è disponibile una nuova versione, quando sta per iniziare un programma per cui hai impostato un promemoria e quando c'è un messaggio da Bingr. Puoi cambiarlo in qualsiasi momento in Impostazioni.",
+  "Not now": "Non ora",
+  "Continue": "Continua"
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -5379,7 +5434,18 @@
   "Enter your last name.": "Voer je achternaam in.",
   "Enter your password to confirm.": "Vul je wachtwoord in om te bevestigen.",
   "Incorrect password.": "Onjuist wachtwoord.",
-  "Too many attempts. Wait a few minutes and try again.": "Te veel pogingen. Wacht een paar minuten en probeer het opnieuw."
+  "Too many attempts. Wait a few minutes and try again.": "Te veel pogingen. Wacht een paar minuten en probeer het opnieuw.",
+  "Notifications": "Meldingen",
+  "Push notifications": "Pushmeldingen",
+  "Get a notification when a new version of Bingr is available, when a program you set a reminder for is about to start, and for messages from Bingr.": "Krijg een melding als er een nieuwe versie van Bingr is, als een programma waarvoor je een herinnering hebt gezet bijna begint, en voor berichten van Bingr.",
+  "Notifications are turned off for Bingr in Android settings.": "Meldingen voor Bingr staan uit in de Android-instellingen.",
+  "Open notification settings": "Meldingsinstellingen openen",
+  "New versions": "Nieuwe versies",
+  "Messages from Bingr": "Berichten van Bingr",
+  "Allow notifications?": "Meldingen toestaan?",
+  "Bingr can let you know when a new version is available, when a program you set a reminder for is about to start, and when there's a message from Bingr. You can change this any time in Settings.": "Bingr kan je laten weten wanneer er een nieuwe versie is, wanneer een programma waarvoor je een herinnering hebt gezet bijna begint en wanneer er een bericht van Bingr is. Je kunt dit altijd wijzigen in Instellingen.",
+  "Not now": "Niet nu",
+  "Continue": "Doorgaan"
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -6276,7 +6342,18 @@
   "Enter your last name.": "Wpisz swoje nazwisko.",
   "Enter your password to confirm.": "Wpisz hasło, aby potwierdzić.",
   "Incorrect password.": "Nieprawidłowe hasło.",
-  "Too many attempts. Wait a few minutes and try again.": "Zbyt wiele prób. Odczekaj kilka minut i spróbuj ponownie."
+  "Too many attempts. Wait a few minutes and try again.": "Zbyt wiele prób. Odczekaj kilka minut i spróbuj ponownie.",
+  "Notifications": "Powiadomienia",
+  "Push notifications": "Powiadomienia push",
+  "Get a notification when a new version of Bingr is available, when a program you set a reminder for is about to start, and for messages from Bingr.": "Otrzymuj powiadomienie, gdy dostępna jest nowa wersja Bingr, gdy zaraz zacznie się program, dla którego ustawiono przypomnienie, oraz o wiadomościach od Bingr.",
+  "Notifications are turned off for Bingr in Android settings.": "Powiadomienia Bingr są wyłączone w ustawieniach Androida.",
+  "Open notification settings": "Otwórz ustawienia powiadomień",
+  "New versions": "Nowe wersje",
+  "Messages from Bingr": "Wiadomości od Bingr",
+  "Allow notifications?": "Zezwolić na powiadomienia?",
+  "Bingr can let you know when a new version is available, when a program you set a reminder for is about to start, and when there's a message from Bingr. You can change this any time in Settings.": "Bingr może dać Ci znać, gdy dostępna jest nowa wersja, gdy zaraz zacznie się program, dla którego ustawiono przypomnienie, i gdy jest wiadomość od Bingr. Możesz to zmienić w dowolnej chwili w Ustawieniach.",
+  "Not now": "Nie teraz",
+  "Continue": "Dalej"
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -7173,7 +7250,18 @@
   "Enter your last name.": "Introduza o seu apelido.",
   "Enter your password to confirm.": "Introduza a sua palavra-passe para confirmar.",
   "Incorrect password.": "Palavra-passe incorreta.",
-  "Too many attempts. Wait a few minutes and try again.": "Demasiadas tentativas. Aguarde alguns minutos e tente novamente."
+  "Too many attempts. Wait a few minutes and try again.": "Demasiadas tentativas. Aguarde alguns minutos e tente novamente.",
+  "Notifications": "Notificações",
+  "Push notifications": "Notificações push",
+  "Get a notification when a new version of Bingr is available, when a program you set a reminder for is about to start, and for messages from Bingr.": "Receba uma notificação quando houver uma nova versão do Bingr, quando um programa para o qual definiu um lembrete estiver prestes a começar e para mensagens do Bingr.",
+  "Notifications are turned off for Bingr in Android settings.": "As notificações do Bingr estão desativadas nas definições do Android.",
+  "Open notification settings": "Abrir definições de notificações",
+  "New versions": "Novas versões",
+  "Messages from Bingr": "Mensagens do Bingr",
+  "Allow notifications?": "Permitir notificações?",
+  "Bingr can let you know when a new version is available, when a program you set a reminder for is about to start, and when there's a message from Bingr. You can change this any time in Settings.": "O Bingr pode avisar quando houver uma nova versão, quando um programa para o qual definiu um lembrete estiver prestes a começar e quando houver uma mensagem do Bingr. Pode alterar isto a qualquer momento nas Definições.",
+  "Not now": "Agora não",
+  "Continue": "Continuar"
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -8070,7 +8158,18 @@
   "Enter your last name.": "Soyadını gir.",
   "Enter your password to confirm.": "Onaylamak için şifreni gir.",
   "Incorrect password.": "Şifre yanlış.",
-  "Too many attempts. Wait a few minutes and try again.": "Çok fazla deneme. Birkaç dakika bekleyip tekrar dene."
+  "Too many attempts. Wait a few minutes and try again.": "Çok fazla deneme. Birkaç dakika bekleyip tekrar dene.",
+  "Notifications": "Bildirimler",
+  "Push notifications": "Anlık bildirimler",
+  "Get a notification when a new version of Bingr is available, when a program you set a reminder for is about to start, and for messages from Bingr.": "Bingr'ın yeni bir sürümü çıktığında, hatırlatıcı kurduğun bir program başlamak üzereyken ve Bingr'dan gelen mesajlar için bildirim al.",
+  "Notifications are turned off for Bingr in Android settings.": "Bingr bildirimleri Android ayarlarında kapalı.",
+  "Open notification settings": "Bildirim ayarlarını aç",
+  "New versions": "Yeni sürümler",
+  "Messages from Bingr": "Bingr'dan mesajlar",
+  "Allow notifications?": "Bildirimlere izin verilsin mi?",
+  "Bingr can let you know when a new version is available, when a program you set a reminder for is about to start, and when there's a message from Bingr. You can change this any time in Settings.": "Bingr, yeni bir sürüm çıktığında, hatırlatıcı kurduğun bir program başlamak üzereyken ve Bingr'dan bir mesaj geldiğinde sana haber verebilir. Bunu istediğin zaman Ayarlar'dan değiştirebilirsin.",
+  "Not now": "Şimdi değil",
+  "Continue": "Devam"
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -8967,6 +9066,17 @@
   "Enter your last name.": "请输入你的姓氏。",
   "Enter your password to confirm.": "请输入密码以确认。",
   "Incorrect password.": "密码不正确。",
-  "Too many attempts. Wait a few minutes and try again.": "尝试次数过多。请等待几分钟后重试。"
+  "Too many attempts. Wait a few minutes and try again.": "尝试次数过多。请等待几分钟后重试。",
+  "Notifications": "通知",
+  "Push notifications": "推送通知",
+  "Get a notification when a new version of Bingr is available, when a program you set a reminder for is about to start, and for messages from Bingr.": "在 Bingr 有新版本、你设置了提醒的节目即将开始以及 Bingr 发来消息时收到通知。",
+  "Notifications are turned off for Bingr in Android settings.": "Bingr 的通知已在 Android 设置中关闭。",
+  "Open notification settings": "打开通知设置",
+  "New versions": "新版本",
+  "Messages from Bingr": "来自 Bingr 的消息",
+  "Allow notifications?": "允许通知？",
+  "Bingr can let you know when a new version is available, when a program you set a reminder for is about to start, and when there's a message from Bingr. You can change this any time in Settings.": "Bingr 可以在有新版本、你设置了提醒的节目即将开始以及 Bingr 发来消息时通知你。你可以随时在“设置”中更改。",
+  "Not now": "以后再说",
+  "Continue": "继续"
  }
 }

@@ -271,45 +271,9 @@
     });
     D.syncState().then(function () { if (app.profile === p) { Lib.applyFilters(); B.trakt.refresh(false); } });
     B.reminders.start();
-    setTimeout(checkAnnouncements, 1500);
     startRefreshTimer();
   }
 
-  // MARK: mededelingen van de beheerder (build 62)
-  // Na de profielkeuze en bij terugkeer naar de voorgrond (hooguit één keer per uur); elke mededeling één keer.
-  // Gelezen ids lokaal (max. 200); fouten stil negeren.
-
-  var annLast = 0, annBusy = false, annQueue = [], annOpen = false;
-  function annSeen() { var l = B.store.get('announcements.seen', []); return l && l.length != null ? l : []; }
-  function annMarkSeen(id) {
-    var l = annSeen().filter(function (x) { return x !== id; });
-    l.push(id);
-    if (l.length > 200) l = l.slice(l.length - 200);
-    B.store.set('announcements.seen', l);
-  }
-  function checkAnnouncements() {
-    if (annBusy || !A.isSignedIn() || onLogin || !app.profile) return;
-    var now = Date.now();
-    if (annLast && now - annLast < 3600000) { showAnnouncement(); return; }
-    annLast = now;
-    annBusy = true;
-    A.announcements(B.lang || 'en').then(function (items) {
-      var seen = annSeen();
-      items.sort(function (a, b) { return a.createdAt - b.createdAt; }).forEach(function (a) {
-        if (seen.indexOf(a.id) >= 0) return;
-        if (annQueue.some(function (q) { return q.id === a.id; })) return;
-        annQueue.push(a);
-      });
-    }).catch(B.noop).then(function () { annBusy = false; showAnnouncement(); });
-  }
-  /** Eén tegelijk; niet over de speler of multiview heen (dan bij de volgende controle). OK of Terug sluit. */
-  function showAnnouncement() {
-    if (annOpen || !annQueue.length || !app.profile || onLogin || B.player.current || B.multiview.current) return;
-    var a = annQueue[0];
-    annOpen = true;
-    function done() { annOpen = false; annMarkSeen(a.id); annQueue.shift(); showAnnouncement(); }
-    U.modal({ title: a.title || null, text: a.body || null, buttons: [{ label: L('OK'), fn: done }], onCancel: done });
-  }
   /** TMDB-leeftijden bijwerken als dit profiel een leeftijdsgrens heeft (kindergroepen eerst). */
   function warmAges() {
     if (!app.profile || D.ageLimit(app.profile) == null) return;
@@ -387,7 +351,7 @@
           else if (src) { Lib.source = src; Lib.applyFilters(); }
         }
       });
-    }).catch(B.noop).then(function () { checking = false; showAnnouncement(); });
+    }).catch(B.noop).then(function () { checking = false; });
   }
   function startHeartbeat() {
     clearInterval(hbTimer);
@@ -403,7 +367,6 @@
       D.flush();
     } else {
       startHeartbeat();
-      setTimeout(checkAnnouncements, 2000);
       // build 88: abonnement bijwerken (na een upgrade op bingr.online gaan de sloten open)
       A.fetchEntitlements(false);
       // build 75: terug op de tv → Trakt-vinkjes bijwerken (alleen als Trakt iets nieuws meldt), zoals iOS/Android

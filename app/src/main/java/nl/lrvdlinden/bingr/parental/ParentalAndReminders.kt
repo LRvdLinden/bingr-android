@@ -250,7 +250,7 @@ object Reminders {
     var due by mutableStateOf<ProgramReminder?>(null)
     private var checker: Job? = null
 
-    private fun ensureChannel(ctx: Context) {
+    fun ensureChannel(ctx: Context) {
         if (Build.VERSION.SDK_INT >= 26) {
             val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             val ch = NotificationChannel(CHANNEL_ID, L("Reminders"), NotificationManager.IMPORTANCE_HIGH)
@@ -258,9 +258,13 @@ object Reminders {
         }
     }
 
-    /** Bij het starten van de app (BingrApplication): meldingskanaal + alarmen opnieuw plannen. */
+    /**
+     * Bij het starten van de app (BingrApplication): meldingskanaal + alarmen opnieuw plannen.
+     * Met actieve pushmeldingen ([Push.active]) geen lokale alarmen: de server stuurt de herinnering (docs/PUSH.md).
+     */
     fun createChannel(ctx: Context) {
         ensureChannel(ctx)
+        if (Push.active) return
         // na een herstart van het toestel zijn alarmen weg: toekomstige herinneringen opnieuw plannen
         runCatching { Store.reminders.filter { it.start > System.currentTimeMillis() }.forEach { schedule(ctx, it) } }
     }
@@ -315,6 +319,19 @@ object Reminders {
      */
     fun canWatch(r: ProgramReminder): Boolean = isMine(r) || Store.activeProfile?.effectiveAgeLimit == null
 
+    /**
+     * Zelfde controle voor een tik op een herinnering (push of lokale melding, `bingr://live?channel=&profile=`):
+     * [profileID] = profiel van de herinnering (leeg = hoofdprofiel).
+     */
+    fun canOpenFor(profileID: String?): Boolean {
+        val active = Store.activeProfileID ?: return true
+        val owner = profileID?.trim()?.takeIf { it.isNotEmpty() }
+        val mine = if (owner == null) Store.isMain(active)
+            else owner.equals(active, ignoreCase = true) ||
+                (Store.isMain(active) && Store.mainProfileID?.equals(owner, ignoreCase = true) == true)
+        return mine || Store.activeProfile?.effectiveAgeLimit == null
+    }
+
     /** Herinnering voor het actieve profiel (elk profiel heeft zijn eigen herinneringen, ook een kinderprofiel). */
     fun add(channel: Channel, program: EPGProgram, playlistID: String) {
         val owner = currentProfile
@@ -322,7 +339,8 @@ object Reminders {
             channelID = channel.id, channelName = channel.name, title = program.title, start = program.start,
             profileID = owner?.takeUnless { Store.isMain(it) }?.lowercase())
         Store.addReminder(r)
-        schedule(AppState.appContext, r)
+        // met actieve pushmeldingen stuurt de server de herinnering (geen lokaal alarm, anders dubbel)
+        if (!Push.active) schedule(AppState.appContext, r)
     }
 
     /** Een profiel is verwijderd (hier of op een ander apparaat): zijn herinneringen en alarmen gaan weg. */
@@ -367,11 +385,12 @@ object Reminders {
         Store.applySyncedReminders(keep)
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         old.filter { o -> keep.none { it.id == o.id } }.forEach { runCatching { am.cancel(pending(ctx, it)) } }
-        keep.filter { it.start > now && it !in old }.forEach { runCatching { schedule(ctx, it) } }
+        if (!Push.active) keep.filter { it.start > now && it !in old }.forEach { runCatching { schedule(ctx, it) } }
     }
 
     /** Na het opstarten van het apparaat zijn alle alarmen weg: de toekomstige herinneringen opnieuw plannen. */
     fun rescheduleAll(ctx: Context) {
+        if (Push.active) return
         val now = System.currentTimeMillis()
         Store.reminders.filter { it.start > now }.forEach { runCatching { schedule(ctx, it) } }
     }
@@ -407,7 +426,8 @@ object Reminders {
                 val visible = MainActivity.current?.lifecycle?.currentState
                     ?.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED) == true
                 val now = System.currentTimeMillis()
-                if (visible && due == null) {
+                // met actieve pushmeldingen komt de herinnering als systeemmelding (ook op de voorgrond): geen banner erbij
+                if (visible && due == null && !Push.active) {
                     Store.reminders.firstOrNull { it.start <= now + 60_000 && it.start > now - 300_000 }?.let { r ->
                         due = r
                         Store.removeReminder(r.id)
@@ -422,11 +442,21 @@ object Reminders {
     @SuppressLint("MissingPermission")
     fun showNotification(ctx: Context, intent: Intent) {
         val id = intent.getStringExtra(EXTRA_ID) ?: return
+        // overgestapt op pushmeldingen terwijl dit alarm nog stond: de server stuurt hem al
+        if (Push.active) return
         // met de profielnaam (ook voor een profiel dat nu niet actief is); de herinnering zelf heeft de nieuwste naam
         val title = Store.reminders.firstOrNull { it.id == id }?.let { displayTitle(it) } ?: intent.getStringExtra(EXTRA_TITLE) ?: ""
         val channelName = intent.getStringExtra(EXTRA_CHANNEL_NAME) ?: ""
         ensureChannel(ctx)
+        // tik: zender openen met profielcontrole, net als een herinnering via push (bingr://live, PushNav)
+        val owner = Store.reminders.firstOrNull { it.id == id }?.let { owner(it) } ?: profileFromID(id)
+        val live = android.net.Uri.Builder().scheme("bingr").authority("live")
+            .appendQueryParameter("channel", intent.getStringExtra(EXTRA_ITEM_ID) ?: "")
+            .apply { if (owner != null) appendQueryParameter("profile", owner) }
+            .build()
         val open = Intent(ctx, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = live
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(EXTRA_ITEM_ID, intent.getStringExtra(EXTRA_ITEM_ID))
             putExtra(EXTRA_PLAYLIST_ID, intent.getStringExtra(EXTRA_PLAYLIST_ID))

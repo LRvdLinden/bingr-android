@@ -47,6 +47,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
+            <!-- Pushmeldingen (docs/PUSH.md in iptv-ios-appletv): bingr://changelog?p=&b= en bingr://live?channel=&profile= -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="bingr" android:host="changelog" />
+                <data android:scheme="bingr" android:host="live" />
+            </intent-filter>
         </activity>
 
         <!-- App-icoon kiezen (Instellingen > Uiterlijk): precies één alias staat aan -->
@@ -121,6 +129,21 @@
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
+
+        <!-- Pushmeldingen (FCM): alleen actief als de build een google-services.json had (anders start Firebase niet) -->
+        <service
+            android:name=".BingrMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <!-- geen token vanzelf: pas na inloggen, met toestemming en alleen op telefoon/tablet (Push.sync) -->
+        <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false" />
+        <meta-data android:name="firebase_analytics_collection_enabled" android:value="false" />
+        <!-- melding met een notification-blok terwijl de app niet draait: kanaal "Berichten" en het Bingr-icoon -->
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="messages" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_bingr" />
 
         <receiver android:name=".ReminderReceiver" android:exported="false" />
         <!-- Herinneringen opnieuw plannen na een herstart (alarmen overleven dat niet) -->

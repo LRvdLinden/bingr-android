@@ -453,17 +453,11 @@ if __name__ == '__main__':
             ('eval', 'var r = Array.prototype.filter.call(document.querySelectorAll(".st-row"), function(r){return r.textContent.indexOf("Automatische") === 0})[0]; B.ui.focus(r); 1'), ('wait', 300), ('shot', '60-lang-settings'),
         ])
     if which in ('all', 'announce'):
-        # mededelingen (build 62): na de profielkeuze één voor één (oudste eerst), OK en Terug sluiten; gelezen ids lokaal
-        seen = "localStorage.setItem('bingr.announcements.seen', JSON.stringify(['a0']));"
-        run(SIGNED_IN + seen, 'announce', [
-            ('wait', 2500), ('key', 'Enter', 400), ('wait', 6000), ('shot', '61-announcement'),
-            ('expect', 'B.ui.top().modal === true && document.querySelector(".modal-box h2").textContent === "Welkom bij Bingr"', 'oudste mededeling eerst'),
-            ('walk', 'Enter', 'mededeling: OK'), ('wait', 300),
-            ('expect', 'B.ui.top().modal === true && document.querySelector(".modal-box h2").textContent === "Onderhoud vannacht"', 'daarna de volgende'),
-            ('shot', '62-announcement-2'),
-            ('walk', '10009', 'mededeling: terug'), ('wait', 300),
-            ('expect', 'B.ui.top().el.classList.contains("main")', 'mededelingen dicht'),
-            ('expect', 'JSON.stringify(B.store.get("announcements.seen")) === JSON.stringify(["a0","a1","a2"])', 'gelezen ids bewaard'),
+        # build 62 had mededelingen van de beheerder als venster; die zijn weg (beheerberichten komen als push, en de
+        # Samsung TV heeft geen push): na de profielkeuze geen venster en geen aanvraag `announcements`
+        run(SIGNED_IN, 'announce', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 6000), ('shot', '61-no-announcement'),
+            ('expect', 'B.ui.top().modal !== true && B.ui.top().el.classList.contains("main")', 'geen mededelingsvenster'),
             ('eval', 'JSON.stringify(B.account.appVersion()) + " " + JSON.stringify(B.account.osVersion())', 'versies'),
         ])
         with open(os.path.join(OUT, 'requests.jsonl')) as f:
@@ -472,7 +466,7 @@ if __name__ == '__main__':
         ok = bool(hb) and all(r.get('app_version') and r.get('os_version', '').startswith('Tizen') for r in hb)
         RESULTS.append(('heartbeat met app_version en os_version', ok, json.dumps(hb[:1], ensure_ascii=False)))
         an = [r for r in reqs if r.get('action') == 'announcements']
-        RESULTS.append(('announcements één keer met lang', len(an) == 1 and an[0].get('lang') == 'nl', json.dumps(an, ensure_ascii=False)))
+        RESULTS.append(('geen aanvraag announcements meer', len(an) == 0, json.dumps(an, ensure_ascii=False)))
     if which in ('all', 'perf'):
         # prestaties met een grote bibliotheek: lange taken (> 50 ms) tijdens snel scrollen tellen
         LT = 'window.__lt = []; try { new PerformanceObserver(function (l) { l.getEntries().forEach(function (e) { window.__lt.push(Math.round(e.duration)); }); }).observe({entryTypes: ["longtask"]}); } catch (e) {} 1'

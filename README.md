@@ -87,6 +87,7 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
 
 **Gids & beheer**
 - **Tv-gids als raster** met nu-lijn, programma-details, **terugkijken** en **herinneringen** (melding)
+- **Pushmeldingen** (telefoon en tablet, Android 13+ na toestemming): nieuwe versie (tik = wat er nieuw is in die build), herinneringen voor programma's (tik = zender openen) en berichten van Bingr; aan/uit in *Instellingen → Meldingen*. Niet op Android TV, Google TV, Fire TV en Samsung TV: daar blijven herinneringen in de app
 - **Live TV** met favorieten, recent en alle groepen, en **zoeken door álle zenders** (naam, nummer, groep en wat er nu speelt)
 - **Live-voorbeeld**: in Live TV en de gids speelt de zender met focus na een seconde klein en zonder geluid (op een telefoon met mobiele data uit)
 - **Evenementen**: PPV- en evenementzenders in een eigen groep, op begintijd, met de wedstrijd, de lokale begintijd en **LIVE**

@@ -4,6 +4,27 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 113
+_16 oktober 2026_
+
+### Alle apps
+
+**Verbeterd**
+
+- Berichten van Bingr verschijnen niet meer als venster in de app; ze komen als pushmelding waar je apparaat dat ondersteunt
+
+### Android
+
+**Nieuw**
+
+- Pushmeldingen op telefoon en tablet: bij een nieuwe versie, je programmaherinneringen en berichten van Bingr. Aan of uit in Instellingen → Meldingen; op Android 13 en nieuwer vraagt Bingr na het inloggen om toestemming
+
+### Server
+
+**Nieuw**
+
+- Eigen pushdienst voor Apple, Android en web, met automatische meldingen bij een nieuwe versie en herinneringen per profiel
+
 ## Versie 1.0.0 · Build 112
 _16 oktober 2026_
 
