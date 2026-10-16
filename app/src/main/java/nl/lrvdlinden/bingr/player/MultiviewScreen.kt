@@ -162,7 +162,15 @@ fun MultiviewScreen(onClose: () -> Unit) {
     }
     DisposableEffect(Unit) {
         MainActivity.current?.keepScreenOn(true)
+        // naar de achtergrond: alle beelden echt stoppen (providerverbindingen vrij); StreamSession meldt af en weer aan
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_STOP && !AppState.inPiP) tiles.forEach { it.controller.suspendForBackground() }
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_START) tiles.forEach { it.controller.resumeFromBackground() }
+        }
+        val lc = androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle
+        lc.addObserver(obs)
         onDispose {
+            lc.removeObserver(obs)
             endStream()
             tiles.forEach { it.controller.stop() }
             MainActivity.current?.keepScreenOn(false)

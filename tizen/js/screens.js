@@ -74,11 +74,34 @@
   S.emailLogin = function (onDone) {
     var email = '', pw = '', field = 'email', signup = false, showPw = false;
     var emailBox = h('div.input.f.autofocus'), pwBox = h('div.input.f');
+    // account maken: voor- en achternaam (verplicht; user_metadata first_name / last_name, voor de aanhef in de e-mails).
+    // Typen met het gewone teksttoetsenbord (U.editText): dat heeft een spatie, het e-mailtoetsenbord niet.
+    var firstName = '', lastName = '';
+    var firstBox = h('div.input.f.nm'), lastBox = h('div.input.f.nm');
+    var nameRow = h('div.email-names', [firstBox, lastBox]);
+    function cleanName(s) {
+      var v = String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim();
+      return Array.from(v).slice(0, 50).join('').trim();
+    }
+    function editName(which) {
+      var first = which === 'first';
+      U.editText({ title: first ? L('First name') : L('Last name'), value: first ? firstName : lastName, layout: 'text', placeholder: first ? L('First name') : L('Last name') }, function (v) {
+        if (first) firstName = cleanName(v); else lastName = cleanName(v);
+        err.textContent = ''; draw();
+      });
+    }
+    firstBox.onEnter = function () { editName('first'); };
+    lastBox.onEnter = function () { editName('last'); };
     var err = h('div.login-error');
     var title = h('h1');
     var kb = U.keyboard({ layout: 'email', onChange: function (v) { if (field === 'email') email = v; else pw = v; draw(); } });
     function draw() {
       title.textContent = signup ? L('Create account') : L('Sign In');
+      nameRow.style.display = signup ? '' : 'none';
+      firstBox.textContent = firstName || L('First name');
+      firstBox.classList.toggle('placeholder', !firstName);
+      lastBox.textContent = lastName || L('Last name');
+      lastBox.classList.toggle('placeholder', !lastName);
       emailBox.textContent = email || L('Email');
       emailBox.classList.toggle('placeholder', !email);
       pwBox.textContent = pw ? (showPw ? pw : new Array(pw.length + 1).join('•')) : L('Password');
@@ -102,10 +125,12 @@
     }
     function submit() {
       if (busy) return;
+      if (signup && !firstName) { err.textContent = L('Enter your first name.'); return; }
+      if (signup && !lastName) { err.textContent = L('Enter your last name.'); return; }
       if (!validEmail()) { err.textContent = L('Enter a valid email address.'); return; }
       if (pw.length < 6) { err.textContent = L('Password must be at least 6 characters.'); return; }
       busy = true; err.textContent = '';
-      var req = signup ? auth('/auth/v1/signup', { email: email.trim(), password: pw, data: { lang: B.lang } })
+      var req = signup ? auth('/auth/v1/signup', { email: email.trim(), password: pw, data: { lang: B.lang, first_name: firstName, last_name: lastName } })
         : auth('/auth/v1/token?grant_type=password', { email: email.trim(), password: pw });
       req.then(function (r) {
         busy = false;
@@ -143,7 +168,7 @@
     var switchBtn = U.button(' ', function () { signup = !signup; err.textContent = ''; draw(); });
     var el = layer('email-login', [h('div.email-card', [
       title,
-      h('div.email-cols', [kb, h('div.email-fields', [emailBox, pwBox, mainBtn, err, h('div.email-links', [showBtn, forgotBtn]), switchBtn])])
+      h('div.email-cols', [kb, h('div.email-fields', [nameRow, emailBox, pwBox, mainBtn, err, h('div.email-links', [showBtn, forgotBtn]), switchBtn])])
     ])]);
     draw();
     U.push({ el: el, onBack: function () { U.pop(); return true; } });

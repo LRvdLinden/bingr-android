@@ -249,6 +249,10 @@ object ProviderLimit {
     suspend fun failureMessage(s: PlaylistSource?): String? {
         val x = client(s) ?: return null
         val c = x.connections() ?: cache["${x.server}|${x.username}"]?.first ?: return null
-        return if (c.atLimit) c.message else null
+        return if (c.atLimit) c.message + "\n\n" + tip else null
     }
+
+    /** Tip onder de providermelding: een net gesloten verbinding telt bij de provider vaak nog even mee. */
+    val tip: String
+        get() = L("Stop the stream on your other device, or wait a moment: your provider sometimes only releases a connection you just closed after a minute.")
 }

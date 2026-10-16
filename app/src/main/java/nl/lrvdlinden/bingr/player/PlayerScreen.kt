@@ -381,8 +381,10 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     }
     DisposableEffect(player) {
         val obs = LifecycleEventObserver { _, e ->
-            // app naar de achtergrond zonder beeld-in-beeld (bijv. TV-thuisknop): pauzeren
-            if (e == Lifecycle.Event.ON_STOP && !AppState.inPiP && player.isPlaying) player.pause()
+            // app naar de achtergrond zonder beeld-in-beeld of Chromecast (bijv. TV-thuisknop): de stream echt stoppen,
+            // zodat de providerverbinding vrijkomt (pauzeren hield hem open); terug = verder op dezelfde plek
+            if (e == Lifecycle.Event.ON_STOP && !AppState.inPiP && !Casting.connected) player.suspendForBackground()
+            if (e == Lifecycle.Event.ON_START) player.resumeFromBackground()
         }
         val lc = ProcessLifecycleOwner.get().lifecycle
         lc.addObserver(obs)

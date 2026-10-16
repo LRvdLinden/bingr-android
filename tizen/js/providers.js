@@ -196,7 +196,10 @@
       return x.connections().then(function (c) {
         var e = self.cache[x.server + '|' + x.username];
         c = c || (e && e.c);
-        return providerAtLimit(c) ? providerMessage(c) : null;
+        // met de tip eronder: een net gesloten verbinding telt bij de provider vaak nog even mee
+        return providerAtLimit(c)
+          ? providerMessage(c) + '\n\n' + L('Stop the stream on your other device, or wait a moment: your provider sometimes only releases a connection you just closed after a minute.')
+          : null;
       }, function () { return null; });
     }
   };

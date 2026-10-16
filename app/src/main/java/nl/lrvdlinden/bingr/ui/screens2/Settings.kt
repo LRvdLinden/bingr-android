@@ -74,6 +74,10 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -770,18 +774,15 @@ fun SettingsScreen() {
             }),
             onDismiss = { accountConfirm = null }
         )
-        "delete" -> S2ActionDialog(
-            L("Delete your Bingr account? This can't be undone."),
-            listOf(S2Action(L("Delete account"), Icons.Default.Delete, destructive = true) {
-                accountError = null
-                AppScope.launch {
-                    try { Account.deleteAccount(); AppState.signedOut() }
-                    catch (e: AccountException) { accountError = e.message }
-                    catch (e: Exception) { accountError = L("Something went wrong. Please try again.") }
-                }
-            }),
-            onDismiss = { accountConfirm = null }
-        )
+        // H1: bevestigen met het huidige wachtwoord (de server controleert het; fout = 403 wrong_password)
+        "delete" -> S2DeleteAccountDialog(onDismiss = { accountConfirm = null }) { password ->
+            accountError = null
+            AppScope.launch {
+                try { Account.deleteAccount(password); AppState.signedOut() }
+                catch (e: AccountException) { accountError = e.message }
+                catch (e: Exception) { accountError = L("Something went wrong. Please try again.") }
+            }
+        }
     }
     if (showTraktLogin) TraktLoginScreen { showTraktLogin = false }
     if (showOSLogin) OpenSubtitlesLoginScreen { showOSLogin = false }
@@ -1043,4 +1044,30 @@ private fun S2NavRow(
         if (locked) LifetimeBadge()
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Theme.secondary, modifier = Modifier.size(tvs(20)))
     })
+}
+
+/** H1: "Account verwijderen" bevestigen met het huidige wachtwoord (alleen in het geheugen van deze dialoog). */
+@Composable
+private fun S2DeleteAccountDialog(onDismiss: () -> Unit, onDelete: (String) -> Unit) {
+    var password by remember { mutableStateOf("") }
+    val fr = remember { FocusRequester() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Theme.elevated,
+        title = { Text(L("Delete your Bingr account? This can't be undone."), color = Color.White) },
+        text = {
+            Column {
+                Text(L("Enter your password to confirm."), color = Theme.secondary, fontSize = tsp(13))
+                Spacer(Modifier.height(10.dp))
+                S2TextField(password, { password = it }, L("Password"), password = true, modifier = Modifier.focusRequester(fr))
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { val p = password; password = ""; onDismiss(); onDelete(p) }, enabled = password.isNotEmpty()) {
+                Text(L("Delete account"), color = if (password.isNotEmpty()) Theme.red else Theme.secondary)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(L("Cancel"), color = Color.White) } }
+    )
+    LaunchedEffect(Unit) { runCatching { fr.requestFocus() } }
 }

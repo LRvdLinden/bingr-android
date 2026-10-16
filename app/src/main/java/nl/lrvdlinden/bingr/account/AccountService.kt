@@ -217,16 +217,40 @@ object Account {
         put("email", email.trim()); put("password", password)
     }
 
+    /** Max. lengte van voor- en achternaam (user_metadata first_name / last_name). */
+    const val NAME_MAX = 50
+    private val nameJunk = Regex("[\\u0000-\\u001F\\u007F<>]")
+    private val spaces = Regex("\\s+")
+
+    /**
+     * Voor- of achternaam opschonen: stuurtekens en < > weg, witruimte samengevoegd en getrimd, max. [NAME_MAX] tekens
+     * (gelijk aan personName() in supabase/functions/_shared/mail.ts van de iOS-repo).
+     */
+    fun cleanName(s: String): String {
+        val v = s.replace(nameJunk, "").replace(spaces, " ").trim()
+        if (v.codePointCount(0, v.length) <= NAME_MAX) return v
+        return v.substring(0, v.offsetByCodePoints(0, NAME_MAX)).trim()
+    }
+
     /**
      * Account maken. true = direct ingelogd; false = eerst het e-mailadres bevestigen
      * (toon dan "Check your inbox to confirm your email address, then sign in.").
+     * Voor- en achternaam zijn verplicht; ze gaan mee als user_metadata first_name / last_name (aanhef "Hoi <voornaam>," in de mails).
      */
-    suspend fun signUp(email: String, password: String): Boolean = working {
+    suspend fun signUp(email: String, password: String, firstName: String, lastName: String): Boolean = working {
+        val first = cleanName(firstName)
+        val last = cleanName(lastName)
+        if (first.isEmpty()) throw AccountException(L("Enter your first name."))
+        if (last.isEmpty()) throw AccountException(L("Enter your last name."))
         validate(email, password)
         val r = post("/auth/v1/signup", buildJsonObject {
             put("email", email.trim()); put("password", password)
-            // taal van de bevestigings- en resetmails
-            put("data", buildJsonObject { put("lang", Localizer.language) })
+            // taal van de bevestigings- en resetmails; naam voor de aanhef
+            put("data", buildJsonObject {
+                put("lang", Localizer.language)
+                put("first_name", first)
+                put("last_name", last)
+            })
         })
         if (r.ok) {
             val json = r.json ?: throw generic()
@@ -326,10 +350,16 @@ object Account {
         AppState.signedOut()
     }
 
-    /** Account verwijderen (device-auth delete_account), daarna lokaal uitloggen. */
-    suspend fun deleteAccount() = working {
+    /**
+     * Account verwijderen (device-auth delete_account), daarna lokaal uitloggen.
+     * H1: alleen met het huidige wachtwoord; de server controleert het (403 wrong_password, 429 rate_limited).
+     */
+    suspend fun deleteAccount(password: String) = working {
+        if (password.isEmpty()) throw AccountException(L("Incorrect password."))
         val token = validAccessToken()
-        val r = post("/functions/v1/device-auth", buildJsonObject { put("action", "delete_account") }, bearer = token)
+        val r = post("/functions/v1/device-auth", buildJsonObject { put("action", "delete_account"); put("password", password) }, bearer = token)
+        if (r.code == 403 && r.json.jS("error") == "wrong_password") throw AccountException(L("Incorrect password."))
+        if (r.code == 429) throw AccountException(L("Too many attempts. Wait a few minutes and try again."))
         if (!r.ok || r.json.jB("ok") != true) throw generic()
         clear()
     }

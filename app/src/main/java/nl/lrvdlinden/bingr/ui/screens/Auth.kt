@@ -29,6 +29,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -157,6 +158,9 @@ private fun AuthEmailCard(onBack: (() -> Unit)?) {
     var mode by remember { mutableStateOf(AuthMode.SIGN_IN) }
     var email by remember { mutableStateOf(Account.email ?: "") }
     var password by remember { mutableStateOf("") }
+    // account maken: voor- en achternaam (verplicht; user_metadata first_name / last_name)
+    var firstName by remember { mutableStateOf("") }
+    var lastName by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var info by remember { mutableStateOf<String?>(null) }
@@ -164,6 +168,7 @@ private fun AuthEmailCard(onBack: (() -> Unit)?) {
     val busy = Account.busy || ProfileSync.syncing || SourceSync.syncing
     val firstField = remember { FocusRequester() }
     val passwordField = remember { FocusRequester() }
+    val lastNameField = remember { FocusRequester() }
 
     BackHandler(enabled = mode != AuthMode.SIGN_IN || onBack != null) {
         if (mode != AuthMode.SIGN_IN) { mode = AuthMode.SIGN_IN; error = null; info = null } else onBack?.invoke()
@@ -176,7 +181,7 @@ private fun AuthEmailCard(onBack: (() -> Unit)?) {
             try {
                 when (mode) {
                     AuthMode.SIGN_IN -> Account.signIn(email, password)
-                    AuthMode.SIGN_UP -> if (!Account.signUp(email, password)) {
+                    AuthMode.SIGN_UP -> if (!Account.signUp(email, password, firstName, lastName)) {
                         info = L("Check your inbox to confirm your email address, then sign in.")
                         mode = AuthMode.SIGN_IN; password = ""
                     }
@@ -202,6 +207,18 @@ private fun AuthEmailCard(onBack: (() -> Unit)?) {
             when (mode) { AuthMode.SIGN_IN -> L("Sign In"); AuthMode.SIGN_UP -> L("Create account"); AuthMode.RESET -> L("Reset password") },
             color = Color.White, fontSize = tsp(30), fontWeight = FontWeight.Bold
         )
+        if (mode == AuthMode.SIGN_UP) {
+            AuthField(
+                firstName, { firstName = it.take(Account.NAME_MAX) }, L("First name"), Modifier,
+                keyboardType = KeyboardType.Text, capitalizeWords = true, imeAction = ImeAction.Next,
+                onIme = { runCatching { lastNameField.requestFocus() } }
+            )
+            AuthField(
+                lastName, { lastName = it.take(Account.NAME_MAX) }, L("Last name"), Modifier.focusRequester(lastNameField),
+                keyboardType = KeyboardType.Text, capitalizeWords = true, imeAction = ImeAction.Next,
+                onIme = { runCatching { firstField.requestFocus() } }
+            )
+        }
         AuthField(
             email, { email = it }, L("Email"), Modifier.focusRequester(firstField),
             keyboardType = KeyboardType.Email,
@@ -249,6 +266,7 @@ private fun AuthField(
     modifier: Modifier = Modifier,
     keyboardType: KeyboardType,
     hidden: Boolean = false,
+    capitalizeWords: Boolean = false,
     imeAction: ImeAction,
     onIme: () -> Unit,
     trailing: (@Composable () -> Unit)? = null,
@@ -260,7 +278,10 @@ private fun AuthField(
         singleLine = true,
         trailingIcon = trailing,
         visualTransformation = if (hidden) PasswordVisualTransformation() else VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+        keyboardOptions = KeyboardOptions(
+            capitalization = if (capitalizeWords) KeyboardCapitalization.Words else KeyboardCapitalization.None,
+            keyboardType = keyboardType, imeAction = imeAction
+        ),
         keyboardActions = KeyboardActions(onAny = { onIme() }),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Color.White, unfocusedBorderColor = Color.White.copy(alpha = 0.3f),

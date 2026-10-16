@@ -738,11 +738,19 @@ if __name__ == '__main__':
             ('walk', 'ArrowRight ArrowRight ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowUp ArrowUp', 'e-mail: rondlopen'),
             ('eval', 'var b = Array.prototype.filter.call(document.querySelectorAll(".email-fields .btn"), function (x) { return x.textContent.indexOf(B.L("Sign up now.")) >= 0; })[0]; B.ui.focus(b); 1'),
             ('key', 'Enter', 300), ('expect', 'document.querySelector(".email-card h1").textContent === B.L("Create account")', 'wissel naar account maken'),
+            # voor- en achternaam (verplicht bij account maken): Enter opent het teksttoetsenbord, q typen, Done (65376) = klaar
+            ('eval', 'B.ui.focus(document.querySelector(".email-fields > .btn.primary")); 1'), ('key', 'Enter', 300),
+            ('expect', 'document.querySelector(".email-login .login-error").textContent === B.L("Enter your first name.")', 'zonder voornaam: melding'),
+            ('eval', 'B.ui.focus(document.querySelectorAll(".email-names .input")[0]); 1'), ('key', 'Enter', 400), ('shot', '60b-signup-name'),
+            ('key', 'ArrowDown Enter', 120), ('tv', '65376', 400),
+            ('eval', 'B.ui.focus(document.querySelectorAll(".email-names .input")[1]); 1'), ('key', 'Enter', 400),
+            ('key', 'ArrowDown Enter', 120), ('tv', '65376', 400),
+            ('expect', 'document.querySelectorAll(".email-names .input")[0].textContent === "q" && document.querySelectorAll(".email-names .input")[1].textContent === "q"', 'naam ingevuld'), ('shot', '60c-signup-names'),
             # e-mail typen: a @ b . c d (eerst het e-mailveld kiezen; het toetsenbord typt in het laatst gekozen veld)
-            ('eval', 'B.ui.focus(document.querySelectorAll(".email-fields .input")[0]); B.ui.focus(document.querySelector(".kb .key")); 1'),
+            ('eval', 'B.ui.focus(document.querySelectorAll(".email-fields .input:not(.nm)")[0]); B.ui.focus(document.querySelector(".kb .key")); 1'),
             ('key', 'Enter ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown Enter ArrowUp ArrowUp ArrowUp ArrowUp ArrowUp ArrowUp ArrowRight Enter ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown Enter ArrowUp ArrowUp ArrowUp ArrowUp ArrowUp ArrowUp ArrowRight Enter ArrowRight Enter', 80),
-            ('expect', 'document.querySelector(".email-fields .input").textContent === "a@b.cd"', 'e-mail getypt'),
-            ('eval', 'B.ui.focus(document.querySelectorAll(".email-fields .input")[1]); 1'), ('wait', 100),
+            ('expect', 'document.querySelector(".email-fields .input:not(.nm)").textContent === "a@b.cd"', 'e-mail getypt'),
+            ('eval', 'B.ui.focus(document.querySelectorAll(".email-fields .input:not(.nm)")[1]); 1'), ('wait', 100),
             ('eval', 'B.ui.focus(document.querySelector(".kb .key")); 1'), ('key', 'Enter Enter Enter Enter Enter Enter', 80),
             ('eval', 'B.ui.focus(document.querySelector(".email-fields > .btn.primary")); 1'), ('key', 'Enter', 1200), ('shot', '61-signup'),
             ('expect', 'document.querySelector(".email-login .login-error").textContent === B.L("Check your inbox to confirm your email address, then sign in.")', 'account gemaakt: bevestig je e-mail'),
@@ -751,7 +759,7 @@ if __name__ == '__main__':
             ('walk', '10009', 'e-mail: terug'), ('expect', 'B.ui.top().el.classList.contains("login")', 'terug op het QR-scherm'),
         ])
         reqs = open(os.path.join(OUT, 'requests.jsonl')).read() if os.path.exists(os.path.join(OUT, 'requests.jsonl')) else ''
-        RESULTS.append(('signup met taal + recover met redirect', '"lang": "en"' in reqs and 'redirect_to=https%3A%2F%2Fbingr.online%2Freset' in reqs, reqs[-300:]))
+        RESULTS.append(('signup met taal en naam + recover met redirect', '"lang": "en"' in reqs and '"first_name": "q"' in reqs and '"last_name": "q"' in reqs and 'redirect_to=https%3A%2F%2Fbingr.online%2Freset' in reqs, reqs[-300:]))
     if which in ('all', 'limitback'):
         # te veel apparaten: Terug = annuleren = uitloggen
         run(SIGNED_IN.replace("'true'", "'false'"), 'limit', [('wait', 2500), ('walk', 'ArrowDown ArrowUp', 'limiet: rondlopen'), ('tv', '10009', 1500),

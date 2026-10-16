@@ -70,13 +70,16 @@ jobs:
           name: build-log
           path: build.log
 
-      # Pakketten staan nooit (onversleuteld) op GitHub: geen artefact, geen release, niet in een repo. Ze gaan versleuteld
-      # naar bingr-beheer (tools/seal_build.sh, branch inbox-<platform>); de workflow Builds daar zet ze in de afgesloten
-      # map builds/ op de server van beheer.bingr.online. Nodig: secret BINGR_BEHEER_TOKEN (Contents: Read and write op bingr-beheer).
+      # Pakketten staan nooit (onversleuteld) op GitHub: geen artefact, geen release, niet in een openbare repo. Ze gaan
+      # versleuteld naar de PRIVÉ repo LRvdLinden/bingr-inbox (tools/seal_build.sh van bingr-beheer, branch inbox-<platform>);
+      # de workflow Builds van bingr-beheer haalt ze daar op en zet ze in de afgesloten map builds/ op de server van
+      # beheer.bingr.online. Nodig: secret BINGR_INBOX_TOKEN (fine-grained, alleen Contents: Read and write op bingr-inbox).
+      # H3: géén token voor bingr-beheer meer; die openbare repo wordt anoniem gekloond, het token gaat nooit in een URL.
       - name: APK versleuteld aanleveren voor beheer.bingr.online
         if: success() && github.event_name != 'pull_request'
         env:
-          TOKEN: ${{ secrets.BINGR_BEHEER_TOKEN }}
+          TOKEN: ${{ secrets.BINGR_INBOX_TOKEN }}
+          BINGR_INBOX_REPO: LRvdLinden/bingr-inbox
         run: |
           set -euo pipefail
           # build 97: nooit een APK met de tijdelijke debug-sleutel aanleveren (die installeert niet over de echte heen)
@@ -90,9 +93,10 @@ jobs:
           awk -v b="Build $B" '/^## /{f=($0 ~ (b "$"))?1:0; next} f && !/^_.*_$/' CHANGELOG.md > "$RUNNER_TEMP/pkg/notes.md"
           [ -s "$RUNNER_TEMP/pkg/notes.md" ] || echo "Bingr $V, build $B." > "$RUNNER_TEMP/pkg/notes.md"
           TOKEN=$(printf '%s' "$TOKEN" | tr -d '[:space:]')
-          [ -n "$TOKEN" ] || { echo "::warning::Secret BINGR_BEHEER_TOKEN ontbreekt: APK niet aangeleverd."; exit 0; }
-          git clone -q --depth 1 "https://x-access-token:${TOKEN}@github.com/LRvdLinden/bingr-beheer.git" "$RUNNER_TEMP/beheer" 2>/dev/null \
-            || { echo "::error::bingr-beheer niet op te halen met BINGR_BEHEER_TOKEN."; exit 1; }
+          # bewust geen terugval op een ander token: zonder BINGR_INBOX_TOKEN wordt er niets aangeleverd
+          [ -n "$TOKEN" ] || { echo "::warning::Secret BINGR_INBOX_TOKEN ontbreekt: APK niet aangeleverd (zie README.md van bingr-beheer, H3)."; exit 0; }
+          GIT_TERMINAL_PROMPT=0 git clone -q --depth 1 https://github.com/LRvdLinden/bingr-beheer.git "$RUNNER_TEMP/beheer" 2>/dev/null \
+            || { echo "::error::bingr-beheer niet op te halen."; exit 1; }
           TOKEN="$TOKEN" "$RUNNER_TEMP/beheer/tools/seal_build.sh" android "$RUNNER_TEMP/pkg/Bingr-$V-build$B.apk" "$V" "$B" "$RUNNER_TEMP/pkg/notes.md"
           rm -rf "$RUNNER_TEMP/pkg"
 
@@ -241,10 +245,12 @@ jobs:
           ls -la dist
           echo "SIGN_KIND=${SIGN_KIND:-unsigned}" > dist/signing.txt
 
+      # zoals de APK: naar de privé repo bingr-inbox met BINGR_INBOX_TOKEN (H3)
       - name: Samsung TV-pakket versleuteld aanleveren voor beheer.bingr.online
         if: success() && github.event_name != 'pull_request'
         env:
-          TOKEN: ${{ secrets.BINGR_BEHEER_TOKEN }}
+          TOKEN: ${{ secrets.BINGR_INBOX_TOKEN }}
+          BINGR_INBOX_REPO: LRvdLinden/bingr-inbox
         run: |
           set -euo pipefail
           V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
@@ -253,9 +259,10 @@ jobs:
           awk -v b="Build $B" '/^## /{f=($0 ~ (b "$"))?1:0; next} f && !/^_.*_$/' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           [ -s "$RUNNER_TEMP/notes.md" ] || echo "Bingr $V, build $B." > "$RUNNER_TEMP/notes.md"
           TOKEN=$(printf '%s' "$TOKEN" | tr -d '[:space:]')
-          [ -n "$TOKEN" ] || { echo "::warning::Secret BINGR_BEHEER_TOKEN ontbreekt: .wgt niet aangeleverd."; exit 0; }
-          git clone -q --depth 1 "https://x-access-token:${TOKEN}@github.com/LRvdLinden/bingr-beheer.git" "$RUNNER_TEMP/beheer" 2>/dev/null \
-            || { echo "::error::bingr-beheer niet op te halen met BINGR_BEHEER_TOKEN."; exit 1; }
+          [ -n "$TOKEN" ] || { echo "::warning::Secret BINGR_INBOX_TOKEN ontbreekt: .wgt niet aangeleverd (zie README.md van bingr-beheer, H3)."; exit 0; }
+          rm -rf "$RUNNER_TEMP/beheer"
+          GIT_TERMINAL_PROMPT=0 git clone -q --depth 1 https://github.com/LRvdLinden/bingr-beheer.git "$RUNNER_TEMP/beheer" 2>/dev/null \
+            || { echo "::error::bingr-beheer niet op te halen."; exit 1; }
           w=$(ls dist/*.wgt | head -1)
           TOKEN="$TOKEN" "$RUNNER_TEMP/beheer/tools/seal_build.sh" tizen "$w" "$V" "$B" "$RUNNER_TEMP/notes.md"
 

@@ -706,7 +706,11 @@
       // provider vol (alle verbindingen van het Xtream-abonnement in gebruik)? Dan die melding i.p.v. de algemene
       var g = startGen;
       B.providers.providerLimit.failureMessage(Lib.source).then(function (m) {
-        if (m && !closed && g === startGen && errorBox.style.display !== 'none' && msg.parentNode === errorBox) msg.textContent = m;
+        if (!m || closed || g !== startGen || errorBox.style.display === 'none' || msg.parentNode !== errorBox) return;
+        // melding + tip (gescheiden door een lege regel) als twee alinea's
+        var parts = m.split('\n\n');
+        msg.textContent = parts[0];
+        if (parts[1]) errorBox.insertBefore(h('p', parts[1]), msg.nextSibling);
       }, B.noop);
       var row = h('div.modal-buttons');
       row.appendChild(U.button(L('Try again'), function () { attempts = 0; triedBackup = false; start(resumePos); }, { primary: true }));

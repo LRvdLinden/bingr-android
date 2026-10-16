@@ -71,9 +71,21 @@ object ChannelPreview {
     private var pending: String? = null
     private var job: Job? = null
 
+    private var observing = false
+
     /** Deze zender kreeg focus (of is gekozen): na ~1 s het voorbeeld starten. */
     fun focus(c: Channel) {
         if (!PlayerSettings.previewAllowed() || AppState.playing != null) return
+        // naar de achtergrond (ook vanuit de gids): voorbeeld stoppen, zodat de providerverbinding niet open blijft
+        if (!observing) {
+            observing = true
+            runCatching {
+                androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(
+                    androidx.lifecycle.LifecycleEventObserver { _, e ->
+                        if (e == androidx.lifecycle.Lifecycle.Event.ON_STOP) stop()
+                    })
+            }
+        }
         if (pending == c.id) return
         pending = c.id
         job?.cancel()

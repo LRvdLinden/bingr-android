@@ -173,7 +173,7 @@ class PlayerController(item: PlayableItem) {
             externalSubtitleFile = null; externalSubtitleLang = null
         }
         attempts = 0; triedOtherEngine = false; reconnecting = false; errorText = null; isBuffering = true
-        stallSince = null
+        stallSince = null; backgroundResume = null; pauseWhenReady = false
         retryPending = false; everPlayed = false; lastGoodPosition = 0.0; triedBackup = false; backupPending = false
     }
 
@@ -297,6 +297,7 @@ class PlayerController(item: PlayableItem) {
 
     private fun tick() {
         val st = engine.state
+        if (pauseWhenReady && st == EngineState.PLAYING) { pauseWhenReady = false; pause() }
         isPlaying = engine.isPlaying
         isBuffering = st == EngineState.BUFFERING || st == EngineState.OPENING
         duration = engine.duration
@@ -406,6 +407,10 @@ class PlayerController(item: PlayableItem) {
         retryPending = false; backupPending = false
         if (!isLive) lastGoodPosition.takeIf { it > 0.0 }?.let { item = item.copy(resumeAt = it) }
         timer?.cancel(); timer = null
+        // de stream echt stoppen: anders blijft de verbinding met de provider open (VLC/ExoPlayer blijven proberen)
+        // en telt hij daar mee terwijl je de foutmelding ziet. "Opnieuw" en "Andere speler" laden hem opnieuw.
+        runCatching { engine.stop() }
+        isPlaying = false
         // provider vol (alle verbindingen in gebruik)? Dan die melding in plaats van de algemene fout
         val u = url
         val check = providerLimitCheck
@@ -506,8 +511,41 @@ class PlayerController(item: PlayableItem) {
 
     fun seekTo(fraction: Double) { if (!isLive) engine.seekToFraction(fraction) }
 
+    /** Positie om na de achtergrond te hervatten (null = niet op de achtergrond gestopt). */
+    private var backgroundResume: Double? = null
+    /** Film/aflevering stond op pauze toen de app naar de achtergrond ging: na het opnieuw laden weer pauzeren. */
+    private var pauseWhenReady = false
+
+    /**
+     * Naar de achtergrond zonder beeld-in-beeld of Chromecast: de stream echt stoppen (niet pauzeren), zodat de
+     * verbinding met de IPTV-provider meteen vrijkomt; een gepauzeerde speler hield hem open terwijl Bingr de stream
+     * al afgemeld had. [resumeFromBackground] start op dezelfde plek opnieuw (live: weer live).
+     */
+    fun suspendForBackground() {
+        if (stopped || dismissed || url == null || backgroundResume != null || errorText != null || streamLimit != null) return
+        backgroundResume = if (isLive) 0.0 else position.takeIf { it > 0.005 } ?: item.resumeAt
+        pauseWhenReady = !isLive && engine.state == EngineState.PAUSED
+        saveProgress()
+        timer?.cancel(); timer = null
+        runCatching { engine.stop() }
+        isPlaying = false
+    }
+
+    fun resumeFromBackground() {
+        val p = backgroundResume ?: return
+        backgroundResume = null
+        val u = url ?: return
+        if (stopped || dismissed || errorText != null || streamLimit != null) return
+        if (!isLive) item = item.copy(resumeAt = p)
+        // geen nieuwe kijksessie: kijktijd en geschiedenis lopen door
+        val w = watchedSeconds; val rec = recordedHistory
+        start(u)
+        watchedSeconds = w; recordedHistory = rec
+    }
+
     fun stop() {
         endStream()
+        backgroundResume = null
         if (stopped) return
         stopped = true
         recordHistory()

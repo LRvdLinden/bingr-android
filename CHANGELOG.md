@@ -4,6 +4,41 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 110
+_16 oktober 2026_
+
+### Alle apps en de website
+
+**Nieuw**
+
+- Bij het aanmaken van een account vragen we nu je voor- en achternaam
+
+**Verbeterd**
+
+- Bij de melding over de limiet van je IPTV-provider staat nu een tip: stop de stream op je andere apparaat of wacht even
+
+**Opgelost**
+
+- Verbindingen met je IPTV-server worden direct vrijgegeven bij stoppen, een fout of als de app naar de achtergrond gaat (behalve bij beeld-in-beeld, AirPlay en Chromecast), zodat er geen verbinding blijft hangen
+
+### iOS, iPadOS, tvOS, macOS, Android, Android TV, Website en Server
+
+**Verbeterd**
+
+- Je account verwijderen vraagt nu om je wachtwoord
+
+### Website en Server
+
+**Verbeterd**
+
+- Veiliger tv koppelen: je ziet welk apparaat de code aanvraagt en wanneer, en bij een code uit een link bevestig je eerst dat hij op je eigen scherm staat
+
+### Server
+
+**Verbeterd**
+
+- E-mails van Bingr (account, supporttickets en statusupdates) beginnen met je voornaam als die bekend is
+
 ## Versie 1.0.0 · Build 106
 _16 oktober 2026_
 
