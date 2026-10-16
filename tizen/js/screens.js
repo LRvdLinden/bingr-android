@@ -1792,14 +1792,12 @@
 
     function listButton() {
       var on = D.inSet('myList', listKey);
-      var b = U.button(L('My List'), function () {
+      // plus / vinkje; bij wisselen blijft de knop staan (met focus) en animeert alleen het icoon
+      var b = U.plusCheckButton('mylist', L('My List'), on, function () {
         // build 102: hoofdprofiel met Trakt: ook op de Trakt-watchlist
         if (P) P.toggleMyList(type, x); else D.toggleSet('myList', listKey);
-        var nb = listButton();
-        buttons.replaceChild(nb, b);
-        nb.onFocus = toTop;
-        U.focus(nb);
-      }, { icon: on ? 'check' : 'list' });
+        U.setPlusCheck(b, D.inSet('myList', listKey));
+      });
       return b;
     }
     /** Stremio: bron kiezen uit alle directe streams van de add-ons. */

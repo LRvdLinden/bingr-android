@@ -21,6 +21,7 @@ window.webapis = { productinfo: { getRealModel: function () { return 'QE55Q80B';
 
 
 RESULTS = []      # (naam, ok, detail) van 'walk' en 'expect'
+CTX_EXTRA = {}    # extra opties voor de browsercontext (bijv. reduced_motion)
 PAGEERRORS = []   # fouten in de console (zonder ontbrekende bestanden en 404's van de testserver)
 # focus in orde: element bestaat, is zichtbaar en hoort bij de bovenste laag (of er is in die laag niets te kiezen)
 NAVCHECK = """(function () {
@@ -43,7 +44,7 @@ def run(page_setup, mode, steps):
         os.remove(os.path.join(OUT, 'requests.jsonl'))
     with sync_playwright() as p:
         b = p.chromium.launch(args=['--disable-web-security', '--autoplay-policy=no-user-gesture-required'])
-        ctx = b.new_context(viewport={'width': 1920, 'height': 1080})
+        ctx = b.new_context(viewport={'width': 1920, 'height': 1080}, **CTX_EXTRA)
         ctx.add_init_script(STUB)
         if page_setup:
             ctx.add_init_script('if (!sessionStorage.getItem("seeded")) { sessionStorage.setItem("seeded", "1");' + page_setup + '}')
@@ -1055,6 +1056,17 @@ if __name__ == '__main__':
             ('walk', '10009', 'programma: terug'),
             ('eval', 'B.ui.top().page().setQuery("actie") || 1'), ('wait', 1200),
             ('expect', 'document.querySelectorAll(".search-cats .search-cat").length >= 1', 'zoeken: categorieën/genres'),
+            # Live TV (zenders en tv-gids) altijd als laatste, ook in de focusvolgorde
+            ('eval', 'B.ui.top().page().setQuery("ni") || 1'), ('wait', 2500), ('shot', 'p14b-search-live-last'),
+            ('expect', '(function () { var rows = Array.prototype.slice.call(document.querySelectorAll(".search-results .row-block")); var s = rows.map(function (r) { return r.classList.contains("live") ? "L" : r.classList.contains("search-progs") ? "P" : "V"; }).join(""); return /^V+LP$/.test(s) || s; })()', 'zoeken: Live TV (zenders, tv-gids) als laatste'),
+            ('eval', FOC % 'x.closest(".search-results .row-block") && !x.closest(".live") && !x.closest(".search-progs")'),
+            # films → series → categorieën → andere afspeellijsten → zenders → tv-gids
+            ('key', 'ArrowDown ArrowDown ArrowDown', 250),
+            ('expect', '!!B.ui.focused.closest(".search-others") || B.ui.focused.className', 'zoeken: andere afspeellijsten vóór Live TV'),
+            ('key', 'ArrowDown', 250),
+            ('expect', '!!B.ui.focused.closest(".row-block.live") || B.ui.focused.className', 'zoeken: daarna de zenders'),
+            ('key', 'ArrowDown', 250),
+            ('expect', '!!B.ui.focused.closest(".search-progs") || B.ui.focused.className', 'zoeken: tv-gids als laatste rij'),
             ('eval', 'B.ui.top().page().setQuery("northern") || 1'), ('wait', 6000), ('shot', 'p15-search-other-source'),
             ('expect', 'Array.prototype.some.call(document.querySelectorAll(".search-others .card.other-src .src-badge"), function (b) { return b.textContent === "Jellyfin thuis"; })', 'zoeken: titel uit een andere afspeellijst'),
             ('eval', FOC % 'x.classList.contains("other-src")'), ('walk', 'Enter', 'andere bron openen'), ('wait', 6000), ('shot', 'p16-switched-source'),
@@ -1123,6 +1135,44 @@ if __name__ == '__main__':
                         json.dumps({k: {'progress': sorted((d.get('progress') or {}).keys()), 'removed': (d.get('removed') or {}).get('progress'),
                                         'myList': listed(d)} for k, d in last.items()})[:400]))
         fb.MODE['ios_profile'] = False
+
+    if which in ('all', 'pluscheck'):
+        # Mijn lijst en favoriete zenders: plus ↔ vinkje (U.plusCheckButton) met animatie; met "beweging verminderen" zonder
+        BTN = 'B.ui.top().el.querySelector(".dt-buttons .btn .ic.pc").parentNode'
+        IC = BTN + '.querySelector(".ic.pc")'
+        LK = 'B.lib.source.id + "|xv4"'
+        STYLE = ('(function (ic) { var pl = getComputedStyle(ic.querySelector(".pc-plus")), ck = getComputedStyle(ic.querySelector(".pc-check")); '
+                 'return [ic.classList.contains("on"), ic.classList.contains("pop"), pl.opacity, ck.strokeDashoffset, ck.transitionDuration, '
+                 'getComputedStyle(ic.querySelector("svg")).animationName].join(" "); })(%s)' % IC)
+        FAVICON = ('(function () { var ch = B.lib.lib.channels[0]; var s = B.parity.cardMenu({type: "channel", item: ch}); '
+                   'var it = [].filter.call(s.el.querySelectorAll(".pm-item"), function (x) { return x._mk === "fav"; })[0]; '
+                   'var d = it.querySelector("svg").innerHTML; B.ui.pop(); '
+                   'return (B.data.inSet("favorites", B.lib.source.id + "|" + ch.id) ? "on:" : "off:") + (d.indexOf("M12 4v16") >= 0 ? "plus" : d.indexOf("M4.5 12.5") >= 0 ? "check" : "anders"); })()')
+        for rm in ('no-preference', 'reduce'):
+            CTX_EXTRA['reduced_motion'] = rm
+            anim = rm == 'no-preference'
+            run(SIGNED_IN, 'normal', [
+                ('wait', 2500), ('key', 'Enter', 400), ('wait', 3500),
+                ('eval', 'B.data.inSet("myList", %s) && B.data.toggleSet("myList", %s); B.ui.push(B.screens.detail("movie", B.lib.lib.byId["xv4"].item)) && 1' % (LK, LK)),
+                ('wait', 1500),
+                ('expect', '!!' + IC + ' && !' + IC + '.classList.contains("on") && ' + BTN + '.getAttribute("aria-label") === B.L("Add to My List")', 'pluscheck %s: plus en label "Toevoegen aan Mijn lijst"' % rm),
+                ('eval', 'B.ui.focus(%s) || 1' % BTN), ('wait', 400), ('shot', 'pc-%s-1-plus' % rm),
+                ('key', 'Enter', 120), ('shot', 'pc-%s-2-mid' % rm),
+                ('expect', '(function (r) { return %s || r; })(%s)' % ('/^true true \\S+ \\S+ 0.2s pcPop$/.test(r)' if anim else 'r.indexOf("true true 0 0px 0s") === 0', STYLE),
+                 'pluscheck %s: animatie %s' % (rm, 'loopt (klassen, overgang, bounce)' if anim else 'uit')),
+                ('wait', 600), ('shot', 'pc-%s-3-check' % rm),
+                ('expect', 'B.data.inSet("myList", %s) && %s.classList.contains("on") && getComputedStyle(%s.querySelector(".pc-check")).strokeDashoffset === "0px" && %s.getAttribute("aria-label") === B.L("In My List")' % (LK, IC, IC, BTN),
+                 'pluscheck %s: vinkje en label "In Mijn lijst"' % rm),
+                ('expect', 'B.ui.focused === ' + BTN, 'pluscheck %s: focus blijft op de knop' % rm),
+                ('key', 'Enter', 600),
+                ('expect', '!B.data.inSet("myList", %s) && !%s.classList.contains("on") && getComputedStyle(%s.querySelector(".pc-plus")).opacity === "1"' % (LK, IC, IC),
+                 'pluscheck %s: terug naar plus' % rm),
+                ('walk', '10009', 'pluscheck: terug'),
+                ('expect', '(function (r) { return r === "off:plus" || r === "on:check" || r; })(' + FAVICON + ')', 'pluscheck %s: zenderfavoriet in het menu plus/vinkje' % rm),
+                ('eval', 'B.data.toggleSet("favorites", B.lib.source.id + "|" + B.lib.lib.channels[0].id) || 1'),
+                ('expect', '(function (r) { return r === "off:plus" || r === "on:check" || r; })(' + FAVICON + ')', 'pluscheck %s: na wisselen andersom' % rm),
+            ])
+        CTX_EXTRA.clear()
 
     if which in ('all', 'discover'):
         # build 111: Home: Nieuw toegevoegd (films én series, 30 dagen), Binnenkort op Bingr en Nieuw op Bingr (TMDB; namen build 112),

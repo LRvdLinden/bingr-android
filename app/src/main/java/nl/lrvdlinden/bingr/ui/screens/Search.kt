@@ -239,22 +239,6 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
                     }
                 }
 
-                // zenders
-                if (results.channels.isNotEmpty()) full {
-                    Box(Modifier.bleedHorizontal(edge)) {
-                        MediaRow(L("Channels")) {
-                            items(results.channels) { c ->
-                                val now = lib.nowPlaying(c)
-                                ChannelCard(
-                                    c, now,
-                                    modifier = Modifier.focusLift { AppState.play(Playables.channel(c, now), results.channels) },
-                                    accent = accent
-                                )
-                            }
-                        }
-                    }
-                }
-
                 // categorieën
                 if (groupHits.isNotEmpty()) full {
                     Column(Modifier.bleedHorizontal(edge), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -308,39 +292,6 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                            }
-                        }
-                    }
-                }
-
-                // tv-gids
-                if (programs.isNotEmpty()) {
-                    full { SearchSectionTitle(L("TV guide")) }
-                    items(programs, span = { GridItemSpan(maxLineSpan) }) { h ->
-                        Row(
-                            Modifier.fillMaxWidth().focusLift(1.02f) { program = h }.padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            RemoteImage(
-                                h.channel.logo,
-                                Modifier.width(tvs(56)).height(tvs(36)).clip(RoundedCornerShape(4.dp)),
-                                placeholder = h.channel.name.take(3), fit = true
-                            )
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    if (h.p.isNow) {
-                                        Text(L("NOW"), color = Theme.red, fontSize = tsp(10), fontWeight = FontWeight.Black)
-                                    } else if (h.p.end < System.currentTimeMillis()) {
-                                        Icon(Icons.Default.History, null, tint = Theme.secondary, modifier = Modifier.size(tvs(12)))
-                                    }
-                                    Text(h.p.title, color = Color.White, fontSize = tsp(14), fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                                Text(
-                                    "${h.channel.name} · ${programTime(h.p.start)}", color = Theme.secondary, fontSize = tsp(11),
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis
-                                )
                             }
                         }
                     }
@@ -406,6 +357,56 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 AvatarCircle(h.playlist, tvs(22))
                                 SourceBadge(h.playlist)
+                            }
+                        }
+                    }
+                }
+
+                // Live TV (zenders en tv-gids) altijd als laatste, na films en series; de tv-focus volgt deze volgorde
+                // zenders
+                if (results.channels.isNotEmpty()) full {
+                    Box(Modifier.bleedHorizontal(edge)) {
+                        MediaRow(L("Channels")) {
+                            items(results.channels) { c ->
+                                val now = lib.nowPlaying(c)
+                                ChannelCard(
+                                    c, now,
+                                    modifier = Modifier.focusLift { AppState.play(Playables.channel(c, now), results.channels) },
+                                    accent = accent
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // tv-gids
+                if (programs.isNotEmpty()) {
+                    full { SearchSectionTitle(L("TV guide")) }
+                    items(programs, span = { GridItemSpan(maxLineSpan) }) { h ->
+                        Row(
+                            Modifier.fillMaxWidth().focusLift(1.02f) { program = h }.padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            RemoteImage(
+                                h.channel.logo,
+                                Modifier.width(tvs(56)).height(tvs(36)).clip(RoundedCornerShape(4.dp)),
+                                placeholder = h.channel.name.take(3), fit = true
+                            )
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    if (h.p.isNow) {
+                                        Text(L("NOW"), color = Theme.red, fontSize = tsp(10), fontWeight = FontWeight.Black)
+                                    } else if (h.p.end < System.currentTimeMillis()) {
+                                        Icon(Icons.Default.History, null, tint = Theme.secondary, modifier = Modifier.size(tvs(12)))
+                                    }
+                                    Text(h.p.title, color = Color.White, fontSize = tsp(14), fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                Text(
+                                    "${h.channel.name} · ${programTime(h.p.start)}", color = Theme.secondary, fontSize = tsp(11),
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }

@@ -526,13 +526,14 @@ object Playlists {
                 } ?: continue
                 for (c in olib.channels) {
                     if (!m(c.name)) continue
-                    hits.add(OtherHit(p, c.id, c.name, "Live TV", c.logo))
+                    hits.add(OtherHit(p, c.id, c.name, "Live TV", c.logo, isLive = true))
                     if (hits.size > 80) break
                 }
                 for (mv in olib.movies) if (m(mv.title)) hits.add(OtherHit(p, mv.id, mv.title, mv.year?.toString() ?: "", mv.poster))
                 for (se in olib.series) if (m(se.title)) hits.add(OtherHit(p, se.id, se.title, se.year?.toString() ?: "", se.poster))
             }
-            r.copy(other = hits.take(120))
+            // Live TV altijd als laatste; sortedBy is stabiel, dus verder blijft de volgorde gelijk
+            r.copy(other = hits.take(120).sortedBy { it.isLive })
         }
     }
 
@@ -733,7 +734,11 @@ data class SearchResults(
 }
 
 /** Treffer in een andere afspeellijst. */
-data class OtherHit(val playlist: PlaylistSource, val itemID: String, val title: String, val subtitle: String, val artwork: String?) {
+data class OtherHit(
+    val playlist: PlaylistSource, val itemID: String, val title: String, val subtitle: String, val artwork: String?,
+    /** zender (Live TV): in de zoekresultaten altijd na films en series */
+    val isLive: Boolean = false,
+) {
     val id: String get() = "${playlist.id}-$itemID"
 }
 

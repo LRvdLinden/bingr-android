@@ -41,8 +41,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Downloading
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
@@ -82,6 +80,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -526,10 +528,10 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(tvs(12)), verticalAlignment = Alignment.CenterVertically) {
-                        DetailCircleButton(
-                            if (inMyList) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            tint = if (inMyList) Theme.red else Color.White
-                        ) { toggleMyList() }
+                        // Mijn lijst: plus / vinkje in de accentkleur, met animatie (was een hartje)
+                        DetailCircleBox(if (inMyList) L("In My List") else L("Add to My List"), onClick = { toggleMyList() }) { lit ->
+                            PlusCheckIcon(inMyList, tint = if (lit) Color.Black else if (inMyList) Theme.red else Color.White, size = tvs(22))
+                        }
                         // build 111: ook niet voor titels uit TMDB (Binnenkort op Bingr / Nieuw op Bingr)
                         if (!target.id.startsWith("rec-") && !DiscoverItem.isExternal(target.id)) DetailCircleButton(Icons.AutoMirrored.Filled.PlaylistAdd) { addToCollection = true }
                         if (tv && heroTrailer.visible) {
@@ -1023,17 +1025,26 @@ private fun CreditLine(k: String, v: String) {
 /** Ronde knop; op TV wit bij focus (zoals Netflix). */
 @Composable
 private fun DetailCircleButton(icon: ImageVector, tint: Color = Color.White, onClick: () -> Unit) {
+    DetailCircleBox(null, onClick) { lit ->
+        Icon(icon, null, tint = if (lit) Color.Black else tint, modifier = Modifier.size(tvs(22)))
+    }
+}
+
+/** Ronde knop met eigen inhoud (`lit` = op TV gefocust, dus witte knop); `label` = toegankelijkheidslabel. */
+@Composable
+private fun DetailCircleBox(label: String?, onClick: () -> Unit, content: @Composable (lit: Boolean) -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val lit = AppState.isTV && focused
     Box(
         Modifier.onFocusChanged { focused = it.isFocused }
             .focusLift(1.1f, onClick = onClick)
+            .then(if (label != null) Modifier.semantics { contentDescription = label; role = Role.Button } else Modifier)
             .size(tvs(50)).clip(CircleShape)
             .background(if (lit) Color.White else Color.White.copy(alpha = 0.12f))
             .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, null, tint = if (lit) Color.Black else tint, modifier = Modifier.size(tvs(22)))
+        content(lit)
     }
 }
 

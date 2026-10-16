@@ -35,7 +35,6 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -272,7 +271,7 @@ fun LiveTVScreen() {
     menuFor?.let { c ->
         val fav = Store.isFavorite(pid, c.id)
         S2ActionDialog(c.name, listOf(
-            S2Action(if (fav) L("Remove from favorites") else L("Add to favorites"), if (fav) Icons.Default.StarBorder else Icons.Default.Star) {
+            S2Action(if (fav) L("Remove from favorites") else L("Add to favorites"), PlusCheck.icon(fav)) {   // plus / vinkje, zoals Mijn lijst (was een ster)
                 Store.toggleFavorite(pid, c.id)
             },
             S2Action(if (c.catchupDays > 0) L("Guide & catch-up") else L("Guide"), Icons.Default.Schedule) { guideFor = c },

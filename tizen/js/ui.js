@@ -70,7 +70,12 @@
     movies: '<rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 3v18M17 3v18M3 8h4M3 12h4M3 16h4M17 8h4M17 12h4M17 16h4" stroke="currentColor" stroke-width="1.8"/>',
     series: '<rect x="2.5" y="6" width="19" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6 3h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10 10v6l5-3z" fill="currentColor"/>',
     list: '<path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
+    plus: '<path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
     check: '<path d="M4.5 12.5l5 5L19.5 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>',
+    // Mijn lijst en favoriete zenders: plus en vinkje in één icoon, de klasse "on" wisselt met een overgang
+    // (css: .ic.pc, U.plusCheckButton / U.setPlusCheck)
+    pluscheck: '<g class="pc-plus"><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></g>' +
+      '<path class="pc-check" d="M4.5 12.5l5 5L19.5 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>',
     gear: '<path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.4 5l2-1.5-2-3.5-2.4.9a7.6 7.6 0 0 0-1.8-1L15.8 6h-4l-.4 2.4a7.6 7.6 0 0 0-1.8 1l-2.4-.9-2 3.5 2 1.5a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.5 2.4-.9c.6.4 1.1.7 1.8 1l.4 2.4h4l.4-2.4c.7-.3 1.2-.6 1.8-1l2.4.9 2-3.5-2-1.5c.1-.7.1-1.3 0-2z" fill="currentColor" transform="translate(-1.8 -2) scale(1.08)"/>',
     play: '<path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/>',
     // build 97: dubbele 'grid' (build 85) weggehaald; de latere definitie hieronder was al degene die gold
@@ -486,7 +491,7 @@
   U.button = function (label, onEnter, opts) {
     opts = opts || {};
     var kids = [];
-    if (opts.icon) kids.push(U.icon(opts.icon));
+    if (opts.icon) kids.push(U.icon(opts.icon, opts.iconCls));
     if (label) kids.push(U.h('span.lbl', label));
     var cls = opts.cls ? '.' + String(opts.cls).split(/\s+/).join('.') : '';
     // afspeelknop (primair met play-icoon, of expliciet play): gevuld in de accentkleur van het profiel
@@ -494,6 +499,40 @@
     var el = U.h('div.btn.f' + (opts.primary || play ? '.primary' : '') + (play ? '.play' : '') + cls + (opts.autofocus ? '.autofocus' : ''), kids);
     el.onEnter = onEnter;
     return el;
+  };
+
+  /** Icoonnaam voor menu's (plus of vinkje): Mijn lijst en favoriete zenders. */
+  U.plusCheckIcon = function (on) { return on ? 'check' : 'plus'; };
+  /** Toegankelijkheidslabels [uit, aan] per soort. */
+  U.plusCheckLabels = {
+    mylist: function () { return [L('Add to My List'), L('In My List')]; },
+    favorite: function () { return [L('Add to favorites'), L('In favorites')]; }
+  };
+  /**
+   * Aan/uit-knop plus ↔ vinkje (Mijn lijst, favoriete zenders): icoon 'pluscheck' (on = staat er al in), kind = 'mylist'
+   * of 'favorite' (toegankelijkheidslabel). U.setPlusCheck(knop, on) wisselt met de animatie (plus draait weg, vinkje
+   * tekent zich, kleine bounce bij toevoegen).
+   */
+  U.plusCheckButton = function (kind, label, on, onEnter, opts) {
+    opts = opts || {};
+    opts.icon = 'pluscheck';
+    opts.iconCls = 'pc' + (on ? ' on' : '');
+    var el = U.button(label, onEnter, opts);
+    el._pcKind = kind;
+    el.setAttribute('aria-label', U.plusCheckLabels[kind]()[on ? 1 : 0]);
+    return el;
+  };
+  U.setPlusCheck = function (el, on) {
+    var ic = el && el.querySelector('.ic.pc');
+    if (!ic) return;
+    if (el._pcKind) el.setAttribute('aria-label', U.plusCheckLabels[el._pcKind]()[on ? 1 : 0]);
+    if (ic.classList.contains('on') === on) return;
+    ic.classList.remove('pop');
+    if (on) {
+      void ic.offsetWidth; // animatie opnieuw starten
+      ic.classList.add('pop');
+    }
+    if (on) ic.classList.add('on'); else ic.classList.remove('on');
   };
 
   var lastToast = null;

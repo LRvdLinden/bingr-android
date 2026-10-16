@@ -338,11 +338,14 @@
       U.clear(buttons);
       if (Lib.source) {
         var on = D.inSet('myList', listKey);
-        var b = U.button(on ? L('Remove from My List') : L('Add to My List'), function () {
+        // plus / vinkje: de knop blijft staan (met focus), alleen het icoon en de tekst wisselen
+        var b = U.plusCheckButton('mylist', on ? L('Remove from My List') : L('Add to My List'), on, function () {
           var now = P ? P.toggleMyList(type, x) : (D.toggleSet('myList', listKey), D.inSet('myList', listKey));
           U.toast(now ? L('Added to My List') : L('Removed from My List'));
-          drawButtons();
-        }, { icon: on ? 'check' : 'list', primary: true, autofocus: true });
+          U.setPlusCheck(b, now);
+          var lbl = b.querySelector('.lbl');
+          if (lbl) lbl.textContent = now ? L('Remove from My List') : L('Add to My List');
+        }, { primary: true, autofocus: true });
         b._bk = 'list';
         buttons.appendChild(b);
       }

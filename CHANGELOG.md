@@ -4,6 +4,16 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 114
+_16 oktober 2026_
+
+### Alle apps en de website
+
+**Verbeterd**
+
+- Mijn lijst en favoriete zenders: een plus om toe te voegen en een vinkje als de titel of zender er al in staat (was een hartje of ster), met een korte animatie die rekening houdt met 'beweging verminderen'
+- Zoeken: Live TV-resultaten (zenders en de tv-gids) staan nu altijd onderaan, na films en series
+
 ## Versie 1.0.0 · Build 113
 _16 oktober 2026_
 

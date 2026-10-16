@@ -56,6 +56,21 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 .ic svg { width: 100%; height: 100%; display: block; }
 /* build 104: Lifetime-icoon altijd in Bingr-rood (ook bij een andere accentkleur) */
 .ic .ic-life { fill: #E50914; }
+/* Mijn lijst en favoriete zenders: plus ↔ vinkje (U.plusCheckButton / U.setPlusCheck). De plus draait 90° en krimpt weg, het vinkje tekent zich
+   (stroke-dasharray; lengte van het pad ≈ 21,6), en bij toevoegen een kleine bounce. Samen ± 0,3 s. */
+.ic.pc .pc-plus { -webkit-transform-origin: 12px 12px; transform-origin: 12px 12px;
+  transition: opacity 0.18s ease, -webkit-transform 0.2s ease-in; transition: opacity 0.18s ease, transform 0.2s ease-in; }
+.ic.pc .pc-check { stroke-dasharray: 22; stroke-dashoffset: 22; transition: stroke-dashoffset 0.2s ease-out; }
+.ic.pc.on .pc-plus { opacity: 0; -webkit-transform: rotate(90deg) scale(0.2); transform: rotate(90deg) scale(0.2); }
+.ic.pc.on .pc-check { stroke-dashoffset: 0; transition: stroke-dashoffset 0.2s ease-out 0.1s; }
+.ic.pc:not(.on) .pc-plus { transition-delay: 0.08s; }
+.ic.pc.pop svg { -webkit-animation: pcPop 0.34s ease-out; animation: pcPop 0.34s ease-out; }
+@-webkit-keyframes pcPop { 0% { -webkit-transform: scale(1); } 20% { -webkit-transform: scale(0.9); } 55% { -webkit-transform: scale(1.15); } 100% { -webkit-transform: scale(1); } }
+@keyframes pcPop { 0% { transform: scale(1); } 20% { transform: scale(0.9); } 55% { transform: scale(1.15); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .ic.pc .pc-plus, .ic.pc .pc-check, .ic.pc.on .pc-check { transition: none; }
+  .ic.pc.pop svg { -webkit-animation: none; animation: none; }
+}
 .btn.primary.focused .ic .ic-life { fill: #fff; }
 
 /* toast */

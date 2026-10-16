@@ -26,7 +26,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -863,7 +862,7 @@ private fun ExternalPoster(item: DiscoverItem, pid: String?) {
         val inList = Store.inMyList(pid, item.id)
         S2ActionDialog(item.title, listOf(
             S2Action(L("More info"), Icons.Outlined.Info) { openDetail(item.target) },
-            S2Action(if (inList) L("Remove from My List") else L("Add to My List"), if (inList) Icons.Default.Close else Icons.Default.Add) {
+            S2Action(if (inList) L("Remove from My List") else L("Add to My List"), PlusCheck.icon(inList)) {
                 Store.setMyList(pid, item.id, !inList)
             }
         ), onDismiss = { menu = false })
@@ -895,7 +894,7 @@ private fun MoviePoster(m: Movie, pid: String?) {
             if (pid != null) {
                 val inList = Store.inMyList(pid, m.id)
                 add(S2Action(if (inList) L("Remove from My List") else L("Add to My List"),
-                    if (inList) Icons.Default.Close else Icons.Default.Add) { Store.setMyList(pid, m.id, !inList) })
+                    PlusCheck.icon(inList)) { Store.setMyList(pid, m.id, !inList) })
             }
             add(S2Action(L("Add to collection…"), Icons.AutoMirrored.Filled.PlaylistAdd) { collect = true })
         }

@@ -194,7 +194,7 @@
     if (type === 'channel') {
       var fk = D.key(src(), x.id), fav = D.inSet('favorites', fk);
       items.push({ key: 'play', icon: 'play', label: L('Watch live'), fn: function () { B.player.playChannel(x, ctx.list || [x]); } });
-      items.push({ key: 'fav', icon: 'star', label: fav ? L('Remove from favorites') : L('Add to favorites'), fn: function () {
+      items.push({ key: 'fav', icon: U.plusCheckIcon(fav), label: fav ? L('Remove from favorites') : L('Add to favorites'), fn: function () {
         D.toggleSet('favorites', fk);
         U.toast(D.inSet('favorites', fk) ? L('Added to favorites') : L('Removed from favorites'));
       } });
@@ -213,7 +213,7 @@
     }
     var lk = D.key(src(), x.id), inList = D.inSet('myList', lk);
     items.push({ key: 'open', icon: 'info', label: L('More info'), fn: function () { U.push(S.detail(type, x)); } });
-    items.push({ key: 'mylist', icon: inList ? 'check' : 'list', label: inList ? L('Remove from My List') : L('Add to My List'), fn: function () {
+    items.push({ key: 'mylist', icon: U.plusCheckIcon(inList), label: inList ? L('Remove from My List') : L('Add to My List'), fn: function () {
       var on = P.toggleMyList(type, x);
       U.toast(on ? L('Added to My List') : L('Removed from My List'));
     } });
@@ -854,7 +854,9 @@
           }
         });
       });
-      return out.slice(0, 40);
+      // zenders (Live TV) altijd als laatste; verder de volgorde houden (stabiel)
+      out = out.slice(0, 40);
+      return out.filter(function (x) { return x.type !== 'channel'; }).concat(out.filter(function (x) { return x.type === 'channel'; }));
     });
   };
   /**
@@ -864,12 +866,21 @@
   P.searchExtras = function (q, track, alive, empty) {
     var slots = {};
     ['people', 'cats', 'progs', 'others'].forEach(function (k) { slots[k] = h('div.search-slot'); });
-    // personen na de zenders, de rest onderaan (volgorde van tvOS)
-    var firstRow = track.querySelector('.row-block');
-    track.insertBefore(slots.people, firstRow ? firstRow.nextSibling : null);
+    // Live TV (zenders en tv-gids) altijd als laatste, na films, series, categorieën en andere afspeellijsten;
+    // de focus (omhoog/omlaag) volgt deze volgorde
+    var live = null, firstRow = null;
+    for (var i = 0; i < track.children.length; i++) {
+      var ch = track.children[i];
+      if (!ch.classList.contains('row-block')) continue;
+      if (ch.classList.contains('live')) { if (!live) live = ch; } else if (!firstRow) firstRow = ch;
+    }
+    if (live) track.removeChild(live);
+    // personen na de eerste rij (films of series)
+    track.insertBefore(slots.people, firstRow ? firstRow.nextSibling : track.firstChild);
     track.appendChild(slots.cats);
-    track.appendChild(slots.progs);
     track.appendChild(slots.others);
+    if (live) track.appendChild(live);
+    track.appendChild(slots.progs);
     var any = false;
     function put(slot, row) {
       if (!row || !alive()) return;

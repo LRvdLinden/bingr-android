@@ -30,9 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
@@ -623,7 +621,7 @@ private fun CategoryPoster(t: DetailTarget) {
             if (pid != null) {
                 val inList = Store.inMyList(pid, t.id)
                 add(S2Action(if (inList) L("Remove from My List") else L("Add to My List"),
-                    if (inList) Icons.Default.Close else Icons.Default.Add) { Store.setMyList(pid, t.id, !inList) })
+                    PlusCheck.icon(inList)) { Store.setMyList(pid, t.id, !inList) })
             }
             add(S2Action(L("Add to collection…"), Icons.AutoMirrored.Filled.PlaylistAdd) { collect = true })
         }
