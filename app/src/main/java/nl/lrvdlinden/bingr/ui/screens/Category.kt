@@ -160,7 +160,7 @@ internal fun CategoryCell(t: DetailTarget, modifier: Modifier) {
                 Box(
                     Modifier.align(Alignment.TopStart).padding(6.dp).size(tvs(20)).clip(CircleShape).background(Theme.red),
                     contentAlignment = Alignment.Center
-                ) { Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(tvs(13))) }
+                ) { Icon(Icons.Default.Check, null, tint = Theme.onAccent, modifier = Modifier.size(tvs(13))) }
             }
             // series (build 75): rood label "N BEKEKEN" linksboven
             if (watchedEpisodes > 0) PosterLabel(L("%d WATCHED", watchedEpisodes), Modifier.align(Alignment.TopStart).padding(6.dp))

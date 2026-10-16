@@ -40,6 +40,8 @@ import androidx.compose.ui.unit.sp
 object Theme {
     /** Accentkleur van de app (build 52: instelbaar, zie [Accent]; standaard Netflix-rood) */
     val red: Color get() = Accent.color
+    /** Tekst/iconen óp een vlak in de accentkleur: wit, bij goud donker (wit op goud is onleesbaar) */
+    val onAccent: Color get() = Accent.onColor
     val bg = Color.Black
     val card = Color(0xFF181818)
     val elevated = Color(0xFF232323)
@@ -66,7 +68,7 @@ fun tsp(v: Int): TextUnit = (if (AppState.isTV) v * 1.35f else v.toFloat()).sp
 fun BingrTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = Theme.red, onPrimary = Color.White, background = Color.Black, surface = Color(0xFF141414),
+            primary = Theme.red, onPrimary = Theme.onAccent, background = Color.Black, surface = Color(0xFF141414),
             onSurface = Color.White, onBackground = Color.White, secondary = Theme.secondary, surfaceVariant = Theme.elevated,
         ),
         content = content
@@ -150,7 +152,11 @@ fun NetflixButton(
         light -> Color.White
         else -> Color.White.copy(alpha = 0.22f)
     }
-    val fg = if (light) Color.Black else Color.White
+    val fg = when {
+        kind == NetflixKind.ACCENT || play -> Theme.onAccent
+        light -> Color.Black
+        else -> Color.White
+    }
     Row(
         modifier
             .onFocusChanged { focused = it.isFocused }

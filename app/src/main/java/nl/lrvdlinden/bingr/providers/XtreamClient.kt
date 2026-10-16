@@ -143,7 +143,8 @@ class XtreamClient(source: PlaylistSource, val password: String) {
             val y = s.jI("year") ?: s.jS("releaseDate")?.take(4)?.toIntOrNull() ?: p.year
             Series(id = "xs$sid", title = p.title, year = y, poster = Net.urlValue(s.jS("cover")),
                 group = scMap[s.jS("category_id") ?: ""] ?: other,
-                plot = s.jS("plot"), rating = s.jD("rating"), xtreamSeriesID = sid)
+                plot = s.jS("plot"), rating = s.jD("rating"), xtreamSeriesID = sid,
+                addedAt = s.jD("last_modified")?.takeIf { it > 0 }?.let { (it * 1000).toLong() })
         }
         return Library(channels = channels, movies = movies, series = series)
     }

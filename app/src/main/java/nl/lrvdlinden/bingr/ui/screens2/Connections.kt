@@ -90,7 +90,7 @@ fun ConnectionsSetupScreen(focus: String, onClose: () -> Unit) {
 
     S2FullDialog(onClose) {
         S2Page(L("Set up connections"), onClose = onClose, actions = {
-            Text(L("Save"), color = Color.White, fontSize = tsp(16), fontWeight = FontWeight.Bold,
+            Text(L("Save"), color = Theme.onAccent, fontSize = tsp(16), fontWeight = FontWeight.Bold,
                 modifier = Modifier.focusLift(1.08f) { save() }.clip(RoundedCornerShape(50)).background(Theme.red)
                     .padding(horizontal = 16.dp, vertical = 8.dp))
         }) {

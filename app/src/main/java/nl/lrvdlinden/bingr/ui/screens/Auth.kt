@@ -308,8 +308,8 @@ private fun AuthRedButton(title: String, busy: Boolean, modifier: Modifier = Mod
             .padding(horizontal = 20.dp, vertical = tvs(12)),
         contentAlignment = Alignment.Center
     ) {
-        if (busy) CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(tvs(22)))
-        else Text(title, color = Color.White, fontSize = tsp(16), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        if (busy) CircularProgressIndicator(color = Theme.onAccent, strokeWidth = 2.dp, modifier = Modifier.size(tvs(22)))
+        else Text(title, color = Theme.onAccent, fontSize = tsp(16), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
     }
 }
 

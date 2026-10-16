@@ -702,8 +702,45 @@
   }
   D.key = function (playlist, item) { return playlist + '|' + item; };
   D.episodeKey = function (series, season, ep) { return 'ep:' + series + '|' + season + '-' + ep; };
-  D.inSet = function (field, k) { var it = P.st && P.st.sets[field][k]; return !!(it && it.on); };
-  D.setList = function (field) { return P.st ? liveKeys(P.st.sets[field]) : []; };
+  // Server-id in sleutels ("<server>|<item>") hoofdletterongevoelig: iOS schrijft hem met hoofdletters, web/Android/
+  // Samsung TV soms met kleine letters (server daar aangemaakt). Opgeslagen sleutels blijven zoals ze zijn (oudere apps);
+  // bij het lezen krijgt de server-id de schrijfwijze van de bekende bron, zodat `k.split('|')[0] === src` overal klopt.
+  var UUIDISH = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  function knownSource(id) {
+    var l = lower(id);
+    for (var i = 0; i < D.sources.length; i++) if (lower(D.sources[i].id) === l) return D.sources[i].id;
+    return null;
+  }
+  /** Sleutel met de server-id zoals de bron hem heeft (anders ongewijzigd). */
+  function canonKey(k) {
+    var bar = k.indexOf('|');
+    if (bar <= 0) return k;
+    var s = knownSource(k.slice(0, bar));
+    return s == null ? k : s + k.slice(bar);
+  }
+  /** Vergelijkingssleutel: server-id (bekende bron of UUID) in kleine letters, item-id exact. */
+  function normKey(k) {
+    var bar = k.indexOf('|');
+    if (bar <= 0) return k;
+    var p = k.slice(0, bar);
+    return (knownSource(p) != null || UUIDISH.test(p)) ? lower(p) + k.slice(bar) : k;
+  }
+  /** Alle opgeslagen schrijfwijzen van sleutel k in m. */
+  function variants(m, k) {
+    var n = normKey(k);
+    return Object.keys(m || {}).filter(function (x) { return x === k || normKey(x) === n; });
+  }
+  D.inSet = function (field, k) {
+    var m = P.st && P.st.sets[field];
+    if (!m) return false;
+    if (m[k] && m[k].on) return true;
+    return variants(m, k).some(function (x) { return m[x].on; });
+  };
+  D.setList = function (field) {
+    if (!P.st) return [];
+    var seen = {};
+    return liveKeys(P.st.sets[field]).map(canonKey).filter(function (k) { var n = normKey(k); if (seen[n]) return false; seen[n] = true; return true; });
+  };
   D.progress = function (k) { var it = P.st && P.st.progress[k]; return it && it.v ? it.v : null; };
   D.progressList = function () {
     if (!P.st) return [];
@@ -714,7 +751,10 @@
   D.history = function () {
     if (!P.st) return [];
     var m = P.st.history;
-    return Object.keys(m).map(function (k) { return m[k].v; }).filter(Boolean).sort(function (a, b) { return b.date - a.date; });
+    var seen = {};
+    // dezelfde titel uit iOS (hoofdletters) én web/Samsung TV (kleine letters): één keer, de nieuwste
+    return Object.keys(m).map(function (k) { return m[k].v; }).filter(Boolean).sort(function (a, b) { return b.date - a.date; })
+      .filter(function (e) { var n = normKey(historyId(e)); if (seen[n]) return false; seen[n] = true; return true; });
   };
   D.isWatched = function (k) { return D.inSet('watched', k); };
 
@@ -724,7 +764,10 @@
     var cur = D.inSet(field, k);
     if (on == null) on = !cur;
     if (on === cur) return;
-    P.st.sets[field][k] = { at: Date.now(), on: on };
+    var now = Date.now(), m = P.st.sets[field];
+    if (on) m[k] = { at: now, on: true };
+    // uit: alle schrijfwijzen (anders komt het via de andere terug)
+    else variants(m, k).concat([k]).forEach(function (x) { if (x === k || (m[x] && m[x].on)) m[x] = { at: now, on: false }; });
     changed(false);
   };
   D.pushRecentChannel = function (playlist, channelID) {

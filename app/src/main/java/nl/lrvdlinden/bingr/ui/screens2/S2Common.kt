@@ -431,7 +431,7 @@ fun S2FullDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
 fun S2Step(n: Int, text: String) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.Top) {
         Box(Modifier.size(22.dp).clip(CircleShape).background(Theme.red), contentAlignment = Alignment.Center) {
-            Text("$n", color = Color.White, fontSize = tsp(12), fontWeight = FontWeight.Bold)
+            Text("$n", color = Theme.onAccent, fontSize = tsp(12), fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.width(10.dp))
         Text(text, color = Color.White, fontSize = tsp(14), modifier = Modifier.weight(1f))

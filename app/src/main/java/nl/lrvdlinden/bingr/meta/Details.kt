@@ -112,7 +112,8 @@ object Details {
         }
 
         // TMDB (optioneel): foto's, logo, achtergrond, stills en teksten in de app-taal
-        TMDB.details(d.imdbID, tmdbHint, d.title, yearInt, isShow)?.let { tm ->
+        // build 111: bij een titel uit TMDB (Binnenkort / Nieuw op streamingdiensten) staat het TMDB-id in het id
+        TMDB.details(d.imdbID, DiscoverItem.parse(t.id)?.first ?: tmdbHint, d.title, yearInt, isShow)?.let { tm ->
             d.backdrop = tm.backdrop ?: d.backdrop
             d.logo = tm.logo ?: d.logo
             d.poster = d.poster ?: tm.poster

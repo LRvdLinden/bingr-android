@@ -162,7 +162,7 @@ private fun DeviceRow(
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (d.current) {
                     Spacer(Modifier.width(8.dp))
-                    Text(L("This device"), color = Color.White, fontSize = tsp(11), fontWeight = FontWeight.Bold, maxLines = 1,
+                    Text(L("This device"), color = Theme.onAccent, fontSize = tsp(11), fontWeight = FontWeight.Bold, maxLines = 1,
                         modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Theme.red).padding(horizontal = 6.dp, vertical = 2.dp))
                 }
             }

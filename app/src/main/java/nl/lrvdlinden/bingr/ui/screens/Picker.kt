@@ -499,9 +499,9 @@ fun AddPlaylistScreen(existing: PlaylistSource?, onClose: () -> Unit) {
                                             .padding(vertical = tvs(12)),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        Icon(k.icon, null, tint = Color.White, modifier = Modifier.size(tvs(20)))
+                                        Icon(k.icon, null, tint = if (selected) Theme.onAccent else Color.White, modifier = Modifier.size(tvs(20)))
                                         Spacer(Modifier.height(6.dp))
-                                        Text(k.title, color = Color.White, fontSize = tsp(12), fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                        Text(k.title, color = if (selected) Theme.onAccent else Color.White, fontSize = tsp(12), fontWeight = FontWeight.SemiBold, maxLines = 1)
                                     }
                                 }
                                 repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
@@ -654,12 +654,12 @@ fun AddPlaylistScreen(existing: PlaylistSource?, onClose: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (testing) {
-                        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(tvs(18)))
+                        CircularProgressIndicator(color = if (canSave) Theme.onAccent else Color.White, strokeWidth = 2.dp, modifier = Modifier.size(tvs(18)))
                         Spacer(Modifier.width(10.dp))
                     }
                     Text(
                         if (testing) L("Testing connection…") else L("Save"),
-                        color = if (canSave) Color.White else Theme.secondary, fontSize = tsp(17), fontWeight = FontWeight.Bold
+                        color = if (canSave) Theme.onAccent else Theme.secondary, fontSize = tsp(17), fontWeight = FontWeight.Bold
                     )
                 }
 
@@ -932,7 +932,7 @@ fun ProfileEditScreen(existing: ViewerProfile?, onClose: () -> Unit) {
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(L("Save"), color = if (name.isNotBlank()) Color.White else Theme.secondary, fontSize = tsp(17), fontWeight = FontWeight.Bold)
+                    Text(L("Save"), color = if (name.isNotBlank()) Theme.onAccent else Theme.secondary, fontSize = tsp(17), fontWeight = FontWeight.Bold)
                 }
 
                 if (canAdmin && existing != null && !Store.isMain(existing)) {

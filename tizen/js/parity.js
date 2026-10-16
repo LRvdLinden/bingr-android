@@ -217,6 +217,8 @@
       var on = P.toggleMyList(type, x);
       U.toast(on ? L('Added to My List') : L('Removed from My List'));
     } });
+    // build 111: titel uit TMDB (niet in je bibliotheek): alleen Meer info en Mijn lijst
+    if (x.external) return P.menu(x.title, items, x.year ? String(x.year) : null);
     items.push({ key: 'coll', icon: 'grid', label: L('Add to collection…'), fn: function () { P.chooseCollection(type, x); } });
     if (ctx.collection && ctx.collection.kind !== 'smart') items.push({ key: 'uncoll', icon: 'back', label: L('Remove from collection'), fn: function () { P.toggleInCollection(ctx.collection, type, x); } });
     if (type === 'movie') {

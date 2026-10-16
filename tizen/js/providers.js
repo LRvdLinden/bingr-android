@@ -244,9 +244,10 @@
         var sid = B.int(s.series_id); if (sid == null) return;
         var pt = B.parseTitle(s.name || '');
         var y = B.int(s.year) || (s.releaseDate ? B.int(String(s.releaseDate).slice(0, 4)) : null) || pt.year;
+        var lm = B.num(s.last_modified);   // build 111: laatst bijgewerkt, voor "Nieuw toegevoegd"
         var se = {
           id: 'xs' + sid, title: pt.title, year: y, poster: urlValue(s.cover), group: sc[B.str(s.category_id) || ''] || other,
-          plot: s.plot || null, rating: B.num(s.rating), xtreamSeriesID: sid, episodes: []
+          plot: s.plot || null, rating: B.num(s.rating), xtreamSeriesID: sid, episodes: [], addedAt: lm > 0 ? lm * 1000 : null
         };
         var scl = B.clang.parse(s.name);
         if (scl) se.cl = scl;

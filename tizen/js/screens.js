@@ -682,6 +682,8 @@
         var hit = lib.byId[parts.slice(1).join('|')];
         if (hit && hit.type !== 'channel') { all.push(hit); if (cards.length < 40) cards.push(posterCard(hit.item, hit.type)); }
       });
+      // build 111: TMDB-titels (Binnenkort / Nieuw op streamingdiensten) die niet in je bibliotheek staan
+      if (B.discover) B.discover.myListHits().forEach(function (hit) { all.push(hit); if (cards.length < 40) cards.push(posterCard(hit.item, hit.type)); });
       return rowBlock(L('My List'), cards, null, seeAll(L('My List'), all));
     }
     function liveRow() {
@@ -723,10 +725,14 @@
           });
           return rowBlock(L('For you'), list.map(function (e) { return posterCard(e.item, e.type); }), 'foryou', seeAll(L('For you'), list));
         },
+        // build 111: "Nieuw toegevoegd": films én series van de laatste 30 dagen (max. 30), nieuwste eerst
         'recent': function () {
-          var all = Lib.recent(lib.movies, 200);
-          return rowBlock(L('Recently added'), all.slice(0, 30).map(function (m) { return posterCard(m, 'movie'); }), null, seeAll(L('Recently added'), entries(all, 'movie')));
+          var list = B.discover ? B.discover.recentTitles() : entries(Lib.recent(lib.movies, 30), 'movie');
+          return rowBlock(L('Recently added'), list.map(function (e) { return posterCard(e.item, e.type); }), null, seeAll(L('Recently added'), list));
         },
+        // build 111: Binnenkort / Nieuw op streamingdiensten (TMDB), met bronvermelding onder de rij
+        'upcoming': function () { return B.discover ? B.discover.row('upcoming') : null; },
+        'streaming': function () { return B.discover ? B.discover.row('streaming') : null; },
         'movies': function () { return rowBlock(L('Movies'), lib.movies.slice(0, 30).map(function (m) { return posterCard(m, 'movie'); }), null, seeAll(L('Movies'), entries(lib.movies, 'movie'))); },
         'series': function () { return rowBlock(L('Series'), lib.series.slice(0, 30).map(function (s) { return posterCard(s, 'series'); }), null, seeAll(L('Series'), entries(lib.series, 'series'))); },
         'categories': function () {
@@ -786,7 +792,8 @@
     }
     function order(b) {
       var colls = Object.keys(b).filter(function (k) { return k.indexOf('collection:') === 0; });
-      var o = ['continue', 'mylist', 'foryou', 'top10', 'live', 'recent'].concat(colls).concat(['categories']);
+      // build 111: Binnenkort / Nieuw op streamingdiensten (TMDB) na Nieuw toegevoegd
+      var o = ['continue', 'mylist', 'foryou', 'top10', 'live', 'recent', 'upcoming', 'streaming'].concat(colls).concat(['categories']);
       var layout = homeLayout();
       var auto = autoTiles();
       if (layout) {
@@ -807,6 +814,14 @@
           ['continue', 'mylist'].forEach(function (k) { var j = o.indexOf(k); if (j >= fa) fa = j + 1; });
           o.splice(fa, 0, 'foryou');
         }
+        // build 111: Binnenkort / Nieuw op streamingdiensten nog niet in de indeling: standaard aan, na Nieuw toegevoegd
+        // (of na Verder kijken / Mijn lijst / Voor jou als die rij uit staat)
+        ['upcoming', 'streaming'].forEach(function (k, n) {
+          if (known[k]) return;
+          var da = Math.max(o.indexOf('recent'), n ? o.indexOf('upcoming') : -1) + 1;
+          if (da <= 0) ['continue', 'mylist', 'foryou'].forEach(function (x) { var j = o.indexOf(x); if (j >= da) da = j + 1; });
+          o.splice(da, 0, k);
+        });
         if (!known.live) {
           // geen "live" in de indeling: op de standaardplek (na Verder kijken, Mijn lijst en Top 10)
           var at = 0;
@@ -885,7 +900,7 @@
           holder.forEach(function (n) { n._row = k; track.insertBefore(n, end); });
         }
         if (i < keys.length) B.idle(step, 300);
-        else { built = true; buildCats(); if (B.parity) loadExtras(); }
+        else { built = true; buildCats(); if (B.parity) loadExtras(); loadDiscover(); }
       }
       step();
     }
@@ -926,7 +941,21 @@
         if (document.body.contains(scroller) && blocks.browse) buildCats();
       }, 2500);
     });
-    pg.destroy = function () { offCats(); };
+    /** build 111: TMDB-rijen en de titelindex op de achtergrond; daarna alleen die rijen opnieuw (als de afstandsbediening stil is). */
+    var discJob = 0;
+    function loadDiscover() {
+      if (!B.discover) return;
+      var my = ++discJob;
+      B.discover.resolveMissing();
+      B.discover.loadAll().then(function (changed) {
+        if (!changed || my !== discJob) return;
+        B.whenQuiet(function () { if (document.body.contains(scroller)) refreshRows(['upcoming', 'streaming']); }, 300);
+      }, B.noop);
+    }
+    var offDiscover = B.on('discover', function () {
+      B.whenQuiet(function () { if (document.body.contains(scroller)) refreshRows(['mylist', 'upcoming', 'streaming']); }, 300);
+    });
+    pg.destroy = function () { offCats(); offDiscover(); };
     pg.refresh = render;
     // build 102: ook de collectierijen (toevoegen via het contextmenu) en Voor jou (bekeken/voortgang)
     pg.onData = function () {
@@ -1424,6 +1453,7 @@
         var hit = lib.byId[p.slice(1).join('|')];
         if (hit && hit.type !== 'channel') items.push(hit);
       });
+      if (B.discover) items = items.concat(B.discover.myListHits());   // build 111: TMDB-titels
       if (!items.length) { box.appendChild(h('div.state', [h('h2', L('Your list is empty')), h('div.dim', L('Add movies and series with “My List” on their page.'))])); return; }
       var grid = U.vgrid({ count: items.length, cols: 6, cellW: 238, cellH: 345, height: 880, render: function (i) { return posterCard(items[i].item, items[i].type); } });
       box.appendChild(grid.el);
@@ -1541,6 +1571,8 @@
   // MARK: detailpagina (film of serie, met seizoenen en afleveringen)
 
   S.detail = function (type, x) {
+    // build 111: titel uit TMDB (Binnenkort / Nieuw op streamingdiensten), niet in je bibliotheek
+    if (B.discover && B.discover.isExternal(x.id)) return B.discover.detail(type, x);
     var src = Lib.source ? Lib.source.id : '';
     var listKey = D.key(src, x.id);
     var plot = h('p.dt-plot', x.plot || '');

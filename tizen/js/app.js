@@ -9,6 +9,17 @@
   var L = function () { return B.L.apply(null, arguments); };
   var app = B.app = { profile: null };
 
+  // Accentkleur goud (nieuw; past bij het gouden app-icoon). D.accents is dezelfde lijst als ACCENTS in sync.js
+  // (accentKey, setAccent en de migratie kennen hem daardoor ook). Oudere apps kennen "gold" niet en tekenen rood.
+  if (!D.accents.gold) D.accents.gold = '#F5B30B';
+  // tekst/iconen óp een vlak in de accentkleur: wit, maar donker op een licht accent (wit op goud is onleesbaar)
+  var ON_ACCENT = { gold: '#1A1400' };
+  function setAccentVars(k) {
+    var root = document.documentElement.style;
+    root.setProperty('--accent', D.accents[k] || D.accents.red);
+    root.setProperty('--on-accent', D.accents[k] && ON_ACCENT[k] ? ON_ACCENT[k] : '#fff');
+  }
+
   function withTimeout(p, ms) {
     return Promise.race([p, new Promise(function (r) { setTimeout(function () { r(null); }, ms); })]);
   }
@@ -38,8 +49,7 @@
     var k = key || D.accentKey(app.profile);
     // build 88: accentkleuren horen bij Lifetime; met Gratis rood (de gekozen kleur blijft bewaard)
     if (!A.allowed('themes')) k = 'red';
-    var c = D.accents[k] || D.accents.red;
-    document.documentElement.style.setProperty('--accent', c);
+    setAccentVars(k);
     B.store.set('lastAccent', k);
   };
   app.startPage = function () {
@@ -158,8 +168,7 @@
   function start() {
     B.migrate();
     B.setLanguage(D.shared('appLanguage', '') || '');
-    var accent = B.store.get('lastAccent', 'red');
-    document.documentElement.style.setProperty('--accent', D.accents[accent] || D.accents.red);
+    setAccentVars(B.store.get('lastAccent', 'red'));
     U.root = document.getElementById('app');
     // buiten de tv (test in een browser) bestaat AVPlay niet: het lege plugin-vak verbergen
     try { if (!(window.webapis && webapis.avplay)) document.getElementById('av-player').style.display = 'none'; } catch (e) { /* stil */ }

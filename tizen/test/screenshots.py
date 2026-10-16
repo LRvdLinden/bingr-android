@@ -1091,6 +1091,81 @@ if __name__ == '__main__':
         ])
         fb.MODE['parity'] = False
 
+    if which in ('all', 'mylistsync'):
+        # Bug "iets in Mijn lijst zetten → Verder kijken weg": de account heeft het profiel zoals iOS het net schreef na
+        # "+ Mijn lijst" (sectie met hoofdletters naast die in kleine letters, voortgang xv7 alleen daarin). De tv voegt
+        # beide samen; daarna zet de tv zelf iets in Mijn lijst. Verder kijken moet overal blijven staan.
+        fb.MODE['ios_profile'] = True
+        KEYS = 'JSON.stringify(B.data.progressList().map(function (x) { return x.key; }).sort())'
+        CONTN = ('(function () { var t = [].slice.call(document.querySelectorAll(".row-title")).filter(function (x) { '
+                 'return x.textContent === B.L("Continue watching"); })[0]; if (!t) return 0; var r = t.closest(".row-block") || t.parentNode.parentNode; '
+                 'return r.querySelectorAll(".card").length; })()')
+        MYLIST_BTN = ('(function () { var b = [].slice.call(B.ui.top().el.querySelectorAll(".btn")).filter(function (x) { '
+                      'return x.textContent.indexOf(B.L("My List")) >= 0; })[0]; if (!b) return "geen knop"; b.onEnter(); return 1; })()')
+        run(SIGNED_IN, 'normal', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 3500),
+            ('expect', KEYS + ' === \'["xe1002","xv3","xv7"]\'', 'mijn lijst: Verder kijken uit beide secties (ook die van iOS)'),
+            ('expect', 'B.data.inSet("myList", B.lib.source.id + "|xv2") && !B.data.inSet("myList", B.lib.source.id + "|xv1")', 'mijn lijst: toevoeging en verwijdering van iOS'),
+            ('expect', CONTN + ' === 3', 'mijn lijst: rij Verder kijken met 3 titels'),
+            ('expect', 'B.data.inSet("myList", B.lib.source.id + "|xv6") && B.data.setList("myList").indexOf(B.lib.source.id + "|xv6") >= 0',
+             'mijn lijst: sleutel met server-id in kleine letters herkend'),
+            ('eval', 'B.ui.push(B.screens.detail("movie", B.lib.lib.byId["xv4"].item)) && 1'), ('wait', 1200),
+            ('expect', MYLIST_BTN + ' === 1', 'mijn lijst: knop Mijn lijst op de detailpagina'),
+            ('wait', 300), ('key', 'Escape', 600), ('wait', 5000),
+            ('expect', 'B.data.inSet("myList", B.lib.source.id + "|xv4")', 'mijn lijst: titel toegevoegd'),
+            ('expect', KEYS + ' === \'["xe1002","xv3","xv7"]\'', 'mijn lijst: Verder kijken onveranderd na + Mijn lijst'),
+            ('expect', CONTN + ' === 3', 'mijn lijst: rij Verder kijken nog steeds 3 titels'),
+            ('shot', 'm1-mylist-continue'),
+        ])
+        reqs = [json.loads(l) for l in open(os.path.join(OUT, 'requests.jsonl')).read().splitlines() if l.strip()] if os.path.exists(os.path.join(OUT, 'requests.jsonl')) else []
+        puts = [r for r in reqs if r.get('action') == 'put_state' and str(r.get('section', '')).lower() == 'profile.' + fb.MAIN.lower()]
+        last = {}
+        for r in puts:
+            last[r['section']] = r.get('data') or {}
+        def listed(d):
+            return [x.get('id') for x in d.get('myList') or [] if isinstance(x, dict) and not x.get('removed')]
+        ok = len(last) == 2 and all(sorted((d.get('progress') or {}).keys()) == ['xe1002', 'xv3', 'xv7'] and
+                                    not ((d.get('removed') or {}).get('progress') or {}) and fb.SRC + '|xv4' in listed(d) for d in last.values())
+        RESULTS.append(('mijn lijst: upload naar beide secties met alle voortgang en zonder verwijderingen', ok,
+                        json.dumps({k: {'progress': sorted((d.get('progress') or {}).keys()), 'removed': (d.get('removed') or {}).get('progress'),
+                                        'myList': listed(d)} for k, d in last.items()})[:400]))
+        fb.MODE['ios_profile'] = False
+
+    if which in ('all', 'discover'):
+        # build 111: Home: Nieuw toegevoegd (films én series, 30 dagen), Binnenkort en Nieuw op streamingdiensten (TMDB),
+        # bronvermelding, koppelen aan de bibliotheek, detailpagina van een TMDB-titel met Mijn lijst
+        fb.MODE['discover'] = True
+        del fb.DISCOVER_REQS[:]
+        ROW = '(function (t) { return Array.prototype.filter.call(document.querySelectorAll(".row-block"), function (r) { var x = r.querySelector(".row-title"); return x && x.textContent === B.L(t); })[0]; })'
+        KEYS = '(function (t) { var r = %s(t); return r ? Array.prototype.map.call(r.querySelectorAll(".card.poster:not(.see-all)"), function (c) { return c._key; }) : null; })' % ROW
+        run(SIGNED_IN, 'normal', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 7000),
+            ('eval', 'JSON.stringify({up: %s("Coming soon"), st: %s("New on streaming"), rec: %s("Recently added")})' % (KEYS, KEYS, KEYS), 'rijen'),
+            ('expect', '!!%s("Coming soon") && !!%s("New on streaming") && !!%s("Recently added")' % (ROW, ROW, ROW), 'Home: rijen Nieuw toegevoegd, Binnenkort en Nieuw op streamingdiensten'),
+            ('expect', 'B.L("Coming soon") === "Binnenkort" && B.L("New on streaming") === "Nieuw op streamingdiensten" && B.L("Recently added") === "Nieuw toegevoegd"', 'NL-teksten'),
+            ('expect', '%s("Coming soon").join() === "series:tmdb-tv-8001,movie:tmdb-movie-7001,movie:tmdb-movie-7002"' % KEYS, 'Binnenkort: op datum, zonder uitgekomen titels en zonder poster'),
+            ('expect', '%s("Coming soon").querySelector(".row-attr").textContent === B.L("Data: TMDB")' % ROW, 'Binnenkort: bronvermelding TMDB'),
+            ('expect', '%s("New on streaming").querySelector(".row-attr").textContent === B.L("Data: TMDB · via JustWatch")' % ROW, 'Nieuw op streamingdiensten: bronvermelding TMDB · via JustWatch'),
+            ('expect', '(function (k) { return k.indexOf("movie:" + B.lib.lib.movies.filter(function (m) { return m.title === "Iron Valley"; })[0].id) >= 0 && k.indexOf("series:xs1") >= 0 && k.indexOf("movie:tmdb-movie-7102") >= 0; })(%s("New on streaming"))' % KEYS, 'Nieuw op streamingdiensten: titels uit de bibliotheek gekoppeld'),
+            ('expect', '(function (k) { return k.indexOf("series:xs2") >= 0 && k.indexOf("series:xs1") >= 0 && k.indexOf("series:xs3") < 0 && k.some(function (x) { return x.indexOf("movie:") === 0; }); })(%s("Recently added"))' % KEYS, 'Nieuw toegevoegd: films en series van de laatste 30 dagen'),
+            ('expect', '!/netflix|disney|prime video|hbo|videoland|apple tv|skyshowtime/i.test(document.body.textContent)', 'geen namen van streamingdiensten'),
+            ('eval', 'B.ui.focus(%s("Coming soon").querySelector(".card.poster")) || 1' % ROW), ('wait', 600), ('shot', 'd01-home-coming-soon'),
+            ('key', 'ArrowDown', 500), ('shot', 'd02-home-streaming'),
+            ('eval', 'B.ui.focus(%s("Coming soon").querySelectorAll(".card.poster")[1]) || 1' % ROW), ('wait', 300),
+            ('key', 'Enter', 600), ('wait', 1500), ('shot', 'd03-tmdb-detail'),
+            ('expect', 'B.ui.top().el.classList.contains("discover-detail") && B.ui.top().el.querySelector(".dt-title").textContent === "Starfall Express"', 'TMDB-titel: eigen detailpagina'),
+            ('expect', 'B.ui.top().el.querySelector(".dt-note").textContent.indexOf(B.L("Not in your playlists")) === 0 && B.ui.top().el.querySelector(".dt-note").textContent.indexOf(B.L("Data: TMDB")) > 0', 'detail: niet in je afspeellijst en bronvermelding'),
+            ('key', 'Enter', 600),
+            ('expect', 'B.data.inSet("myList", B.lib.source.id + "|tmdb-movie-7001")', 'detail: op Mijn lijst gezet'),
+            ('key', 'Escape', 600), ('wait', 1200),
+            ('expect', '(%s("My List") ? %s("My List") : []).indexOf("movie:tmdb-movie-7001") >= 0' % (ROW, KEYS), 'Mijn lijst toont de TMDB-titel'),
+            ('eval', 'B.ui.focus(%s("My List").querySelector(".card.poster")) || 1' % ROW), ('wait', 500), ('shot', 'd04-home-mylist'),
+            ('eval', 'B.ui.top().show("mylist", true) || 1'), ('wait', 600), ('shot', 'd05-mylist-page'),
+            ('expect', 'Array.prototype.some.call(document.querySelectorAll(".card.poster"), function (c) { return c._key === "movie:tmdb-movie-7001"; })', 'pagina Mijn lijst toont de TMDB-titel'),
+        ])
+        RESULTS.append(('TMDB: regio NL (series zonder regio) en taal nl-NL', bool(fb.DISCOVER_REQS) and all((r[1] == 'NL' or r[0] == 'upcoming-tv') and r[2] == 'nl-NL' for r in fb.DISCOVER_REQS), str(fb.DISCOVER_REQS[:6])))
+        fb.MODE['discover'] = False
+
     if RESULTS or PAGEERRORS:
         print('\n== Samenvatting ==')
         for name, ok, detail in RESULTS:

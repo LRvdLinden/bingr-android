@@ -153,11 +153,11 @@ private fun S2PrefixChip(code: String, on: Int, total: Int, allOn: Boolean, onCl
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(if (allOn) Icons.Default.CheckCircle else if (on == 0) Icons.Default.RadioButtonUnchecked else Icons.Default.RemoveCircle,
-            null, tint = Color.White, modifier = Modifier.size(tvs(14)))
+            null, tint = if (allOn) Theme.onAccent else Color.White, modifier = Modifier.size(tvs(14)))
         Spacer(Modifier.width(6.dp))
-        Text(code, color = Color.White, fontWeight = FontWeight.Bold, fontSize = tsp(14))
+        Text(code, color = if (allOn) Theme.onAccent else Color.White, fontWeight = FontWeight.Bold, fontSize = tsp(14))
         Spacer(Modifier.width(6.dp))
-        Text("$on/$total", color = Theme.secondary, fontSize = tsp(14))
+        Text("$on/$total", color = if (allOn) Theme.onAccent.copy(alpha = 0.75f) else Theme.secondary, fontSize = tsp(14))
     }
 }
 

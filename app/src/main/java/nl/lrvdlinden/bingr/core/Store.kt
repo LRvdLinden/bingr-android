@@ -684,21 +684,37 @@ object Store {
 
     fun key(playlist: String, item: String) = "$playlist|$item"
 
+    /**
+     * Is [stored] de sleutel van dit item, ongeacht hoofdletters in de server-id? iOS schrijft de id met hoofdletters,
+     * web/Android/Samsung TV soms met kleine letters (server daar aangemaakt). Het item-id blijft exact.
+     */
+    fun sameKey(stored: String, playlist: String, item: String): Boolean =
+        stored.length == playlist.length + 1 + item.length && stored.endsWith("|$item") &&
+            stored.regionMatches(0, playlist, 0, playlist.length, ignoreCase = true)
+
+    /** Alle opgeslagen schrijfwijzen van dit item in [set] (meestal 0 of 1). */
+    private fun keysFor(set: Set<String>, playlist: String, item: String): Set<String> =
+        set.filterTo(HashSet()) { sameKey(it, playlist, item) }
+
+    private fun inSet(set: Set<String>, playlist: String, item: String): Boolean =
+        key(playlist, item) in set || set.any { sameKey(it, playlist, item) }
+
     fun toggleFavorite(playlist: String, item: String) {
-        val k = key(playlist, item)
-        favorites = if (k in favorites) favorites - k else favorites + k
+        val found = keysFor(favorites, playlist, item)
+        // uit: alle schrijfwijzen weg (anders komt het via de andere schrijfwijze terug); aan: in de eigen schrijfwijze
+        favorites = if (found.isNotEmpty()) favorites - found else favorites + key(playlist, item)
         pwrite("favorites", favorites)
         StateSync.profileDataChanged(activeProfileID)
     }
-    fun isFavorite(playlist: String, item: String) = key(playlist, item) in favorites
+    fun isFavorite(playlist: String, item: String) = inSet(favorites, playlist, item)
 
     fun toggleMyList(playlist: String, item: String) {
-        val k = key(playlist, item)
-        myList = if (k in myList) myList - k else myList + k
+        val found = keysFor(myList, playlist, item)
+        myList = if (found.isNotEmpty()) myList - found else myList + key(playlist, item)
         pwrite("mylist", myList)
         StateSync.profileDataChanged(activeProfileID)
     }
-    fun inMyList(playlist: String, item: String) = key(playlist, item) in myList
+    fun inMyList(playlist: String, item: String) = inSet(myList, playlist, item)
     fun setMyList(playlist: String, item: String, on: Boolean) {
         if (inMyList(playlist, item) != on) toggleMyList(playlist, item)
     }
@@ -717,7 +733,8 @@ object Store {
     fun clearProgress(itemKey: String) {
         if (itemKey !in progress) return
         progress = progress - itemKey; pwrite("progress", progress)
-        StateSync.profileDataChanged(activeProfileID)
+        // bewust uit Verder kijken: als verwijdering vastleggen (een ontbrekende sleutel telt niet meer als verwijdering)
+        StateSync.progressCleared(activeProfileID, itemKey)
     }
 
     fun setLocalWatched(itemKey: String, watched: Boolean) {
@@ -753,7 +770,7 @@ object Store {
 
     fun pushRecentChannel(playlist: String, channelID: String) {
         val k = key(playlist, channelID)
-        recentChannels = (listOf(k) + recentChannels.filterNot { it == k }).take(20)
+        recentChannels = (listOf(k) + recentChannels.filterNot { sameKey(it, playlist, channelID) }).take(20)
         pwrite("recent", recentChannels)
         StateSync.profileDataChanged(activeProfileID)
     }
@@ -812,20 +829,29 @@ object Store {
 
     fun addHistory(e: HistoryEntry) {
         val n = if (e.profileID == null && activeProfileID != null) e.copy(profileID = activeProfileID) else e
-        history = (listOf(n) + history.filterNot { it.itemID == n.itemID && it.playlistID == n.playlistID }).take(500)
+        // dezelfde titel (ook in een andere schrijfwijze van de server-id) lokaal vervangen; géén verwijdering vastleggen:
+        // op iOS valt die schrijfwijze samen met de nieuwe vermelding en zou die dan ook verdwijnen (de lijst toont
+        // elke titel toch maar één keer, zie history())
+        history = (listOf(n) + history.filterNot { it.itemID == n.itemID && samePlaylist(it.playlistID, n.playlistID) }).take(500)
         pwrite("history", history)
         StateSync.profileDataChanged(activeProfileID)
     }
     fun removeHistory(e: HistoryEntry) {
-        history = history.filterNot { it.id == e.id }; pwrite("history", history)
-        StateSync.profileDataChanged(activeProfileID)
+        val gone = history.filter { it.id.equals(e.id, ignoreCase = true) && it.itemID == e.itemID }
+        history = history.filterNot { it in gone }; pwrite("history", history)
+        StateSync.historyRemoved(activeProfileID, (gone.map { it.id } + e.id).distinct())
     }
     fun clearHistory(playlist: String?) {
-        history = history.filterNot { it.playlistID == playlist }; pwrite("history", history)
-        StateSync.profileDataChanged(activeProfileID)
+        val gone = history.filter { samePlaylist(it.playlistID, playlist) }
+        history = history.filterNot { it in gone }; pwrite("history", history)
+        StateSync.historyRemoved(activeProfileID, gone.map { it.id })
     }
     /** Kijkgeschiedenis van het actieve profiel op deze server. */
-    fun history(playlist: String?) = history.filter { it.playlistID == playlist && belongsToActive(it.profileID) }
+    fun history(playlist: String?) = history.filter { samePlaylist(it.playlistID, playlist) && belongsToActive(it.profileID) }
+        .distinctBy { (it.playlistID?.lowercase() ?: "-") + "|" + it.itemID }   // dezelfde titel uit iOS én web: één keer
+
+    /** Zelfde server-id, ongeacht hoofdletters (iOS schrijft hoofdletters, web/Android/Samsung TV soms kleine letters). */
+    fun samePlaylist(a: String?, b: String?): Boolean = if (a == null || b == null) a == b else a.equals(b, ignoreCase = true)
 
     // MARK: NAS
 

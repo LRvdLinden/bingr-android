@@ -128,7 +128,32 @@ def state():
                 {'id': 'c2', 'name': 'Filmavond', 'image': {'symbol': 'popcorn', 'colorIndex': 0}, 'kind': 'manual',
                  'items': [{'type': 'movie', 'id': 'xv7'}, {'type': 'movie', 'id': 'xv1'}, {'type': 'series', 'id': 'xs3'}], 'order': 1, 'updatedAt': t(60)}],
                 'updatedAt': t(60)}}}, 'updatedAt': t(60)},
+        **(ios_profile(t) if MODE.get('ios_profile') else {}),
     }
+
+
+def ios_profile(t):
+    """Hetzelfde profiel zoals iOS het net schreef na "+ Mijn lijst" op de iPhone: sectienaam met hoofdletters (naast de
+    oudere in kleine letters), lijsten met {id, removed, at}, de oudere velden progressRemoved/historyRemoved en een
+    voortgang (xv7) die alleen in deze sectie staat. Mijn lijst toevoegen mag Verder kijken nergens wissen."""
+    def prog(pos, dur, m, title):
+        return {'position': pos, 'duration': dur, 'fraction': round(pos / dur, 4), 'updatedAt': t(m), 'title': title,
+                'artwork': None, 'playlistID': SRC}
+    return {'profile.' + MAIN: {'data': {
+        'myList': [{'id': SRC + '|xv2', 'at': t(1)}, {'id': SRC + '|xs2', 'at': t(30)}, {'id': SRC + '|xv5', 'at': t(40)},
+                   {'id': SRC + '|xv1', 'removed': True, 'at': t(35)},
+                   # server-id in kleine letters, zoals web/Android hem schrijven als de server daar is aangemaakt
+                   {'id': SRC.lower() + '|xv6', 'at': t(2)}],
+        'favorites': [{'id': SRC + '|x1', 'at': t(50)}, {'id': SRC + '|x13', 'at': t(51)}],
+        'watched': [{'id': 'ep:xs1|1-1', 'at': t(300)}, {'id': 'xe1001', 'at': t(300)}],
+        'recentChannels': [{'id': SRC + '|x4', 'at': t(5)}, {'id': SRC + '|x14', 'at': t(8)}],
+        'progress': {'xv3': prog(2400, 6000, 20, 'Neon District'), 'xe1002': prog(1500, 2700, 10, 'Midnight Harbor'),
+                     'xv7': prog(1200, 6000, 15, 'Paper Moons')},
+        'history': [],
+        'removed': {'myList': {SRC + '|xv1': t(35)}, 'favorites': {}, 'watched': {}, 'recentChannels': {}, 'progress': {}, 'history': {}},
+        'progressRemoved': {}, 'historyRemoved': {},
+        'prefs': {'autoSubtitles': None, 'subtitleLanguage': None, 'audioLanguage': None, 'streamSubtitleLanguage': None, 'updatedAt': t(500)},
+        'pin': None, 'pinUpdatedAt': t(500), 'updatedAt': t(1)}, 'updatedAt': t(1)}}
 
 
 def sources():
@@ -212,9 +237,14 @@ def xtream(action, params):
     if action == 'get_series_categories':
         return [{'category_id': k, 'category_name': v} for k, v in SER_GROUPS.items()]
     if action == 'get_series':
-        return [{'series_id': i + 1, 'name': TITLES[i if i < 4 else 18 + i], 'cover': 'http://img.test/p%02d.jpg' % (i if i < 4 else 18 + i),
-                 'category_id': '20' if i < 4 else '21', 'plot': 'Een spannende serie over geheimen, vriendschap en een haven die nooit slaapt.',
-                 'rating': '8.%d' % i, 'releaseDate': '202%d-01-01' % i} for i in range(6)]
+        out = [{'series_id': i + 1, 'name': TITLES[i if i < 4 else 18 + i], 'cover': 'http://img.test/p%02d.jpg' % (i if i < 4 else 18 + i),
+                'category_id': '20' if i < 4 else '21', 'plot': 'Een spannende serie over geheimen, vriendschap en een haven die nooit slaapt.',
+                'rating': '8.%d' % i, 'releaseDate': '202%d-01-01' % i} for i in range(6)]
+        if MODE.get('discover'):
+            # build 111: laatst bijgewerkt (Nieuw toegevoegd): serie 2 net nieuw, serie 1 vijf dagen, de rest twee maanden geleden
+            for i, s in enumerate(out):
+                s['last_modified'] = str(int(time.time()) - (3600 if i == 1 else 5 * 86400 if i == 0 else 60 * 86400))
+        return out
     if action == 'get_series_info':
         sid = int(params.get('series_id', ['1'])[0])
         eps = {}
@@ -495,6 +525,35 @@ def tmdb_details(path, q, lang):
     return None
 
 
+DISCOVER_REQS = []
+
+
+def discover(path, q):
+    """build 111: rijen Binnenkort en Nieuw op streamingdiensten (TMDB /movie/upcoming en /discover met watch providers)."""
+    def d(days):
+        return (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
+    p = lambda k: q.get(k, [''])[0]
+    if path == '/3/movie/upcoming':
+        DISCOVER_REQS.append(('upcoming-movie', p('region'), p('language')))
+        return {'results': [
+            {'id': 7002, 'title': 'Glass Rivers 2', 'release_date': d(20), 'poster_path': '/p21.jpg', 'overview': 'Het vervolg.'},
+            {'id': 7001, 'title': 'Starfall Express', 'release_date': d(10), 'poster_path': '/p20.jpg', 'overview': 'Een trein door de sterren.'},
+            {'id': 7003, 'title': 'Al Uitgekomen', 'release_date': d(-3), 'poster_path': '/p19.jpg'},
+            {'id': 7004, 'title': 'Zonder Poster', 'release_date': d(12), 'poster_path': None}]}
+    if path == '/3/discover/tv' and p('first_air_date.gte') > d(0) and not p('with_watch_monetization_types'):
+        DISCOVER_REQS.append(('upcoming-tv', p('region'), p('language')))
+        return {'results': [{'id': 8001, 'name': 'Winter Coast', 'first_air_date': d(5), 'poster_path': '/p11.jpg', 'overview': 'Nieuwe serie.'}]}
+    if p('with_watch_monetization_types') == 'flatrate':
+        DISCOVER_REQS.append(('streaming-' + path.split('/')[-1], p('watch_region'), p('language')))
+        if path == '/3/discover/movie':
+            return {'results': [{'id': 7101, 'title': 'Iron Valley', 'release_date': '2020-02-01', 'poster_path': '/p05.jpg'},
+                                {'id': 7102, 'title': 'Mirror Lake', 'release_date': d(-20), 'poster_path': '/p12.jpg', 'overview': 'Een meer dat terugkijkt.'}]}
+        if path == '/3/discover/tv':
+            return {'results': [{'id': 8101, 'name': 'Midnight Harbor', 'first_air_date': '2020-01-01', 'poster_path': '/p00.jpg'},
+                                {'id': 8102, 'name': 'Neon Nights', 'first_air_date': d(-30), 'poster_path': '/p13.jpg'}]}
+    return None
+
+
 def other(url, method, body, img_dir):
     """Antwoord voor de andere testdomeinen: (status, headers, bytes) of None."""
     u = urllib.parse.urlparse(url)
@@ -574,6 +633,12 @@ def other(url, method, body, img_dir):
         lang = q.get('language', [None])[0]
         if lang:
             TMDB_LANGS.append(lang)
+        if MODE.get('discover'):
+            dd = discover(path, q)
+            if dd is not None:
+                return j(dd)
+        elif path == '/3/movie/upcoming':
+            return j({'results': []})   # build 111: Binnenkort leeg buiten het scenario 'discover'
         d = tmdb_details(path, q, lang)
         if d is not None:
             return j(d)

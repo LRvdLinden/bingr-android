@@ -66,7 +66,7 @@ fun PosterCard(
         if (accent != null) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(tvs(4)).background(accent))
         if (watched) {
             Box(Modifier.align(Alignment.TopEnd).padding(6.dp).size(tvs(20)).clip(CircleShape).background(Theme.red),
-                contentAlignment = Alignment.Center) { Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(tvs(13))) }
+                contentAlignment = Alignment.Center) { Icon(Icons.Default.Check, null, tint = Theme.onAccent, modifier = Modifier.size(tvs(13))) }
         }
         if (rating != null && rating > 0) {
             Row(Modifier.align(Alignment.TopEnd).padding(5.dp).clip(RoundedCornerShape(4.dp)).background(Theme.imdb)
@@ -86,7 +86,7 @@ fun PosterCard(
             }
         }
         if (badge != null && !badgeTopStart) {
-            Text(badge, color = Color.White, fontSize = tsp(9), fontWeight = FontWeight.Black,
+            Text(badge, color = Theme.onAccent, fontSize = tsp(9), fontWeight = FontWeight.Black,
                 modifier = Modifier.align(Alignment.BottomCenter)
                     .padding(bottom = (if (progress == null) 6.dp else 10.dp) + (if (language != null) tvs(16) else 0.dp))
                     .clip(RoundedCornerShape(2.dp)).background(Theme.red).padding(horizontal = 5.dp, vertical = 2.dp))
@@ -98,7 +98,7 @@ fun PosterCard(
 /** Rood label op een poster (SERIE/FILM, "N BEKEKEN"): witte, vette kleine kapitalen op rood, afgerond. */
 @Composable
 fun PosterLabel(text: String, modifier: Modifier = Modifier) {
-    Text(text, color = Color.White, fontSize = tsp(9), fontWeight = FontWeight.Black, maxLines = 1,
+    Text(text, color = Theme.onAccent, fontSize = tsp(9), fontWeight = FontWeight.Black, maxLines = 1,
         style = TextStyle(fontFeatureSettings = "smcp, c2sc"), letterSpacing = 0.3.sp,
         modifier = modifier.clip(RoundedCornerShape(2.dp)).background(Theme.red).padding(horizontal = 5.dp, vertical = 2.dp))
 }
@@ -150,8 +150,8 @@ fun Top10Card(rank: Int, title: String, poster: String?, watched: Boolean = fals
                 watchedEpisodes = watchedEpisodes, topStartInset = tvs(28))
             Column(Modifier.padding(5.dp).clip(RoundedCornerShape(2.dp)).background(Theme.red).padding(horizontal = 3.dp, vertical = 1.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("TOP", color = Color.White, fontSize = tsp(6), fontWeight = FontWeight.Black, lineHeight = tsp(7))
-                Text("10", color = Color.White, fontSize = tsp(11), fontWeight = FontWeight.Black, lineHeight = tsp(11))
+                Text("TOP", color = Theme.onAccent, fontSize = tsp(6), fontWeight = FontWeight.Black, lineHeight = tsp(7))
+                Text("10", color = Theme.onAccent, fontSize = tsp(11), fontWeight = FontWeight.Black, lineHeight = tsp(11))
             }
         }
     }
@@ -263,7 +263,7 @@ fun AvatarView(
                     .border(2.dp, Color.Black, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Person, null, tint = Color.White, modifier = Modifier.size(b * 0.6f))
+                Icon(Icons.Default.Person, null, tint = Theme.onAccent, modifier = Modifier.size(b * 0.6f))
             }
         }
     }

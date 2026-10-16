@@ -827,7 +827,7 @@ private fun PlayerControls(
                             .padding(horizontal = 10.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val fg = if (focused) Color.Black else Color.White
+                        val fg = if (focused) Color.Black else if (behind) Color.White else Theme.onAccent
                         Icon(Icons.Filled.Sensors, null, tint = fg, modifier = Modifier.size(tvs(14)))
                         Spacer(Modifier.width(5.dp))
                         Text(if (behind) "−${PlayerController.format(player.behindLive)}" else "LIVE",

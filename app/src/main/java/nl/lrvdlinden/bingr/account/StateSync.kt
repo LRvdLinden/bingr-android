@@ -329,6 +329,40 @@ object StateSync {
         markDirty("profile:$id")
     }
 
+    /**
+     * Bewust uit Verder kijken gehaald (uitgekeken of "Verwijder uit Verder kijken"): de verwijdering met haar tijd in
+     * het metabestand zetten. Alleen zo ontstaat een verwijdering van voortgang; [recordLocal] leidt ze niet meer af uit
+     * een sleutel die lokaal ontbreekt (een onvolledige lokale kopie wiste anders bij de eerstvolgende ronde, bijv. na
+     * "Mijn lijst", Verder kijken op alle apparaten).
+     */
+    fun progressCleared(id: String?, key: String) = recordRemoved(id, "progress", listOf(key))
+
+    /**
+     * Bewust uit de kijkgeschiedenis gehaald ("Verwijder uit geschiedenis", wissen, of een oudere schrijfwijze van
+     * dezelfde titel vervangen): net als [progressCleared]. De server-id in de sleutel ("<server>|<item>") wordt ook in
+     * kleine letters en hoofdletters vastgelegd, zodat de verwijdering op iOS (hoofdletters) en web/Samsung TV
+     * (soms kleine letters) dezelfde vermelding raakt.
+     */
+    fun historyRemoved(id: String?, keys: List<String>) =
+        recordRemoved(id, "history", keys.flatMap { k ->
+            val bar = k.indexOf('|')
+            if (bar <= 0) listOf(k)
+            else listOf(k, k.substring(0, bar).lowercase() + k.substring(bar), k.substring(0, bar).uppercase() + k.substring(bar))
+        }.distinct())
+
+    private fun recordRemoved(id: String?, field: String, keys: List<String>) {
+        if (applying > 0 || id == null) return
+        if (keys.isNotEmpty()) synchronized(metaLock) {
+            val m = readMeta(id)
+            val now = System.currentTimeMillis()
+            val old = m.removed[field] ?: emptyMap()
+            val removed = old + keys.associateWith { k -> maxOf(now, old[k] ?: 0L) }
+            val present = (m.present[field] ?: emptyMap()) - keys.toSet()
+            writeMeta(id, m.copy(present = m.present + (field to present), removed = m.removed + (field to removed)))
+        }
+        profileDataChanged(id)
+    }
+
     /** Voortgang gewijzigd (tijdens het afspelen): hooguit eens per 30 s uploaden. */
     fun progressChanged(id: String?) {
         if (applying > 0 || id == null) return
@@ -1224,14 +1258,16 @@ object StateSync {
         val m = readMeta(id)
         val present = m.present.toMutableMap()
         val removed = m.removed.toMutableMap()
-        fun record(field: String, current: Map<String, Long?>) {
+        // inferRemovals = false (voortgang): weg → alleen uit de bekende stand; de verwijdering zelf komt van
+        // progressCleared, en wat de server nog heeft komt bij het samenvoegen gewoon terug
+        fun record(field: String, current: Map<String, Long?>, inferRemovals: Boolean = true) {
             val p = (present[field] ?: emptyMap()).toMutableMap()
             val r = (removed[field] ?: emptyMap()).toMutableMap()
             for ((k, at) in current) {
                 val known = p[k]
                 if (known == null || (at != null && at > known)) { p[k] = at ?: now; r.remove(k) }
             }
-            for (k in p.keys.toList()) if (k !in current) { p.remove(k); r[k] = now }
+            for (k in p.keys.toList()) if (k !in current) { p.remove(k); if (inferRemovals) r[k] = now }
             present[field] = p; removed[field] = r
         }
         record("myList", d.myList.associateWith { null })
@@ -1243,8 +1279,9 @@ object StateSync {
         if (order != d.recent.filter { it in known }) {
             record("recentChannels", d.recent.withIndex().associate { (i, k) -> k to now - i })
         } else record("recentChannels", d.recent.associateWith { null })
-        record("progress", d.progress.mapValues { it.value.updated })
-        record("history", d.history.associate { it.id to it.date })
+        record("progress", d.progress.mapValues { it.value.updated }, inferRemovals = false)
+        // geschiedenis: idem, alleen bewuste verwijderingen (historyRemoved)
+        record("history", d.history.associate { it.id to it.date }, inferRemovals = false)
         val cutoff = now - REMOVED_DAYS * 24 * 3_600_000L
         val n = m.copy(present = present, removed = removed.mapValues { (_, v) -> v.filterValues { it >= cutoff } })
         if (n != m) writeMeta(id, n)
@@ -1609,20 +1646,21 @@ object StateSync {
                 merged.home?.value?.let { h -> Store.applySyncedHomeLayout(id, h) }
                 Unit
             }
+            // metabestand bijwerken naar het resultaat, op de main thread samen met het toepassen: een bewuste
+            // verwijdering uit Verder kijken (progressCleared, ook main thread) die daarna komt, wordt zo nooit overschreven
+            writeMeta(id, Meta(
+                present = (setFields.associateWith { f -> present(f).mapValues { it.value.at } } +
+                    mapOf("progress" to merged.progress.filter { it.value.value != null }.mapValues { it.value.at },
+                        "history" to merged.history.filter { it.value.value != null }.mapValues { it.value.at })),
+                removed = (setFields.associateWith { f -> (sets[f] ?: emptyMap()).filter { it.value.value == null }.mapValues { it.value.at } } +
+                    mapOf("progress" to merged.progress.filter { it.value.value == null }.mapValues { it.value.at },
+                        "history" to merged.history.filter { it.value.value == null }.mapValues { it.value.at })),
+                prefsAt = merged.prefs?.at,
+                pinAt = merged.pin?.at,
+            ))
             true
         }
         if (!stillSame) return false
-        // metabestand bijwerken naar het resultaat
-        writeMeta(id, Meta(
-            present = (setFields.associateWith { f -> present(f).mapValues { it.value.at } } +
-                mapOf("progress" to merged.progress.filter { it.value.value != null }.mapValues { it.value.at },
-                    "history" to merged.history.filter { it.value.value != null }.mapValues { it.value.at })),
-            removed = (setFields.associateWith { f -> (sets[f] ?: emptyMap()).filter { it.value.value == null }.mapValues { it.value.at } } +
-                mapOf("progress" to merged.progress.filter { it.value.value == null }.mapValues { it.value.at },
-                    "history" to merged.history.filter { it.value.value == null }.mapValues { it.value.at })),
-            prefsAt = merged.prefs?.at,
-            pinAt = merged.pin?.at,
-        ))
 
         val empty = merged.sets.values.all { it.isEmpty() } && merged.progress.isEmpty() && merged.history.isEmpty() &&
             merged.prefs == null && merged.pin == null && merged.home == null

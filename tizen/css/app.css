@@ -2,6 +2,8 @@
    Geen CSS grid (oude Chromium M56), alleen flexbox. */
 :root {
   --accent: #E50914;
+  /* tekst/iconen op een vlak in de accentkleur (bij goud donker; zie app.applyAccent) */
+  --on-accent: #fff;
   --bg: #000;
   --card: #181818;
   --elevated: #232323;
@@ -45,10 +47,10 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 .btn.primary { background: #fff; color: #000; }
 /* build 97: lichtere focusschaduw (rand + korte schaduw) */
 .btn.focused { background: #fff; color: #000; transform: scale(1.08); box-shadow: 0 0 0 4px var(--accent), 0 6px 14px rgba(0,0,0,0.5); }
-.btn.primary.focused { background: var(--accent); color: #fff; box-shadow: 0 0 0 4px #fff, 0 6px 14px rgba(0,0,0,0.5); }
-/* afspeelknop: altijd gevuld in de accentkleur met witte tekst; focus = groter + witte rand en gloed */
-.btn.play { background: var(--accent); color: #fff; }
-.btn.play.focused { background: var(--accent); color: #fff; transform: scale(1.1);
+.btn.primary.focused { background: var(--accent); color: var(--on-accent); box-shadow: 0 0 0 4px #fff, 0 6px 14px rgba(0,0,0,0.5); }
+/* afspeelknop: altijd gevuld in de accentkleur met witte tekst (goud: donker); focus = groter + witte rand en gloed */
+.btn.play { background: var(--accent); color: var(--on-accent); }
+.btn.play.focused { background: var(--accent); color: var(--on-accent); transform: scale(1.1);
   box-shadow: 0 0 0 5px #fff, 0 0 16px 3px rgba(255,255,255,0.35), 0 6px 14px rgba(0,0,0,0.5); }
 .ic { display: inline-block; width: 40px; height: 40px; flex: none; }
 .ic svg { width: 100%; height: 100%; display: block; }
@@ -173,10 +175,10 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 .prof.focused .prof-name { color: #fff; font-weight: 600; }
 .prof-name .ic.prof-lock { flex: none; width: 22px; height: 22px; margin-left: 10px; }
 .prof-main { position: absolute; left: 170px; top: 170px; width: 50px; height: 50px; border-radius: 50%; background: var(--accent); border: 4px solid #141414;
-  display: flex; align-items: center; justify-content: center; transition: transform 0.16s ease; }
+  color: var(--on-accent); display: flex; align-items: center; justify-content: center; transition: transform 0.16s ease; }
 .prof-main .ic { width: 24px; height: 24px; }
 .prof.focused .prof-main { transform: translate(12px, 12px); }
-.prof-kids { position: absolute; left: 50%; top: 198px; transform: translateX(-50%); background: var(--accent); font-size: 20px; font-weight: 800; padding: 3px 12px;
+.prof-kids { position: absolute; left: 50%; top: 198px; transform: translateX(-50%); background: var(--accent); color: var(--on-accent); font-size: 20px; font-weight: 800; padding: 3px 12px;
   border-radius: 13px; border: 3px solid #141414; transition: transform 0.16s ease; }
 .prof.focused .prof-kids { transform: translate(-50%, 14px); }
 
@@ -243,11 +245,11 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 .card.has-lang .card-progress { bottom: 38px; }
 .card.has-lang .card-label { bottom: 30px; }
 /* bekeken (build 75): vinkje rechtsboven (film), rood label "N BEKEKEN" linksboven (serie) */
-.card-check { position: absolute; right: 10px; top: 10px; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: #fff;
+.card-check { position: absolute; right: 10px; top: 10px; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--on-accent);
   display: flex; align-items: center; justify-content: center; }
 .card-check .ic { width: 24px; height: 24px; }
 .card-badges { position: absolute; left: 10px; top: 10px; display: flex; flex-direction: column; align-items: flex-start; }
-.card-badge { margin-bottom: 6px; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: #fff; font-size: 17px; font-weight: 900;
+.card-badge { margin-bottom: 6px; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: var(--on-accent); font-size: 17px; font-weight: 900;
   letter-spacing: 0.5px; line-height: 1.25; text-transform: uppercase; white-space: nowrap; }
 .card.top10 .card-badges { left: 134px; }
 .card.chan { width: 330px; height: 186px; background: #1d1d1d; display: flex; flex-direction: column; }
@@ -659,7 +661,7 @@ html.mv-hole .layer.multiview { background: transparent; }
 .kb-qwerty .key.wide { width: 210px; font-size: 26px; }
 .kb-qwerty .key.space { width: 320px; }
 .key.on { background: #555; }
-.key.ok { background: var(--accent); color: #fff; }
+.key.ok { background: var(--accent); color: var(--on-accent); }
 .key.ok.focused { background: #fff; color: #000; }
 
 /* servers beheren */
@@ -668,11 +670,11 @@ html.mv-hole .layer.multiview { background: transparent; }
 .st-row.focused .st-value.placeholder { color: #777; }
 .st-row.primary-row { background: #2a1214; }
 .st-row.primary-row .ic { color: var(--accent); }
-.st-row.primary-row.focused { background: var(--accent); color: #fff; }
-.st-row.primary-row.focused .ic { color: #fff; }
+.st-row.primary-row.focused { background: var(--accent); color: var(--on-accent); }
+.st-row.primary-row.focused .ic { color: var(--on-accent); }
 .st-row.add-row .ic { color: var(--accent); }
 .se-error { position: absolute; left: 130px; bottom: 30px; color: #ff8a65; font-size: 26px; }
-.badge { display: inline-block; margin-left: 16px; font-size: 18px; font-weight: 800; padding: 3px 10px; border-radius: 4px; background: var(--accent); color: #fff; vertical-align: middle; letter-spacing: 1px; }
+.badge { display: inline-block; margin-left: 16px; font-size: 18px; font-weight: 800; padding: 3px 10px; border-radius: 4px; background: var(--accent); color: var(--on-accent); vertical-align: middle; letter-spacing: 1px; }
 .badge.dim-badge { background: #444; }
 .st-row.focused .badge.dim-badge { background: #888; }
 
@@ -847,3 +849,7 @@ html.mv-hole .layer.multiview { background: transparent; }
 .lv-groups { flex: none; }
 .lv-preview { flex: 1; min-width: 0; }
 .lv-pv-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* build 111: rijen Binnenkort / Nieuw op streamingdiensten (TMDB): bronvermelding onder de rij, regels op de detailpagina */
+.row-attr { margin: 10px 0 0 6px; font-size: 18px; color: #8c8c8c; }
+.discover-detail .dt-note { margin-top: 24px; font-size: 21px; line-height: 1.5; }

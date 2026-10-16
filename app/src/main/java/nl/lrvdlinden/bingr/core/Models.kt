@@ -150,6 +150,8 @@ data class Series(
     val xtreamSeriesID: Int? = null,
     /** Bij M3U zitten afleveringen al in de lijst */
     val episodes: List<Episode> = emptyList(),
+    /** Build 111: laatst toegevoegd/bijgewerkt op de server (Xtream `last_modified`, epoch-ms), voor "Nieuw toegevoegd" */
+    val addedAt: Long? = null,
 )
 
 @Serializable

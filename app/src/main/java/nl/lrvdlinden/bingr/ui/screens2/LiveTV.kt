@@ -135,11 +135,11 @@ fun LiveTVScreen() {
     }
     val channels: List<Channel> = remember(libKey, current, favorites, recents, pid, events, collectionChannels) {
         when {
-            current == S2_FAV_KEY -> lib.channels.filter { Store.key(pid, it.id) in favorites }
+            current == S2_FAV_KEY -> lib.channels.filter { Store.isFavorite(pid, it.id) }   // server-id hoofdletterongevoelig
             current == S2_RECENT_KEY -> {
                 val byKey = HashMap<String, Channel>()
-                lib.channels.forEach { byKey.putIfAbsent(Store.key(pid, it.id), it) }
-                recents.mapNotNull { byKey[it] }
+                lib.channels.forEach { byKey.putIfAbsent(Store.key(pid, it.id).lowercase(), it) }
+                recents.mapNotNull { byKey[it.lowercase()] }.distinct()
             }
             current == S2_ALL_KEY -> lib.channels
             current == S2_EVENTS_KEY -> events.map { it.first }
@@ -380,7 +380,7 @@ private fun S2ChannelList(
             val next = upcoming.firstOrNull { it.start >= (now?.end ?: Long.MAX_VALUE) } ?: upcoming.drop(1).firstOrNull()
             val ev = events[c.id]
             if (ev != null && group == S2_EVENTS_KEY) S2EventRow(c, ev, onClick = { onPlay(c) }, onLongClick = { onMenu(c) })
-            else S2ChannelRow(c, now, next, Store.key(pid, c.id) in favorites, onClick = { onPlay(c) }, onLongClick = { onMenu(c) })
+            else S2ChannelRow(c, now, next, Store.isFavorite(pid, c.id), onClick = { onPlay(c) }, onLongClick = { onMenu(c) })
         }
     }
 }
@@ -474,7 +474,7 @@ private fun S2EventRow(channel: Channel, ev: EventInfo, onClick: () -> Unit, onL
         }
         if (ev.isLive && !ev.isExpired) {
             Spacer(Modifier.width(8.dp))
-            Text(L("LIVE"), color = Color.White, fontSize = tsp(11), fontWeight = FontWeight.Black,
+            Text(L("LIVE"), color = Theme.onAccent, fontSize = tsp(11), fontWeight = FontWeight.Black,
                 modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Theme.red).padding(horizontal = 6.dp, vertical = 2.dp))
         }
     }

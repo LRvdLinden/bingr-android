@@ -8,7 +8,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 
 /**
- * Accentkleur: rood, blauw, groen, paars, oranje of roze. [Theme.red] is de accentkleur van de hele app.
+ * Accentkleur: rood, blauw, groen, paars, oranje, roze of goud. [Theme.red] is de accentkleur van de hele app.
+ * Goud ("gold", nieuw) kennen oudere apps niet: die tekenen dan rood ([valid] → null → [DEFAULT]).
  * Build 52/53: één kleur voor het hele account (`settings.shared.accentColor`).
  * Build 54: per profiel, als veld `accentColor` op het gesynchroniseerde profielobject (ontbreekt = "red").
  * De kleur volgt het actieve profiel (Compose-state), dus bij het wisselen van profiel verandert hij meteen.
@@ -29,7 +30,14 @@ object Accent {
         Option("purple", Color(0xFF9B51E0), "Purple"),
         Option("orange", Color(0xFFF5821F), "Orange"),
         Option("pink", Color(0xFFE6448C), "Pink"),
+        // goud van het gouden app-icoon (de streep onder de B); licht, dus donkere tekst erop ([onColor])
+        Option("gold", Color(0xFFF5B30B), "Gold"),
     )
+
+    /** Accentkleuren waarop witte tekst te weinig contrast heeft: daarop donkere tekst en iconen. */
+    private val light = setOf("gold")
+    /** Donkere tekst op een licht accent (goud), passend bij het gouden app-icoon. */
+    private val dark = Color(0xFF1A1400)
 
     fun valid(k: String?): String? = k?.lowercase()?.takeIf { v -> options.any { it.key == v } }
 
@@ -39,6 +47,8 @@ object Accent {
     /** Build 88: accentkleuren horen bij Lifetime; met Gratis rood (de gekozen kleur blijft bewaard voor later). */
     val key: String get() = if (Entitlements.themes) keyFor(Store.activeProfile) else DEFAULT
     val color: Color get() = (options.firstOrNull { it.key == key } ?: options[0]).color
+    /** Tekst/iconen óp een vlak in de accentkleur: wit, bij een licht accent (goud) donker. */
+    val onColor: Color get() = if (key in light) dark else Color.White
 
     /** Kleur kiezen voor het actieve profiel. */
     fun set(k: String) {

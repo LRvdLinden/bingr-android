@@ -316,7 +316,8 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
         when (target) {
             is DetailTarget.MovieT -> {
                 val m = target.movie
-                if (m.streamURL == null && m.stalkerCmd == null && m.imdbID == null && imdb == null) openSources()
+                // build 111: TMDB-titel (niet in deze afspeellijst): in je andere bronnen zoeken
+                if (DiscoverItem.isExternal(m.id) || (m.streamURL == null && m.stalkerCmd == null && m.imdbID == null && imdb == null)) openSources()
                 else AppState.play(Playables.movie(m, imdb))
             }
             is DetailTarget.SeriesT -> {
@@ -509,9 +510,9 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(tvs(22)))
+                            Icon(Icons.Default.PlayArrow, null, tint = Theme.onAccent, modifier = Modifier.size(tvs(22)))
                             Spacer(Modifier.width(6.dp))
-                            Text(playTitle, color = Color.White, fontSize = tsp(16), fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Text(playTitle, color = Theme.onAccent, fontSize = tsp(16), fontWeight = FontWeight.SemiBold, maxLines = 1)
                         }
                         val p = resumeFraction ?: 0.0
                         if (p > 0.02) {
@@ -520,7 +521,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                                 Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, end = 24.dp, bottom = 6.dp)
                                     .fillMaxWidth().height(3.dp).clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.3f))
                             ) {
-                                Box(Modifier.fillMaxWidth(p.toFloat().coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(50)).background(Color.White))
+                                Box(Modifier.fillMaxWidth(p.toFloat().coerceIn(0f, 1f)).fillMaxHeight().clip(RoundedCornerShape(50)).background(Theme.onAccent))
                             }
                         }
                     }
@@ -529,7 +530,8 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                             if (inMyList) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             tint = if (inMyList) Theme.red else Color.White
                         ) { toggleMyList() }
-                        if (!target.id.startsWith("rec-")) DetailCircleButton(Icons.AutoMirrored.Filled.PlaylistAdd) { addToCollection = true }
+                        // build 111: ook niet voor titels uit TMDB (Binnenkort / Nieuw op streamingdiensten)
+                        if (!target.id.startsWith("rec-") && !DiscoverItem.isExternal(target.id)) DetailCircleButton(Icons.AutoMirrored.Filled.PlaylistAdd) { addToCollection = true }
                         if (tv && heroTrailer.visible) {
                             DetailCircleButton(if (heroTrailer.muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp) {
                                 heroTrailer.toggleMute()
@@ -588,6 +590,11 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                 }
                 // taal van deze versie (build 59): uit de titel/categorie, anders de originele taal (TMDB)
                 language?.longName?.let { CreditLine(L("Language"), it) }
+                // build 111: titel uit TMDB (Binnenkort / Nieuw op streamingdiensten): niet in je afspeellijst, datum en
+                // de verplichte bronvermelding
+                remember(target.id) { DiscoverStore.detailNote(target.id) }?.let {
+                    Text(it, color = Theme.secondary, fontSize = tsp(12), modifier = Modifier.widthIn(max = 700.dp).fillMaxWidth())
+                }
             }
 
             // MARK: andere taal (build 59)
@@ -855,7 +862,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                                         Box(
                                             Modifier.align(Alignment.TopEnd).padding(6.dp).size(tvs(22)).clip(CircleShape).background(Theme.red),
                                             contentAlignment = Alignment.Center
-                                        ) { Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(tvs(15))) }
+                                        ) { Icon(Icons.Default.PlayArrow, null, tint = Theme.onAccent, modifier = Modifier.size(tvs(15))) }
                                     }
                                 }
                                 Text(r.title, color = Color.White, fontSize = tsp(14), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1103,7 +1110,7 @@ private fun EpisodeCard(
                     Box(
                         Modifier.align(Alignment.TopEnd).padding(8.dp).size(tvs(22)).clip(CircleShape).background(Theme.red),
                         contentAlignment = Alignment.Center
-                    ) { Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(tvs(14))) }
+                    ) { Icon(Icons.Default.Check, null, tint = Theme.onAccent, modifier = Modifier.size(tvs(14))) }
                 }
             }
             Column(Modifier.padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {

@@ -853,7 +853,7 @@ private fun S2MyBingrHeader() {
     val cont = remember(progress, index, pid, Store.activeProfileID) {
         val seen = HashSet<String>()
         progress.entries
-            .filter { Store.belongsToActive(it.value.profileID) && (it.value.playlistID == null || it.value.playlistID == pid) }
+            .filter { Store.belongsToActive(it.value.profileID) && (it.value.playlistID == null || it.value.playlistID.equals(pid, ignoreCase = true)) }
             .sortedByDescending { it.value.updated }
             .mapNotNull { (k, e) ->
                 val t: DetailTarget = index.movieByID[k]?.let { DetailTarget.MovieT(it) }
@@ -867,8 +867,8 @@ private fun S2MyBingrHeader() {
     val mine = remember(myList, index, pid) {
         if (pid == null) emptyList<DetailTarget>()
         else {
-            val movies: List<DetailTarget> = myList.mapNotNull { k -> index.movie(k, pid) }.sortedBy { it.title }.map { DetailTarget.MovieT(it) }
-            val series: List<DetailTarget> = myList.mapNotNull { k -> index.series(k, pid) }.sortedBy { it.title }.map { DetailTarget.SeriesT(it) }
+            val movies: List<DetailTarget> = myList.mapNotNull { k -> index.movie(k, pid) }.distinctBy { it.id }.sortedBy { it.title }.map { DetailTarget.MovieT(it) }
+            val series: List<DetailTarget> = myList.mapNotNull { k -> index.series(k, pid) }.distinctBy { it.id }.sortedBy { it.title }.map { DetailTarget.SeriesT(it) }
             movies + series
         }
     }

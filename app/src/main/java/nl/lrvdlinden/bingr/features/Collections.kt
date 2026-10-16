@@ -355,8 +355,11 @@ object HomeLayouts {
     /** Oudere sleutels voor deze rij ("categorytiles" Android/Samsung TV, "genres" web) → "browse"; dubbele vervallen. */
     private val aliases = mapOf("categorytiles" to CATEGORY_TILES, "genres" to CATEGORY_TILES)
 
-    /** Vaste rij-sleutels in de standaardvolgorde. */
-    val fixedKeys = listOf("continue", "mylist", "top10", "foryou", "recent", "live", CATEGORY_TILES, "movies", "series", "categories")
+    /**
+     * Vaste rij-sleutels in de standaardvolgorde. Build 111: "upcoming" (Binnenkort) en "streaming" (Nieuw op
+     * streamingdiensten), TMDB; standaard aan, na "recent" (zelfde sleutels als iOS/tvOS/macOS en web).
+     */
+    val fixedKeys = listOf("continue", "mylist", "top10", "foryou", "recent", "upcoming", "streaming", "live", CATEGORY_TILES, "movies", "series", "categories")
 
     fun title(key: String): String = when (key) {
         "continue" -> L("Continue watching")
@@ -364,6 +367,8 @@ object HomeLayouts {
         "top10" -> "Top 10"
         "foryou" -> L("For you")
         "recent" -> L("Recently added")
+        "upcoming" -> L("Coming soon")
+        "streaming" -> L("New on streaming")
         "live" -> L("Live TV")
         "movies" -> L("Movies")
         "series" -> L("Series")

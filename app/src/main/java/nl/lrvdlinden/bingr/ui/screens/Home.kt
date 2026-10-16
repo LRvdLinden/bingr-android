@@ -82,11 +82,17 @@ class HomeIndex(
     val channelByID: Map<String, Channel> = emptyMap(),
     val movieByIMDb: Map<String, Movie> = emptyMap(),
     val seriesByTitle: Map<String, Series> = emptyMap(),
+    /**
+     * Build 111: rij "Nieuw toegevoegd" op Home: films én series van de laatste 30 dagen (Xtream `added` /
+     * `last_modified`), nieuwste eerst, max. 30; zonder datum (M3U) blijft hij leeg.
+     */
+    val recentTitles: List<DetailTarget> = emptyList(),
 ) {
     val seriesTitles: Set<String> get() = seriesByTitle.keys
 
     private fun itemID(key: String, playlist: String): String? =
-        if (key.length > playlist.length + 1 && key.startsWith("$playlist|")) key.substring(playlist.length + 1) else null
+        // server-id hoofdletterongevoelig: iOS schrijft hem met hoofdletters, web/Android/Samsung TV soms met kleine
+        if (key.length > playlist.length + 1 && key.startsWith("$playlist|", ignoreCase = true)) key.substring(playlist.length + 1) else null
 
     fun movie(forKey: String, playlist: String): Movie? = itemID(forKey, playlist)?.let { movieByID[it] }
     fun series(forKey: String, playlist: String): Series? = itemID(forKey, playlist)?.let { seriesByID[it] }
@@ -117,11 +123,17 @@ class HomeIndex(
             val channelByID = HashMap<String, Channel>(lib.channels.size * 2)
             for (c in lib.channels) channelByID.putIfAbsent(c.id, c)
             val recent = lib.movies.filter { it.addedAt != null }.sortedByDescending { it.addedAt ?: 0L }
+            // build 111: films én series van de laatste 30 dagen (één keer per id)
+            val cutoff = System.currentTimeMillis() - 30L * 86_400_000L
+            val fresh = ArrayList<Pair<DetailTarget, Long>>()
+            for (m in movieByID.values) { val a = m.addedAt; if (a != null && a >= cutoff) fresh.add(DetailTarget.MovieT(m) to a) }
+            for (x in seriesByID.values) { val a = x.addedAt; if (a != null && a >= cutoff) fresh.add(DetailTarget.SeriesT(x) to a) }
+            val recentTitles = fresh.sortedByDescending { it.second }.take(30).map { it.first }
             return HomeIndex(
                 movieGroups = mGroups.map { e -> Pair<String, List<Movie>>(e.key, e.value) },
                 seriesGroups = sGroups.map { e -> Pair<String, List<Series>>(e.key, e.value) },
                 recent = recent, movieByID = movieByID, seriesByID = seriesByID, channelByID = channelByID,
-                movieByIMDb = movieByIMDb, seriesByTitle = seriesByTitle,
+                movieByIMDb = movieByIMDb, seriesByTitle = seriesByTitle, recentTitles = recentTitles,
             )
         }
     }
@@ -323,7 +335,7 @@ private class HomeModel(val filter: Filter) {
                 val seriesByID = HashMap<String, Series>().apply { lib.series.forEach { putIfAbsent(it.id, it) } }
                 val prefix = "$pid|"
                 for (k in myList) {
-                    if (!k.startsWith(prefix)) continue
+                    if (!k.startsWith(prefix, ignoreCase = true)) continue
                     val id = k.substring(prefix.length)
                     movieByID[id]?.let { groupScore[it.group] = (groupScore[it.group] ?: 0) + 1 }
                     seriesByID[id]?.let { groupScore[it.group] = (groupScore[it.group] ?: 0) + 2 }
@@ -368,7 +380,7 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
     val out = ArrayList<ContinueItem>()
     for ((key, e) in progress) {
         if (!Store.belongsToActive(e.profileID)) continue                    // alleen van dit profiel
-        if (e.playlistID != null && e.playlistID != pid) continue           // alleen van deze server
+        if (e.playlistID != null && !e.playlistID.equals(pid, ignoreCase = true)) continue   // alleen van deze server (iOS: hoofdletters)
         val isMovie = key in index.movieByID
         if (!isMovie && e.title !in index.seriesTitles) continue
         if (filter == Filter.MOVIES && !isMovie) continue
@@ -482,7 +494,8 @@ private fun openCategory(title: String, items: List<DetailTarget>) = ScreensNav.
 private fun homePlay(t: DetailTarget) {
     val ageLimited = Store.activeProfile?.effectiveAgeLimit != null
     when {
-        t is DetailTarget.MovieT && !ageLimited -> AppState.play(Playables.movie(t.movie, Trakt.imdb(t.movie)))
+        // build 111: TMDB-titel (niet in je bibliotheek, bijv. uit Mijn lijst) → detailpagina
+        t is DetailTarget.MovieT && !ageLimited && !DiscoverItem.isExternal(t.movie.id) -> AppState.play(Playables.movie(t.movie, Trakt.imdb(t.movie)))
         else -> openDetail(t)
     }
 }
@@ -509,11 +522,25 @@ fun HomeScreen(filter: Filter) {
         continueItems(filter, index, pid, progress, traktContinue)
     }
     val myList = Store.myList
-    val myMovies = remember(myList, index, pid) {
-        if (pid == null) emptyList<Movie>() else myList.mapNotNull { index.movie(it, pid) }.sortedBy { it.title }
+    // build 111: plus TMDB-titels (Binnenkort / Nieuw op streamingdiensten) die niet in je bibliotheek staan; alleen
+    // zonder leeftijdsgrens (die profielen zien alleen hun eigen, gefilterde bibliotheek)
+    var knownTick by remember { mutableStateOf(0) }
+    val external = Store.activeProfile?.effectiveAgeLimit == null
+    val myMovies = remember(myList, index, pid, external, knownTick) {
+        if (pid == null) emptyList<Movie>()
+        else myList.mapNotNull { index.movie(it, pid) ?: if (external) DiscoverKnown.movie(it, pid) else null }.distinctBy { it.id }.sortedBy { it.title }
     }
-    val mySeries = remember(myList, index, pid) {
-        if (pid == null) emptyList<Series>() else myList.mapNotNull { index.series(it, pid) }.sortedBy { it.title }
+    val mySeries = remember(myList, index, pid, external, knownTick) {
+        if (pid == null) emptyList<Series>()
+        else myList.mapNotNull { index.series(it, pid) ?: if (external) DiscoverKnown.series(it, pid) else null }.distinctBy { it.id }.sortedBy { it.title }
+    }
+    // build 111: TMDB-titels in Mijn lijst die dit apparaat nog niet kent (op een ander apparaat toegevoegd)
+    LaunchedEffect(myList, pid) {
+        val p = pid ?: return@LaunchedEffect
+        val ids = myList.filter { it.startsWith("$p|", ignoreCase = true) }.map { it.substring(p.length + 1) }.filter { DiscoverItem.isExternal(it) }
+        if (ids.isEmpty()) return@LaunchedEffect
+        val missing = withContext(Dispatchers.IO) { ids.filter { !DiscoverKnown.contains(it) } }
+        if (missing.isNotEmpty() && screensSafe { DiscoverStore.resolve(missing) } == true) knownTick++
     }
     val favorites = Store.favorites
     val favChannels = remember(favorites, index, pid) {
@@ -525,6 +552,34 @@ fun HomeScreen(filter: Filter) {
     }
     val collections = Collections.visible
     val layoutRows = remember(Store.activeHomeLayout, collections) { HomeLayouts.effective(Store.activeHomeLayout, collections) }
+
+    // build 111: Binnenkort / Nieuw op streamingdiensten (TMDB): alleen de rijen die in de indeling aan staan; eerst wat
+    // bewaard is, daarna het netwerk (12 uur bewaard), koppelen aan je bibliotheek op de achtergrond
+    val discoverKinds = remember(layoutRows, filter) {
+        if (filter != Filter.ALL) emptyList() else DiscoverKind.entries.filter { k -> layoutRows.any { it.key == k.key && it.visible } }
+    }
+    var discover by remember(filter) { mutableStateOf(mapOf<DiscoverKind, List<DiscoverEntry>>()) }
+    LaunchedEffect(System.identityHashCode(lib), discoverKinds, Store.activeProfileID, Localizer.language) {
+        if (discoverKinds.isEmpty() || (lib.movies.isEmpty() && lib.series.isEmpty())) {
+            if (discover.isNotEmpty()) discover = emptyMap()
+            return@LaunchedEffect
+        }
+        val profile = Store.activeProfile
+        val kidsProfile = profile?.kids == true
+        val onlyLibrary = profile?.effectiveAgeLimit != null
+        val matcher = screensSafe { MatcherCache.matcher(lib, "${pid ?: ""}-${lib.movies.size}-${lib.series.size}") }
+        val out = HashMap<DiscoverKind, List<DiscoverEntry>>()
+        for (k in discoverKinds) {
+            val cached = withContext(Dispatchers.IO) { DiscoverStore.cached(k, kidsProfile) }
+            if (cached.isNotEmpty()) out[k] = DiscoverStore.match(cached, matcher, onlyLibrary)
+        }
+        if (out != discover) discover = out.toMap()
+        for (k in discoverKinds) {
+            val items = screensSafe { DiscoverStore.get(k, kidsProfile) } ?: emptyList()
+            out[k] = DiscoverStore.match(items, matcher, onlyLibrary)
+        }
+        if (out != discover) discover = out.toMap()
+    }
 
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         LazyColumn(
@@ -584,10 +639,22 @@ fun HomeScreen(filter: Filter) {
                         }
                     }.also { shown(myMovies.isNotEmpty() || mySeries.isNotEmpty()) }
                     // Onlangs toegevoegd
-                    "recent" -> if (filter != Filter.SERIES) item(key = "recent") {
+                    // build 111: op Home "Nieuw toegevoegd" met films én series van de laatste 30 dagen
+                    "recent" -> if (filter == Filter.ALL) item(key = "recent") {
+                        val all = index.recentTitles
+                        if (all.isNotEmpty()) TargetRow(L("Recently added"), all, pid)
+                    }.also { shown(index.recentTitles.isNotEmpty()) }
+                    else if (filter != Filter.SERIES) item(key = "recent") {
                         val all = index.recent
                         if (all.isNotEmpty()) MovieRow(L("Recently added"), all.take(30), all, pid)
                     }.also { shown(index.recent.isNotEmpty()) }
+                    // build 111: Binnenkort / Nieuw op streamingdiensten (TMDB)
+                    "upcoming", "streaming" -> if (filter == Filter.ALL) {
+                        val kind = DiscoverKind.of(key)
+                        val list = kind?.let { discover[it] }.orEmpty()
+                        if (kind != null && list.isNotEmpty()) item(key = "d|$key") { DiscoverRow(kind, list, pid) }
+                        shown(list.isNotEmpty())
+                    }
                     // Voor jou
                     "foryou" -> { item(key = "foryou") { ForYouRow(filter, model.forYou) }; shown(model.forYou.isNotEmpty()) }
                     // Top 10 (Home: eerst series, dan films)
@@ -755,6 +822,47 @@ private fun TargetRow(title: String, items: List<DetailTarget>, pid: String?) {
                 is DetailTarget.SeriesT -> SeriesPoster(t.series)
             }
         }
+    }
+}
+
+/**
+ * Build 111: rij Binnenkort / Nieuw op streamingdiensten (TMDB). Titels uit je bibliotheek openen die titel; de rest
+ * een detailpagina met Mijn lijst. Verplichte bronvermelding klein onder de rij (TMDB; watch providers via JustWatch).
+ */
+@Composable
+private fun DiscoverRow(kind: DiscoverKind, list: List<DiscoverEntry>, pid: String?) {
+    val keys = rememberKeys(list) { it.id }
+    Column(verticalArrangement = Arrangement.spacedBy(tvs(4))) {
+        MediaRow(kind.title) {
+            keyedItems(list, keys) { e ->
+                when (val m = e.match) {
+                    is DetailTarget.MovieT -> MoviePoster(m.movie, pid)
+                    is DetailTarget.SeriesT -> SeriesPoster(m.series)
+                    null -> ExternalPoster(e.item, pid)
+                }
+            }
+        }
+        Text(kind.attribution, color = Theme.secondary, fontSize = tsp(11), modifier = Modifier.padding(horizontal = Theme.edge))
+    }
+}
+
+/** Build 111: poster van een TMDB-titel die niet in je bibliotheek staat (lang indrukken = Mijn lijst). */
+@Composable
+private fun ExternalPoster(item: DiscoverItem, pid: String?) {
+    var menu by remember { mutableStateOf(false) }
+    PosterCard(
+        item.title, item.poster,
+        modifier = Modifier.focusLift(onLongClick = { menu = true }) { openDetail(item.target) },
+        badge = item.dateLabel
+    )
+    if (menu && pid != null) {
+        val inList = Store.inMyList(pid, item.id)
+        S2ActionDialog(item.title, listOf(
+            S2Action(L("More info"), Icons.Outlined.Info) { openDetail(item.target) },
+            S2Action(if (inList) L("Remove from My List") else L("Add to My List"), if (inList) Icons.Default.Close else Icons.Default.Add) {
+                Store.setMyList(pid, item.id, !inList)
+            }
+        ), onDismiss = { menu = false })
     }
 }
 

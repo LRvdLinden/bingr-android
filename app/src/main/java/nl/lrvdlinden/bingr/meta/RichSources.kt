@@ -118,6 +118,12 @@ object TMDB {
 
     private fun yearOf(s: String?): Int? = s?.take(4)?.toIntOrNull()
 
+    /** Build 111: TMDB-verzoek voor de rijen Binnenkort / Nieuw op streamingdiensten (zie Discover.kt). */
+    suspend fun request(path: String, q: List<Pair<String, String>> = emptyList()): JsonElement? = get(path, q)
+    /** Build 111: TMDB-locale van de app-taal en posterpad → URL (zie Discover.kt). */
+    val appLanguage: String get() = language
+    fun image(path: String?, size: String): String? = img(path, size)
+
     /** Trending vandaag (Netflix-achtige Top 10): titels in de app-taal én origineel, met jaar. */
     suspend fun trending(shows: Boolean): List<ExternalTitle> {
         val out = ArrayList<ExternalTitle>()
