@@ -54,6 +54,20 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="bingr" android:host="changelog" />
                 <data android:scheme="bingr" android:host="live" />
+                <!-- build 120: titel uit een e-mail van Bingr (fallbackknop op bingr.online/titel/) -->
+                <data android:scheme="bingr" android:host="title" />
+            </intent-filter>
+            <!-- Build 120: app link uit de e-mail van Bingr: https://bingr.online/titel/?type=&id=&q=&y=
+                 (geverifieerd via https://bingr.online/.well-known/assetlinks.json; eigen filter, zodat autoVerify alleen
+                 voor bingr.online geldt) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="bingr.online" />
+                <data android:pathPrefix="/titel" />
             </intent-filter>
         </activity>
 

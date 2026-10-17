@@ -74,6 +74,31 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: gradle --no-daemon --stacktrace assembleRelease 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
 
+      # build 120: SHA-256-vingerafdruk van het ondertekencertificaat voor assetlinks.json op bingr.online (app links
+      # https://bingr.online/titel/…). De vingerafdruk is openbaar (staat in elke APK); de keystore en wachtwoorden
+      # worden hier niet gebruikt en nooit gelogd.
+      - name: Vingerafdruk ondertekencertificaat
+        if: success()
+        run: |
+          set +e
+          APK=$(ls app/build/outputs/apk/release/*.apk 2>/dev/null | head -1)
+          [ -n "$APK" ] || { echo "::warning::Geen APK gevonden voor de vingerafdruk."; exit 0; }
+          SIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/ 2>/dev/null | sort -V | tail -1)apksigner
+          FP=""
+          if [ -x "$SIGNER" ]; then
+            FP=$("$SIGNER" verify --print-certs "$APK" 2>/dev/null | grep -m1 'certificate SHA-256 digest:' | awk '{print $NF}')
+          fi
+          if [ -z "$FP" ]; then
+            FP=$(keytool -printcert -jarfile "$APK" 2>/dev/null | grep -m1 'SHA256:' | awk '{print $NF}' | tr -d ':')
+          fi
+          [ -n "$FP" ] || { echo "::warning::Vingerafdruk van het ondertekencertificaat niet te bepalen."; exit 0; }
+          FP=$(printf '%s' "$FP" | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
+          if [ -n "${BINGR_KEYSTORE:-}" ]; then
+            echo "::notice title=assetlinks.json::SHA-256 ondertekencertificaat (vaste Bingr-sleutel): $FP"
+          else
+            echo "::warning::APK met een tijdelijke sleutel getekend (BINGR_KEYSTORE_BASE64 ontbreekt); deze vingerafdruk hoort NIET in assetlinks.json: $FP"
+          fi
+
       - name: Foutmeldingen samenvatten
         if: failure()
         run: |

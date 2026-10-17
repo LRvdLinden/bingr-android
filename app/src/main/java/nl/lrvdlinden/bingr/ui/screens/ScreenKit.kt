@@ -29,6 +29,8 @@ sealed class ScreenEntry {
     data class Detail(val target: DetailTarget) : ScreenEntry()
     data class Category(val target: CategoryTarget) : ScreenEntry()
     data object Search : ScreenEntry()
+    /** Build 120: zoekscherm met een zoekterm (titel-link zonder eenduidige match). */
+    data class SearchFor(val query: String) : ScreenEntry()
     data class Person(val ref: PersonRef) : ScreenEntry()
     /** Build 85: overzicht Categorieën (telefoon/tablet) en één genre of servercategorie. */
     data class Categories(val kind: Filter) : ScreenEntry()
@@ -104,6 +106,7 @@ fun ScreensStackHost() {
                     is ScreenEntry.Detail -> DetailScreen(e.target, onClose = { ScreensNav.close(item.id) }, isTop = i == items.size - 1)
                     is ScreenEntry.Category -> CategoryScreen(e.target, onClose = { ScreensNav.close(item.id) })
                     ScreenEntry.Search -> SearchScreen(modal = true, onClose = { ScreensNav.close(item.id) })
+                    is ScreenEntry.SearchFor -> SearchScreen(modal = true, onClose = { ScreensNav.close(item.id) }, initialQuery = e.query)
                     is ScreenEntry.Person -> PersonScreen(e.ref, onClose = { ScreensNav.close(item.id) })
                     is ScreenEntry.Categories -> CategoriesScreen(e.kind, onClose = { ScreensNav.close(item.id) })
                     is ScreenEntry.CategoryPage -> CategoryPageScreen(e.ref, e.kind, onClose = { ScreensNav.close(item.id) })

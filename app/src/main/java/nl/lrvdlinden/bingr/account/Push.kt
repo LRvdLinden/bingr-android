@@ -362,6 +362,8 @@ class BingrMessagingService : FirebaseMessagingService() {
  * - `reminder` → `bingr://live?channel=<id>&profile=<profiel-id>`: zender openen zoals de herinneringsbanner, met
  *   dezelfde profielcontrole ([Reminders.canOpenFor]); pas in het hoofdscherm (na inloggen en profielkeuze).
  * - `admin` → `data.url` (https) in de browser, anders alleen de app.
+ * - build 120: `bingr://title?type=movie|tv&id=<tmdb-id>&q=<titel>&y=<jaar>` en de app link
+ *   `https://bingr.online/titel/?…` (e-mail van Bingr) → [pendingTitle]: detailpagina of zoekscherm ([TitleLink]).
  */
 object PushNav {
     data class Live(val channel: String, val profile: String?)
@@ -370,9 +372,21 @@ object PushNav {
     var pending by mutableStateOf<Live?>(null)
         private set
 
+    /**
+     * Build 120: film of serie uit een link (e-mail van Bingr: https://bingr.online/titel/… of bingr://title?…).
+     * [MainScreen] zoekt hem in de bibliotheek zodra die geladen is (dus ook na inloggen en "Wie kijkt er?").
+     */
+    var pendingTitle by mutableStateOf<TitleLink?>(null)
+
     fun handle(intent: Intent?) {
         val i = intent ?: return
         val data = i.data
+        // app link (android:autoVerify): https://bingr.online/titel/?type=&id=&q=&y=
+        if (data != null && i.action == Intent.ACTION_VIEW && (data.scheme.equals("https", ignoreCase = true) || data.scheme.equals("http", ignoreCase = true))) {
+            i.data = null
+            TitleLink.parse(data)?.let { openTitle(it) }
+            return
+        }
         if (data != null && data.scheme.equals("bingr", ignoreCase = true)) {
             i.data = null
             openDeepLink(data)
@@ -395,8 +409,16 @@ object PushNav {
         }
     }
 
+    private fun openTitle(link: TitleLink) {
+        // de detailpagina of het zoekscherm komt boven het hoofdscherm: speler en multiview dicht
+        AppState.playing = null
+        AppState.showMultiview = false
+        pendingTitle = link
+    }
+
     private fun openDeepLink(u: Uri) {
         when (u.host?.lowercase()) {
+            "title", "titel" -> TitleLink.parse(u)?.let { openTitle(it) }
             "changelog" -> {
                 val p = u.getQueryParameter("p")?.lowercase()?.filter { it in 'a'..'z' }?.takeIf { it.isNotEmpty() } ?: "android"
                 val b = u.getQueryParameter("b")?.filter { it.isDigit() }?.takeIf { it.isNotEmpty() }

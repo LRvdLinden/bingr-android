@@ -63,7 +63,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private data class MainTab(val id: Int, val title: String, val icon: ImageVector)
 
@@ -127,6 +130,25 @@ fun MainScreen() {
             c != null -> { AppState.pendingItemID = null; AppState.play(Playables.channel(c, l.nowPlaying(c)), l.channels) }
             m != null -> { AppState.pendingItemID = null; ScreensNav.detail(DetailTarget.MovieT(m)) }
             s != null -> { AppState.pendingItemID = null; ScreensNav.detail(DetailTarget.SeriesT(s)) }
+        }
+    }
+
+    // build 120: titel uit een link (e-mail van Bingr): in de bibliotheek van de actieve bron zoeken op TMDB-id of
+    // titel (+ jaar). Eén goede match → detailpagina, anders het zoekscherm. Wacht tot de bibliotheek geladen is.
+    LaunchedEffect(PushNav.pendingTitle, Playlists.isLoading, Playlists.isFiltering, source?.id, lib.movies.size, lib.series.size) {
+        val link = PushNav.pendingTitle ?: return@LaunchedEffect
+        if (Playlists.isLoading || Playlists.isFiltering) return@LaunchedEffect
+        if (source == null || source.id != Store.mainSource?.id) return@LaunchedEffect
+        // nog leeg: misschien begint het laden net; na een paar seconden zonder lijst toch het zoekscherm
+        if (Playlists.library.isEmpty) delay(6_000)
+        if (PushNav.pendingTitle != link || Playlists.isLoading) return@LaunchedEffect
+        PushNav.pendingTitle = null
+        val l = Playlists.library
+        val pref = TrackPreferences.preferredAudio
+        val r = withContext(Dispatchers.Default) { TitleLink.resolve(link, l.movies, l.series, pref) }
+        when (r) {
+            is TitleLink.Resolution.Detail -> ScreensNav.detail(r.target)
+            is TitleLink.Resolution.Search -> ScreensNav.push(ScreenEntry.SearchFor(r.query))
         }
     }
 

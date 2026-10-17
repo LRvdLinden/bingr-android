@@ -107,9 +107,10 @@ private fun programTime(ms: Long): String {
 
 /** Zoeken in de huidige afspeellijst (alles, los van het tabblad) én in alle andere afspeellijsten (= SearchView.swift). */
 @Composable
-fun SearchScreen(modal: Boolean, onClose: () -> Unit) {
+fun SearchScreen(modal: Boolean, onClose: () -> Unit, initialQuery: String? = null) {
     val tv = AppState.isTV
-    var query by rememberSaveable { mutableStateOf("") }
+    // build 120: met een zoekterm geopend (titel-link zonder eenduidige match)
+    var query by rememberSaveable { mutableStateOf(initialQuery ?: "") }
     var results by remember { mutableStateOf(SearchResults()) }
     var programs by remember { mutableStateOf(emptyList<ProgramHit>()) }
     var groupHits by remember { mutableStateOf(emptyList<GroupHit>()) }
