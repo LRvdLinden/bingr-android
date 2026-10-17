@@ -42,6 +42,15 @@ jobs:
             echo "::warning::Secret BINGR_KEYSTORE_BASE64 ontbreekt: APK krijgt een tijdelijke sleutel en kan niet over een vorige versie heen worden geïnstalleerd."
           fi
 
+      # Openbare SHA-256-vingerafdruk van het certificaat (voor bingr.online/.well-known/assetlinks.json, Android app links)
+      - name: Vingerafdruk van het ondertekencertificaat
+        if: env.BINGR_KEYSTORE != ''
+        env:
+          PW: ${{ secrets.BINGR_KEYSTORE_PASSWORD }}
+        run: |
+          fp=$(keytool -list -v -keystore "$BINGR_KEYSTORE" -storepass:env PW -alias bingr 2>/dev/null | grep -m1 -E '^\s*SHA256:' | sed -E 's/^\s*SHA256:\s*//' || true)
+          [[ "$fp" =~ ^([0-9A-F]{2}:){31}[0-9A-F]{2}$ ]] && echo "::notice title=assetlinks.json::SHA256 $fp" || echo "::warning::Vingerafdruk van het certificaat niet gevonden"
+
       # Pushmeldingen (FCM): google-services.json uit het secret GOOGLE_SERVICES_JSON (nooit in de repo of in het log).
       # Ontbreekt het, dan bouwt de app zonder push en registreert hij niets.
       - name: Firebase-configuratie klaarzetten

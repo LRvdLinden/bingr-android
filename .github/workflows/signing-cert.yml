@@ -1,0 +1,29 @@
+name: Ondertekencertificaat
+
+# Logt de SHA-256-vingerafdruk van het vaste ondertekencertificaat van de Bingr-APK als notice, voor
+# bingr.online/.well-known/assetlinks.json (Android app links; zie docs/NEWSLETTER.md in iptv-ios-appletv).
+# Een certificaatvingerafdruk is openbaar (staat in elke APK); de sleutel en het wachtwoord komen nooit in het log.
+# Alleen met de hand te starten (bouwt en levert niets).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fingerprint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Vingerafdruk van het certificaat
+        env:
+          KS: ${{ secrets.BINGR_KEYSTORE_BASE64 }}
+          PW: ${{ secrets.BINGR_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [ -n "$KS" ] || { echo "::error::Secret BINGR_KEYSTORE_BASE64 ontbreekt"; exit 1; }
+          umask 077; printf '%s' "$KS" | base64 -d > "$RUNNER_TEMP/k.jks"
+          fp=$(keytool -list -v -keystore "$RUNNER_TEMP/k.jks" -storepass:env PW -alias bingr 2>/dev/null | grep -m1 -E '^\s*SHA256:' | sed -E 's/^\s*SHA256:\s*//')
+          rm -f "$RUNNER_TEMP/k.jks"
+          [[ "$fp" =~ ^([0-9A-F]{2}:){31}[0-9A-F]{2}$ ]] || { echo "::error::Geen SHA-256-vingerafdruk gevonden (alias bingr)"; exit 1; }
+          echo "::notice title=assetlinks.json::SHA256 $fp"
