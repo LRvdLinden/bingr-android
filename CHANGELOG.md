@@ -13,6 +13,12 @@ _17 oktober 2026_
 
 - Links in e-mails van Bingr openen de film of serie direct in de app: de detailpagina als hij in je bibliotheek staat, anders het zoekscherm met de titel al ingevuld (ook als je nog moet inloggen of een profiel moet kiezen)
 
+### Server
+
+**Nieuw**
+
+- Nieuwsbrief: op zondag 09:00 en woensdag 18:00 een e-mail met wat er nieuw is aan films en series (nieuw op streamingdiensten in Nederland, binnenkort en populair deze week), in het Nederlands of Engels; afmelden met één klik
+
 ## Versie 1.0.0 · Build 116
 _17 oktober 2026_
 
