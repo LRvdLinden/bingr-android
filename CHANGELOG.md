@@ -4,6 +4,15 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 116
+_17 oktober 2026_
+
+### Android
+
+**Nieuw**
+
+- Pushmeldingen op Android-telefoons en -tablets: nieuwe versies, berichten van Bingr en herinneringen voor programma's
+
 ## Versie 1.0.0 · Build 114
 _16 oktober 2026_
 
