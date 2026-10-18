@@ -141,7 +141,7 @@ object Trailer {
     }
 }
 
-/** Delen via het Android-deelmenu (WhatsApp, Berichten, …). */
+/** Delen via het Android-deelmenu (WhatsApp, Berichten, …). Titels: link uit [TitleShare.url] (build 132). */
 object ShareSheet {
     fun share(ctx: Context, subject: String, text: String, url: String?): Boolean = runCatching {
         val body = if (url != null) "$text\n$url" else text

@@ -78,9 +78,14 @@ jobs:
               -include-runtime -d "$RUNNER_TEMP/logic-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/logic-test.jar" | tee "$RUNNER_TEMP/logic-test.txt"; rc=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests::$(tail -1 "$RUNNER_TEMP/logic-test.txt")"
-            exit $rc
+            # build 132: deellink (TitleShare)
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/core/TitleShare.kt tools/test/TitleShareTest.kt \
+              -include-runtime -d "$RUNNER_TEMP/share-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/share-test.jar" | tee "$RUNNER_TEMP/share-test.txt"; rc2=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests deellink::$(tail -1 "$RUNNER_TEMP/share-test.txt")"
+            [ $rc -eq 0 ] && [ $rc2 -eq 0 ]
           else
-            echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic overgeslagen."
+            echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi
 
       - name: APK bouwen

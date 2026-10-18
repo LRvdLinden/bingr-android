@@ -137,23 +137,23 @@ fun MainScreen() {
         }
     }
 
-    // build 120: titel uit een link (e-mail van Bingr): in de bibliotheek van de actieve bron zoeken op TMDB-id of
-    // titel (+ jaar). Eén goede match → detailpagina, anders het zoekscherm. Wacht tot de bibliotheek geladen is.
+    // build 120: titel uit een link (e-mail van Bingr, of sinds build 132 een gedeelde link): in de bibliotheek van de
+    // actieve bron zoeken op TMDB-id of titel (+ jaar). Eén goede match → detailpagina, anders het zoekscherm. Wacht tot
+    // de bibliotheek geladen is.
+    // Build 132: elke open server telt (sinds build 130 kan een profiel een andere server dan de hoofdserver openen; dan
+    // bleef de link eerder liggen), en staat de titel niet op de actieve server, dan de andere servers van het account
+    // (cache, filters van dit profiel; build 128/129): detailpagina via die server, zonder te wisselen.
     LaunchedEffect(PushNav.pendingTitle, Playlists.isLoading, Playlists.isFiltering, source?.id, lib.movies.size, lib.series.size) {
         val link = PushNav.pendingTitle ?: return@LaunchedEffect
         if (Playlists.isLoading || Playlists.isFiltering) return@LaunchedEffect
-        if (source == null || source.id != Store.mainSource?.id) return@LaunchedEffect
+        val active = source ?: return@LaunchedEffect
         // nog leeg: misschien begint het laden net; na een paar seconden zonder lijst toch het zoekscherm
         if (Playlists.library.isEmpty) delay(6_000)
         if (PushNav.pendingTitle != link || Playlists.isLoading) return@LaunchedEffect
         PushNav.pendingTitle = null
-        val l = Playlists.library
-        val pref = TrackPreferences.preferredAudio
-        val r = withContext(Dispatchers.Default) { TitleLink.resolve(link, l.movies, l.series, pref) }
-        when (r) {
-            is TitleLink.Resolution.Detail -> ScreensNav.detail(r.target)
-            is TitleLink.Resolution.Search -> ScreensNav.push(ScreenEntry.SearchFor(r.query))
-        }
+        // build 132: buiten dit effect afmaken: het leegmaken van pendingTitle (een sleutel) of een veranderende
+        // bibliotheek start het effect opnieuw, en dat brak het zoeken (grote lijsten, cache van andere servers) af
+        AppScope.launch { openTitleLink(link, active.id) }
     }
 
     // "Start bij laatste zender" (build 52): na het kiezen van een profiel meteen de laatst bekeken zender
@@ -321,5 +321,39 @@ private fun LoadingOverlay(text: String, source: PlaylistSource?) {
         CircularProgressIndicator(color = Theme.red, modifier = Modifier.size(tvs(36)))
         Spacer(Modifier.height(tvs(22)))
         Text(text, color = Theme.secondary, fontSize = tsp(14))
+    }
+}
+
+/**
+ * Build 120/132: titel-link openen: eerst de actieve server, dan de andere servers van het account (cache op dit
+ * apparaat, filters van het actieve profiel). Eén goede match → detailpagina (via die server), anders het zoekscherm
+ * (dat zoekt sinds build 129 ook op alle servers).
+ */
+private suspend fun openTitleLink(link: TitleLink, activeID: String) {
+    val l = Playlists.library
+    val pref = TrackPreferences.preferredAudio
+    var r = withContext(Dispatchers.Default) { TitleLink.resolve(link, l.movies, l.series, pref) }
+    if (r is TitleLink.Resolution.Search) {
+        for (p in Store.playlists) {
+            if (p.id.equals(activeID, ignoreCase = true)) continue
+            val ctx = Playlists.context(p)
+            val ol = screensSafe { AllServers.otherLibrary(p, ctx, allowNetwork = false) } ?: continue
+            val o = withContext(Dispatchers.Default) { TitleLink.resolve(link, ol.movies, ol.series, pref) }
+            if (o is TitleLink.Resolution.Detail) {
+                r = TitleLink.Resolution.Detail(when (val t = o.target) {
+                    is DetailTarget.MovieT -> DetailTarget.MovieT(t.movie.copy(sourceID = p.id))
+                    is DetailTarget.SeriesT -> DetailTarget.SeriesT(t.series.copy(sourceID = p.id))
+                })
+                break
+            }
+        }
+    }
+    // intussen een nieuwere link: die gaat voor; intussen een andere server geopend (bijv. bij een koude start eerst de
+    // laatste, daarna de hoofdserver): opnieuw, zodra die geladen is
+    if (PushNav.pendingTitle != null) return
+    if (Playlists.source?.id != activeID) { PushNav.pendingTitle = link; return }
+    when (r) {
+        is TitleLink.Resolution.Detail -> ScreensNav.detail(r.target)
+        is TitleLink.Resolution.Search -> ScreensNav.push(ScreenEntry.SearchFor(r.query))
     }
 }

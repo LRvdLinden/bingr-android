@@ -187,15 +187,10 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
     // MARK: delen
     /** Titel zonder IPTV-rommel ("NL | Reacher (2022) 4K" → "Reacher"). */
     val shareTitle = details?.title?.takeIf { it.isNotBlank() } ?: TitleCleaner.parse(target.title).title.ifBlank { target.title }
-    val shareYear = screensText(details?.year)?.take(4) ?: target.year?.toString()
-    /** Openbare link: IMDb (mooie preview in WhatsApp), anders Trakt of TMDB. */
-    val shareURL: String? = when {
-        imdb != null -> "https://www.imdb.com/title/$imdb/"
-        screensText(details?.traktSlug) != null -> "https://trakt.tv/${if (isMovie) "movies" else "shows"}/${screensText(details?.traktSlug)}"
-        details?.tmdbID != null -> "https://www.themoviedb.org/${if (isMovie) "movie" else "tv"}/${details.tmdbID}"
-        else -> null
-    }
-    val shareText = L(if (isMovie) "Movie tip: %@" else "Series tip: %@", shareYear?.let { "$shareTitle ($it)" } ?: shareTitle)
+    val shareYear = TitleShare.year(screensText(details?.year)) ?: target.year
+    /** Build 132: eigen Bingr-link (bingr.online/titel/, preview met cover; opent in de app) i.p.v. IMDb/Trakt/TMDB. */
+    val shareURL: String = TitleShare.url(isMovie, details?.tmdbID ?: Details.cachedTMDB(target.id), shareTitle, shareYear)
+    val shareText = L(if (isMovie) "Movie tip: %@" else "Series tip: %@", TitleShare.label(shareTitle, shareYear))
 
     fun flash(t: String) {
         toast = t
@@ -359,7 +354,8 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
 
     fun share() {
         if (tv) return
-        ShareSheet.share(ctx, shareTitle, shareText, shareURL)
+        // onderwerp en tekst "Filmtip: Titel (jaar)", daaronder de Bingr-link
+        ShareSheet.share(ctx, shareText, shareText, shareURL)
     }
 
     fun toggleWatchedMovie() {
