@@ -23,6 +23,11 @@ object Http {
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .followRedirects(true)
+        // screenshotmodus (alleen de screenshot-build, ScreenshotMode.kt): geen netwerk
+        .addInterceptor { chain ->
+            if (Screenshots.isActive) throw java.io.IOException("Screenshot mode: no network")
+            chain.proceed(chain.request())
+        }
         .build()
 
     data class Response(val code: Int, val body: String, val bytes: ByteArray? = null) {

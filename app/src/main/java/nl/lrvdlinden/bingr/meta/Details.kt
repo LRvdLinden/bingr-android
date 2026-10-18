@@ -51,6 +51,7 @@ object Details {
 
     /** Basisgegevens uit de afspeellijst + alle verrijkingen (gecachet per item). */
     suspend fun load(t: DetailTarget, knownIMDb: String? = null): TitleDetails {
+        if (Screenshots.isActive) ScreenshotDemo.details(t)?.let { return it }
         synchronized(cache) { cache[t.id] }?.let { return it.copy() }
         val isShow = t.isSeries
         var tmdbHint: Int? = null

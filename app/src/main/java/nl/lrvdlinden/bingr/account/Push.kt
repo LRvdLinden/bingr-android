@@ -244,6 +244,7 @@ object Push {
 
     /** Hoofdscherm in beeld (na inloggen en profielkeuze): zo nodig eerst uitleggen waarom, dan registreren. */
     fun mainShown() {
+        if (Screenshots.isActive) return
         if (Build.VERSION.SDK_INT >= 33 && !AppState.isTV && !Prefs.bool(K_ASKED) && !hasPermission &&
             (Account.isSignedIn || !Account.configured)) {
             showPrimer = true

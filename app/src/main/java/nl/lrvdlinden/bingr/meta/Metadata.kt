@@ -66,6 +66,7 @@ object Metadata {
     suspend fun metadata(s: Series): TitleMetadata? = fetch(s.title, s.year, true, s.imdbID)
 
     suspend fun fetch(title: String, year: Int?, isShow: Boolean, imdb: String?): TitleMetadata? {
+        if (Screenshots.isActive) return ScreenshotDemo.metadata(title, isShow)
         val k = key(title, year, isShow)
         cache[k]?.let { return it }
         val fresh = AppScope.async(start = CoroutineStart.LAZY) { resolve(title, year, isShow, imdb) }

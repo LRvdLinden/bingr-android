@@ -1,0 +1,197 @@
+name: Play Store-screenshots
+
+# Engelse Google Play-afbeeldingen van de echte Android-app (telefoon, tablet 7" en 10", Android TV), gemaakt in de
+# screenshotmodus (core/ScreenshotMode.kt): alleen in een aparte build met -PBINGR_SCREENSHOTS=true en de intent-extra
+# bingr.screenshots, nooit in gewone builds of in normaal gebruik. Demobibliotheek met echte films met een vrije licentie
+# (Blender open movies, CC BY; stille films die in de EU en de VS publiek domein zijn) met afbeeldingen van Wikimedia
+# Commons (docs/appstore/free_media.json en tools/fetch_free_media.py uit iptv-ios-appletv, licentie per bestand
+# gecontroleerd), verzonnen zenders, geen netwerk in de app, geen account. Daarna marketingversies (kop + ondertitel +
+# naamsvermelding, Bingr-stijl), feature graphic, TV-banner, CREDITS.txt en README.txt.
+# Resultaat: de branch playstore-shots (alleen PNG's en tekst). Geen APK of ander buildpakket buiten de runner: de
+# screenshot-build gaat alleen als kortlevend artefact (1 dag) naar de emulator-jobs en is nooit een release.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['screenshots/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: playstore-screenshots
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (v5.1.0)
+
+      - name: iptv-ios-appletv ophalen (lijst vrije afbeeldingen en de scripts van de Apple-set)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (v5.1.0)
+        with:
+          repository: LRvdLinden/iptv-ios-appletv
+          path: iptv
+          persist-credentials: false
+
+      - name: Pillow, numpy en Inter
+        run: |
+          python3 -m pip install --quiet --break-system-packages pillow==11.0.0 numpy==2.1.3
+          sudo apt-get update -qq && sudo apt-get install -y -qq fonts-inter || true
+          mkdir -p fonts && cd fonts
+          curl -fsSL -o inter.zip https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip
+          unzip -q inter.zip
+          ls /usr/share/fonts/opentype/inter/Inter-Black.otf || {
+            sudo mkdir -p /usr/share/fonts/opentype/inter
+            sudo cp "$(find . -name 'Inter-Black.*tf' | head -1)" /usr/share/fonts/opentype/inter/Inter-Black.otf; }
+
+      - name: Vrije film-afbeeldingen ophalen (licentie per bestand gecontroleerd)
+        run: |
+          python3 iptv/tools/fetch_free_media.py fetch media
+          du -sh media
+
+      - name: Demo-afbeeldingen voor de screenshot-build, feature graphic en TV-banner
+        run: |
+          python3 tools/screenshots/make_demo_media.py media fonts app/src/main/assets/screenshot-media
+          python3 tools/screenshots/make_play_graphics.py media iptv/tools extra
+          cp media/credits.json extra/_credits.json
+
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Screenshot-build (debug, met BINGR_SCREENSHOTS)
+        run: |
+          gradle --no-daemon assembleDebug -PBINGR_SCREENSHOTS=true 2>&1 | tail -n 40; test ${PIPESTATUS[0]} -eq 0
+          cp app/build/outputs/apk/debug/*.apk bingr-screenshots.apk
+          ls -la bingr-screenshots.apk
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: screenshot-apk
+          path: bingr-screenshots.apk
+          retention-days: 1
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: play-extra
+          path: extra
+          retention-days: 3
+
+  shoot:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { set: phone,    api: 34, target: google_apis, arch: x86_64, profile: pixel_6 }
+          - { set: tablet7,  api: 34, target: google_apis, arch: x86_64, profile: pixel_tablet }
+          - { set: tablet10, api: 34, target: google_apis, arch: x86_64, profile: pixel_tablet }
+          - { set: tv,       api: 34, target: android-tv,  arch: x86,    profile: tv_1080p }
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (v5.1.0)
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: screenshot-apk
+
+      - name: KVM aan
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Tijdzone (in de app ongeveer 20 uur)
+        run: |
+          H=$((10#$(date -u +%H))); OFF=$(( (20 - H + 36) % 24 - 12 ))
+          if [ $OFF -ge 0 ]; then echo "TZ_APP=Etc/GMT-$OFF" >> $GITHUB_ENV; else echo "TZ_APP=Etc/GMT+$((-OFF))" >> $GITHUB_ENV; fi
+
+      - name: Screenshots in de emulator
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        with:
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.target }}
+          arch: ${{ matrix.arch }}
+          profile: ${{ matrix.profile }}
+          ram-size: 4096M
+          disk-size: 6000M
+          force-avd-creation: true
+          disable-animations: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: bash tools/screenshots/shoot.sh ${{ matrix.set }} shots/${{ matrix.set }} bingr-screenshots.apk
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: shots-${{ matrix.set }}
+          path: shots
+          retention-days: 3
+
+  marketing:
+    needs: shoot
+    if: always() && needs.shoot.result != 'cancelled'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # alleen voor de branch playstore-shots (resultaat)
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (v5.1.0)
+
+      - name: iptv-ios-appletv ophalen (stijl van de Apple-set)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (v5.1.0)
+        with:
+          repository: LRvdLinden/iptv-ios-appletv
+          path: iptv
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: shots-*
+          merge-multiple: true
+          path: shots
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: play-extra
+          path: extra
+
+      - name: Lettertype Inter en Pillow
+        run: |
+          python3 -m pip install --quiet --break-system-packages pillow==11.0.0 numpy==2.1.3
+          mkdir -p fonts && cd fonts
+          curl -fsSL -o inter.zip https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip
+          unzip -q inter.zip
+
+      - name: Marketingversies maken
+        run: |
+          cp extra/_credits.json shots/_credits.json
+          cp extra/_graphics-films.txt shots/_graphics-films.txt || true
+          python3 tools/screenshots/make_play_shots.py shots fonts iptv/tools out/Bingr-PlayStore-EN
+          cp extra/feature-graphic-1024x500.png extra/tv-banner-1280x720.png out/Bingr-PlayStore-EN/
+          find out -type f | sort | head -100
+          du -sh out/Bingr-PlayStore-EN
+
+      - name: Resultaat op de branch playstore-shots (alleen demo-PNG's en tekst)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pub && cp -R out/Bingr-PlayStore-EN /tmp/pub/
+          mkdir -p /tmp/pub/_raw
+          for d in shots/*/; do n=$(basename "$d"); mkdir -p "/tmp/pub/_raw/$n"; cp "$d"*.png "$d"_log.txt "/tmp/pub/_raw/$n/" 2>/dev/null || true; done
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git switch --orphan playstore-shots-tmp
+          git rm -rf --quiet . || true
+          rm -rf ./* 2>/dev/null || true
+          cp -R /tmp/pub/. .
+          git add -A
+          git commit -qm "Play Store-screenshots ${GITHUB_SHA::7}"
+          git push -f origin HEAD:playstore-shots

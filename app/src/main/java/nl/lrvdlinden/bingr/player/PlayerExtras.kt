@@ -75,6 +75,8 @@ object ChannelPreview {
 
     /** Deze zender kreeg focus (of is gekozen): na ~1 s het voorbeeld starten. */
     fun focus(c: Channel) {
+        // screenshotmodus (alleen de screenshot-build): beeld uit de demo in plaats van een stream
+        if (Screenshots.isActive) { channel = c; playing = true; return }
         if (!PlayerSettings.previewAllowed() || AppState.playing != null) return
         // naar de achtergrond (ook vanuit de gids): voorbeeld stoppen, zodat de providerverbinding niet open blijft
         if (!observing) {
@@ -156,6 +158,7 @@ fun ChannelPreviewView(modifier: Modifier = Modifier) {
     val c = ChannelPreview.channel ?: return
     val p = ChannelPreview.player
     Box(modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(Color.Black)) {
+        if (Screenshots.isActive) ScreenshotStill(c, Modifier.matchParentSize())
         if (p != null) {
             AndroidView(
                 factory = { ctx ->

@@ -109,7 +109,7 @@ fun MainScreen() {
     }
     // profielmenu (build 72): naar Mijn Bingr / Instellingen / Account en apparaten / Profielen beheren
     // build 128: één lijst over alle servers (achtergrond: andere servers, meta, verhuizen)
-    LaunchedEffect(Unit) { AllServers.start() }
+    LaunchedEffect(Unit) { if (!Screenshots.isActive) AllServers.start() }
     // build 128: categorieën aan/uit per profiel (eenmalige migratie van de keuzes per server)
     LaunchedEffect(Store.profiles.size) { Store.migrateCategoriesToProfiles() }
     LaunchedEffect(MyBingrNav.tabRequest) {

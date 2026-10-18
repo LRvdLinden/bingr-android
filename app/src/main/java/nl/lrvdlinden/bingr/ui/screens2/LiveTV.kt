@@ -103,7 +103,7 @@ fun LiveTVScreen() {
     val libKey = System.identityHashCode(lib)
     val pid = Playlists.source?.id ?: ""
     var group by rememberSaveable { mutableStateOf(S2_ALL_KEY) }
-    var gridMode by rememberSaveable { mutableStateOf(false) }
+    var gridMode by rememberSaveable { mutableStateOf(Screenshots.isActive && Screenshots.screen == "guide") }
     var filter by rememberSaveable { mutableStateOf("") }
     var guideFor by remember { mutableStateOf<Channel?>(null) }
     var program by remember { mutableStateOf<Pair<Channel, EPGProgram>?>(null) }

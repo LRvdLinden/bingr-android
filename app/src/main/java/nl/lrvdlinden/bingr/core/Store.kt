@@ -260,6 +260,42 @@ object Store {
         }
     }
 
+    /** Demo-gegevens van de screenshotmodus (ScreenshotMode.kt). */
+    data class ScreenshotData(
+        val playlists: List<PlaylistSource>,
+        val profiles: List<ViewerProfile>,
+        val mainProfile: String,
+        val active: String,
+        val favorites: Set<String>,
+        val myList: Set<String>,
+        val progress: Map<String, ProgressEntry>,
+        val watched: Set<String>,
+        val recent: List<String>,
+        val hiddenCategories: Set<String>,
+        val homeLayout: HomeLayout,
+    )
+
+    /** Screenshotmodus (alleen de screenshot-build): demo-gegevens alleen in het geheugen, nooit opgeslagen of gesynchroniseerd. */
+    fun applyScreenshotDemo(d: ScreenshotData) {
+        if (!Screenshots.isActive) return
+        playlists = d.playlists
+        profiles = d.profiles
+        mainProfileIDStored = d.mainProfile
+        mainSourceID = d.playlists.firstOrNull()?.id
+        activeProfileID = d.active
+        favorites = d.favorites
+        myList = d.myList
+        progress = d.progress
+        localWatched = d.watched
+        recentChannels = d.recent
+        history = emptyList()
+        hiddenCategories = d.hiddenCategories
+        activeHomeLayout = d.homeLayout
+        customizations = emptyMap()
+        parental = ParentalSettings()
+        reminders = emptyList()
+    }
+
     /** Dit profiel actief maken: eigen lijsten, voortgang, geschiedenis en kijkvoorkeuren laden. */
     fun selectProfile(p: ViewerProfile) {
         activeProfileID = p.id

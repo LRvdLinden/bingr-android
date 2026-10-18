@@ -11,6 +11,8 @@ plugins {
 // Versie/build: gelijk aan de iOS-app, bij te werken in gradle.properties
 val buildNumber = (findProperty("BINGR_BUILD") as String?)?.toIntOrNull() ?: 1
 val marketing = (findProperty("BINGR_VERSION") as String?) ?: "1.0.0"
+// Screenshotmodus voor Google Play (core/ScreenshotMode.kt): alleen met -PBINGR_SCREENSHOTS=true (workflow playstore-screenshots.yml)
+val screenshotBuild = (findProperty("BINGR_SCREENSHOTS") as String?) == "true"
 
 // App-sleutels: uit GitHub Secrets (CI) of local.properties
 val localProps = Properties().apply {
@@ -34,7 +36,8 @@ android {
         targetSdk = 35
         versionCode = buildNumber
         versionName = marketing
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        // screenshot-build: ook x86/x86_64 voor de emulators in de workflow
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") + (if (screenshotBuild) listOf("x86", "x86_64") else emptyList()) }
         buildConfigField("String", "TRAKT_CLIENT_ID", "\"${key("TRAKT_CLIENT_ID")}\"")
         buildConfigField("String", "TRAKT_CLIENT_SECRET", "\"${key("TRAKT_CLIENT_SECRET")}\"")
         buildConfigField("String", "OPENSUBTITLES_API_KEY", "\"${key("OPENSUBTITLES_API_KEY")}\"")
@@ -43,6 +46,8 @@ android {
         // Bingr-account (Supabase): alleen ingebouwd, niet in de app aan te passen
         buildConfigField("String", "SUPABASE_URL", "\"${key("SUPABASE_URL").ifEmpty { "https://vjewsncmsxmhmhnoxwqx.supabase.co" }}\"")
         buildConfigField("boolean", "PUSH_CONFIGURED", hasGoogleServices.toString())
+        // in gewone builds altijd false (zie screenshotBuild hierboven)
+        buildConfigField("boolean", "SCREENSHOTS", screenshotBuild.toString())
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${key("SUPABASE_ANON_KEY").ifEmpty { "sb_publishable_lpIup6Omq5kW2k3oICGZ4g_HPGac5A3" }}\"")
     }
 
