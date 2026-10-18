@@ -96,7 +96,7 @@ jobs:
           - { set: phone,    api: 34, target: google_apis, arch: x86_64, profile: pixel_6 }
           - { set: tablet7,  api: 34, target: google_apis, arch: x86_64, profile: pixel_tablet }
           - { set: tablet10, api: 34, target: google_apis, arch: x86_64, profile: pixel_tablet }
-          - { set: tv,       api: 34, target: android-tv,  arch: x86,    profile: tv_1080p }
+          - { set: tv,       api: 33, target: android-tv,  arch: x86,    profile: tv_1080p }
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (v5.1.0)
 
@@ -116,6 +116,7 @@ jobs:
           if [ $OFF -ge 0 ]; then echo "TZ_APP=Etc/GMT-$OFF" >> $GITHUB_ENV; else echo "TZ_APP=Etc/GMT+$((-OFF))" >> $GITHUB_ENV; fi
 
       - name: Screenshots in de emulator
+        timeout-minutes: 35
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
         with:
           api-level: ${{ matrix.api }}
@@ -126,9 +127,9 @@ jobs:
           disk-size: 6000M
           force-avd-creation: true
           disable-animations: true
-          emulator-boot-timeout: 900
+          emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
-          script: bash tools/screenshots/shoot.sh ${{ matrix.set }} shots/${{ matrix.set }} bingr-screenshots.apk
+          script: timeout 1200 bash tools/screenshots/shoot.sh ${{ matrix.set }} shots/${{ matrix.set }} bingr-screenshots.apk
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
@@ -138,8 +139,8 @@ jobs:
           retention-days: 3
 
   marketing:
-    needs: shoot
-    if: always() && needs.shoot.result != 'cancelled'
+    needs: [build, shoot]
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       contents: write   # alleen voor de branch playstore-shots (resultaat)
