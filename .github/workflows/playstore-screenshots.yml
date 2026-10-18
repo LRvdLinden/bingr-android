@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: playstore-screenshots
+  group: playstore-screenshots-b131-check
   cancel-in-progress: true
 
 jobs:
@@ -195,4 +195,4 @@ jobs:
           cp -R /tmp/pub/. .
           git add -A
           git commit -qm "Play Store-screenshots ${GITHUB_SHA::7}"
-          git push -f origin HEAD:playstore-shots
+          git push -f origin HEAD:playstore-shots-b131-check

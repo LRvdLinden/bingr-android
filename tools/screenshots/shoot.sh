@@ -92,7 +92,6 @@ for s in $SCREENS; do
   else
     # liggende tablet: de billboardkaart is ~86% van de breedte en daardoor veel hoger dan het scherm; tot de rijen
     case "$s" in
-      home)   scroll 85 15; scroll 85 15; scroll 85 30 ;;
       movies) scroll 85 15; scroll 85 15; scroll 85 15; scroll 85 40 ;;
       detail) scroll 80 35 ;;
     esac
