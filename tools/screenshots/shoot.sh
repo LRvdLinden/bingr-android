@@ -87,11 +87,17 @@ for s in $SCREENS; do
       timeout 15 adb shell input keyevent KEYCODE_DPAD_DOWN; sleep 2
       timeout 15 adb shell input keyevent KEYCODE_DPAD_DOWN; sleep 4
     fi
-  elif [ "$s" = "movies" ]; then
-    scroll 85 20
-  elif [ "$SET" != "phone" ] && { [ "$s" = "home" ] || [ "$s" = "detail" ]; }; then
-    scroll 80 35
+  elif [ "$SET" = "phone" ]; then
+    [ "$s" = "movies" ] && scroll 85 20
+  else
+    # liggende tablet: het billboard is hoger dan het scherm
+    case "$s" in
+      home)   scroll 85 20; scroll 85 45 ;;
+      movies) scroll 85 15; scroll 85 15 ;;
+      detail) scroll 80 35 ;;
+    esac
   fi
+  if [ "$SET" != "tv" ]; then demo clock -e hhmm 0941; sleep 1; fi
   timeout 60 adb exec-out screencap -p > "$OUT/$s.png"
   echo "$s: $(python3 -c 'import sys,struct; d=open(sys.argv[1],"rb").read(24); print("%dx%d" % struct.unpack(">II", d[16:24]))' "$OUT/$s.png" 2>/dev/null)"
 done
