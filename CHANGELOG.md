@@ -4,6 +4,27 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 130
+_18 oktober 2026_
+
+### Alle apps en de website
+
+**Verbeterd**
+
+- Vernieuwen werkt nu al je servers bij: eerst de actieve, daarna de andere één voor één op de achtergrond, met voortgang. Lukt een server niet, dan gaan de andere gewoon door en zie je welke niet lukte
+
+### iOS, iPadOS, tvOS, macOS, Android, Android TV en Website
+
+**Verbeterd**
+
+- Alle servers van je account zijn er nu voor elk profiel: kiezen, vernieuwen, zoeken en Andere bronnen over alle servers, met het kinderslot, de leeftijdsgrens en de categorieën van het profiel. Servers toevoegen, wijzigen en verwijderen blijft bij het hoofdprofiel
+
+### Android, Android TV en Samsung TV (Tizen)
+
+**Opgelost**
+
+- Na het openen is de app weer snel klaar en blijft hij niet meer lang ‘Bijwerken…’ tonen. Je andere servers worden stil op de achtergrond bijgewerkt, één tegelijk, hooguit eens per 6 uur en niet tijdens het kijken
+
 ## Versie 1.0.0 · Build 129
 _18 oktober 2026_
 
