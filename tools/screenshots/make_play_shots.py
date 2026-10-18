@@ -20,7 +20,7 @@ SCREENS = [  # volgorde in Google Play
     ("detail", "Pick up right where you left off", "Seasons, episodes and your progress, on every screen."),
     ("live", "All your channels, neatly sorted", "See what's on now and next on every channel."),
     ("guide", "Live TV with a real TV guide", "Scroll through today's programmes at a glance."),
-    ("movies", "Always something to watch", "Top 10, My List and picks for you."),
+    ("movies", "Always something to watch", "Continue watching, My List, Top 10 and picks for you."),
     ("picker", "A profile for everyone", "Own lists, progress and settings for every viewer."),
     ("categories", "Browse by genre and category", "Every genre and category of your playlist in one place."),
     ("multiview", "Four streams at once", "Watch up to four live channels side by side."),
