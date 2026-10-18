@@ -4,6 +4,21 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 131
+_18 oktober 2026_
+
+### Android
+
+**Opgelost**
+
+- Op liggende tablets en andere brede schermen past het uitgelichte billboard op Home nu in beeld: een breed billboard met poster, titel en knoppen in plaats van een kaart die hoger was dan het scherm
+
+### Android TV
+
+**Opgelost**
+
+- Het detailscherm schuift bij openen niet meer omhoog: de titel of het logo blijft met ruimte boven in beeld
+
 ## Versie 1.0.0 · Build 130
 _18 oktober 2026_
 
