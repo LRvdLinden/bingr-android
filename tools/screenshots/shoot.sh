@@ -90,10 +90,10 @@ for s in $SCREENS; do
   elif [ "$SET" = "phone" ]; then
     [ "$s" = "movies" ] && scroll 85 20
   else
-    # liggende tablet: het billboard is hoger dan het scherm
+    # liggende tablet: de billboardkaart is ~86% van de breedte en daardoor veel hoger dan het scherm; tot de rijen
     case "$s" in
-      home)   scroll 85 20; scroll 85 45 ;;
-      movies) scroll 85 15; scroll 85 15 ;;
+      home)   scroll 85 15; scroll 85 15; scroll 85 30 ;;
+      movies) scroll 85 15; scroll 85 15; scroll 85 15; scroll 85 40 ;;
       detail) scroll 80 35 ;;
     esac
   fi
