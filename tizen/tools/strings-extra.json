@@ -1231,5 +1231,12 @@
     "tr": "Z–A",
     "ar": "ي–أ",
     "zh-Hans": "Z–A"
+  },
+  "No categories": {
+    "nl": "Geen categorieën",
+    "de": "Keine Kategorien",
+    "fr": "Aucune catégorie",
+    "es": "Sin categorías",
+    "it": "Nessuna categoria"
   }
 }

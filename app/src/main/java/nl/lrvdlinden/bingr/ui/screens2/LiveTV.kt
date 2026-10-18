@@ -377,8 +377,9 @@ private fun S2ChannelList(
         items(channels.size, key = { keys[it] }, contentType = { "channel" }) { i ->
             val c = channels[i]
             val refresh = tick   // elke 30 s opnieuw (nu/straks)
-            val upcoming = if (refresh >= 0) lib.upcoming(c, 2) else emptyList()
-            val now = lib.nowPlaying(c)
+            // build 128: zender van een andere server: zijn eigen gids
+            val upcoming = if (refresh >= 0) (if (c.sourceID != null) Playlists.upcomingOf(c, 2) else lib.upcoming(c, 2)) else emptyList()
+            val now = if (c.sourceID != null) Playlists.nowOf(c) else lib.nowPlaying(c)
             val next = upcoming.firstOrNull { it.start >= (now?.end ?: Long.MAX_VALUE) } ?: upcoming.drop(1).firstOrNull()
             val ev = events[c.id]
             if (ev != null && group == S2_EVENTS_KEY) S2EventRow(c, ev, onClick = { onPlay(c) }, onLongClick = { onMenu(c) })

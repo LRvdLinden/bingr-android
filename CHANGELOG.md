@@ -4,6 +4,20 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 128
+_18 oktober 2026_
+
+### Android, Android TV en Samsung TV (Tizen)
+
+**Nieuw**
+
+- Eén Verder kijken, Mijn lijst en favorieten per profiel over al je servers heen; is een server verwijderd, dan zoekt Bingr de titel of zender automatisch op je andere servers. Ook recente zenders, geschiedenis en collecties tonen alles van al je servers; een titel of zender van een andere server speel je af via die server, zonder te wisselen. Vindt Bingr hem nergens, dan blijft hij staan en krijg je bij aanklikken een melding met Verwijderen, Zoeken of Annuleren
+- Categorieën aan of uit per profiel, voor de categorieën van al je servers (dezelfde naam op twee servers is één regel); je bestaande keuzes gaan mee, en de categorieën van een verwijderde server verdwijnen
+
+**Verbeterd**
+
+- Lifetime is tot 3 schermen tegelijk en 15 apparaten; hoeveel je tegelijk kunt kijken, hangt ook af van je IPTV-aanbieder
+
 ## Versie 1.0.0 · Build 120
 _17 oktober 2026_
 

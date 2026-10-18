@@ -285,7 +285,7 @@
     Object.keys(CM.items).sort().forEach(function (k) { items[k] = CM.items[k]; });
     return { items: items, remap: rm, updatedAt: B.iso() };
   }
-  AS.wipe = function () { CM = { items: {}, remap: {} }; reindex(); found = {}; absent = {}; tried = {}; B.idb.del('catalogmeta'); B.store.del('allservers.migrated128'); };
+  AS.wipe = function () { CM = { items: {}, remap: {} }; reindex(); found = {}; absent = {}; epgs = {}; tried = {}; B.idb.del('catalogmeta'); B.store.del('allservers.migrated128'); };
   AS.meta = function (key) { var k = AS.metaKey(key); return CM.items[k] || CM.items[cmIndex[lower(k)]] || null; };
   AS.rules = function () { return CM.remap; };
   AS.target = function (key) { var t = AS.resolve(CM.remap, key); return t ? t.to : null; };
@@ -377,6 +377,7 @@
   // MARK: items van andere servers
 
   var found = {};    // metaKey → {type, item (met _src)}
+  var epgs = {};     // metaKey → programma's van een zender van een andere server (gids en terugkijken)
   var absent = {};   // metaKey → true: server bestaat, item staat er niet (meer) in
   var tried = {};    // metaKey → tijd van de laatste zoekpoging
   var RETRY = 6 * 3600000;
@@ -395,6 +396,8 @@
     return !server(sid) || !!absent[AS.metaKey(key)];
   };
   AS.item = function (key) { return found[AS.metaKey(key)] || null; };
+  /** Gids van een zender van een andere server. */
+  AS.programs = function (ch) { return (ch && ch._src && epgs[AS.metaKey(ch._src + '|' + ch.id)]) || []; };
 
   /** Tegel voor een item van een andere server: het echte item, anders uit de meta ("Onbekende titel"). */
   AS.tile = function (key, wantType) {
@@ -547,7 +550,7 @@
     var list = refs();
     var bySrc = {};
     list.forEach(function (r) { var s = lower(AS.serverOf(r.key)); (bySrc[s] = bySrc[s] || []).push(r); });
-    var newFound = {}, newAbsent = {}, needs = [];
+    var newFound = {}, newAbsent = {}, newEpg = {}, needs = [];
     var chain = Promise.resolve();
     D.sources.forEach(function (src) {
       var mine = bySrc[lower(src.id)];
@@ -572,12 +575,20 @@
             if ((r.field === 'continue' || r.field === 'history') && !wanted(r)) return;
             newAbsent[mk] = true; needs.push(r);
           });
+          // gids van de gevonden zenders van deze server (alleen die zenders), voor gids en terugkijken
+          if (AS.isActive(src.id)) return;
+          var chans = [];
+          mine.forEach(function (r) { var f = newFound[AS.metaKey(r.key)]; if (f && f.type === 'channel' && chans.indexOf(f.item) < 0) chans.push(f.item); });
+          if (!chans.length) return;
+          return idle().then(function () { return Lib.epgOther(src, raw, chans); }).then(function (byId) {
+            Object.keys(byId).forEach(function (id) { newEpg[AS.metaKey(src.id + '|' + id)] = byId[id]; });
+          });
         });
       });
     });
     return chain.then(function () {
       Object.keys(bySrc).forEach(function (s) { if (s && !server(s)) needs = needs.concat(bySrc[s]); });
-      found = newFound; absent = newAbsent;
+      found = newFound; absent = newAbsent; epgs = newEpg;
       AS.version++;
       B.emit('allservers');
       var now = Date.now(), seen = {};

@@ -98,6 +98,15 @@ def _profiles(now):
     ]
 
 
+def state_base_main(t):
+    return {
+        'myList': [{'id': SRC + '|xs2', 'at': t(30)}, {'id': SRC + '|xv5', 'at': t(40)}],
+        'favorites': [{'id': SRC + '|x1', 'at': t(50)}, {'id': SRC + '|x13', 'at': t(51)}],
+        'watched': [], 'recentChannels': [{'id': SRC + '|x4', 'at': t(5)}],
+        'progress': {'xv3': {'position': 2400, 'duration': 6000, 'fraction': 0.4, 'updatedAt': t(20), 'title': 'Neon District', 'playlistID': SRC}},
+        'history': [], 'removed': {}, 'pin': None, 'pinUpdatedAt': t(500), 'updatedAt': t(1)}
+
+
 def state():
     now = datetime.now(timezone.utc)
     t = lambda m: iso(now - timedelta(minutes=m))
@@ -129,6 +138,32 @@ def state():
                  'items': [{'type': 'movie', 'id': 'xv7'}, {'type': 'movie', 'id': 'xv1'}, {'type': 'series', 'id': 'xs3'}], 'order': 1, 'updatedAt': t(60)}],
                 'updatedAt': t(60)}}}, 'updatedAt': t(60)},
         **(ios_profile(t) if MODE.get('ios_profile') else {}),
+        **(allservers_state(t) if MODE.get('allservers') else {}),
+    }
+
+
+DEAD = 'DEAD0000-0000-4000-8000-00000000000A'
+XT2 = 'E5F6A7B8-0000-4000-8000-000000000005'   # build 128: tweede Xtream-server (niet actief) voor gids en terugkijken
+
+
+def allservers_state(t):
+    """build 128: items van een verwijderde server (tombstone DEAD) in Mijn lijst en favorieten van twee profielen, met
+    catalogmeta: 'Iron Valley' en 'RTL 5' staan ook op de actieve server (verhuizen), 'Totally Missing' nergens (melding)."""
+    base = state_base_main(t)
+    base['myList'] = base['myList'] + [{'id': DEAD + '|old-iv', 'at': t(3)}, {'id': DEAD + '|gone1', 'at': t(4)}]
+    base['favorites'] = base['favorites'] + [{'id': DEAD + '|ch-rtl5', 'at': t(6)}, {'id': XT2 + '|x2', 'at': t(2)}]
+    # categoriekeuze van de verwijderde server: moet als verwijdering opgeruimd worden
+    base['hiddenCategories'] = [{'id': DEAD + '|Oud', 'at': t(50)}]
+    meta = {
+        DEAD.lower() + '|old-iv': {'t': 'NL | Iron Valley (4K)', 'y': None, 'k': 'movie', 'tmdb': None, 'img': None, 'sid': DEAD, 'sname': 'Oude server', 'ep': None, 'ch': None, 'at': t(3)},
+        DEAD.lower() + '|gone1': {'t': 'Totally Missing', 'y': 2001, 'k': 'movie', 'tmdb': None, 'img': None, 'sid': DEAD, 'sname': 'Oude server', 'ep': None, 'ch': None, 'at': t(4)},
+        DEAD.lower() + '|ch-rtl5': {'t': 'NL: RTL 5 HD', 'y': None, 'k': 'channel', 'tmdb': None, 'img': None, 'sid': DEAD, 'sname': 'Oude server', 'ep': None,
+                                     'ch': {'name': 'NL: RTL 5 HD', 'epg': None}, 'at': t(6)},
+    }
+    return {
+        'profile.' + MAIN.lower(): {'data': base, 'updatedAt': t(1)},
+        'profile.' + SAM.lower(): {'data': {'pin': '1234', 'pinUpdatedAt': t(100), 'myList': [{'id': DEAD + '|old-iv', 'at': t(7)}]}, 'updatedAt': t(7)},
+        'catalogmeta': {'data': {'items': meta, 'remap': {}, 'updatedAt': t(3)}, 'updatedAt': t(3)},
     }
 
 
@@ -160,7 +195,7 @@ def sources():
     return {'sources': [
         {'id': SRC, 'name': 'Thuis IPTV', 'kind': 'Xtream Codes', 'avatar': {'symbol': 'tv', 'colorIndex': 0}, 'm3uURL': '', 'epgURL': '',
          'serverURL': 'http://xtream.test', 'username': 'demo', 'macAddress': '', 'preferHLS': True, 'secrets': {'password': 'demo'},
-         'android': {'customization': {'renamed': {}, 'hidden': [], 'groupOrder': [], 'channelOrder': {}, 'merged': {}}, 'lockedGroups': []},
+         'android': {'customization': {'renamed': {}, 'hidden': ['group:Sport'] if MODE.get('allservers') else [], 'groupOrder': [], 'channelOrder': {}, 'merged': {}}, 'lockedGroups': []},
          'updatedAt': iso(datetime.now(timezone.utc)), 'catchupOffsets': {'x2': -5}},
         {'id': JF, 'name': 'Jellyfin thuis', 'kind': 'Jellyfin', 'avatar': {'symbol': 'film', 'colorIndex': 2}, 'm3uURL': '', 'epgURL': '',
          'serverURL': 'http://jf.test', 'username': 'leon', 'macAddress': '', 'preferHLS': False,
@@ -173,6 +208,9 @@ def sources():
         {'id': SM, 'name': 'Stremio', 'kind': 'Stremio', 'avatar': {'symbol': 'play', 'colorIndex': 4}, 'm3uURL': 'http://stremio.test/manifest.json',
          'epgURL': '', 'serverURL': '', 'username': '', 'macAddress': '', 'preferHLS': False, 'secrets': {},
          'updatedAt': iso(datetime.now(timezone.utc))},
+        *([{'id': XT2, 'name': 'Tweede IPTV', 'kind': 'Xtream Codes', 'avatar': {'symbol': 'tv', 'colorIndex': 1}, 'm3uURL': '', 'epgURL': '',
+             'serverURL': 'http://xtream.test', 'username': 'tweede', 'macAddress': '', 'preferHLS': True, 'secrets': {'password': 'pw2'},
+             'updatedAt': iso(datetime.now(timezone.utc)), 'catchupOffsets': {'x2': 10}}] if MODE.get('allservers') else []),
         {'id': 'DEAD0000-0000-4000-8000-00000000000A', 'deleted': True, 'deletedAt': iso(datetime.now(timezone.utc)), 'updatedAt': iso(datetime.now(timezone.utc))}],
         'mainSourceID': SRC, 'updatedAt': iso(datetime.now(timezone.utc))}
 

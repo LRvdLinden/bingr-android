@@ -20,7 +20,7 @@
   var L = function () { return B.L.apply(null, arguments); };
   var P = B.parity = {};
   function lower(s) { return String(s == null ? '' : s).toLowerCase(); }
-  function src() { return Lib.source ? Lib.source.id : ''; }
+  function src(x) { return x && x._src ? x._src : (Lib.source ? Lib.source.id : ''); }   // build 128: x._src = andere server
   function isShowType(type) { return type === 'series'; }
 
   // MARK: collecties schrijven (ACCOUNT.md: version 2, per profiel een emmer; per collectie wint de nieuwste updatedAt)
@@ -79,15 +79,18 @@
     var pid = profileId();
     return pid ? D.collectionsFor(pid).filter(function (c) { return c.kind !== 'smart'; }) : [];
   };
-  function inCollection(c, type, id) {
-    return (c.items || []).some(function (it) { return it && it.id === id && (!it.type || it.type === type); });
+  // build 128: items hebben `sid` (server); ontbreekt die aan één kant, dan alleen soort + id
+  function sameSid(it, sid) { return !it.sid || !sid || String(it.sid).toLowerCase() === String(sid).toLowerCase(); }
+  function inCollection(c, type, id, sid) {
+    return (c.items || []).some(function (it) { return it && it.id === id && (!it.type || it.type === type) && sameSid(it, sid); });
   }
   /** Item toevoegen aan (of weghalen uit) een handmatige collectie. */
   P.toggleInCollection = function (c, type, item) {
     var copy = B.copy(c);
-    var has = inCollection(copy, type, item.id);
-    copy.items = (copy.items || []).filter(function (it) { return !(it && it.id === item.id && (!it.type || it.type === type)); });
-    if (!has) copy.items.push({ type: type, id: item.id });
+    var sid = src(item);
+    var has = inCollection(copy, type, item.id, sid);
+    copy.items = (copy.items || []).filter(function (it) { return !(it && it.id === item.id && (!it.type || it.type === type) && sameSid(it, sid)); });
+    if (!has) copy.items.push({ type: type, id: item.id, sid: sid });
     P.saveCollection(copy);
     U.toast(has ? L('Removed from %@', c.name) : L('Added to %@', c.name));
     return !has;
@@ -99,7 +102,7 @@
     var order = 0;
     D.collectionsFor(profileId()).forEach(function (c) { order = Math.max(order, (B.int(c.order) || 0) + 1); });
     var coll = { id: B.uuid().toUpperCase(), name: name, image: { symbol: 'popcorn', colorIndex: Math.floor(Math.random() * D.palettes.length) },
-      kind: 'manual', items: item ? [{ type: type, id: item.id }] : [], order: order };
+      kind: 'manual', items: item ? [{ type: type, id: item.id, sid: src(item) }] : [], order: order };
     P.saveCollection(coll);
     U.toast(L('Added to %@', name));
     return coll;
@@ -160,7 +163,7 @@
   };
   /** Mijn lijst aan/uit; voor het hoofdprofiel ook op de Trakt-watchlist (= TraktSync.setWatchlist). */
   P.toggleMyList = function (type, x) {
-    var k = D.key(src(), x.id);
+    var k = D.key(src(x), x.id);
     D.toggleSet('myList', k);
     var on = D.inSet('myList', k);
     if (type === 'movie' || type === 'series') T.setWatchlist(x, type === 'series', on);
@@ -192,7 +195,7 @@
   P.cardMenu = function (ctx) {
     var x = ctx.item, type = ctx.type, items = [];
     if (type === 'channel') {
-      var fk = D.key(src(), x.id), fav = D.inSet('favorites', fk);
+      var fk = D.key(src(x), x.id), fav = D.inSet('favorites', fk);
       items.push({ key: 'play', icon: 'play', label: L('Watch live'), fn: function () { B.player.playChannel(x, ctx.list || [x]); } });
       items.push({ key: 'fav', icon: U.plusCheckIcon(fav), label: fav ? L('Remove from favorites') : L('Add to favorites'), fn: function () {
         D.toggleSet('favorites', fk);
@@ -211,7 +214,7 @@
       } });
       return P.menu(x.name, items);
     }
-    var lk = D.key(src(), x.id), inList = D.inSet('myList', lk);
+    var lk = D.key(src(x), x.id), inList = D.inSet('myList', lk);
     items.push({ key: 'open', icon: 'info', label: L('More info'), fn: function () { U.push(S.detail(type, x)); } });
     items.push({ key: 'mylist', icon: U.plusCheckIcon(inList), label: inList ? L('Remove from My List') : L('Add to My List'), fn: function () {
       var on = P.toggleMyList(type, x);

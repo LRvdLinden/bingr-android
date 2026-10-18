@@ -507,7 +507,47 @@ object Playlists {
         return item.url
     }
 
-    fun catchupURL(c: Channel, p: EPGProgram): String? = catchupURL(c.id, p.start, p.end)
+    fun catchupURL(c: Channel, p: EPGProgram): String? = catchupURL(c.id, p.start, p.end, c.sourceID)
+
+    // MARK: build 128: gids en terugkijken van zenders op een andere server (eigen inlog, eigen gids, eigen catch-up-URL)
+
+    private fun foreign(sid: String?): Boolean = sid != null && !sid.equals(source?.id, ignoreCase = true)
+
+    /** Gids van een zender: van de actieve server, of (zender van een andere server) uit de catalogus van die server. */
+    fun epgFor(c: Channel): List<EPGProgram> =
+        if (foreign(c.sourceID)) AllServers.programs(c) else library.epg[c.epgID ?: c.id] ?: emptyList()
+
+    /** Wat er nu speelt (ook voor een zender van een andere server). */
+    fun nowOf(c: Channel): EPGProgram? {
+        if (!foreign(c.sourceID)) return library.nowPlaying(c)
+        val list = AllServers.programs(c)
+        val i = EPGIndex.indexAt(list, System.currentTimeMillis())
+        return if (i >= 0 && list[i].isNow) list[i] else null
+    }
+
+    /** Wat er straks komt (ook voor een zender van een andere server). */
+    fun upcomingOf(c: Channel, count: Int): List<EPGProgram> {
+        if (!foreign(c.sourceID)) return library.upcoming(c, count)
+        val list = AllServers.programs(c)
+        val now = System.currentTimeMillis()
+        val i = EPGIndex.firstEndingAfter(list, now)
+        if (i < 0) return emptyList()
+        return list.subList(i, minOf(list.size, i + count)).filter { it.end > now }
+    }
+
+    /**
+     * Terugkijk-URL voor een zender van server [sourceID] (null = de actieve): Xtream met de inloggegevens van die
+     * server en zijn terugkijk-correctie. Zenders die via remap verhuisd zijn, staan al op hun nieuwe server.
+     */
+    fun catchupURL(channelID: String, start: Long, end: Long, sourceID: String?): String? {
+        if (!foreign(sourceID)) return catchupURL(channelID, start, end)
+        val s = sourceFor(sourceID) ?: return null
+        if (s.kind != PlaylistKind.XTREAM) return null
+        val ch = (AllServers.item("${s.id}|$channelID") as? Channel) ?: return null
+        if (ch.catchupDays <= 0) return null
+        val shift = (s.catchupOffsets[channelID] ?: 0) * 60_000L
+        return XtreamClient(s, Store.secret(s.passwordKey) ?: "").catchupURL(ch, start + shift, end + shift)
+    }
 
     /**
      * Terugkijken / timeshift vanaf een willekeurig moment (Xtream). De terugkijk-correctie van de zender

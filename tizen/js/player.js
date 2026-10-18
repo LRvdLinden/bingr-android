@@ -478,9 +478,9 @@
         mark('url');
         return openURL(url, resumeAt);
       }).catch(function (e) { if (gen === startGen) fail(e); });
-      if (isLive() && item.channel && Lib.source) {
-        D.pushRecentChannel(Lib.source.id, item.channel.id);
-        B.store.set('lastChannel.' + String(profile.id).toLowerCase(), { sourceId: Lib.source.id, channelId: item.channel.id });
+      if (isLive() && item.channel && (item.src || Lib.source)) {
+        D.pushRecentChannel(item.src || Lib.source.id, item.channel.id);
+        B.store.set('lastChannel.' + String(profile.id).toLowerCase(), { sourceId: item.src || Lib.source.id, channelId: item.channel.id });
       }
     }
     function openURL(url, resumeAt) {
@@ -1240,14 +1240,17 @@
           D.setWatched(D.episodeKey(item.seriesID, item.season, item.episode), true);
         }
       } else if (pos > 0.02) {
-        D.setProgress(item.id, { fraction: pos, position: t, title: item.title, artwork: item.artwork || null, playlistID: Lib.source ? Lib.source.id : null });
+        // build 128: item van een andere server: voortgang bij die server
+        D.setProgress(item.id, { fraction: pos, position: t, title: item.title, artwork: item.artwork || null, playlistID: item.src || (Lib.source ? Lib.source.id : null) });
       }
     }
     function recordHistory() {
       if (recorded || watchedSeconds < 60 || isCatchup() || !ownProfile()) return;
       recorded = true;
+      // build 128: meta (titel, serie + seizoen/aflevering) voor de lijsten over alle servers
+      if (B.allservers) { try { B.allservers.recordPlayed(item); } catch (e) { B.log('meta', e); } }
       D.addHistory({
-        itemID: item.channel ? item.channel.id : item.id, playlistID: Lib.source ? Lib.source.id : null, title: item.title,
+        itemID: item.channel ? item.channel.id : item.id, playlistID: item.src || (Lib.source ? Lib.source.id : null), title: item.title,
         subtitle: item.subtitle || null, artwork: item.artwork || null, type: item.type, channelID: item.channel ? item.channel.id : null, date: Date.now()
       });
     }
@@ -1290,7 +1293,7 @@
         : L('Your account can be used on up to %d screens at the same time.', r.limit)));
       // build 88: Gratis → met Lifetime meer schermen tegelijk
       var free = r.plan ? String(r.plan).toLowerCase() === 'free' : A.isFree();
-      if (free) errorBox.appendChild(h('p', L('Upgrade to Lifetime to watch on up to %d screens at the same time.', A.LIFETIME.streams)));
+      if (free) errorBox.appendChild(h('p', L('Upgrade to Lifetime to watch on up to %d screens at the same time.', A.LIFETIME.streams) + ' ' + L('How many you can watch at once also depends on your IPTV provider.')));
       var list = h('div.limit-list');
       r.streams.forEach(function (s) {
         list.appendChild(h('div.limit-row', [U.icon(U.platformIcon(s.platform)),
@@ -1513,24 +1516,27 @@
 
   // MARK: items maken
 
+  // build 128: src = server van het item als die niet de actieve is (afspelen zonder te wisselen)
   function channelItem(ch) {
-    return { type: 'live', id: ch.id, title: ch.name, subtitle: ch.group, streamURL: ch.streamURL, stalkerCmd: ch.stalkerCmd || null, artwork: ch.logo || null, channel: ch };
+    return { type: 'live', id: ch.id, title: ch.name, subtitle: ch.group, streamURL: ch.streamURL, stalkerCmd: ch.stalkerCmd || null, artwork: ch.logo || null, channel: ch,
+      src: ch._src || null };
   }
   function episodeItem(ep, series) {
     return {
       type: 'episode', id: ep.id, title: series ? series.title : ep.title, subtitle: 'S' + ep.season + ':E' + ep.number + ' · ' + ep.title,
       streamURL: ep.streamURL, artwork: (series && series.poster) || ep.still || null, seriesID: ep.seriesID, season: ep.season, episode: ep.number,
-      imdbID: (series && series.imdbID) || null, stremio: ep.stremio || null, year: series ? series.year : null
+      imdbID: (series && series.imdbID) || null, stremio: ep.stremio || null, year: series ? series.year : null,
+      src: (series && series._src) || null
     };
   }
   function movieItem(m) {
     return { type: 'movie', id: m.id, title: m.title, subtitle: m.year ? String(m.year) : '', streamURL: m.streamURL, stalkerCmd: m.stalkerCmd || null,
-      artwork: m.poster || null, imdbID: m.imdbID || null, stremio: m.stremio || null, year: m.year || null };
+      artwork: m.poster || null, imdbID: m.imdbID || null, stremio: m.stremio || null, year: m.year || null, src: m._src || null };
   }
   /** Terugkijken: id "<zender>-cu-<start in s>" zoals op Android. */
   function catchupItem(ch, p) {
     return { type: 'catchup', id: ch.id + '-cu-' + Math.floor(p.start / 1000), title: p.title || ch.name, subtitle: ch.name, streamURL: null,
-      artwork: ch.logo || null, channel: ch, program: p };
+      artwork: ch.logo || null, channel: ch, program: p, src: ch._src || null };
   }
   B.player.catchupItem = catchupItem;
   B.player.playCatchup = function (ch, p, list) {
@@ -1543,7 +1549,10 @@
 
   /** Zender afspelen met zappen binnen de lijst. */
   B.player.playChannel = function (ch, list) {
-    list = list || [ch];
+    // build 128: zender van een verwijderde server (of niet meer daar): eerst zoeken; zappen binnen dezelfde server
+    if (ch._src && B.allservers && B.allservers.isOrphan(ch._src + '|' + ch.id)) { B.allservers.open({ type: 'channel', item: ch }); return null; }
+    list = (list || [ch]).filter(function (c) { return !c._src === !ch._src && (!c._src || String(c._src).toLowerCase() === String(ch._src).toLowerCase()); });
+    if (!list.length) list = [ch];
     var idx = 0;
     for (var i = 0; i < list.length; i++) if (list[i].id === ch.id) { idx = i; break; }
     return B.player.open(channelItem(ch), { channels: list, index: idx });

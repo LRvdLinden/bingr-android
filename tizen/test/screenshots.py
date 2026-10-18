@@ -1085,7 +1085,7 @@ if __name__ == '__main__':
         def c2(r):
             b = ((r.get('data') or {}).get('profiles') or {}).get(fb.MAIN) or {}
             return [c for c in b.get('items', []) if c.get('id') == 'c2']
-        RESULTS.append(('put_state: collectie (version 2, eigen emmer)', any(r['data'].get('version') == 2 and c2(r) and {'type': 'movie', 'id': 'xv8'} in c2(r)[0].get('items', []) for r in cols), str(cols[-1:])[:300]))
+        RESULTS.append(('put_state: collectie (version 2, eigen emmer, item met sid)', any(r['data'].get('version') == 2 and c2(r) and any(i.get('type') == 'movie' and i.get('id') == 'xv8' and i.get('sid') == fb.SRC for i in c2(r)[0].get('items', [])) for r in cols), str(cols[-1:])[:300]))
         tk = [r for r in reqs if 'trakt' in r]
         RESULTS.append(('Trakt: watchlist en geschiedenis', any(r['trakt'] == '/sync/watchlist' for r in tk) and any(r['trakt'] == '/sync/history' for r in tk) and any(r['trakt'] == '/sync/history/remove' for r in tk), str([r['trakt'] for r in tk])))
         # kinderprofiel: Top 10 uit populaire kids-titels
@@ -1224,6 +1224,79 @@ if __name__ == '__main__':
         ])
         RESULTS.append(('TMDB: regio NL (series zonder regio) en taal nl-NL', bool(fb.DISCOVER_REQS) and all((r[1] == 'NL' or r[0] == 'upcoming-tv') and r[2] == 'nl-NL' for r in fb.DISCOVER_REQS), str(fb.DISCOVER_REQS[:6])))
         fb.MODE['discover'] = False
+
+    if which in ('all', 'allservers'):
+        # build 128: één lijst over alle servers (js/allservers.js): pure logica (gelijk aan AllServersLogicTest.kt),
+        # verhuizen van items van een verwijderde server, melding bij niet gevonden, catalogmeta, andere profielen,
+        # categorieën per profiel (migratie uit het android-blok, opruimen bij een verwijderde server)
+        fb.MODE['allservers'] = True
+        AS = 'B.allservers'
+        IV = '(B.lib.lib.movies.filter(function (m) { return m.title === "Iron Valley"; })[0] || {}).id'
+        RTL5 = '(B.lib.raw.channels.filter(function (c) { return c.name === "RTL 5"; })[0] || {}).id'
+        DEAD = fb.DEAD
+        XCH = '(B.allservers.channels(B.data.setList("favorites")).filter(function (x) { return x._src === "%s" && x.id === "x2"; })[0])' % fb.XT2
+        checks = [
+            ('%s.normTitle("NL | Dune: Part Two (2024) 4K") === "dune part two"' % AS, 'titel: voorvoegsel, jaar, 4K'),
+            ('%s.normTitle("NL: Amélie") === "amelie" && %s.normTitle("[NL] Night Train MULTI") === "night train"' % (AS, AS), 'titel: NL:, accenten, MULTI'),
+            ('%s.normTitle("NL | Reacher S02E03 Het begin") === "reacher" && %s.normTitle("Fast & Furious!") === "fast furious"' % (AS, AS), 'titel: afleveringsmarkering, leestekens'),
+            ('%s.normChannel("NL: NPO 1 HD") === "npo1" && %s.normChannel("|BE| VTM 4K") === "vtm" && %s.normChannel("RTL 4 FHD 50fps HEVC") === "rtl4" && %s.normChannel("Canvas 8K BE") === "canvas"' % (AS, AS, AS, AS), 'zenders normaliseren'),
+            ('JSON.stringify(%s.seasonEpisode("S1:E2 · Pilot")) === "[1,2]" && %s.yearIn("Dune (2021)") === 2021 && %s.yearIn("1917") === null' % (AS, AS, AS), 'jaar en seizoen/aflevering'),
+            ('(function (A) { var c = [{sid: "B", id: "xv1", kind: "movie", title: "NL | Dune (2021)", year: 2021}, {sid: "A", id: "m9", kind: "movie", title: "Dune", year: 2022}, {sid: "A", id: "s1", kind: "series", title: "Dune", year: 2021}];'
+             ' var w = {kind: "movie", title: "Dune 4K", year: 2021}; return A.best(w, c, ["a", "b"]).id === "m9" && A.best(w, c, ["b", "a"]).id === "xv1" && !A.best({kind: "movie", title: "Dune", year: 1990}, c, ["a"]) && A.best({kind: "episode", title: "Dune"}, c, ["a"]).id === "s1"; })(%s)' % AS, 'matchen: voorrang actieve server, jaar ±1, afleveringen via de serie'),
+            ('(function (A) { var r = A.addRule(A.addRule({}, "OLD|a", "mid|b", 10), "mid|b", "New|c", 20); var t = A.resolve(r, "old|A");'
+             ' return t.to === "New|c" && t.at === 20 && A.addRule(r, "new|c", "old|a", 30) === r && A.resolve(r, "x|y") === null; })(%s)' % AS, 'remap: ketens, hoofdletters, geen lus'),
+            ('(function (A) { var r = {"old|a": {to: "New|c", at: 20}}; var m = A.remapSet({"OLD|a": {at: 5, on: true}, "k|z": {at: 6, on: true}}, r);'
+             ' return m["OLD|a"].on === false && m["OLD|a"].at === 20 && m["New|c"].on && m["New|c"].at === 5 && m["k|z"].on && A.remapSet(m, r) === null; })(%s)' % AS, 'remap: zelfde at, oude als verwijdering, idempotent'),
+            ('(function (A) { var st = {sets: {myList: {}, favorites: {}, recentChannels: {}, watched: {"xv1": {at: 3, on: true}}, hiddenCategories: {}}, progress: {"xv1": {at: 7, v: {fraction: 0.4, position: 100, updated: 7, title: "T", playlistID: "dead"}}}, history: {}};'
+             ' var n = A.applyRemapState(st, {"dead|xv1": {to: "Live|m5", at: 9}}); return n.progress.m5.v.playlistID === "Live" && n.progress.m5.v.position === 100 && n.progress.xv1.v === null && n.sets.watched.m5.on; })(%s)' % AS, 'remap: voortgang (positie, playlistID) en bekeken'),
+        ]
+        steps = [('wait', 2500), ('key', 'Enter', 400), ('wait', 14000)]
+        steps += [('expect', e, n) for e, n in checks]
+        steps += [
+            ('eval', 'JSON.stringify({ml: B.data.setList("myList"), fav: B.data.setList("favorites"), rules: B.allservers.rules()})', 'stand'),
+            ('expect', 'B.data.inSet("myList", B.lib.source.id + "|" + %s) && !B.data.inSet("myList", "%s|old-iv")' % (IV, DEAD), 'Mijn lijst: Iron Valley van de verwijderde server verhuisd naar de actieve'),
+            ('expect', 'B.allservers.rules()["%s|old-iv"].to === B.lib.source.id + "|" + %s' % (DEAD.lower(), IV), 'catalogmeta: remap-regel'),
+            ('expect', 'B.data.inSet("favorites", B.lib.source.id + "|" + %s) && !B.data.inSet("favorites", "%s|ch-rtl5")' % (RTL5, DEAD), 'favorieten: RTL 5 (NL: RTL 5 HD) verhuisd'),
+            ('expect', 'B.data.inSet("myList", "%s|gone1")' % DEAD, 'niet gevonden: blijft in Mijn lijst'),
+            ('expect', 'B.allservers.myList().some(function (h) { return h.item._src === "%s" && h.item.title === "Totally Missing"; })' % DEAD, 'Mijn lijst toont de tegel (titel uit de meta)'),
+            ('expect', '!B.data.hiddenCategoryNames("%s").Oud && B.data.hiddenCategoryNames(B.lib.source.id).Sport === true' % DEAD, 'categorieën: verwijderde server opgeruimd, oude keuze (Sport) gemigreerd'),
+            ('expect', '!B.lib.lib.channels.some(function (c) { return c.name === "ESPN" || c.name === "Ziggo Sport"; }) && B.lib.lib.channels.length > 5', 'categorie Sport uit voor dit profiel'),
+            ('eval', 'B.data.setCategoriesHidden([B.lib.source.id + "|Sport"], false) || 1'), ('wait', 600),
+            ('expect', 'B.lib.lib.channels.some(function (c) { return c.name === "ESPN"; })', 'categorie Sport weer aan'),
+            # zender van een andere (niet-actieve) server: eigen gids en terugkijken met de inlog en correctie van die server
+            ('expect', '!!%(ch)s && %(ch)s.catchupDays > 0 && B.allservers.programs(%(ch)s).length > 0 && B.lib.epgFor(%(ch)s).length > 0' % {'ch': XCH}, 'zender van een andere server: in favorieten, met zijn eigen gids'),
+            ('expect', '(function (c) { var now = Date.now(), p = B.allservers.programs(c).filter(function (x) { return x.end < now && x.start > now - 86400000; })[0];'
+                       ' if (!p) return "geen afgelopen programma"; return B.lib.catchupURL(c, p).then(function (u) {'
+                       ' var d = new Date(p.start + 10 * 60000), two = function (n) { return (n < 10 ? "0" : "") + n; };'
+                       ' var stamp = d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate()) + ":" + two(d.getHours()) + "-" + two(d.getMinutes());'
+                       ' return (u && u.indexOf("/timeshift/tweede/pw2/") > 0 && u.indexOf(stamp) > 0) || u; }); })(%s)' % XCH, 'terugkijken: URL met de inlog en de correctie (+10 min) van die server'),
+            ('eval', 'B.player.playCatchup(%(ch)s, B.allservers.programs(%(ch)s).filter(function (x) { return x.end < Date.now(); }).slice(-1)[0], null) && 1' % {'ch': XCH}), ('wait', 2500),
+            ('expect', '!!B.player.current && Array.prototype.some.call(document.querySelectorAll("video"), function (v) { return (v.currentSrc || v.src || "").indexOf("/timeshift/tweede/pw2/") >= 0; })', 'terugkijken speelt via die server (eigen inlog)'),
+            ('eval', 'B.player.current && B.player.current.close() || 1'), ('wait', 800),
+            ('eval', 'B.screens.openItem("channel", %s) || 1' % XCH), ('wait', 2500),
+            ('expect', '!!B.player.current && Array.prototype.some.call(document.querySelectorAll("video"), function (v) { return (v.currentSrc || v.src || "").indexOf("/tweede/pw2/") >= 0; }) && B.data.inSet("recentChannels", "%s|x2")' % fb.XT2, 'live kijken via die server (zonder te wisselen), recent bij die server'),
+            ('expect', 'B.lib.source.id === "%s"' % fb.SRC, 'actieve server niet gewisseld'),
+            ('eval', 'B.player.current && B.player.current.close() || 1'), ('wait', 600),
+            ('eval', 'B.ui.top().show("mylist", true) || 1'), ('wait', 800), ('shot', 'as01-mylist'),
+            ('eval', 'B.screens.openItem("movie", B.allservers.myList().filter(function (h) { return h.item.title === "Totally Missing"; })[0].item) || 1'), ('wait', 4000), ('shot', 'as02-notice'),
+            ('expect', '!!document.querySelector(".layer.modal") && document.querySelector(".layer.modal").textContent.indexOf("Totally Missing") >= 0 && document.querySelector(".layer.modal").textContent.indexOf("Oude server") >= 0', 'melding: titel en servernaam'),
+            ('expect', 'document.querySelector(".layer.modal").textContent.indexOf(B.L("Remove from My List")) >= 0 && document.querySelector(".layer.modal").textContent.indexOf(B.L("Search")) >= 0', 'melding: Verwijderen uit Mijn lijst en Zoeken'),
+            ('key', 'Enter', 800),
+            ('expect', '!B.data.inSet("myList", "%s|gone1")' % DEAD, 'Verwijderen: uit Mijn lijst'),
+            ('eval', 'B.data.flush() || 1'), ('wait', 2500),
+        ]
+        run(SIGNED_IN, 'normal', steps)
+        reqs = [json.loads(l) for l in open(os.path.join(OUT, 'requests.jsonl')).read().splitlines() if l.strip()] if os.path.exists(os.path.join(OUT, 'requests.jsonl')) else []
+        puts = [r for r in reqs if r.get('action') == 'put_state']
+        cm = [r for r in puts if r.get('section') == 'catalogmeta']
+        RESULTS.append(('put_state catalogmeta met de remap-regel', bool(cm) and (DEAD.lower() + '|old-iv') in ((cm[-1].get('data') or {}).get('remap') or {}), str([list(((r.get('data') or {}).get('remap') or {}).keys()) for r in cm][-1:])))
+        sam = [r for r in puts if (r.get('section') or '').lower() == 'profile.' + fb.SAM.lower()]
+        okSam = bool(sam) and any(not str(x.get('id', '')).startswith(DEAD) for x in (sam[-1]['data'].get('myList') or [])) and (DEAD + '|old-iv') in ((sam[-1]['data'].get('removed') or {}).get('myList') or {})
+        RESULTS.append(('ander profiel (Sam): remap toegepast en geüpload', okSam, str(sam[-1]['data'].get('myList') if sam else 'geen put_state')))
+        main = [r for r in puts if (r.get('section') or '').lower() == 'profile.' + fb.MAIN.lower()]
+        okCats = bool(main) and any(x.get('id') == fb.SRC + '|Sport' for x in (main[0]['data'].get('hiddenCategories') or [])) and (DEAD + '|Oud') in ((main[-1]['data'].get('removed') or {}).get('hiddenCategories') or {})
+        RESULTS.append(('hiddenCategories: migratie en opruimen gesynct', okCats, str([(m['data'].get('hiddenCategories'), (m['data'].get('removed') or {}).get('hiddenCategories')) for m in main][-1:])))
+        fb.MODE['allservers'] = False
 
     if RESULTS or PAGEERRORS:
         print('\n== Samenvatting ==')

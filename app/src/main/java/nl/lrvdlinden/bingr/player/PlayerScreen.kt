@@ -104,7 +104,7 @@ private enum class PlayerPanel { AUDIO_SUBS, OPENSUBS, OPTIONS, CAST, SOURCES, R
 
 /** Zender → afspeelbaar item (zoals Playables.channel op iOS). */
 private fun livePlayable(c: Channel): PlayableItem = PlayableItem(
-    id = c.id, title = c.name, subtitle = Playlists.library.nowPlaying(c)?.title, url = c.streamURL,
+    id = c.id, title = c.name, subtitle = Playlists.nowOf(c)?.title, url = c.streamURL,
     type = MediaType.LIVE, artwork = c.logo, stalkerCmd = c.stalkerCmd, channelID = c.id, sourceID = c.sourceID,
 )
 
@@ -265,7 +265,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             (itm.sourceID ?: Playlists.source?.id)?.let { Store.pushRecentChannel(it, cid) }
         }
         player.catchupProvider =
-            if (itm.type == MediaType.LIVE && cid != null) ({ from: Long, to: Long -> Playlists.catchupURL(cid, from, to) }) else null
+            // build 128: zender van een andere server: terugkijken via die server
+            if (itm.type == MediaType.LIVE && cid != null) ({ from: Long, to: Long -> Playlists.catchupURL(cid, from, to, itm.sourceID) }) else null
         if (itm.stremio != null) {
             val found = runCatching { Playlists.stremioStreams(itm) }.getOrDefault(emptyList())
             // intussen gesloten of al naar een andere zender/aflevering → niet meer starten
@@ -966,7 +967,7 @@ private fun PlayerBarButton(icon: ImageVector, label: String, isTV: Boolean, mod
 /** Zenderbanner bij zappen: nummer, logo, naam, groep en wat er nu speelt. */
 @Composable
 private fun ZapBanner(c: Channel, pending: Boolean) {
-    val now = Playlists.library.nowPlaying(c)
+    val now = Playlists.nowOf(c)
     Row(
         Modifier.widthIn(max = 640.dp).padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.82f))

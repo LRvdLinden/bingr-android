@@ -12,7 +12,8 @@
   var L = function () { return B.L.apply(null, arguments); };
   var D = B.data = {};
 
-  var SET_FIELDS = ['myList', 'favorites', 'watched', 'recentChannels'];
+  // build 128: hiddenCategories = categorieën aan/uit per profiel ("<server-id>|<naam>", zoals myList)
+  var SET_FIELDS = ['myList', 'favorites', 'watched', 'recentChannels', 'hiddenCategories'];
   var REMOVED_DAYS = 90, MAX_RECENT = 20, MAX_PROGRESS = 300, MAX_HISTORY = 500;
   var lower = function (s) { return String(s || '').toLowerCase(); };
 
@@ -50,7 +51,7 @@
     save();
     B.store.keys('pstate.').forEach(function (k) { B.store.del(k); });
     B.store.keys('lastChannel.').forEach(function (k) { B.store.del(k); });
-    B.store.del('lastProfile'); B.store.del('activeSource'); B.store.del('accentMigrated');
+    B.store.del('lastProfile'); B.store.del('activeSource'); B.store.del('accentMigrated'); B.store.del('cats.migrated128');
     B.idb.clear();
     // Trakt, OpenSubtitles en herinneringen van het vorige account
     B.emit('wipe');
@@ -559,7 +560,7 @@
   }
   D.loadProfileState = function (id) {
     var saved = B.store.get(pkey(id), null);
-    var st = (saved && saved.st) || { sets: { myList: {}, favorites: {}, watched: {}, recentChannels: {} }, progress: {}, history: {} };
+    var st = (saved && saved.st) || { sets: { myList: {}, favorites: {}, watched: {}, recentChannels: {}, hiddenCategories: {} }, progress: {}, history: {} };
     SET_FIELDS.forEach(function (f) { st.sets[f] = st.sets[f] || {}; });
     P = { id: id, st: st, base: (saved && saved.base) || null, names: (saved && saved.names) || [], dirty: !!(saved && saved.dirty) };
     B.emit('profileData');
@@ -612,7 +613,13 @@
       // connections (Trakt/OpenSubtitles) en herinneringen voegen zelf samen
       B.emit('state', all);
       if (!Q.id) return true;
-      return mergeActive(all, Q);
+      // build 128: eerst catalogmeta (remap-regels), dan het actieve profiel, daarna de andere profielen en de collecties
+      var AS = B.allservers;
+      return (AS ? AS.syncMeta(all) : Promise.resolve()).then(function () {
+        return mergeActive(all, Q);
+      }).then(function (r) {
+        return (AS ? otherProfiles(all, Q) : Promise.resolve()).then(function () { return r; });
+      });
     }).catch(function (e) { B.log('sync', e); return false; }).then(function (r) { syncing = null; return r; });
     return syncing;
   }
@@ -650,6 +657,8 @@
     if (names.length) P.names = names;
     var srv = server ? normalize(server) : null;
     var merged = normalize(srv ? mergeState(P.st, srv) : P.st);
+    // build 128: verhuisde items (remap) en categoriekeuzes van verwijderde servers opruimen / migreren
+    merged = normalize(fixState(merged, true));
     var changed = stateKey(merged) !== stateKey(P.st);
     P.st = merged;
     var needUpload = prefsNewer || (!srv ? hasAny(merged) : stateKey(merged) !== stateKey(srv));
@@ -666,6 +675,107 @@
     });
   }
   function activeP() { return P; }
+
+  // MARK: build 128: remap, categorieën per profiel en de andere profielen
+
+  /** Sleutels van servers die niet (meer) in de sources staan (tombstone): alleen als de servers bekend zijn. */
+  function goneServer(k) {
+    if (!D.sources.length) return false;
+    var bar = k.indexOf('|');
+    return bar > 0 && !D.sourceById(k.slice(0, bar));
+  }
+  /** Oude keuzes (per server, "group:<naam>" in het android-blok) als "<server-id>|<naam>" met een oude tijd. */
+  function legacyCategories() {
+    var out = [];
+    D.sources.forEach(function (src) {
+      (D.customization(src).hidden || []).forEach(function (h) { if (String(h).indexOf('group:') === 0) out.push(src.id + '|' + String(h).slice(6)); });
+    });
+    return out;
+  }
+  /**
+   * Remap-regels toepassen, categoriekeuzes van verwijderde servers als verwijdering markeren en (eenmalig per apparaat)
+   * de oude categoriekeuzes migreren (oude tijd, zodat een nieuwere keuze per profiel voorgaat).
+   */
+  function fixState(st, migrate) {
+    var AS = B.allservers;
+    var out = AS ? AS.applyRemapState(st) : st;
+    var hc = out.sets.hiddenCategories || {};
+    var nh = null, now = Date.now();
+    Object.keys(hc).forEach(function (k) {
+      if (hc[k].on && goneServer(k)) { nh = nh || B.assign({}, hc); nh[k] = { at: Math.max(now, hc[k].at + 1), on: false }; }
+    });
+    if (migrate && !B.store.get('cats.migrated128', false) && D.sources.length) {
+      legacyCategories().forEach(function (k) {
+        var cur = (nh || hc)[k];
+        var known = cur || Object.keys(nh || hc).some(function (x) { return lower(x) === lower(k); });
+        if (!known) { nh = nh || B.assign({}, hc); nh[k] = { at: 0, on: true }; }
+      });
+    }
+    if (!nh) return out;
+    var sets = B.assign({}, out.sets); sets.hiddenCategories = nh;
+    return { sets: sets, progress: out.progress, history: out.history };
+  }
+  /**
+   * De andere profielen (alleen op de server, deze tv heeft hun gegevens niet lokaal) en de collecties: remap-regels
+   * toepassen, categoriekeuzes van verwijderde servers opruimen en de oude keuzes migreren; uploaden wat verandert.
+   */
+  function otherProfiles(all, Q) {
+    var jobs = [];
+    var mig = !B.store.get('cats.migrated128', false) && D.sources.length > 0;
+    var seen = {};
+    Object.keys(all).forEach(function (name) {
+      if (lower(name).indexOf('profile.') !== 0) return;
+      var id = lower(name.slice(8));
+      if (Q.id && id === lower(Q.id)) return;
+      if (!D.profiles.some(function (p) { return lower(p.id) === id; })) return;
+      var d = all[name] && all[name].data;
+      if (!d || typeof d !== 'object') return;
+      var st = normalize(parseState(d));
+      var fixed = normalize(fixState(st, mig));
+      // ook profielen die nog geen hiddenCategories hebben, krijgen de oude keuzes (één keer per profiel-id)
+      if (stateKey(fixed) === stateKey(st)) return;
+      if (seen[id]) return;
+      seen[id] = true;
+      jobs.push(A.putState(name, toJSON(d, fixed)));
+    });
+    var AS = B.allservers;
+    if (AS && D.collections && AS.applyRemapCollections(D.collections)) {
+      save();
+      jobs.push(A.putState('collections', D.collections));
+    }
+    return Promise.all(jobs).then(function (res) {
+      if (mig && !res.some(function (x) { return x == null; })) B.store.set('cats.migrated128', true);
+    }, B.noop);
+  }
+
+  /** Build 128: er is een remap-regel bij gekomen: meteen toepassen op dit profiel en daarna alles synchroniseren. */
+  D.remapNow = function () {
+    if (!P.st) return;
+    var n = normalize(fixState(P.st, false));
+    if (n !== P.st && stateKey(n) !== stateKey(P.st)) { P.st = n; changed(false); }
+    else { clearTimeout(timer); setTimeout(function () { D.syncState(); }, 500); }
+  };
+
+  /** Build 128: verborgen categorienamen van server sid voor het actieve profiel ({naam: true}). */
+  D.hiddenCategoryNames = function (sid) {
+    var out = {}, m = P.st && P.st.sets.hiddenCategories;
+    if (!m) return out;
+    var pre = lower(sid) + '|';
+    Object.keys(m).forEach(function (k) { if (m[k].on && lower(k).indexOf(pre) === 0) out[k.slice(pre.length)] = true; });
+    return out;
+  };
+  /** Build 128: categorieën ("<server-id>|<naam>") aan/uit voor het actieve profiel. */
+  D.setCategoriesHidden = function (keys, hidden) {
+    if (!P.st) return;
+    var m = P.st.sets.hiddenCategories = P.st.sets.hiddenCategories || {};
+    var now = Date.now(), any = false;
+    keys.forEach(function (k) {
+      var vs = variants(m, k).concat([k]);
+      if (hidden) { if (!vs.some(function (x) { return m[x] && m[x].on; })) { m[k] = { at: now, on: true }; any = true; } }
+      else vs.forEach(function (x) { if (m[x] && m[x].on) { m[x] = { at: now, on: false }; any = true; } });
+    });
+    if (any) { changed(false); B.lib.applyFilters(); }
+  };
   function hasAny(st) {
     var any = Object.keys(st.progress).length || Object.keys(st.history).length;
     SET_FIELDS.forEach(function (f) { if (Object.keys(st.sets[f]).length) any = true; });

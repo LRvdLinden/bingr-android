@@ -122,8 +122,9 @@ fun GuideGrid(channels: List<Channel>, onPlay: (Channel) -> Unit, onProgram: (Ch
         LazyColumn(Modifier.fillMaxSize()) {
             keyedItems(shown, keys) { c ->
                 // build 56: alleen het zichtbare venster uit de gesorteerde gids (binair zoeken), niet de hele lijst filteren
-                val progs = remember(epg, c.id, start) {
-                    val list = epg[c.epgID ?: c.id] ?: emptyList()
+                val progs = remember(epg, c.id, start, AllServers.version) {
+                    // build 128: zender van een andere server: zijn eigen gids
+                    val list = if (c.sourceID != null) Playlists.epgFor(c) else epg[c.epgID ?: c.id] ?: emptyList()
                     val from = EPGIndex.firstEndingAfter(list, start)
                     if (!EPGIndex.isSorted(list)) list.filter { it.end > start && it.start < end }
                     else if (from < 0) emptyList() else list.subList(from, list.size).asSequence()
@@ -211,9 +212,9 @@ fun GuideSheet(channel: Channel, onDismiss: () -> Unit) {
     var programs by remember { mutableStateOf<List<EPGProgram>?>(null) }
     var selected by remember { mutableStateOf<EPGProgram?>(null) }
     LaunchedEffect(channel.id) {
-        val all = Playlists.library.epg[channel.epgID ?: channel.id] ?: emptyList()
+        val all = Playlists.epgFor(channel)   // build 128: ook van een andere server
         val from = System.currentTimeMillis() - maxOf(channel.catchupDays, 0) * 86_400_000L
-        programs = if (all.isEmpty()) runCatching { Playlists.shortEPG(channel) }.getOrDefault(emptyList())
+        programs = if (all.isEmpty() && channel.sourceID == null) runCatching { Playlists.shortEPG(channel) }.getOrDefault(emptyList())
         else all.filter { it.end > from }
     }
     S2FullDialog(onDismiss) {
@@ -275,11 +276,12 @@ private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss:
     val rid = s2ReminderID(channel, program)
     val canCatchup = program.end < now && channel.catchupDays > 0 &&
         program.start > now - channel.catchupDays * 86_400_000L
-    val pid = Playlists.source?.id ?: ""
+    // build 128: zender van een andere server: terugkijken met de inloggegevens en correctie van die server
+    val pid = channel.sourceID ?: Playlists.source?.id ?: ""
     var offsetOpen by remember { mutableStateOf(false) }
     val offset = Store.catchupOffset(pid, channel.id)
     val catchupURL = remember(channel.id, program.start, offset) {
-        if (channel.catchupDays > 0) Playlists.catchupURL(channel.id, program.start, program.end) else null
+        if (channel.catchupDays > 0) Playlists.catchupURL(channel.id, program.start, program.end, channel.sourceID) else null
     }
     // live-voorbeeld van deze zender in het programmavenster (build 51); eigen voorbeeld na sluiten weer weg
     val previewHere = program.isNow
@@ -290,7 +292,7 @@ private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss:
     fun playCatchup(u: String) {
         onPlayed()
         AppState.play(PlayableItem(id = "${channel.id}-cu-${program.start / 1000}", title = program.title,
-            subtitle = channel.name, url = u, type = MediaType.LIVE, artwork = channel.logo))
+            subtitle = channel.name, url = u, type = MediaType.LIVE, artwork = channel.logo, sourceID = channel.sourceID))
     }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         val tv = AppState.isTV
@@ -326,7 +328,8 @@ private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss:
                     if (program.isNow) {
                         NetflixButton(L("Watch live"), Icons.Default.PlayArrow, kind = NetflixKind.PLAY, modifier = firstMod()) {
                             onPlayed()
-                            AppState.play(Playables.channel(channel, program), zap = Playlists.library.channels)
+                            if (channel.sourceID != null) AllServers.playChannel(channel, null, AllServers.Field.FAVORITES)
+                            else AppState.play(Playables.channel(channel, program), zap = Playlists.library.channels)
                         }
                     } else if (canCatchup && catchupURL != null) {
                         NetflixButton(L("Watch from the start"), Icons.Default.History, kind = NetflixKind.PLAY, modifier = firstMod()) { playCatchup(catchupURL) }

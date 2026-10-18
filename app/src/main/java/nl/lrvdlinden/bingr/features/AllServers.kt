@@ -51,6 +51,8 @@ object AllServers {
 
     /** Items van andere bestaande servers (metaKey → Movie/Series/Channel met sourceID). */
     @Volatile private var found: Map<String, Any> = emptyMap()
+    /** Gids van zenders van andere servers (metaKey → programma's, gesorteerd), voor gids en terugkijken. */
+    @Volatile private var epg: Map<String, List<EPGProgram>> = emptyMap()
     /** Server bestaat, maar het item staat niet (meer) in zijn catalogus (metaKey). */
     @Volatile private var absent: Set<String> = emptySet()
     /** Laatste zoekpoging per sleutel (metaKey → tijd), zodat de achtergrond niet steeds opnieuw zoekt. */
@@ -192,6 +194,7 @@ object AllServers {
         }
         val byServer = refs.groupBy { X.serverOf(it.key)?.lowercase(Locale.ROOT) ?: "" }
         val newFound = HashMap<String, Any>()
+        val newEpg = HashMap<String, List<EPGProgram>>()
         val newAbsent = HashSet<String>()
         val needs = ArrayList<Ref>()
         var complete = true
@@ -223,9 +226,13 @@ object AllServers {
                     }
                     newAbsent += mk; needs += r
                 } else if (!isActive(p.id)) newFound[mk] = when (item) {
+                    // build 128: gids van deze zender (alleen wat er nog toe doet: max. 8 dagen terug), voor gids en terugkijken
+                    is Channel -> item.copy(sourceID = p.id).also { c ->
+                        val cutoff = System.currentTimeMillis() - 8 * 86_400_000L
+                        lib.epg[c.epgID ?: c.id]?.filter { it.end > cutoff }?.takeIf { it.isNotEmpty() }?.let { newEpg[mk] = it }
+                    }
                     is Movie -> item.copy(sourceID = p.id)
                     is Series -> item.copy(sourceID = p.id)
-                    is Channel -> item.copy(sourceID = p.id)
                     else -> item
                 }
             }
@@ -235,7 +242,7 @@ object AllServers {
             if (sid.isEmpty() || server(sid) != null) continue
             needs += list
         }
-        found = newFound; absent = newAbsent
+        found = newFound; absent = newAbsent; epg = newEpg
         withContext(Dispatchers.Main) {
             version++
             if (migrating && complete) Prefs.put(MIGRATED, true)
@@ -303,6 +310,9 @@ object AllServers {
     }
 
     // MARK: voor de rijen
+
+    /** Gids van een zender van een andere server (leeg als die server geen gids heeft). */
+    fun programs(c: Channel): List<EPGProgram> = c.sourceID?.let { epg[X.metaKey("$it|${c.id}")] } ?: emptyList()
 
     /** Film/serie/zender van een andere server (gevonden), of null. */
     fun item(key: String): Any? = found[X.metaKey(key)]
