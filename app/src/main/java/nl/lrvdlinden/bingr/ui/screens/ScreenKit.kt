@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
@@ -126,8 +129,8 @@ fun AllServersNotice() {
     val n = AllServers.notice ?: return
     val actions = buildList {
         val remove = n.remove
-        if (remove != null && n.removeLabel != null) add(S2Action(n.removeLabel, androidx.compose.material.icons.Icons.Default.Close, destructive = true) { remove() })
-        add(S2Action(L("Search"), androidx.compose.material.icons.Icons.Default.Search) { ScreensNav.push(ScreenEntry.SearchFor(n.searchFor)) })
+        if (remove != null && n.removeLabel != null) add(S2Action(n.removeLabel, Icons.Default.Close, destructive = true) { remove() })
+        add(S2Action(L("Search"), Icons.Default.Search) { ScreensNav.push(ScreenEntry.SearchFor(n.searchFor)) })
         add(S2Action(L("Cancel")) { })
     }
     S2ActionDialog(n.title, actions, onDismiss = { AllServers.notice = null }, message = n.message)
