@@ -286,17 +286,25 @@ object ScreenshotDemo {
         val epg = HashMap<String, List<EPGProgram>>()
         val channelList = channels.mapIndexed { i, c ->
             val titles = programTitles[c.group] ?: programTitles.getValue("EN | Entertainment")
-            var t = start0 + ((i * 15) % 60) * 60_000L - 1_800_000L
-            var k = i
-            val list = ArrayList<EPGProgram>()
-            while (t < now + 14 * 3_600_000L) {
-                val dur = durations[k % durations.size]
-                val title = titles[k % titles.size]
-                list.add(EPGProgram(channelID = c.id, title = title,
+            // het programma van nu begint kort geleden (0-25 min), zodat de titels in de gids in beeld staan
+            val anchor = (now - ((i * 7) % 26) * 60_000L) / 300_000L * 300_000L
+            fun program(k: Int, start: Long, dur: Int): EPGProgram {
+                val title = titles[Math.floorMod(k, titles.size)]
+                return EPGProgram(channelID = c.id, title = title,
                     description = "$title: fresh episode with highlights, guests and the stories everyone will be talking about tomorrow.",
-                    start = t, end = t + dur * 60_000L))
-                t += dur * 60_000L
-                k++
+                    start = start, end = start + dur * 60_000L)
+            }
+            val list = ArrayList<EPGProgram>()
+            var t = anchor
+            var k = i
+            while (t < now + 14 * 3_600_000L) {
+                val dur = durations[Math.floorMod(k, durations.size)]
+                list.add(program(k, t, dur)); t += dur * 60_000L; k++
+            }
+            t = anchor; k = i - 1
+            while (t > start0) {
+                val dur = durations[Math.floorMod(k, durations.size)]
+                t -= dur * 60_000L; list.add(0, program(k, t, dur)); k--
             }
             epg[c.id] = list
             Channel(id = c.id, name = c.name, logo = media("logo-${c.id}.png"), group = c.group,
