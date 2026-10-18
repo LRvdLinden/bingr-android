@@ -18,6 +18,12 @@ _18 oktober 2026_
 
 - Lifetime is tot 3 schermen tegelijk en 15 apparaten; hoeveel je tegelijk kunt kijken, hangt ook af van je IPTV-aanbieder
 
+### Server
+
+**Verbeterd**
+
+- Server: de account-sync bewaart de gegevens voor één lijst over alle servers (titels en verhuisde items), en het abonnement geeft de standaardwaarden van Gratis en Lifetime mee
+
 ## Versie 1.0.0 · Build 120
 _17 oktober 2026_
 
