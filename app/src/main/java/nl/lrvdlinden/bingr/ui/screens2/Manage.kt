@@ -67,6 +67,27 @@ private fun s2RawGroups(kind: S2Kind): List<String> {
     }.distinct()
 }
 
+/**
+ * Build 128: categorieën van alle servers (actieve eerst, dan de overige uit de cache op dit apparaat): naam → server-id's
+ * waarop hij voorkomt.
+ */
+private suspend fun s2AllServerGroups(kind: S2Kind, servers: List<PlaylistSource>, active: String?, activeRaw: Library): LinkedHashMap<String, List<String>> {
+    val out = LinkedHashMap<String, MutableList<String>>()
+    for (p in servers.sortedBy { if (it.id == active) 0 else 1 }) {
+        val lib = if (p.id == active) activeRaw else Playlists.catalogOf(p, allowNetwork = false) ?: continue
+        val groups = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            when (kind) {
+                S2Kind.LIVE -> lib.channels.map { it.group }
+                S2Kind.MOVIES -> lib.movies.map { it.group }
+                S2Kind.SERIES -> lib.series.map { it.group }
+            }.distinct()
+        }
+        for (g in groups) out.getOrPut(g) { ArrayList() }.add(p.id)
+    }
+    @Suppress("UNCHECKED_CAST")
+    return out as LinkedHashMap<String, List<String>>
+}
+
 private val s2PrefixRE = Regex("""^\s*[|\[({]?\s*([A-Z]{2,4}|[A-Z]{2}\+)\s*(?:[|\])}:\-–•]|\s+\|)""")
 private val s2PrefixSkip = setOf("THE", "AND", "FOR", "ALL", "NEW", "TOP", "VOD", "TV")
 
@@ -86,21 +107,24 @@ fun ManageCategoriesScreen(onClose: () -> Unit) {
     var filter by remember { mutableStateOf("") }
     val pid = Playlists.source?.id
     val c = pid?.let { Store.customizations[it] } ?: Customization()
-    val all = remember(kind, Playlists.rawLibrary) { s2RawGroups(kind) }
+    // build 128: per profiel, de categorieën van alle servers; dezelfde naam op twee servers = één regel (geldt voor beide)
+    val servers = Store.playlists
+    val raw = Playlists.rawLibrary
+    val byName by androidx.compose.runtime.produceState(initialValue = linkedMapOf<String, List<String>>(), kind, raw, servers) {
+        value = s2AllServerGroups(kind, servers, pid, raw)
+    }
+    val all = byName.keys.toList()
     val groups = if (filter.isBlank()) all else all.filter { it.contains(filter.trim(), ignoreCase = true) }
     val prefixes = remember(groups) {
         groups.mapNotNull { g -> s2GroupPrefix(g)?.let { it to g } }.groupBy({ it.first }, { it.second })
             .entries.sortedWith(compareByDescending<Map.Entry<String, List<String>>> { it.value.size }.thenBy { it.key })
             .map { it.key to it.value }
     }
-    fun isOn(g: String) = Customization.groupKey(g) !in c.hidden
-    fun set(list: List<String>, on: Boolean) {
-        val id = pid ?: return
-        Store.updateCustomization(id) { cu ->
-            val keys = list.map { Customization.groupKey(it) }.toSet()
-            cu.copy(hidden = if (on) cu.hidden - keys else cu.hidden + keys)
-        }
-    }
+    fun keysOf(g: String) = (byName[g] ?: emptyList()).map { Store.key(it, g) }
+    fun isOn(g: String) = (byName[g] ?: emptyList()).none { Store.isCategoryHidden(it, g) }
+    fun set(list: List<String>, on: Boolean) = Store.setCategoriesHidden(list.flatMap { keysOf(it) }, hidden = !on)
+    fun from(g: String): String? = if (servers.size < 2) null
+        else (byName[g] ?: emptyList()).mapNotNull { id -> servers.firstOrNull { it.id == id }?.name }.joinToString(", ")
 
     S2Page(L("Categories"), onClose = onClose) {
         item { S2Segments(s2KindOptions, kind) { kind = it; filter = "" } }
@@ -133,10 +157,10 @@ fun ManageCategoriesScreen(onClose: () -> Unit) {
         }
         itemsIndexed(groups) { i, g ->
             Column(Modifier.s2Cell(i + 1, groups.size + 1)) {
-                S2Toggle(c.renamed[Customization.groupKey(g)] ?: g, isOn(g)) { set(listOf(g), it) }
+                S2Toggle(c.renamed[Customization.groupKey(g)] ?: g, isOn(g), subtitle = from(g)) { set(listOf(g), it) }
             }
         }
-        item { S2Footer(L("Categories that are off don't appear anywhere in the app. Saved per playlist.")) }
+        item { S2Footer(L("Categories that are off don't appear anywhere in the app. Saved per profile, for all your servers.")) }
     }
 }
 
@@ -227,8 +251,8 @@ fun ManageScreen(onClose: () -> Unit) {
         item { S2Segments(s2KindOptions, kind) { kind = it } }
         item { S2Header(L("Groups")) }
         itemsIndexed(groups) { i, g ->
-            val key = Customization.groupKey(g)
-            val hidden = key in c.hidden
+            // build 128: verbergen is per profiel (hiddenCategories)
+            val hidden = pid != null && Store.isCategoryHidden(pid, g)
             val locked = pid != null && "$pid|$g" in Store.parental.lockedGroups
             Column(Modifier.s2Cell(i, groups.size)) {
                 S2Row(
@@ -270,13 +294,13 @@ fun ManageScreen(onClose: () -> Unit) {
 
     menuFor?.let { g ->
         val key = Customization.groupKey(g)
-        val hidden = key in c.hidden
+        val hidden = pid != null && Store.isCategoryHidden(pid, g)
         val locked = pid != null && "$pid|$g" in Store.parental.lockedGroups
         val actions = buildList {
             if (kind == S2Kind.LIVE) add(S2Action(L("Channels"), Icons.AutoMirrored.Filled.List) { channelsOf = g })
             add(S2Action(L("Rename"), Icons.Default.Edit) { renaming = key to display(g) })
             add(S2Action(if (hidden) L("Show") else L("Hide"), if (hidden) Icons.Default.Visibility else Icons.Default.VisibilityOff) {
-                update { it.copy(hidden = if (hidden) it.hidden - key else it.hidden + key) }
+                pid?.let { Store.setCategoriesHidden(listOf(Store.key(it, g)), hidden = !hidden) }
             })
             add(S2Action(L("Merge into…"), Icons.AutoMirrored.Filled.MergeType) { merging = g })
             if (Store.parental.enabled && pid != null) {

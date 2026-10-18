@@ -298,7 +298,7 @@ fun SettingsScreen() {
         // MARK: bibliotheek
         item {
             S2Section(L("Library")) {
-                val historyCount = Store.history(source?.id).size
+                val historyCount = Store.historyAll().size
                 S2NavRow(L("Watch history"), Icons.Default.History, value = historyCount.takeIf { it > 0 }?.toString()) {
                     sub = S2SettingsSub.HISTORY
                 }
@@ -683,7 +683,8 @@ fun SettingsScreen() {
                     listOf(0 to L("Home"), 1 to L("Live TV"), 2 to L("Movies"), 3 to L("Series")), startTab) {
                     startTab = it; Prefs.put("ui.startTab", it)
                 }
-                if (isMain) S2Row(L("Categories on/off (NL, BE, DE…)"), icon = Icons.Default.FilterList, onClick = { sub = S2SettingsSub.CATEGORIES })
+                // build 128: categorieën aan/uit per profiel (elk profiel zijn eigen keuzes)
+                S2Row(L("Categories on/off (NL, BE, DE…)"), icon = Icons.Default.FilterList, onClick = { sub = S2SettingsSub.CATEGORIES })
                 S2Toggle(L("Show Live TV"), showLive) { showLive = it; Prefs.put("ui.showLive", it) }
                 S2Toggle(L("Show Movies"), showMovies) { showMovies = it; Prefs.put("ui.showMovies", it) }
                 S2Toggle(L("Show Series"), showSeries) { showSeries = it; Prefs.put("ui.showSeries", it) }
@@ -852,7 +853,6 @@ private fun s2TraktSyncNow() {
 }
 
 /** Verder kijken van dít profiel: per serie alleen de laatste aflevering (= MyBingrHeader.swift). */
-private class S2ContinueEntry(val id: String, val target: DetailTarget, val entry: ProgressEntry)
 
 /**
  * Bovenkant van Mijn Bingr, zoals "Mijn Netflix": je profiel (tik = wisselen), Trakt-status,
@@ -867,31 +867,23 @@ private fun S2MyBingrHeader() {
     val progress = Store.progress
     var choice by remember { mutableStateOf<ResumeChoice?>(null) }
 
-    val cont = remember(progress, index, pid, Store.activeProfileID) {
-        val seen = HashSet<String>()
-        progress.entries
-            .filter { Store.belongsToActive(it.value.profileID) && (it.value.playlistID == null || it.value.playlistID.equals(pid, ignoreCase = true)) }
-            .sortedByDescending { it.value.updated }
-            .mapNotNull { (k, e) ->
-                val t: DetailTarget = index.movieByID[k]?.let { DetailTarget.MovieT(it) }
-                    ?: index.seriesByTitle[e.title]?.let { DetailTarget.SeriesT(it) } ?: return@mapNotNull null
-                if (!seen.add(t.id)) return@mapNotNull null
-                S2ContinueEntry(k, t, e)
-            }
-            .take(20)
-    }
+    // build 128: Verder kijken, Mijn lijst en favorieten over alle servers (zelfde als Home)
+    val allV = AllServers.version + CatalogMeta.version
+    val traktNone = remember { emptyList<ContinueItem>() }
+    val cont = remember(progress, index, pid, Store.activeProfileID, allV) { continueItems(Filter.ALL, index, pid, progress, traktNone) }
     val myList = Store.myList
-    val mine = remember(myList, index, pid) {
+    val mine = remember(myList, index, pid, allV) {
         if (pid == null) emptyList<DetailTarget>()
-        else {
-            val movies: List<DetailTarget> = myList.mapNotNull { k -> index.movie(k, pid) }.distinctBy { it.id }.sortedBy { it.title }.map { DetailTarget.MovieT(it) }
-            val series: List<DetailTarget> = myList.mapNotNull { k -> index.series(k, pid) }.distinctBy { it.id }.sortedBy { it.title }.map { DetailTarget.SeriesT(it) }
-            movies + series
+        else AllServers.myList(myList, pid) { k ->
+            index.movie(k, pid)?.let { DetailTarget.MovieT(it) } ?: index.series(k, pid)?.let { DetailTarget.SeriesT(it) }
         }
     }
     val favorites = Store.favorites
-    val favs = remember(favorites, index, pid) {
-        if (pid == null) emptyList<Channel>() else favorites.mapNotNull { index.channel(it, pid) }
+    val favs = remember(favorites, index, pid, allV) {
+        if (pid == null) emptyList<Channel>() else {
+            val times = StateSync.addedTimes(Store.activeProfileID, "favorites")
+            AllServers.channels(favorites.sortedByDescending { times[it] ?: 0L }, pid) { index.channel(it, pid) }
+        }
     }
 
     Column(Modifier.fillMaxWidth().padding(vertical = tvs(8)), verticalArrangement = Arrangement.spacedBy(tvs(18))) {
@@ -923,13 +915,9 @@ private fun S2MyBingrHeader() {
         if (cont.isNotEmpty()) {
             MediaRow(L("Continue watching")) {
                 items(cont) { c ->
-                    val e = c.entry
-                    val left = maxOf(0.0, e.position / maxOf(e.fraction, 0.01) - e.position)
                     ContinueCard(
-                        e.title, e.artwork ?: c.target.poster, e.fraction, L("%d min left", (left / 60).toInt()),
-                        Modifier.focusLift {
-                            choice = ResumeChoice(c.id, e.title, e.fraction, if (e.position > 0) e.position else null, c.target)
-                        }
+                        c.title, c.artwork, c.fraction, c.subtitle,
+                        Modifier.focusLift { choice = c.choice(index) }
                     )
                 }
             }
@@ -952,9 +940,9 @@ private fun S2MyBingrHeader() {
         if (favs.isNotEmpty()) {
             MediaRow(L("Favorite channels")) {
                 items(favs) { c ->
-                    val now = lib.nowPlaying(c)
+                    val now = if (c.sourceID == null) lib.nowPlaying(c) else null
                     ChannelCard(c, now, favorite = true,
-                        modifier = Modifier.focusLift { AppState.play(Playables.channel(c, now), favs) })
+                        modifier = Modifier.focusLift { AllServers.playChannel(c, favs, AllServers.Field.FAVORITES) })
                 }
             }
         }

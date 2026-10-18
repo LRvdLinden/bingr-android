@@ -5,6 +5,10 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
@@ -54,7 +58,8 @@ object ScreensNav {
         FocusRestore.current?.let { returnFocus[counter] = it }
         stack.add(Item(counter, e))
     }
-    fun detail(t: DetailTarget) = push(ScreenEntry.Detail(t))
+    /** Build 128: een titel van een verwijderde server (of die er niet meer op staat) wordt eerst gezocht ([AllServers]). */
+    fun detail(t: DetailTarget) { if (!AllServers.intercept(t)) push(ScreenEntry.Detail(t)) }
     fun category(t: CategoryTarget) = push(ScreenEntry.Category(t))
     fun search() = push(ScreenEntry.Search)
     fun person(r: PersonRef) = push(ScreenEntry.Person(r))
@@ -113,6 +118,35 @@ fun ScreensStackHost() {
                 }
             }
         }
+    }
+    AllServersNotice()
+    AllServersBusy()
+}
+
+/** Build 128: melding als een titel/zender op geen enkele server (meer) gevonden is: Verwijderen / Zoeken / Annuleren. */
+@Composable
+fun AllServersNotice() {
+    val n = AllServers.notice ?: return
+    val actions = buildList {
+        val remove = n.remove
+        if (remove != null && n.removeLabel != null) add(S2Action(n.removeLabel, Icons.Default.Close, destructive = true) { remove() })
+        add(S2Action(L("Search"), Icons.Default.Search) { ScreensNav.push(ScreenEntry.SearchFor(n.searchFor)) })
+        add(S2Action(L("Cancel")) { })
+    }
+    S2ActionDialog(n.title, actions, onDismiss = { AllServers.notice = null }, message = n.message)
+}
+
+/** Build 128: "Zoeken op je andere servers…" terwijl een aangeklikte titel gezocht wordt. */
+@Composable
+fun AllServersBusy() {
+    if (!AllServers.busy) return
+    Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.BottomCenter) {
+        androidx.compose.material3.Text(
+            L("Looking for this title on your other servers…"), color = androidx.compose.ui.graphics.Color.White, fontSize = tsp(13),
+            modifier = Modifier.padding(bottom = tvs(40))
+                .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.8f), androidx.compose.foundation.shape.RoundedCornerShape(50))
+                .padding(horizontal = tvs(16), vertical = tvs(10))
+        )
     }
 }
 

@@ -1,5 +1,6 @@
 package nl.lrvdlinden.bingr
 
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -52,11 +53,25 @@ fun HistoryScreen(onClose: () -> Unit) {
     }
 
     val pid = Playlists.source?.id
-    val entries = Store.history(pid)
+    // build 128: kijkgeschiedenis over alle servers
+    val entries = Store.historyAll()
     val days = entries.groupBy { s2StartOfDay(it.date) }.entries.sortedByDescending { it.key }
         .map { en -> en.key to en.value.sortedByDescending { it.date } }
 
     fun open(e: HistoryEntry) {
+        // build 128: van een andere (of verwijderde) server: daar openen of spelen, zonder te wisselen
+        val sid = e.playlistID
+        if (sid != null && !AllServers.isActive(sid)) {
+            when (val x = AllServers.item("$sid|${e.itemID}")) {
+                is Channel -> AllServers.playChannel(x, null, AllServers.Field.HISTORY)
+                is Movie -> ScreensNav.detail(DetailTarget.MovieT(x))
+                is Series -> ScreensNav.detail(DetailTarget.SeriesT(x))
+                else -> if (e.type == MediaType.LIVE) AllServers.playChannel(Channel(id = e.channelID ?: e.itemID, name = e.title, logo = e.artwork, sourceID = sid), null, AllServers.Field.HISTORY)
+                    else if (e.type == MediaType.MOVIE) ScreensNav.detail(DetailTarget.MovieT(Movie(id = e.itemID, title = e.title, poster = e.artwork, sourceID = sid)))
+                    else AppScope.launch { ResumePlayer.play(e.itemID, e.title, restart = false, sourceID = sid) }
+            }
+            return
+        }
         val lib = Playlists.library
         val ch = if (e.type == MediaType.LIVE) lib.channels.firstOrNull { it.id == (e.channelID ?: e.itemID) } else null
         if (ch != null) {
@@ -121,7 +136,7 @@ fun HistoryScreen(onClose: () -> Unit) {
             containerColor = Theme.elevated,
             title = { Text(L("Clear watch history"), color = Color.White) },
             confirmButton = {
-                TextButton(onClick = { confirmClear = false; Store.clearHistory(pid) }) { Text(L("Clear watch history"), color = Theme.red) }
+                TextButton(onClick = { confirmClear = false; Store.clearHistory(pid, all = true) }) { Text(L("Clear watch history"), color = Theme.red) }
             },
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(L("Cancel"), color = Color.White) } }
         )

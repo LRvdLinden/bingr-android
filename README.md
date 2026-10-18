@@ -92,7 +92,8 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
 - **Live-voorbeeld**: in Live TV en de gids speelt de zender met focus na een seconde klein en zonder geluid (op een telefoon met mobiele data uit)
 - **Evenementen**: PPV- en evenementzenders in een eigen groep, op begintijd, met de wedstrijd, de lokale begintijd en **LIVE**
 - **Terugkijk-correctie per zender** (−120 tot +120 min) als de catch-up van een server verschoven is, gedeeld met al je apparaten
-- **Categorieën aan/uit** per Live TV, Films en Series, met snelknoppen per land/taal
+- **Categorieën aan/uit per profiel** (build 128) per Live TV, Films en Series, voor de categorieën van al je servers, met snelknoppen per land/taal
+- **Eén lijst over alle servers** (build 128): Verder kijken, Mijn lijst, favorieten, recente zenders, geschiedenis en collecties tonen alles van al je servers; een titel of zender van een andere server speelt via die server (ook terugkijken in de gids), zonder te wisselen. Is een server verwijderd, dan zoekt Bingr de titel of zender op je andere servers en verhuist hij mee; anders blijft hij staan met bij aanklikken Verwijderen / Zoeken / Annuleren
 - **Beheren**: groepen en zenders hernoemen, herschikken en verbergen
 - **Pincode** per profiel en kinderslot: groepen op slot, volwassenengroepen automatisch, **leeftijdsgrens per profiel**, 30 min ontgrendelen
 - **Kinderprofiel**: alleen kinderzenders, tekenfilms/familie en titels binnen de leeftijdsgrens, met een eigen **Top 10 voor kids**

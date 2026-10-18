@@ -132,13 +132,15 @@ fun LiveTVScreen() {
                 .filterIsInstance<CollectionEntry.C>().map { it.channel }
         }
     }
-    val channels: List<Channel> = remember(libKey, current, favorites, recents, pid, events, collectionChannels) {
+    val channels: List<Channel> = remember(libKey, current, favorites, recents, pid, events, collectionChannels, AllServers.version) {
         when {
-            current == S2_FAV_KEY -> lib.channels.filter { Store.isFavorite(pid, it.id) }   // server-id hoofdletterongevoelig
+            // build 128: favorieten en recente zenders van alle servers (andere servers spelen daar, zonder te wisselen)
+            current == S2_FAV_KEY -> lib.channels.filter { Store.isFavorite(pid, it.id) } +   // server-id hoofdletterongevoelig
+                AllServers.channels(favorites.filterNot { AllServersLogic.sameServer(AllServersLogic.serverOf(it), pid) }, pid) { null }
             current == S2_RECENT_KEY -> {
                 val byKey = HashMap<String, Channel>()
                 lib.channels.forEach { byKey.putIfAbsent(Store.key(pid, it.id).lowercase(), it) }
-                recents.mapNotNull { byKey[it.lowercase()] }.distinct()
+                AllServers.channels(recents, pid) { byKey[it.lowercase()] }.distinct()
             }
             current == S2_ALL_KEY -> lib.channels
             current == S2_EVENTS_KEY -> events.map { it.first }
@@ -175,6 +177,7 @@ fun LiveTVScreen() {
     val searchPending = searching && found?.first != query
 
     fun play(c: Channel) {
+        if (c.sourceID != null) { AllServers.playChannel(c, visible, if (current == S2_FAV_KEY) AllServers.Field.FAVORITES else AllServers.Field.RECENT); return }
         Store.pushRecentChannel(pid, c.id)
         AppState.play(Playables.channel(c, Playlists.library.nowPlaying(c)), zap = visible)
     }
@@ -374,8 +377,9 @@ private fun S2ChannelList(
         items(channels.size, key = { keys[it] }, contentType = { "channel" }) { i ->
             val c = channels[i]
             val refresh = tick   // elke 30 s opnieuw (nu/straks)
-            val upcoming = if (refresh >= 0) lib.upcoming(c, 2) else emptyList()
-            val now = lib.nowPlaying(c)
+            // build 128: zender van een andere server: zijn eigen gids
+            val upcoming = if (refresh >= 0) (if (c.sourceID != null) Playlists.upcomingOf(c, 2) else lib.upcoming(c, 2)) else emptyList()
+            val now = if (c.sourceID != null) Playlists.nowOf(c) else lib.nowPlaying(c)
             val next = upcoming.firstOrNull { it.start >= (now?.end ?: Long.MAX_VALUE) } ?: upcoming.drop(1).firstOrNull()
             val ev = events[c.id]
             if (ev != null && group == S2_EVENTS_KEY) S2EventRow(c, ev, onClick = { onPlay(c) }, onLongClick = { onMenu(c) })

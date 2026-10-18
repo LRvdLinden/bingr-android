@@ -339,10 +339,12 @@
     var e = A.entitlements();
     var fs = (e && e.free && e.streams) || A.FREE.streams, fd = (e && e.free && e.devices) || A.FREE.devices;
     var fsv = (e && e.free && e.servers) || A.FREE.servers;
+    // build 128: Lifetime "tot 3" schermen (eigen waarden van de server als je Lifetime hebt); hangt ook af van de IPTV-aanbieder
+    var ls = (e && !e.free && e.streams) || A.LIFETIME.streams, ld = (e && !e.free && e.devices) || A.LIFETIME.devices;
     var yes = '✓', no = '—';
     var table = h('div.up-table', [h('div.up-row.up-head', [h('div.up-label', ''), h('div.up-col', L('Free')), h('div.up-col.life', L('Lifetime'))])]);
-    [[L('Streams at the same time'), String(fs), String(A.LIFETIME.streams)],
-      [L('Devices'), String(fd), String(A.LIFETIME.devices)],
+    [[L('Streams at the same time'), String(fs), L('up to %d', ls)],
+      [L('Devices'), String(fd), String(ld)],
       [L('Servers'), String(fsv), L('Unlimited')],
       [L('Statistics'), no, yes], [L('Watching now'), no, yes], ['Trakt', no, yes], [L('Accent colors'), no, yes]
     ].forEach(function (r) {
@@ -361,7 +363,8 @@
       right.appendChild(h('div.dim.up-scan', L("Scan the QR code with your phone's camera to upgrade on bingr.online.")));
       S.drawQR(qr, url, 240);
     }
-    var body = h('div.up-body', [h('div.up-main', [table, price, note]), right]);
+    var provider = h('div.dim.up-provider', L('How many you can watch at once also depends on your IPTV provider.'));
+    var body = h('div.up-body', [h('div.up-main', [table, provider, price, note]), right]);
     var box = h('div', [lead, body]);
     var thanks = function () {
       U.clear(box);

@@ -655,9 +655,11 @@ class PlayerController(item: PlayableItem) {
         if (isPreview || recordedHistory || watchedSeconds < 60) return
         recordedHistory = true
         val it = item
+        // build 128: meta (titel, serie + seizoen/aflevering) voor Verder kijken over alle servers
+        runCatching { AllServers.recordPlayed(it) }
         Store.addHistory(
             HistoryEntry(
-                itemID = it.channelID ?: it.id, playlistID = Store.activePlaylistID,
+                itemID = it.channelID ?: it.id, playlistID = it.sourceID ?: Store.activePlaylistID,
                 title = it.title, subtitle = it.subtitle, artwork = it.artwork,
                 type = it.type, channelID = it.channelID, date = System.currentTimeMillis(),
                 profileID = Store.activeProfileID
@@ -684,7 +686,7 @@ class PlayerController(item: PlayableItem) {
                 it.id,
                 ProgressEntry(
                     fraction = position, position = currentTime, updated = System.currentTimeMillis(),
-                    title = it.title, artwork = it.artwork, playlistID = Store.activePlaylistID,
+                    title = it.title, artwork = it.artwork, playlistID = it.sourceID ?: Store.activePlaylistID,
                     profileID = Store.activeProfileID
                 )
             )

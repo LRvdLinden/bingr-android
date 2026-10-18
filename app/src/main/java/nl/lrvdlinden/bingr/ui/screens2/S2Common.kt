@@ -322,7 +322,7 @@ fun <T> S2Menu(open: Boolean, options: List<Pair<T, String>>, selected: T, onDis
 
 /** Lijst met acties (lang indrukken / menuknop / ⋮), als dialoog zodat de focus erin blijft. */
 @Composable
-fun S2ActionDialog(title: String?, actions: List<S2Action>, onDismiss: () -> Unit) {
+fun S2ActionDialog(title: String?, actions: List<S2Action>, onDismiss: () -> Unit, message: String? = null) {
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier.widthIn(min = 260.dp, max = 460.dp).clip(RoundedCornerShape(14.dp)).background(Theme.elevated)
@@ -331,6 +331,11 @@ fun S2ActionDialog(title: String?, actions: List<S2Action>, onDismiss: () -> Uni
             if (title != null) {
                 Text(title, color = Theme.secondary, fontSize = tsp(13), fontWeight = FontWeight.SemiBold, maxLines = 2,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+            }
+            // build 128: uitleg onder de titel (melding "niet gevonden op je andere servers")
+            if (message != null) {
+                Text(message, color = Color.White, fontSize = tsp(14),
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp))
             }
             val fr = remember { FocusRequester() }
             actions.forEachIndexed { i, a ->

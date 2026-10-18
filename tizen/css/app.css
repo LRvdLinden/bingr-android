@@ -870,3 +870,8 @@ html.mv-hole .layer.multiview { background: transparent; }
 .st-note { margin: 4px 0 0; padding: 12px 28px; border-radius: 10px; font-size: 19px; line-height: 1.45; color: #8c8c8c; }
 .st-note.focused { background: #121212; color: #ddd; }
 .discover-detail .dt-note { margin-top: 24px; font-size: 21px; line-height: 1.5; }
+
+/* build 128: categorieën aan/uit per profiel (Instellingen → Categorieën) */
+.cat-kinds, .cat-codes { display: flex; flex-wrap: wrap; margin: 10px 0 6px 12px; }
+.cat-kinds > *, .cat-codes > * { margin: 0 14px 14px 0; }
+.st-note-small { font-size: 20px; margin: 0 18px 18px 18px; }

@@ -65,6 +65,8 @@ object StateSync {
     private const val SETTINGS = "settings"
     private const val REMINDERS = "reminders"
     private const val COLLECTIONS = "collections"
+    /** Build 128: meta van titels en zenders over alle servers + remap-regels (zie [CatalogMeta]). */
+    private const val CATALOGMETA = "catalogmeta"
     private const val PROFILE = "profile."
     private const val UPLOAD_DELAY = 3_000L
     private const val PROGRESS_INTERVAL = 30_000L
@@ -74,7 +76,7 @@ object StateSync {
     private const val MAX_RECENT = 20
 
     /** Velden met losse items (per item toegevoegd/verwijderd bijhouden). */
-    private val setFields = listOf("myList", "favorites", "watched", "recentChannels")
+    private val setFields = listOf("myList", "favorites", "watched", "recentChannels", "hiddenCategories")
 
     private val active: Boolean get() = Account.isSignedIn && Account.configured
 
@@ -381,6 +383,47 @@ object StateSync {
         markDirty(COLLECTIONS)
     }
 
+    /** Build 128: meta of remap-regels gewijzigd (toevoegen, afspelen, migratie, verhuisd item). */
+    fun catalogMetaChanged() {
+        if (applying > 0) return
+        markDirty(CATALOGMETA)
+    }
+
+    /**
+     * Build 128: er is een remap-regel bij gekomen. Meteen lokaal toepassen op alle profielen en collecties (zonder de
+     * server), daarna alles samenvoegen en uploaden (de oude sleutels gaan dan als verwijdering mee).
+     */
+    fun remapNow() {
+        AppScope.launch {
+            quietly {
+                for (p in withContext(Dispatchers.Main) { Store.profiles.toList() }) {
+                    try { mergeProfile(p.id, emptyList(), localOnly = true) } catch (e: CancellationException) { throw e } catch (_: Exception) { }
+                }
+                withContext(Dispatchers.Main) {
+                    if (Collections.applyRemap(CatalogMeta.rulesNow())) collectionsChanged()
+                    Store.profiles.forEach { dirty += "profile:${it.id}" }
+                    markDirty(CATALOGMETA)
+                }
+            }
+        }
+    }
+
+    /** Build 128: items als "gezet op [at]" vastleggen (migratie met een oude tijd), als ze nog niet bekend zijn. */
+    fun seedPresent(id: String, field: String, keys: Collection<String>, at: Long) {
+        synchronized(metaLock) {
+            val m = readMeta(id)
+            val p = (m.present[field] ?: emptyMap()).toMutableMap()
+            val r = m.removed[field] ?: emptyMap()
+            var changed = false
+            for (k in keys) if (k !in p && k !in r) { p[k] = at; changed = true }
+            if (changed) writeMeta(id, m.copy(present = m.present + (field to p)))
+        }
+    }
+
+    /** Build 128: wanneer elk item van [field] in profiel [id] (het laatst) gezet is (voor de volgorde over alle servers). */
+    fun addedTimes(id: String?, field: String): Map<String, Long> =
+        if (id == null) emptyMap() else synchronized(metaLock) { readMeta(id).present[field] ?: emptyMap() }
+
     fun remindersChanged() {
         if (applying > 0) return
         bumpLocal(REMINDERS)
@@ -500,6 +543,8 @@ object StateSync {
             mergeConnections(all[CONNECTIONS])
             mergeSettings(all[SETTINGS])
             mergeReminders(all[REMINDERS])
+            // build 128: eerst catalogmeta (de remap-regels gelden daarna voor collecties en profielen)
+            mergeCatalogMeta(all[CATALOGMETA])
             mergeCollections(all[COLLECTIONS], all.containsKey(COLLECTIONS))
             mergeProfiles(all)
             synced = true
@@ -532,6 +577,7 @@ object StateSync {
                         when {
                             k.startsWith("profile:") -> uploadProfile(k.removePrefix("profile:"))
                             k == COLLECTIONS -> uploadCollections()
+                            k == CATALOGMETA -> uploadCatalogMeta()
                             else -> uploadSimple(k)
                         }
                     } catch (e: CancellationException) { dirty += keys; throw e } catch (_: Exception) { false }
@@ -1044,6 +1090,37 @@ object StateSync {
         }
     }
 
+    // MARK: catalogmeta (build 128)
+
+    private suspend fun uploadCatalogMeta(): Boolean {
+        val got = Account.getState(listOf(CATALOGMETA)) ?: return false
+        return mergeCatalogMeta(got[CATALOGMETA])
+    }
+
+    /** Sleutels (server kleine letters) waarnaar een lijst of collectie van een profiel op dit apparaat verwijst. */
+    private fun referencedKeys(): Set<String> {
+        val out = HashSet<String>()
+        for (p in Store.profiles) {
+            val d = Store.profileData(p.id)
+            (d.myList + d.favorites + d.recent).forEach { out += AllServersLogic.metaKey(it) }
+            d.progress.forEach { (k, e) -> e.playlistID?.let { out += AllServersLogic.metaKey("$it|$k") } }
+            d.history.forEach { out += AllServersLogic.metaKey(it.id) }
+        }
+        out += Collections.referencedKeys()
+        return out
+    }
+
+    /** Per sleutel samenvoegen (nieuwste `at`), lokaal bewaren en uploaden als het afwijkt van de server. true = gelukt. */
+    private suspend fun mergeCatalogMeta(sec: Account.StateSection?): Boolean {
+        val data = sec?.data as? JsonObject
+        val referenced = withContext(Dispatchers.Main) { referencedKeys() }
+        val (json, differs) = withContext(Dispatchers.Default) { CatalogMeta.merge(data, referenced) }
+        if (!differs) return true
+        val empty = (json["items"] as? JsonObject).isNullOrEmpty() && (json["remap"] as? JsonObject).isNullOrEmpty()
+        if (data == null && empty) return true
+        return Account.putState(CATALOGMETA, json) != null
+    }
+
     // MARK: collecties (build 51)
 
     /** Collecties uploaden: eerst de serverversie lezen en per item samenvoegen. */
@@ -1062,7 +1139,7 @@ object StateSync {
             val r = e as? JsonObject ?: return@mapNotNull null
             val t = r.jS("type")?.lowercase() ?: return@mapNotNull null
             val iid = r.jS("id")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-            CollectionRef(t, iid)
+            CollectionRef(t, iid, r.jS("sid")?.takeIf { it.isNotEmpty() })
         } ?: emptyList()
         val types = (o["types"] as? JsonArray)?.mapNotNull { it.jFlex?.lowercase() } ?: BingrCollection.ALL_TYPES
         return BingrCollection(
@@ -1094,7 +1171,13 @@ object StateSync {
             if (!c.image.avatar.isIllustration) put("emoji", JsonPrimitive(c.image.symbol))
         })
         m["kind"] = JsonPrimitive(c.kind)
-        m["items"] = JsonArray(c.items.map { JsonObject(mapOf("type" to JsonPrimitive(it.type), "id" to JsonPrimitive(it.id))) })
+        // build 128: `sid` = server van het item (collecties over alle servers)
+        m["items"] = JsonArray(c.items.map { r ->
+            JsonObject(buildMap {
+                put("type", JsonPrimitive(r.type)); put("id", JsonPrimitive(r.id))
+                r.sid?.let { put("sid", JsonPrimitive(it)) }
+            })
+        })
         m["query"] = JsonPrimitive(c.query)
         m["types"] = JsonArray(c.types.map { JsonPrimitive(it) })
         m["group"] = c.group?.let { JsonPrimitive(it) } ?: JsonNull
@@ -1183,6 +1266,8 @@ object StateSync {
         }
         // build 74: kopieën van collecties van een ander profiel (migratie tot build 73) uit de subprofielen halen
         Collections.withoutSharedCopies(merged, mainKey).let { if (it !== merged) { merged.clear(); merged.putAll(it) } }
+        // build 128: verhuisde items (remap) in handmatige collecties van alle profielen
+        Collections.remapped(merged, CatalogMeta.rulesNow()).let { if (it !== merged) { merged.clear(); merged.putAll(it) } }
 
         // lokaal: alleen profielen die op dit apparaat bestaan
         val localMap = merged.filterKeys { k -> profiles.any { it.lowercase() == k } }
@@ -1273,6 +1358,7 @@ object StateSync {
         record("myList", d.myList.associateWith { null })
         record("favorites", d.favorites.associateWith { null })
         record("watched", d.watched.associateWith { null })
+        record("hiddenCategories", d.hiddenCategories.associateWith { null })
         // recente zenders: volgorde = tijd (nieuwste eerst)
         val known = present["recentChannels"] ?: emptyMap()
         val order = known.entries.sortedByDescending { it.value }.map { it.key }.filter { it in d.recent }
@@ -1551,6 +1637,76 @@ object StateSync {
         return JsonObject(out)
     }
 
+    /**
+     * Build 128: remap-regels toepassen op één profiel: Mijn lijst, favorieten en recente zenders (sleutel
+     * "<server>|<item>"), voortgang (item-id + `playlistID`), geschiedenis ("<server>|<item>") en bekeken (de nieuwe
+     * item-id erbij). Oude sleutel → verwijdering met de remap-tijd; nieuwe sleutel met dezelfde tijd, positie en
+     * bekeken-status. Idempotent; ketens volgen ([AllServersLogic.resolve]).
+     */
+    private val remapFields = setOf("myList", "favorites", "recentChannels")
+    private fun applyRemap(s: PState, rules: Map<String, AllServersLogic.Rule>): PState {
+        if (rules.isEmpty()) return s
+        val L = AllServersLogic
+        val moved = ArrayList<Pair<String, String>>()   // oude item-id → nieuwe item-id
+        fun remapSet(m: Map<String, Item<Boolean>>): Map<String, Item<Boolean>> {
+            val e = m.mapValues { AllServersLogic.Entry(it.value.at, it.value.value != null) }
+            val r = L.remapEntries(e, rules) ?: return m
+            for ((k, v) in e) if (v.alive && r[k]?.alive == false) L.resolve(rules, k)?.let { moved += L.itemOf(k) to L.itemOf(it.first) }
+            return r.mapValues { (_, v) -> Item(v.at, if (v.alive) true else null) }
+        }
+        val sets = s.sets.mapValues { (f, m) -> if (f in remapFields) remapSet(m) else m }.toMutableMap()
+        // voortgang
+        var progress: HashMap<String, Item<ProgressEntry>>? = null
+        for ((k, it) in s.progress) {
+            val e = it.value ?: continue
+            val pid = e.playlistID ?: continue
+            val (target, at) = L.resolve(rules, "$pid|$k") ?: continue
+            val sid = L.serverOf(target) ?: continue
+            val nk = L.itemOf(target)
+            val p = progress ?: HashMap(s.progress).also { progress = it }
+            if (nk == k) { if (!L.sameServer(pid, sid)) p[k] = Item(it.at, e.copy(playlistID = sid)); continue }
+            p[k] = Item(maxOf(at, it.at + 1), null)
+            val cur = p[nk]
+            if (cur == null || cur.at < it.at) p[nk] = Item(it.at, e.copy(playlistID = sid))
+            moved += k to nk
+        }
+        // geschiedenis
+        var history: HashMap<String, Item<HistoryEntry>>? = null
+        for ((k, it) in s.history) {
+            val e = it.value ?: continue
+            if (e.playlistID == null) continue
+            val (target, at) = L.resolve(rules, e.id) ?: continue
+            val sid = L.serverOf(target) ?: continue
+            val item = L.itemOf(target)
+            val n = e.copy(playlistID = sid, itemID = item, channelID = e.channelID?.let { item })
+            if (n.id == k) continue
+            val h = history ?: HashMap(s.history).also { history = it }
+            h[k] = Item(maxOf(at, it.at + 1), null)
+            val cur = h[n.id]
+            if (cur == null || cur.at < it.at) h[n.id] = Item(it.at, n)
+        }
+        // bekeken: de nieuwe item-id (en "ep:<serie>|s-e") erbij
+        val watched = s.sets["watched"]
+        if (watched != null && moved.isNotEmpty()) {
+            val w = HashMap(watched)
+            for ((old, new) in moved.distinct()) {
+                if (old == new) continue
+                for ((wk, wi) in watched) {
+                    if (wi.value == null) continue
+                    val nk = when {
+                        wk == old -> new
+                        wk.startsWith("ep:$old|") -> "ep:$new|" + wk.substring("ep:$old|".length)
+                        else -> null
+                    } ?: continue
+                    val cur = w[nk]
+                    if (cur == null || (cur.value == null && cur.at < wi.at)) w[nk] = Item(wi.at, true)
+                }
+            }
+            if (w != watched) sets["watched"] = w
+        }
+        return s.copy(sets = sets, progress = progress ?: s.progress, history = history ?: s.history)
+    }
+
     /** Alle profielen: serveronderdelen (hoofdletterongevoelig) samenvoegen met de lokale gegevens. */
     private suspend fun mergeProfiles(all: Map<String, Account.StateSection>) {
         val byId = all.entries.filter { it.key.startsWith(PROFILE) }.groupBy { it.key.removePrefix(PROFILE).lowercase() }
@@ -1570,16 +1726,17 @@ object StateSync {
      * Eén profiel samenvoegen (zie de regels bovenaan) en lokaal toepassen. Upload als het resultaat afwijkt van de
      * server. true = gelukt.
      */
-    private suspend fun mergeProfile(id: String, sections: List<Pair<String, Account.StateSection>>): Boolean =
+    private suspend fun mergeProfile(id: String, sections: List<Pair<String, Account.StateSection>>, localOnly: Boolean = false): Boolean =
         // build 97: lezen, vergelijken en JSON maken buiten de main thread; toepassen blijft op main (zie hieronder)
-        withContext(Dispatchers.Default) { mergeProfileOffMain(id, sections) }
+        withContext(Dispatchers.Default) { mergeProfileOffMain(id, sections, localOnly) }
 
-    private suspend fun mergeProfileOffMain(id: String, sections: List<Pair<String, Account.StateSection>>): Boolean {
+    /** [localOnly] (build 128): alleen lokaal samenvoegen/remappen en toepassen, niets lezen of uploaden. */
+    private suspend fun mergeProfileOffMain(id: String, sections: List<Pair<String, Account.StateSection>>, localOnly: Boolean = false): Boolean {
         val key = id.lowercase()
         // voorkeur: de naam die de server al heeft (exact, anders een andere schrijfwijze)
         val name = sections.firstOrNull { it.first == "$PROFILE$id" }?.first ?: sections.firstOrNull()?.first
             ?: sectionNames[key] ?: "$PROFILE$id"
-        sectionNames[key] = name
+        if (!localOnly) sectionNames[key] = name
         // build 97: stand van het actieve profiel bij het begin; is die bij het toepassen anders (intussen hier gewijzigd),
         // dan niets overschrijven: die wijziging start zelf een nieuwe upload (en samenvoeging)
         val activeAtStart = id == Store.activeProfileID
@@ -1609,10 +1766,11 @@ object StateSync {
         )
         // van vóór build 44 (tijd -1) en de server heeft niets: nu stempelen
         val now = System.currentTimeMillis()
-        val merged = normalize(merged0.copy(
+        // build 128: verhuisde items (remap-regels uit catalogmeta) naar hun nieuwe sleutel, met dezelfde tijd
+        val merged = normalize(applyRemap(merged0.copy(
             prefs = merged0.prefs?.let { if (it.at < 0) it.copy(at = now) else it },
             pin = merged0.pin?.let { if (it.at < 0) it.copy(at = now) else it },
-        ))
+        ), CatalogMeta.rulesNow()))
 
         // lokaal toepassen
         val sets = merged.sets
@@ -1624,6 +1782,7 @@ object StateSync {
             watched = present("watched").keys,
             recent = present("recentChannels").entries.sortedByDescending { it.value.at }.map { it.key },
             history = merged.history.values.mapNotNull { it.value }.sortedByDescending { it.date },
+            hiddenCategories = present("hiddenCategories").keys,
         )
         val stillSame = withContext(Dispatchers.Main) {
             if (snapshot != null && (Store.activeProfileID != id || Store.profileData(id) != snapshot)) return@withContext false
@@ -1661,6 +1820,7 @@ object StateSync {
             true
         }
         if (!stillSame) return false
+        if (localOnly) return true
 
         val empty = merged.sets.values.all { it.isEmpty() } && merged.progress.isEmpty() && merged.history.isEmpty() &&
             merged.prefs == null && merged.pin == null && merged.home == null

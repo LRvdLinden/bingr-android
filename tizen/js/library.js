@@ -29,6 +29,9 @@
   var notKidsWords = ['anime', 'hentai', 'horror', 'thriller', 'family guy'];
   var kidsChannelWords = ['kids', 'kinder', 'junior', 'cartoon', 'disney', 'nick', 'boomerang', 'cbeebies', 'baby', 'zapp', 'kika',
     'toon', 'jeugd', 'jeunesse', 'pbs kids', 'duck tv', 'jimjam', 'minimax', 'pop kids'];
+  function lower(s) { return String(s == null ? '' : s).toLowerCase(); }
+  // build 128: categoriekeuzes per profiel kunnen via de sync veranderen (applyFilters doet niets als er niets anders is)
+  B.on('profileData', function () { if (Lib.raw) Lib.applyFilters(); });
   function anyIn(s, words) { for (var i = 0; i < words.length; i++) if (s.indexOf(words[i]) >= 0) return true; return false; }
   PC.isAdultGroup = function (g) { return anyIn(String(g || '').toLowerCase(), adultWords); };
   PC.isKidsGroup = function (g) {
@@ -104,7 +107,9 @@
       ageLimit: D.ageLimit(p), strict: D.strict(p),
       parentalEnabled: !!B.bool(D.shared('parentalControl', false)),
       autoLockAdult: B.bool(D.shared('parentalAutoLockAdult', true)) !== false,
-      lockedGroups: D.lockedGroups(src), unlocked: PC.isUnlocked()
+      lockedGroups: D.lockedGroups(src), unlocked: PC.isUnlocked(),
+      // build 128: categorieën aan/uit per profiel (hiddenCategories, "<server-id>|<naam>"), niet meer "group:" uit het android-blok
+      hiddenCats: src ? D.hiddenCategoryNames(src.id) : {}
     };
   }
   /** Filter per item (= Playlists.apply): geeft per soort een functie item → gefilterde kopie of null. */
@@ -127,7 +132,8 @@
       if (hidden[id]) return false;
       if (B.has(groupOK, g)) return groupOK[g];
       var m = c.merged[g] || g;
-      var ok = !hidden['group:' + g] && !hidden['group:' + m] && !isLocked(g) && !isLocked(m);
+      var hc = ctx.hiddenCats || {};
+      var ok = !hc[g] && !hc[m] && !isLocked(g) && !isLocked(m);
       groupOK[g] = ok;
       return ok;
     }
@@ -265,6 +271,8 @@
 
   /** Programma's van een zender (gesorteerd op start). De sleutel wordt per zender één keer bepaald. */
   Lib.epgFor = function (ch) {
+    // build 128: zender van een andere server: zijn eigen gids (js/allservers.js)
+    if (ch && ch._src) return B.allservers ? B.allservers.programs(ch) : [];
     var e = Lib.raw.epg || {};
     var k = ch._ek || (ch._ek = String(ch.epgID || ch.id).toLowerCase());
     return e[k] || e[String(ch.id).toLowerCase()] || [];
@@ -290,26 +298,30 @@
   // MARK: terugkijken (catch-up / timeshift)
 
   /** Kan dit programma teruggekeken worden? (afgelopen of bezig, binnen catchupDays, Xtream of MAC-portal) */
+  /** build 128: server van een zender (ch._src = andere server, ook na een verhuizing). */
+  function srcOf(ch) { return ch && ch._src ? D.sourceById(ch._src) : Lib.source; }
   Lib.canCatchup = function (ch, p) {
-    if (!ch || !p || !(ch.catchupDays > 0) || !Lib.source) return false;
-    var kind = Lib.source.kind;
+    var s = srcOf(ch);
+    if (!ch || !p || !(ch.catchupDays > 0) || !s) return false;
+    var kind = s.kind;
     if (kind !== 'Xtream Codes' && kind !== 'Stalker / MAC-portal') return false;
     var now = Date.now();
     return p.start < now && p.start > now - ch.catchupDays * 86400000;
   };
   /** Afspeel-URL voor terugkijken, met de terugkijk-correctie van de zender (catchupOffsets, minuten). */
   Lib.catchupURL = function (ch, p) {
-    var src = Lib.source;
+    var src = srcOf(ch);
     if (!Lib.canCatchup(ch, p)) return Promise.resolve(null);
     var raw = null;
-    for (var i = 0; i < Lib.raw.channels.length; i++) if (Lib.raw.channels[i].id === ch.id) { raw = Lib.raw.channels[i]; break; }
+    // build 128: zender van een andere server: zijn eigen gegevens (inlog, terugkijk-correctie, MAC-portal)
+    if (!ch._src) for (var i = 0; i < Lib.raw.channels.length; i++) if (Lib.raw.channels[i].id === ch.id) { raw = Lib.raw.channels[i]; break; }
     raw = raw || ch;
     var shift = D.catchupOffset(D.sourceById(src.id) || src, ch.id) * 60000;
     var start = p.start + shift, end = Math.min(p.end, Date.now()) + shift;
     if (p.end > Date.now()) end = p.end + shift;
     if (src.kind === 'Xtream Codes') return Promise.resolve(new P.Xtream(src, D.secret(src, 'password')).catchupURL(raw, start, end));
-    var st = Lib.stalker || new P.Stalker(src);
-    Lib.stalker = st;
+    var st = ch._src ? new P.Stalker(src) : (Lib.stalker || new P.Stalker(src));
+    if (!ch._src) Lib.stalker = st;
     return st.archiveLink(raw, start, end).catch(function () { return null; });
   };
 
@@ -466,38 +478,48 @@
   /** Afleveringen van een serie (M3U: al in de lijst; Xtream: get_series_info; Plex/Jellyfin/Emby/Stremio: hun API). */
   Lib.episodes = function (s) {
     if (s.episodes && s.episodes.length) return Promise.resolve({ episodes: s.episodes, info: null });
-    if (Lib.episodeCache[s.id]) return Promise.resolve(Lib.episodeCache[s.id]);
-    var src = Lib.source;
+    // build 128: serie van een andere server (s._src), zonder te wisselen; eigen cachesleutel
+    var ck = (s._src ? lower(s._src) + '|' : '') + s.id;
+    if (Lib.episodeCache[ck]) return Promise.resolve(Lib.episodeCache[ck]);
+    var src = s._src ? (D.sourceById(s._src) || Lib.source) : Lib.source;
     if (src && B.media.isMediaServer(src.kind)) {
       return B.media.episodes(src, s).then(function (eps) {
         var r = { episodes: eps || [], info: null };
-        if (r.episodes.length) Lib.episodeCache[s.id] = r;
+        if (r.episodes.length) Lib.episodeCache[ck] = r;
         return r;
       }, function () { return { episodes: [], info: null }; });
     }
     if (!src || src.kind !== 'Xtream Codes') return Promise.resolve({ episodes: [], info: null });
     var x = new P.Xtream(src, D.secret(src, 'password'));
     return x.episodes(s).then(function (r) {
-      if (r.episodes.length) Lib.episodeCache[s.id] = r;
+      if (r.episodes.length) Lib.episodeCache[ck] = r;
       return r;
     }, function () { return { episodes: [], info: null }; });
   };
   Lib.movieInfo = function (m) {
-    var src = Lib.source;
+    var src = m && m._src ? (D.sourceById(m._src) || Lib.source) : Lib.source;
     if (!src || src.kind !== 'Xtream Codes' || m.xtreamVodID == null) return Promise.resolve(null);
     return new P.Xtream(src, D.secret(src, 'password')).vodInfo(m.xtreamVodID).catch(function () { return null; });
   };
 
   /** Stremio: alle directe streams van een titel ("movie|tt…" of "series|tt…:s:e"). */
-  Lib.stremioStreams = function (ref) {
-    var src = Lib.source;
+  Lib.stremioStreams = function (ref, srcId) {
+    var src = srcId ? (D.sourceById(srcId) || Lib.source) : Lib.source;
     if (!src || src.kind !== 'Stremio' || !ref) return Promise.resolve([]);
     return B.media.stremioFor(src).then(function (st) { return st.streams(ref); }, function () { return []; });
   };
   /** Afspeel-URL (MAC-portal: eerst een link aanmaken; Stremio: gekozen of eerste directe stream). */
   Lib.resolveURL = function (item, live) {
     if (item.stremio && !item.streamURL) {
-      return Lib.stremioStreams(item.stremio).then(function (list) { return list.length ? list[0].url : null; });
+      return Lib.stremioStreams(item.stremio, item.src).then(function (list) { return list.length ? list[0].url : null; });
+    }
+    // build 128: item van een andere server: een eigen MAC-portalverbinding
+    var other = item.src && !(Lib.source && lower(Lib.source.id) === lower(item.src)) ? D.sourceById(item.src) : null;
+    if (other) {
+      if (item.stalkerCmd && other.kind === 'Stalker / MAC-portal') {
+        return new P.Stalker(other).createLink(item.stalkerCmd, live).then(function (u) { return u || item.streamURL; }, function () { return item.streamURL; });
+      }
+      return Promise.resolve(item.streamURL);
     }
     if (item.stalkerCmd && Lib.source && Lib.source.kind === 'Stalker / MAC-portal') {
       var st = Lib.stalker || new P.Stalker(Lib.source);
@@ -570,6 +592,31 @@
     lib.epg = {};
     return lib;
   };
+  /** build 128: filter per item (kinderslot, verborgen, leeftijd) voor een andere bron, zonder de hele lijst te kopiëren. */
+  Lib.filterOne = function (src) { return makeFilter(context(src)); };
+  /** build 128: gids van een paar zenders van een andere server (cache van die server, anders alleen deze zenders uit XMLTV). */
+  Lib.epgOther = function (src, lib, chans) {
+    if (!chans.length || B.media.isMediaServer(src.kind)) return Promise.resolve({});
+    return B.idb.get('epg:' + src.id).then(function (c) {
+      if (c && c.epg && Date.now() - c.at < 24 * 3600000) return c.epg;
+      if (!lib || !lib.epgURL) return c && c.epg ? c.epg : {};
+      var w = {}, now = Date.now();
+      chans.forEach(function (ch) {
+        if (!ch.epgID) return;
+        w[String(ch.epgID).toLowerCase()] = ch.catchupDays > 0 ? now - Math.min(3, ch.catchupDays) * 86400000 : now - 3 * 3600000;
+      });
+      if (!Object.keys(w).length) return {};
+      return P.loadXMLTV(lib.epgURL, w).catch(function () { return {}; });
+    }).then(function (epg) {
+      var out = {};
+      chans.forEach(function (ch) {
+        var k = String(ch.epgID || ch.id).toLowerCase();
+        var l = (epg && (epg[k] || epg[String(ch.id).toLowerCase()])) || null;
+        if (l && l.length) out[ch.id] = l;
+      });
+      return out;
+    }, function () { return {}; });
+  };
   /** build 102: bibliotheek van een andere bron ophalen en cachen (zoals Lib.refresh, maar zonder te wisselen). */
   Lib.fetchOther = function (src) {
     return fetchLibrary(src).then(function (lib) {
@@ -625,14 +672,14 @@
   Lib.collectionItems = function (c, limit) {
     limit = limit || 60;
     var prof = B.app && B.app.profile ? B.app.profile.id : '';
-    var key = 'coll:' + prof + '|' + c.id + '|' + (c.updatedAt || '') + '|' + limit + '|' + (Lib.source ? Lib.source.id : '');
+    var key = 'coll:' + prof + '|' + c.id + '|' + (c.updatedAt || '') + '|' + limit + '|' + (Lib.source ? Lib.source.id : '') + '|' + (B.allservers ? B.allservers.version : 0);
     return Lib.memo(key, function () { return collectionItems(c, limit); });
   };
   function collectionItems(c, limit) {
     var lib = Lib.lib, out = [];
     var src = Lib.source ? String(Lib.source.id).toLowerCase() : '';
-    if (c.sourceID && String(c.sourceID).toLowerCase() !== src) return [];
     if (c.kind === 'smart') {
+      if (c.sourceID && String(c.sourceID).toLowerCase() !== src) return [];
       var words = String(c.query || '').split(',').map(function (w) { return B.fold(w).trim(); }).filter(Boolean);
       if (!words.length) return [];
       var types = Array.isArray(c.types) && c.types.length ? c.types : ['channel', 'movie', 'series'];
@@ -649,8 +696,16 @@
       return out;
     }
     (c.items || []).forEach(function (it) {
-      var hit = it && lib.byId[it.id];
-      if (hit && out.length < limit) out.push(hit);
+      if (!it || out.length >= limit) return;
+      // build 128: item van een andere (of verwijderde) server (`sid`)
+      var sid = it.sid || c.sourceID;
+      if (sid && src && String(sid).toLowerCase() !== src && B.allservers) {
+        var t = B.allservers.tile(sid + '|' + it.id, it.type);
+        if (t) out.push(t);
+        return;
+      }
+      var hit = lib.byId[it.id];
+      if (hit) out.push(hit);
     });
     return out;
   }

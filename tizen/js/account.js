@@ -530,7 +530,7 @@
       case 'trakt': return L('Trakt is part of Bingr Lifetime.');
       case 'multi_server': return L('More servers are part of Bingr Lifetime. Your current servers keep working.');
       case 'themes': return L('Accent colors are part of Bingr Lifetime.');
-      case 'streams': return L('With Bingr Lifetime you can watch on up to %d screens at the same time.', A.LIFETIME.streams);
+      case 'streams': return L('With Bingr Lifetime you can watch on up to %d screens at the same time.', A.LIFETIME.streams) + ' ' + L('How many you can watch at once also depends on your IPTV provider.');
       case 'devices': return L('With Bingr Lifetime you can use up to %d devices.', A.LIFETIME.devices);
       default: return L('Get more out of Bingr with a one-time upgrade.');
     }

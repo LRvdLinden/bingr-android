@@ -5457,7 +5457,17 @@
   "Allow notifications?": "Meldingen toestaan?",
   "Bingr can let you know when a new version is available, when a program you set a reminder for is about to start, and when there's a message from Bingr. You can change this any time in Settings.": "Bingr kan je laten weten wanneer er een nieuwe versie is, wanneer een programma waarvoor je een herinnering hebt gezet bijna begint en wanneer er een bericht van Bingr is. Je kunt dit altijd wijzigen in Instellingen.",
   "Not now": "Niet nu",
-  "Continue": "Doorgaan"
+  "Continue": "Doorgaan",
+  "a removed server": "een verwijderde server",
+  "Unknown title": "Onbekende titel",
+  "Looking for this title on your other servers…": "Deze titel wordt gezocht op je andere servers…",
+  "How many you can watch at once also depends on your IPTV provider.": "Hoeveel je tegelijk kunt kijken, hangt ook af van je IPTV-aanbieder.",
+  "up to %d": "tot %d",
+  "“%@” was on “%@”, but that server has been removed. This title wasn't found on your other servers (%@).": "‘%@’ stond op ‘%@’, maar die server is verwijderd. Op je andere servers (%@) is deze titel niet gevonden.",
+  "“%@” was on “%@”, but that server has been removed, and you have no other server to search.": "‘%@’ stond op ‘%@’, maar die server is verwijderd, en je hebt geen andere server waarop we kunnen zoeken.",
+  "“%@” is no longer on “%@” and wasn't found on %@ either.": "‘%@’ staat niet meer op ‘%@’ en is ook niet gevonden op %@.",
+  "“%@” is no longer on “%@”, and you have no other server to search.": "‘%@’ staat niet meer op ‘%@’, en je hebt geen andere server waarop we kunnen zoeken.",
+  "Categories that are off don't appear anywhere in the app. Saved per profile, for all your servers.": "Categorieën die uit staan, zie je nergens in de app. Bewaard per profiel, voor al je servers."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",

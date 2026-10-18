@@ -69,6 +69,20 @@ jobs:
             echo "::warning::Secret GOOGLE_SERVICES_JSON ontbreekt: APK zonder pushmeldingen."
           fi
 
+      # build 128: unit-tests van de pure logica (één lijst over alle servers: normaliseren, matchen, remap, samenvoegen).
+      # Zonder Android-SDK met kotlinc (staat op de runner); ontbreekt kotlinc, dan alleen een waarschuwing.
+      - name: Unit-tests (pure logica)
+        run: |
+          if command -v kotlinc >/dev/null 2>&1; then
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/AllServersLogic.kt tools/test/AllServersLogicTest.kt \
+              -include-runtime -d "$RUNNER_TEMP/logic-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/logic-test.jar" | tee "$RUNNER_TEMP/logic-test.txt"; rc=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests::$(tail -1 "$RUNNER_TEMP/logic-test.txt")"
+            exit $rc
+          else
+            echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic overgeslagen."
+          fi
+
       - name: APK bouwen
         env:
           BINGR_KEYSTORE_PASSWORD: ${{ secrets.BINGR_KEYSTORE_PASSWORD }}
