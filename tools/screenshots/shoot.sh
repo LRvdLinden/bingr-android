@@ -52,26 +52,37 @@ if [ "$SET" != "tv" ]; then
   demo notifications -e visible false
 fi
 
+# geen systeemmeldingen over de screenshots: uitleg bij verborgen balken al "gezien", geen ANR-vensters van andere apps
+adb shell settings put secure immersive_mode_confirmations confirmed || true
+adb shell settings put global anr_show_background 0 || true
+adb shell settings put secure show_first_crash_dialog 0 || true
+adb shell settings put global show_first_crash_dialog 0 || true
+sleep 45   # launcher en systeem eerst laten bijkomen na het opstarten
+adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
+
 timeout 300 adb install -r -g "$APK" || { echo "::error::installeren mislukt"; exit 1; }
 
 case "$SET" in
   phone) SCREENS="home detail live guide movies picker categories" ;;
-  *)     SCREENS="home detail live guide movies picker categories multiview" ;;
+  *)     SCREENS="home detail live guide movies picker multiview categories" ;;
 esac
 
 first=1
 for s in $SCREENS; do
-  adb shell am force-stop "$PKG"
+  # emulator weggevallen (komt voor bij zware schermen): de rest overslaan, wat er is blijft bewaard
+  [ "$(timeout 15 adb get-state 2>/dev/null)" = "device" ] || { echo "::warning::emulator weg vóór $s"; break; }
+  timeout 30 adb shell am force-stop "$PKG"
+  timeout 15 adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
   sleep 2
   timeout 60 adb shell am start -W -n "$PKG/.MainActivity" --ez bingr.screenshots true --es bingr.screen "$s" >/dev/null
   if [ $first = 1 ]; then sleep 25; first=0; else sleep 15; fi
-  # TV: de focus staat bovenin; voor Home en Films één stap omlaag naar de knoppen van het billboard
-  if [ "$SET" = "tv" ] && { [ "$s" = "home" ] || [ "$s" = "movies" ]; }; then
-    adb shell input keyevent KEYCODE_DPAD_DOWN; sleep 3
+  # TV-detail: de focus op "Afspelen" schuift de kop deels weg; één stap omhoog zet hem weer helemaal in beeld
+  if [ "$SET" = "tv" ] && [ "$s" = "detail" ]; then
+    timeout 15 adb shell input keyevent KEYCODE_DPAD_UP; sleep 3
   fi
   timeout 60 adb exec-out screencap -p > "$OUT/$s.png"
   echo "$s: $(python3 -c 'import sys,struct; d=open(sys.argv[1],"rb").read(24); print("%dx%d" % struct.unpack(">II", d[16:24]))' "$OUT/$s.png" 2>/dev/null)"
 done
-adb logcat -d -t 400 '*:E' > "$OUT/_logcat-errors.txt" 2>/dev/null || true
-adb shell am force-stop "$PKG"
+timeout 30 adb logcat -d -t 400 '*:E' > "$OUT/_logcat-errors.txt" 2>/dev/null || true
+timeout 30 adb shell am force-stop "$PKG" || true
 exit 0
