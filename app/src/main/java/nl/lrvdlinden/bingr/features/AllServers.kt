@@ -30,6 +30,10 @@ import java.util.Locale
  *   Verwijderen / Zoeken / Annuleren ([notice]).
  * - Op de achtergrond: alleen als er items zijn die het nodig hebben, niet tijdens het afspelen, met time-outs, één
  *   catalogus tegelijk in het geheugen; elke server hooguit eens per 6 uur opnieuw doorzocht voor dezelfde items.
+ * - Build 130: pas als de actieve server klaar is (laden, verversen, filteren) en minstens 10 s na het openen; elke
+ *   server wordt alleen opnieuw ingelezen als zijn cache, de filters of de verwijzingen veranderd zijn ([scans]), en
+ *   een server zonder cache wordt hooguit eens per 6 uur van het netwerk gehaald (Playlists.catalogOf). Zo staat er na
+ *   het openen niet lang "Bijwerken…" en loopt het niet steeds opnieuw.
  * - Migratie (eerste start van build 128, vlag per apparaat): meta van alle items van alle profielen aanvullen uit de
  *   catalogus van hun eigen server (voortgang: eerst de titel/artwork die er al is).
  */
@@ -61,12 +65,14 @@ object AllServers {
     private const val MIGRATED = "allservers.migrated128"
     private val lock = Mutex()
     private var started = false
+    private var startedAt = 0L
     private var job: Job? = null
 
     private val X = AllServersLogic
 
     fun wipe() {
         found = emptyMap(); absent = emptySet(); tried.clear(); notice = null; smart = emptyMap(); smartTried.clear(); libCache.clear()
+        scans.clear(); smartDone = null
         synchronized(seenChannels) { seenChannels.clear(); seenEpg.clear() }
         runCatching { Prefs.remove(MIGRATED) }; version++
     }
@@ -90,21 +96,30 @@ object AllServers {
     fun start() {
         if (started) return
         started = true
+        startedAt = System.currentTimeMillis()
         CatalogMeta.ensureLoaded()
         job = AppScope.launch {
             snapshotFlow {
                 listOf(Store.activeProfileID, Store.myList, Store.favorites, Store.recentChannels, Store.progress.keys,
                     Store.history.size, Collections.byProfile, Store.playlists.map { it.id }, activeID(),
-                    System.identityHashCode(Playlists.library), CatalogMeta.version)
+                    System.identityHashCode(Playlists.library), CatalogMeta.version, Playlists.catalogVersion)
             }.debounce(2_000).collectLatest { quietly { refresh() } }
         }
         // build 129: slimme collecties over alle servers
         AppScope.launch {
             snapshotFlow {
                 listOf(Store.activeProfileID, Collections.visible.filter { it.isSmart }.map { it.id + smartSig(it) },
-                    Store.playlists.map { it.id }, activeID(), System.identityHashCode(Playlists.library))
+                    Store.playlists.map { it.id }, activeID(), System.identityHashCode(Playlists.library), Playlists.catalogVersion)
             }.debounce(3_000).collectLatest { quietly { refreshSmart() } }
         }
+    }
+
+    /**
+     * Build 130: na "alles vernieuwen" (nieuwe catalogi): items die niet gevonden werden en servers zonder cache meteen
+     * opnieuw proberen (de rondes zelf starten via Playlists.catalogVersion).
+     */
+    fun catalogsRefreshed() {
+        tried.clear(); smartTried.clear(); smartDone = null
     }
 
     private suspend fun quietly(block: suspend () -> Unit) {
@@ -165,10 +180,10 @@ object AllServers {
     }
 
     /** Gefilterde catalogus van [p] (kinderslot, verborgen groepen, leeftijdsgrens van het actieve profiel). */
-    private suspend fun filtered(p: PlaylistSource, allowNetwork: Boolean): Library? {
+    private suspend fun filtered(p: PlaylistSource, allowNetwork: Boolean, background: Boolean = false): Library? {
         if (isActive(p.id)) return Playlists.library.takeIf { !it.isEmpty }
         val ctx = withContext(Dispatchers.Main) { Playlists.context(p) }
-        return otherLibrary(p, ctx, allowNetwork)
+        return otherLibrary(p, ctx, allowNetwork, background)
     }
 
     // MARK: build 129: andere servers zonder te wisselen (zoeken, "Andere bronnen", slimme collecties)
@@ -182,11 +197,11 @@ object AllServers {
      * met Playlists.context): uit het geheugen, anders de cache op dit apparaat, anders (alleen met [allowNetwork]) stil
      * van het netwerk. Zo leest zoeken niet bij elke letter de hele cache opnieuw in.
      */
-    suspend fun otherLibrary(p: PlaylistSource, ctx: Playlists.FilterContext, allowNetwork: Boolean): Library? {
+    suspend fun otherLibrary(p: PlaylistSource, ctx: Playlists.FilterContext, allowNetwork: Boolean, background: Boolean = false): Library? {
         val k = p.id.lowercase(Locale.ROOT)
         val stamp = withContext(Dispatchers.IO) { Playlists.cacheStamp(p) }
         libCache[k]?.get()?.let { if (stamp != 0L && it.stamp == stamp && it.ctx == ctx) return it.lib }
-        val raw = Playlists.catalogOf(p, allowNetwork) ?: return null
+        val raw = Playlists.catalogOf(p, allowNetwork, background) ?: return null
         val lib = withContext(Dispatchers.Default) { runCatching { Playlists.apply(raw, ctx) }.getOrNull() } ?: return null
         val now = withContext(Dispatchers.IO) { Playlists.cacheStamp(p) }
         if (now != 0L) libCache[k] = java.lang.ref.SoftReference(Cached(now, ctx, lib))
@@ -246,12 +261,31 @@ object AllServers {
      * Slimme collecties van het actieve profiel op de andere servers doorzoeken (één catalogus tegelijk, rustig, niet
      * tijdens het afspelen). Een collectie met `sourceID` zoekt alleen op die server.
      */
+    @Volatile private var smartDone: String? = null
     private suspend fun refreshSmart() {
         val (cols, servers, ctxs) = withContext(Dispatchers.Main) {
             val cs = Collections.visible.filter { it.isSmart && it.keywords.isNotEmpty() }
             val ps = order().filter { !isActive(it.id) }
             Triple(cs, ps, ps.associate { it.id to Playlists.context(it) })
         }
+        if (cols.isEmpty()) {
+            if (smart.isNotEmpty()) { smart = emptyMap(); withContext(Dispatchers.Main) { version++ } }
+            smartDone = null
+            return
+        }
+        // build 130: zelfde collecties, servers, caches en filters als de vorige ronde → niets te doen
+        val sig = withContext(Dispatchers.IO) {
+            cols.joinToString(";") { it.id + "=" + smartSig(it) } + "#" +
+                servers.joinToString(";") { it.id + "@" + Playlists.cacheStamp(it) + "@" + ctxs[it.id].hashCode() }
+        }
+        if (sig == smartDone) return
+        // één catalogus tegelijk (samen met [refresh]) en pas als de actieve server klaar is
+        lock.withLock { smartRound(cols, servers, ctxs, sig) }
+    }
+
+    private suspend fun smartRound(cols: List<BingrCollection>, servers: List<PlaylistSource>, ctxs: Map<String, Playlists.FilterContext>, sig: String) {
+        waitForIdle()
+        var complete = true
         val out = HashMap<String, MutableList<CollectionEntry>>()
         for (p in servers) {
             val mine = cols.filter { it.sourceID == null || it.sourceID.equals(p.id, ignoreCase = true) }
@@ -260,11 +294,11 @@ object AllServers {
             val lib = otherLibrary(p, ctx, allowNetwork = false) ?: run {
                 // nog geen cache van die server: hooguit eens per 6 uur stil van het netwerk
                 val k = p.id.lowercase(Locale.ROOT)
-                if (System.currentTimeMillis() - (smartTried[k] ?: 0L) < RETRY) return@run null
+                if (System.currentTimeMillis() - (smartTried[k] ?: 0L) < RETRY) { complete = false; return@run null }
                 smartTried[k] = System.currentTimeMillis()
                 waitForIdle()
-                withTimeoutOrNull(120_000) { otherLibrary(p, ctx, allowNetwork = true) }
-            } ?: continue
+                withTimeoutOrNull(120_000) { otherLibrary(p, ctx, allowNetwork = true, background = true) }
+            } ?: run { complete = false; null } ?: continue
             withContext(Dispatchers.Default) {
                 for (c in mine) {
                     val list = out.getOrPut(c.id.lowercase(Locale.ROOT)) { ArrayList() }
@@ -275,16 +309,33 @@ object AllServers {
             }
         }
         val n = cols.associate { it.id.lowercase(Locale.ROOT) to (smartSig(it) to (out[it.id.lowercase(Locale.ROOT)]?.toList() ?: emptyList())) }
+        if (complete) smartDone = sig
         if (n != smart) {
             smart = n
             withContext(Dispatchers.Main) { version++ }
         }
     }
 
+    /**
+     * Build 130: wachten tot de achtergrond aan de andere servers mag werken: niet tijdens het afspelen, niet zolang de
+     * actieve server laadt, ververst ("Bijwerken…") of filtert, en niet in de eerste seconden na het openen.
+     */
     private suspend fun waitForIdle() {
-        // niet tijdens het afspelen (en niet terwijl de actieve server nog laadt)
-        while (AppState.playing != null || Playlists.isLoading) delay(5_000)
+        while (true) {
+            val ok = withContext(Dispatchers.Main) {
+                X.idle(AppState.playing != null, Playlists.isLoading, Playlists.updating, Playlists.isFiltering,
+                    System.currentTimeMillis() - startedAt)
+            }
+            if (ok) return
+            delay(3_000)
+        }
     }
+
+    /** Build 130: uitkomst van één server in [refresh], zolang zijn cache, de filters en de verwijzingen gelijk blijven. */
+    private class Scan(val sig: String, val found: Map<String, Any>, val epg: Map<String, List<EPGProgram>>,
+                       val absent: Set<String>, val needs: List<Ref>)
+    private val scans = java.util.concurrent.ConcurrentHashMap<String, Scan>()
+    private fun refSig(r: Ref) = "${r.key}\u0003${r.field}\u0003${r.kind}\u0003${r.title}"
 
     private fun recordMeta(key: String, sid: String, sname: String, item: Any?, ref: Ref?) {
         when (item) {
@@ -303,6 +354,8 @@ object AllServers {
 
     /** Eén ronde: items van andere servers ophalen, meta aanvullen, verhuizen wat nergens meer staat. */
     private suspend fun refresh() = lock.withLock {
+        // build 130: eerst de actieve server (snel klaar na het openen), daarna pas de rest
+        waitForIdle()
         val (refs, migrating) = withContext(Dispatchers.Main) {
             val m = !Prefs.bool(MIGRATED, false)
             (activeRefs() + if (m) otherProfileRefs() else emptyList()) to m
@@ -318,11 +371,29 @@ object AllServers {
         val newAbsent = HashSet<String>()
         val needs = ArrayList<Ref>()
         var complete = true
-        for (p in Store.playlists.toList()) {
-            val list = byServer[p.id.lowercase(Locale.ROOT)] ?: continue
+        val servers = Store.playlists.toList()
+        scans.keys.retainAll(servers.map { it.id.lowercase(Locale.ROOT) }.toSet())
+        for (p in servers) {
+            val pk = p.id.lowercase(Locale.ROOT)
+            val list = byServer[pk] ?: run { scans.remove(pk); null } ?: continue
+            // build 130: niets veranderd voor deze server (cache, filters, verwijzingen) → vorige uitkomst
+            val active = isActive(p.id)
+            val stamp = if (active) System.identityHashCode(Playlists.library).toLong() else withContext(Dispatchers.IO) { Playlists.cacheStamp(p) }
+            val filters = if (active) "active" else withContext(Dispatchers.Main) { Playlists.context(p) }.hashCode().toString()
+            val sig = X.scanSig(list.map { refSig(it) }, stamp, filters)
+            val prev = scans[pk]
+            if (prev != null && prev.sig == sig && stamp != 0L) {
+                newFound.putAll(prev.found); newEpg.putAll(prev.epg); newAbsent.addAll(prev.absent); needs.addAll(prev.needs)
+                continue
+            }
+            val sFound = HashMap<String, Any>()
+            val sEpg = HashMap<String, List<EPGProgram>>()
+            val sAbsent = HashSet<String>()
+            val sNeeds = ArrayList<Ref>()
+            // geen cache: Playlists.catalogOf haalt hem hooguit eens per 6 uur stil op, met een time-out
             val lib = filtered(p, allowNetwork = false) ?: run {
                 waitForIdle()
-                filtered(p, allowNetwork = true)
+                filtered(p, allowNetwork = true, background = true)
             }
             if (lib == null) { complete = false; continue }
             val ix = withContext(Dispatchers.Default) { Ix(lib) }
@@ -339,23 +410,27 @@ object AllServers {
                 if (item == null) {
                     // voortgang van een aflevering: de serie (op titel) bestaat nog → niet "weg"
                     val series = if (r.field == Field.CONTINUE && r.title != null) ix.seriesByTitle[X.normTitle(r.title)] else null
-                    if (series != null) { if (!isActive(p.id)) newFound[mk] = series.copy(sourceID = p.id); continue }
+                    if (series != null) { if (!isActive(p.id)) sFound[mk] = series.copy(sourceID = p.id); continue }
                     if (r.field == Field.CONTINUE || r.field == Field.HISTORY) {
                         // voortgang/geschiedenis zonder item in de catalogus (bijv. aflevering): alleen als we weten wat het is
                         if (CatalogMeta.wanted(r.key) == null) continue
                     }
-                    newAbsent += mk; needs += r
-                } else if (!isActive(p.id)) newFound[mk] = when (item) {
+                    sAbsent += mk; sNeeds += r
+                } else if (!isActive(p.id)) sFound[mk] = when (item) {
                     // build 128: gids van deze zender (alleen wat er nog toe doet: max. 8 dagen terug), voor gids en terugkijken
                     is Channel -> item.copy(sourceID = p.id).also { c ->
                         val cutoff = System.currentTimeMillis() - 8 * 86_400_000L
-                        lib.epg[c.epgID ?: c.id]?.filter { it.end > cutoff }?.takeIf { it.isNotEmpty() }?.let { newEpg[mk] = it }
+                        lib.epg[c.epgID ?: c.id]?.filter { it.end > cutoff }?.takeIf { it.isNotEmpty() }?.let { sEpg[mk] = it }
                     }
                     is Movie -> item.copy(sourceID = p.id)
                     is Series -> item.copy(sourceID = p.id)
                     else -> item
                 }
             }
+            // stamp opnieuw lezen: alleen bewaren als de cache intussen niet veranderd is
+            val after = if (active) System.identityHashCode(Playlists.library).toLong() else withContext(Dispatchers.IO) { Playlists.cacheStamp(p) }
+            if (after == stamp) scans[pk] = Scan(sig, sFound, sEpg, sAbsent, sNeeds)
+            newFound.putAll(sFound); newEpg.putAll(sEpg); newAbsent.addAll(sAbsent); needs.addAll(sNeeds)
         }
         // verwijzingen naar een server die er niet meer is (tombstone of onbekend)
         for ((sid, list) in byServer) {
@@ -376,7 +451,7 @@ object AllServers {
             .distinctBy { X.metaKey(it.key) }
         if (todo.isEmpty() || Store.playlists.isEmpty()) return@withLock
         waitForIdle()
-        val moved = match(todo, allowNetwork = true)
+        val moved = match(todo, allowNetwork = true, background = true)
         todo.forEach { tried[X.metaKey(it.key)] = now }
         if (moved.isNotEmpty()) withContext(Dispatchers.Main) { StateSync.remapNow() }
     }
@@ -394,7 +469,7 @@ object AllServers {
      * Items in [refs] op de servers zoeken (actieve eerst, de oude server niet). Gevonden → remap-regel en meta van de
      * nieuwe sleutel. Geeft de verhuizingen (oud → nieuw).
      */
-    private suspend fun match(refs: List<Ref>, allowNetwork: Boolean): Map<String, String> {
+    private suspend fun match(refs: List<Ref>, allowNetwork: Boolean, background: Boolean = false): Map<String, String> {
         val pending = refs.mapNotNull { r -> wantedFor(r)?.let { r to it } }.toMutableList()
         if (pending.isEmpty()) return emptyMap()
         val out = LinkedHashMap<String, String>()
@@ -402,7 +477,7 @@ object AllServers {
             if (pending.isEmpty()) break
             val mine = pending.filter { (r, _) -> !X.sameServer(X.serverOf(r.key), p.id) }
             if (mine.isEmpty()) continue
-            val lib = (withTimeoutOrNull(120_000) { filtered(p, allowNetwork) }) ?: continue
+            val lib = (withTimeoutOrNull(120_000) { filtered(p, allowNetwork, background) }) ?: continue
             val cands = withContext(Dispatchers.Default) { Ix(lib).candidates().map { it.copy(sid = p.id) }.toList() }
             for ((r, w) in mine) {
                 val hit = withContext(Dispatchers.Default) { X.best(w, cands, listOf(p.id)) } ?: continue

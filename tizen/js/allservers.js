@@ -327,7 +327,7 @@
     Object.keys(CM.items).sort().forEach(function (k) { items[k] = CM.items[k]; });
     return { items: items, remap: rm, updatedAt: B.iso() };
   }
-  AS.wipe = function () { CM = { items: {}, remap: {} }; reindex(); found = {}; absent = {}; epgs = {}; tried = {}; smart = {}; smartTried = {}; B.idb.del('catalogmeta'); B.store.del('allservers.migrated128'); };
+  AS.wipe = function () { CM = { items: {}, remap: {} }; reindex(); found = {}; absent = {}; epgs = {}; tried = {}; smart = {}; smartTried = {}; scans = {}; smartDone = null; B.idb.del('catalogmeta'); B.store.del('allservers.migrated128'); };
   AS.meta = function (key) { var k = AS.metaKey(key); return CM.items[k] || CM.items[cmIndex[lower(k)]] || null; };
   AS.rules = function () { return CM.remap; };
   AS.target = function (key) { var t = AS.resolve(CM.remap, key); return t ? t.to : null; };
@@ -425,6 +425,44 @@
   var lastSig = '';
   var RETRY = 6 * 3600000;
   AS.version = 0;
+
+  // MARK: build 130: achtergrondwerk voor de andere servers (= AllServersLogic.kt op Android)
+  // Na het openen eerst de actieve server; de andere stil op de achtergrond, één tegelijk, alleen opnieuw inlezen als hun
+  // cache, de filters of de verwijzingen veranderd zijn, en een server zonder cache hooguit eens per 6 uur ophalen.
+  AS.FETCH_EVERY = 6 * 3600000;
+  AS.FETCH_TIMEOUT = 90000;
+  AS.START_GRACE = 10000;
+  var startedAt = Date.now();
+  /** Mag een catalogus weer van het netwerk? Hooguit eens per `every` sinds `last` (0/null = nooit; klok terug = mag). */
+  AS.mayFetch = function (last, now, every) {
+    every = every == null ? AS.FETCH_EVERY : every;
+    return !last || last <= 0 || last > now || now - last >= every;
+  };
+  /** Mag de achtergrond werken? Niet tijdens afspelen, niet zolang de actieve server laadt, niet vlak na het openen. */
+  AS.idleOK = function (playing, loading, sinceStart) { return !playing && !loading && sinceStart >= AS.START_GRACE; };
+  /** "Alles vernieuwen": de actieve eerst, dan de rest in lijstvolgorde, elke server één keer. */
+  AS.refreshOrder = function (ids, active) {
+    var out = [], seen = {};
+    ids.forEach(function (id) { if (AS.sameServer(id, active) && !seen[lower(id)]) { seen[lower(id)] = true; out.push(id); } });
+    ids.forEach(function (id) { if (!seen[lower(id)]) { seen[lower(id)] = true; out.push(id); } });
+    return out;
+  };
+  /** Handtekening van één server-scan: zelfde verwijzingen (volgorde maakt niet uit), cache en filters = zelfde uitkomst. */
+  AS.scanSig = function (refs, stamp, filters) { return refs.slice().sort().join('\u0001') + '\u0002' + stamp + '\u0002' + filters; };
+  function fetchKey(id) { return 'allservers.fetch.' + lower(id); }
+  /** Met een time-out: na `ms` null (de belofte zelf loopt stil door). */
+  AS.withTimeout = function (p, ms) {
+    return new Promise(function (resolve) {
+      var done = false;
+      var t = setTimeout(function () { if (!done) { done = true; resolve(null); } }, ms);
+      p.then(function (v) { if (!done) { done = true; clearTimeout(t); resolve(v); } },
+        function () { if (!done) { done = true; clearTimeout(t); resolve(null); } });
+    });
+  };
+  var scans = {};   // server-id (kleine letters) → {sig, at, found, absent, epg, needs}
+  var smartDone = null;
+  /** Na "alles vernieuwen": alles opnieuw proberen (ook items die niet gevonden werden). */
+  AS.refreshed = function () { tried = {}; smartTried = {}; scans = {}; smartDone = null; return AS.refresh(); };
 
   function activeId() { return Lib.source ? Lib.source.id : null; }
   AS.isActive = function (sid) { return AS.sameServer(sid, activeId()); };
@@ -558,14 +596,28 @@
   function catalog(src, network) {
     if (AS.isActive(src.id) && Lib.raw && (Lib.raw.movies.length || Lib.raw.channels.length || Lib.raw.series.length)) return Promise.resolve(Lib.raw);
     return B.idb.get('lib:' + src.id).then(function (c) {
-      if (c && c.lib) return c.lib;
+      if (c && c.lib) { if (Lib.stamps) Lib.stamps[src.id] = c.at || 0; return c.lib; }
       if (!network) return null;
-      return Lib.fetchOther(src).catch(function () { return null; });
+      // build 130: op de achtergrond (network === 'bg') hooguit eens per 6 uur per server (ook na een herstart); altijd
+      // met een time-out. Aangeklikt door de gebruiker = meteen proberen.
+      if (network === 'bg' && !AS.mayFetch(B.store.get(fetchKey(src.id), 0), Date.now())) return null;
+      B.store.set(fetchKey(src.id), Date.now());
+      return AS.withTimeout(Lib.fetchOther(src), AS.FETCH_TIMEOUT);
     });
+  }
+  AS.markFetched = function (id) { B.store.set(fetchKey(id), Date.now()); };
+  /** Tijd van de cache van een andere server (bekend nadat hij één keer gelezen of geschreven is), anders null. */
+  function stampOf(src) {
+    if (AS.isActive(src.id)) return 'active:' + (Lib.version || 0);
+    return Lib.stamps && B.has(Lib.stamps, src.id) ? Lib.stamps[src.id] : null;
   }
   function idle() {
     return new Promise(function (resolve) {
-      (function wait() { if (B.player.current || Lib.loading || (B.multiview && B.multiview.current)) setTimeout(wait, 5000); else resolve(); })();
+      (function wait() {
+        var playing = B.player.current || (B.multiview && B.multiview.current);
+        if (!AS.idleOK(!!playing, !!(Lib.loading || Lib.refreshingAll && Lib.refreshingAll.active), Date.now() - startedAt)) setTimeout(wait, 3000);
+        else resolve();
+      })();
     });
   }
   function findIn(raw, filter, id, kind) {
@@ -597,7 +649,14 @@
     var cols = (pid ? D.collectionsFor(pid) : []).filter(function (c) { return c.kind === 'smart' && smartWords(c).length; });
     var out = {};
     cols.forEach(function (c) { out[lower(c.id)] = { sig: smartSig(c), items: [] }; });
-    var chain = Promise.resolve();
+    // build 130: zelfde collecties, servers, caches en filters als de vorige keer → niets te doen
+    var others = order().filter(function (src) { return !AS.isActive(src.id); });
+    var roundSig = cols.map(function (c) { return c.id + '=' + smartSig(c); }).join(';') + '#' +
+      others.map(function (src) { return src.id + '@' + stampOf(src) + '@' + Lib.filterSig(src); }).join(';');
+    var known = others.every(function (src) { return stampOf(src) != null; });
+    if (cols.length && known && roundSig === smartDone) return Promise.resolve();
+    var complete = true;
+    var chain = cols.length ? idle() : Promise.resolve();
     if (cols.length) order().forEach(function (src) {
       if (AS.isActive(src.id)) return;
       var mine = cols.filter(function (c) { return !c.sourceID || AS.sameServer(c.sourceID, src.id); });
@@ -609,9 +668,9 @@
           var k = lower(src.id);
           if (Date.now() - (smartTried[k] || 0) < RETRY) return null;
           smartTried[k] = Date.now();
-          return idle().then(function () { return catalog(src, true); });
+          return idle().then(function () { return catalog(src, 'bg'); });
         }).then(function (raw) {
-          if (!raw) return;
+          if (!raw) { complete = false; return; }
           var filter = Lib.filterOne(src);
           var spec = mine.map(function (c) {
             var types = Array.isArray(c.types) && c.types.length ? c.types : ['channel', 'movie', 'series'];
@@ -638,6 +697,10 @@
       });
     });
     return chain.then(function () {
+      if (complete && cols.length) {
+        smartDone = cols.map(function (c) { return c.id + '=' + smartSig(c); }).join(';') + '#' +
+          others.map(function (src) { return src.id + '@' + stampOf(src) + '@' + Lib.filterSig(src); }).join(';');
+      }
       var sig = JSON.stringify(Object.keys(out).sort().map(function (k) { return [k, out[k].sig, out[k].items.map(function (e) { return e.type + ':' + e.item._src + '|' + e.item.id; })]; }));
       var before = JSON.stringify(Object.keys(smart).sort().map(function (k) { return [k, smart[k].sig, smart[k].items.map(function (e) { return e.type + ':' + e.item._src + '|' + e.item.id; })]; }));
       smart = out;
@@ -656,17 +719,39 @@
     });
     return running;
   };
+  function refSig(r) { return [r.key, r.field, r.kind || '', r.title || ''].join('\u0003'); }
   function round() {
+    // build 130: eerst de actieve server (snel klaar na het openen), daarna pas de andere
+    return idle().then(roundNow);
+  }
+  function roundNow() {
     var list = refs();
     var bySrc = {};
     list.forEach(function (r) { var s = lower(AS.serverOf(r.key)); (bySrc[s] = bySrc[s] || []).push(r); });
     var newFound = {}, newAbsent = {}, newEpg = {}, needs = [];
+    var keep = {};
+    D.sources.forEach(function (src) { if (bySrc[lower(src.id)]) keep[lower(src.id)] = true; });
+    Object.keys(scans).forEach(function (k) { if (!keep[k]) delete scans[k]; });
     var chain = Promise.resolve();
     D.sources.forEach(function (src) {
       var mine = bySrc[lower(src.id)];
       if (!mine) return;
       chain = chain.then(function () {
-        return catalog(src, false).then(function (raw) { return raw || idle().then(function () { return catalog(src, true); }); }).then(function (raw) {
+        // build 130: niets veranderd voor deze server (cache, filters, verwijzingen) → vorige uitkomst, niets inlezen
+        var pk = lower(src.id), st = stampOf(src);
+        var sig = st == null ? null : AS.scanSig(mine.map(refSig), st, Lib.filterSig(src));
+        var prev = scans[pk];
+        if (sig && prev && prev.sig === sig) {
+          B.assign(newFound, prev.found); B.assign(newAbsent, prev.absent); B.assign(newEpg, prev.epg); needs = needs.concat(prev.needs);
+          return;
+        }
+        var sFound = {}, sAbsent = {}, sEpg = {}, sNeeds = [];
+        function save() {
+          var st2 = stampOf(src);
+          if (st2 != null) scans[pk] = { sig: AS.scanSig(mine.map(refSig), st2, Lib.filterSig(src)), found: sFound, absent: sAbsent, epg: sEpg, needs: sNeeds };
+          B.assign(newFound, sFound); B.assign(newAbsent, sAbsent); B.assign(newEpg, sEpg); needs = needs.concat(sNeeds);
+        }
+        return catalog(src, false).then(function (raw) { return raw || idle().then(function () { return catalog(src, 'bg'); }); }).then(function (raw) {
           if (!raw) return;
           var filter = Lib.filterOne(src);
           var titles = null;
@@ -674,24 +759,25 @@
             var id = AS.itemOf(r.key), mk = AS.metaKey(r.key);
             var hit = findIn(raw, filter, id, r.kind === 'episode' ? 'movie' : r.kind);
             recordFrom(r.key, src.id, src.name, hit, r);
-            if (hit) { if (!AS.isActive(src.id)) { hit.item._src = src.id; newFound[mk] = hit; } return; }
+            if (hit) { if (!AS.isActive(src.id)) { hit.item._src = src.id; sFound[mk] = hit; } return; }
             if (r.field === 'continue' && r.title) {
               // aflevering: de serie (op titel) bestaat nog → niet "weg"
               if (!titles) { titles = {}; (raw.series || []).forEach(function (s) { var n = AS.normTitle(s.title); if (!titles[n]) titles[n] = s; }); }
               var s = titles[AS.normTitle(r.title)];
               var fs = s ? filter.series(s) : null;
-              if (fs) { if (!AS.isActive(src.id)) { fs._src = src.id; newFound[mk] = { type: 'series', item: fs }; } return; }
+              if (fs) { if (!AS.isActive(src.id)) { fs._src = src.id; sFound[mk] = { type: 'series', item: fs }; } return; }
             }
             if ((r.field === 'continue' || r.field === 'history') && !wanted(r)) return;
-            newAbsent[mk] = true; needs.push(r);
+            sAbsent[mk] = true; sNeeds.push(r);
           });
           // gids van de gevonden zenders van deze server (alleen die zenders), voor gids en terugkijken
-          if (AS.isActive(src.id)) return;
+          if (AS.isActive(src.id)) return save();
           var chans = [];
-          mine.forEach(function (r) { var f = newFound[AS.metaKey(r.key)]; if (f && f.type === 'channel' && chans.indexOf(f.item) < 0) chans.push(f.item); });
-          if (!chans.length) return;
-          return idle().then(function () { return Lib.epgOther(src, raw, chans); }).then(function (byId) {
-            Object.keys(byId).forEach(function (id) { newEpg[AS.metaKey(src.id + '|' + id)] = byId[id]; });
+          mine.forEach(function (r) { var f = sFound[AS.metaKey(r.key)]; if (f && f.type === 'channel' && chans.indexOf(f.item) < 0) chans.push(f.item); });
+          if (!chans.length) return save();
+          return idle().then(function () { return AS.withTimeout(Lib.epgOther(src, raw, chans), AS.FETCH_TIMEOUT); }).then(function (byId) {
+            Object.keys(byId || {}).forEach(function (id) { sEpg[AS.metaKey(src.id + '|' + id)] = byId[id]; });
+            save();
           });
         });
       });
@@ -709,7 +795,7 @@
         seen[mk] = true; return true;
       });
       if (!todo.length || !D.sources.length) return;
-      return idle().then(function () { return match(todo, true); }).then(function (moved) {
+      return idle().then(function () { return match(todo, 'bg'); }).then(function (moved) {
         todo.forEach(function (r) { tried[AS.metaKey(r.key)] = now; });
         if (Object.keys(moved).length) D.remapNow();
       });

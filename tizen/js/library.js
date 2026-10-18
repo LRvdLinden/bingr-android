@@ -16,6 +16,10 @@
   Lib.lib = Lib.raw;
   Lib.loading = false;
   Lib.error = null;
+  /** Build 130: tijd van de cache per server-id (lib:<id>.at), zodat de achtergrond weet of hij opnieuw moet inlezen. */
+  Lib.stamps = {};
+  /** Build 130: bezig met "alles vernieuwen" ({active: true zolang de actieve server aan de beurt is}), anders null. */
+  Lib.refreshingAll = null;
   Lib.episodeCache = {};
   var gen = 0;
 
@@ -405,6 +409,7 @@
     B.emit('loading');
     return B.idb.get('lib:' + src.id).then(function (cached) {
       if (my !== gen) return;
+      if (cached && cached.lib) Lib.stamps[src.id] = cached.at || 0;
       if (cached && cached.lib && !force) {
         Lib.raw = cached.lib; Lib.raw.epg = Lib.raw.epg || {};
         Lib.loading = false;
@@ -457,7 +462,9 @@
       // Jellyfin/Emby leveren hun gids zelf mee; bij de andere komt hij later uit XMLTV
       var ownEpg = B.media.isMediaServer(src.kind) ? (lib.epg || {}) : null;
       lib.epg = ownEpg || {};
-      B.idb.set('lib:' + src.id, { at: Date.now(), lib: lib });
+      var at = Date.now();
+      B.idb.set('lib:' + src.id, { at: at, lib: lib });
+      Lib.stamps[src.id] = at;
       // alleen de zenders apart, voor de reservebron op andere servers
       saveChannels(src, lib.channels);
       if (my !== gen) return;
@@ -466,13 +473,61 @@
       Lib.raw = lib;
       Lib.loading = false;
       Lib.applyFilters();
-      return loadEpg(src, lib, true);
+      return Promise.resolve(loadEpg(src, lib, true)).then(function () { return true; }, function () { return true; });
     }, function (e) {
-      if (my !== gen) return;
+      if (my !== gen) return false;
       Lib.loading = false;
       if (!Lib.raw.channels.length && !Lib.raw.movies.length && !Lib.raw.series.length) Lib.error = (e && e.message) || L('Something went wrong. Please try again.');
       B.emit('library');
+      return false;
     });
+  };
+
+  /**
+   * Build 130: alle servers vernieuwen ("Nu vernieuwen"): eerst de actieve (zodat die snel klaar is), daarna de andere
+   * één voor één op de achtergrond, elk met een time-out en niet tijdens het afspelen. Een fout bij één server houdt de
+   * rest niet tegen; daarna een korte melding met de servers die niet lukten (alleen de naam, niets gelogd). Daarna
+   * werkt allservers.js catalogmeta, remap en slimme collecties bij.
+   */
+  Lib.refreshAll = function (status) {
+    if (Lib.refreshingAll) return Lib.refreshingAll.promise;
+    var AS = B.allservers;
+    var active = Lib.source;
+    var ids = D.sources.map(function (s) { return s.id; });
+    var order = (AS && AS.refreshOrder ? AS.refreshOrder(ids, active ? active.id : null) : ids).map(function (id) { return D.sourceById(id); }).filter(Boolean);
+    var failed = [], n = order.length;
+    var state = Lib.refreshingAll = { active: false, promise: null };
+    status = status || B.noop;
+    function idle() {
+      return new Promise(function (resolve) {
+        (function wait() { if ((B.player && B.player.current) || Lib.loading) setTimeout(wait, 2000); else resolve(); })();
+      });
+    }
+    function timeout(p, ms) { return AS && AS.withTimeout ? AS.withTimeout(p, ms) : p; }
+    var chain = Promise.resolve();
+    order.forEach(function (src, i) {
+      chain = chain.then(function () {
+        if (n > 1) status(L('Refreshing %@ (%d of %d)…', src.name, i + 1, n));
+        if (active && src.id === active.id) {
+          state.active = true;
+          return timeout(Lib.select(src, true), 180000).then(function (ok) {
+            state.active = false;
+            if (ok === false || ok === null || Lib.error) failed.push(src.name);
+          });
+        }
+        return idle().then(function () {
+          if (AS && AS.markFetched) AS.markFetched(src.id);
+          return timeout(Lib.fetchOther(src), 90000);
+        }).then(function (lib) { if (!lib) failed.push(src.name); }, function () { failed.push(src.name); });
+      });
+    });
+    state.promise = chain.then(function () {
+      Lib.refreshingAll = null;
+      status(failed.length ? L('Couldn\'t refresh: %@', failed.join(', ')) : null, true);
+      if (AS && AS.refreshed) AS.refreshed();
+      return failed;
+    }, function () { Lib.refreshingAll = null; return failed; });
+    return state.promise;
   };
 
   /** Afleveringen van een serie (M3U: al in de lijst; Xtream: get_series_info; Plex/Jellyfin/Emby/Stremio: hun API). */
@@ -623,7 +678,9 @@
   Lib.fetchOther = function (src) {
     return fetchLibrary(src).then(function (lib) {
       lib.epg = B.media.isMediaServer(src.kind) ? (lib.epg || {}) : {};
-      B.idb.set('lib:' + src.id, { at: Date.now(), lib: lib });
+      var at = Date.now();
+      B.idb.set('lib:' + src.id, { at: at, lib: lib });
+      Lib.stamps[src.id] = at;
       return lib;
     });
   };

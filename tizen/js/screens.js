@@ -2113,7 +2113,13 @@
         });
       });
       row(L('Your servers'), String(D.sources.length), function () { U.push(S.servers()); });
-      row(L('Refresh now'), null, function () { if (Lib.source) { Lib.select(Lib.source, true); U.toast(L('Updating…')); } });
+      // build 130: alle servers (eerst de actieve, dan de andere één voor één op de achtergrond)
+      row(L('Refresh now'), null, function () {
+        if (!D.sources.length) return;
+        if (Lib.refreshingAll) { U.toast(L('Updating…')); return; }
+        U.toast(L('Updating…'));
+        Lib.refreshAll(function (text, done) { if (text) U.toast(text, done ? 5000 : 3000); });
+      });
 
       // audio en ondertitels (settings.shared: audioLanguage, autoSubtitles, subtitleLanguage; gelijk met iOS en Android)
       section(L('Audio & subtitles'));

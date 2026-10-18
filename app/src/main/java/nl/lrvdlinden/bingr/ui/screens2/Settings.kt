@@ -436,8 +436,10 @@ fun SettingsScreen() {
                         S2Row(L("Categories on/off (NL, BE, DE…)"), icon = Icons.Default.FilterList, onClick = { sub = S2SettingsSub.CATEGORIES })
                         S2Row(L("Manage groups and channels"), icon = Icons.Default.Tune, onClick = { sub = S2SettingsSub.MANAGE })
                         S2Row(L("Check source"), icon = Icons.Default.Analytics, onClick = { sub = S2SettingsSub.CHECK })
-                        S2Row(L("Refresh now"), icon = Icons.Default.Refresh, onClick = {
-                            AppScope.launch { runCatching { Playlists.select(current, forceRefresh = true) } }
+                        // build 130: eerst deze server, daarna de andere één voor één op de achtergrond
+                        S2Row(L("Refresh now"), icon = Icons.Default.Refresh, enabled = !Playlists.refreshingAll,
+                            subtitle = refreshSubtitle(), onClick = {
+                            AppScope.launch { runCatching { Playlists.refreshAll(spinner = true) } }
                         })
                     }
                     // build 88: met Gratis één server; bestaande extra servers blijven gewoon werken
@@ -491,7 +493,7 @@ fun SettingsScreen() {
                         refreshPolicy = it; RefreshPolicy.current = it
                     }
                     val busy = Playlists.refreshingAll
-                    S2Row(L("Refresh all playlists now"), icon = Icons.Default.Refresh, enabled = !busy,
+                    S2Row(L("Refresh all playlists now"), icon = Icons.Default.Refresh, enabled = !busy, subtitle = refreshSubtitle(),
                         onClick = { AppScope.launch { runCatching { Playlists.refreshAll() } } },
                         trailing = { if (busy) CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(18.dp)) })
                 }
@@ -1076,3 +1078,7 @@ private fun S2DeleteAccountDialog(onDismiss: () -> Unit, onDelete: (String) -> U
     )
     LaunchedEffect(Unit) { runCatching { fr.requestFocus() } }
 }
+
+/** Build 130: voortgang van "alles vernieuwen", of welke servers de laatste keer niet lukten. */
+private fun refreshSubtitle(): String? = Playlists.refreshStatus
+    ?: Playlists.refreshFailed.takeIf { it.isNotEmpty() }?.let { L("Couldn't refresh: %@", it.joinToString(", ")) }

@@ -141,6 +141,29 @@ fun main() {
     eq("archief: programma binnen 5 min en in het archief", L.archiveProgram(progs, start), "p2")
     eq("archief: niets in de buurt", L.archiveProgram(progs, start + 3_600_000L), null)
 
+    // build 130: achtergrondwerk voor de andere servers (niet lang "Bijwerken" na openen)
+    val h = 3_600_000L
+    val t0 = 1_700_000_000_000L
+    eq("ophalen: nooit geprobeerd", L.mayFetch(null, t0), true)
+    eq("ophalen: 0 = nooit", L.mayFetch(0L, t0), true)
+    eq("ophalen: net geprobeerd", L.mayFetch(t0 - 60_000, t0), false)
+    eq("ophalen: 5 uur geleden", L.mayFetch(t0 - 5 * h, t0), false)
+    eq("ophalen: 6 uur geleden", L.mayFetch(t0 - 6 * h, t0), true)
+    eq("ophalen: klok teruggezet", L.mayFetch(t0 + h, t0), true)
+    eq("rust: alles klaar", L.idle(false, false, false, false, 20_000), true)
+    eq("rust: tijdens afspelen", L.idle(true, false, false, false, 20_000), false)
+    eq("rust: actieve laadt", L.idle(false, true, false, false, 20_000), false)
+    eq("rust: actieve ververst (Bijwerken)", L.idle(false, false, true, false, 20_000), false)
+    eq("rust: actieve filtert", L.idle(false, false, false, true, 20_000), false)
+    eq("rust: net geopend", L.idle(false, false, false, false, 2_000), false)
+    eq("vernieuwen: actieve eerst", L.refreshOrder(listOf("a", "B", "c"), "b"), listOf("B", "a", "c"))
+    eq("vernieuwen: geen actieve", L.refreshOrder(listOf("a", "b"), null), listOf("a", "b"))
+    eq("vernieuwen: dubbel één keer", L.refreshOrder(listOf("a", "A", "b"), "x"), listOf("a", "b"))
+    eq("scan: volgorde maakt niet uit", L.scanSig(listOf("s|1", "s|2"), 5, "f") == L.scanSig(listOf("s|2", "s|1"), 5, "f"), true)
+    eq("scan: nieuwe cache = opnieuw", L.scanSig(listOf("s|1"), 5, "f") == L.scanSig(listOf("s|1"), 6, "f"), false)
+    eq("scan: andere filters = opnieuw", L.scanSig(listOf("s|1"), 5, "f") == L.scanSig(listOf("s|1"), 5, "g"), false)
+    eq("scan: ander item = opnieuw", L.scanSig(listOf("s|1"), 5, "f") == L.scanSig(listOf("s|1", "s|3"), 5, "f"), false)
+
     println("$checks controles, $failures fout")
     if (failures > 0) kotlin.system.exitProcess(1)
 }

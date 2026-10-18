@@ -5467,7 +5467,9 @@
   "“%@” was on “%@”, but that server has been removed, and you have no other server to search.": "‘%@’ stond op ‘%@’, maar die server is verwijderd, en je hebt geen andere server waarop we kunnen zoeken.",
   "“%@” is no longer on “%@” and wasn't found on %@ either.": "‘%@’ staat niet meer op ‘%@’ en is ook niet gevonden op %@.",
   "“%@” is no longer on “%@”, and you have no other server to search.": "‘%@’ staat niet meer op ‘%@’, en je hebt geen andere server waarop we kunnen zoeken.",
-  "Categories that are off don't appear anywhere in the app. Saved per profile, for all your servers.": "Categorieën die uit staan, zie je nergens in de app. Bewaard per profiel, voor al je servers."
+  "Categories that are off don't appear anywhere in the app. Saved per profile, for all your servers.": "Categorieën die uit staan, zie je nergens in de app. Bewaard per profiel, voor al je servers.",
+  "Refreshing %@ (%d of %d)…": "%@ vernieuwen (%d van %d)…",
+  "Couldn't refresh: %@": "Niet vernieuwd: %@"
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",

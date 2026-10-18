@@ -214,7 +214,8 @@ fun MainScreen() {
         }
 
         // verversen op de achtergrond (de lijst uit de cache staat er al): klein label "Updating…"
-        AnimatedVisibility(Playlists.updating && !Playlists.isLoading, enter = fadeIn(), exit = fadeOut(),
+        // build 130: ook bij "alles vernieuwen" (met de server die nu aan de beurt is)
+        AnimatedVisibility((Playlists.updating || Playlists.refreshStatus != null) && !Playlists.isLoading, enter = fadeIn(), exit = fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = if (tv) 24.dp else 96.dp)) {
             Row(
                 Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.8f))
@@ -224,7 +225,7 @@ fun MainScreen() {
             ) {
                 CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(12.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(L("Updating…"), color = Color.White, fontSize = tsp(12), fontWeight = FontWeight.Medium)
+                Text(Playlists.refreshStatus ?: L("Updating…"), color = Color.White, fontSize = tsp(12), fontWeight = FontWeight.Medium)
             }
         }
 

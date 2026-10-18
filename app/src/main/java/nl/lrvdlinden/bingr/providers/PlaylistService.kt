@@ -66,6 +66,12 @@ object Playlists {
     var refreshingAll by mutableStateOf(false); private set
     /** Bezig met verversen op de achtergrond terwijl de lijst uit de cache al zichtbaar is ("Updating…") */
     var updating by mutableStateOf(false); private set
+    /** Build 130: voortgang van "alles vernieuwen" ("Server 2 van 3 vernieuwen…"), null = niet bezig. */
+    var refreshStatus by mutableStateOf<String?>(null); private set
+    /** Build 130: servers die bij de laatste keer "alles vernieuwen" niet lukten (namen). */
+    var refreshFailed by mutableStateOf<List<String>>(emptyList()); private set
+    /** Build 130: verhoogt als de cache van een server ververst is (de achtergrond van [AllServers] kijkt dan opnieuw). */
+    var catalogVersion by mutableStateOf(0); private set
     var episodeCache by mutableStateOf(mapOf<String, List<Episode>>()); private set
     /**
      * Bezig met filteren op de achtergrond (grote lijsten). Bij een profiel met leeftijdsgrens is [library]
@@ -144,7 +150,8 @@ object Playlists {
         refresh(p, showSpinner = true)
     }
 
-    suspend fun refresh(s: PlaylistSource, showSpinner: Boolean) {
+    /** true = gelukt. */
+    suspend fun refresh(s: PlaylistSource, showSpinner: Boolean): Boolean {
         if (showSpinner) isLoading = true
         val background = !showSpinner && source?.id == s.id
         if (background) updating = true
@@ -155,10 +162,12 @@ object Playlists {
                 setRaw(lib)
                 saveSplashPosters(lib)
             }
+            return true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             if (source?.id == s.id && rawLibrary.isEmpty) error = Net.message(e)
+            return false
         } finally {
             isLoading = false; loadingText = ""
             if (background) updating = false
@@ -227,14 +236,31 @@ object Playlists {
      * Build 128: ruwe catalogus van server [p] (ook een niet-actieve): de actieve uit het geheugen, anders de cache op dit
      * apparaat, anders (alleen met [allowNetwork]) stil van het netwerk met een time-out (de cache wordt dan bijgewerkt).
      */
-    suspend fun catalogOf(p: PlaylistSource, allowNetwork: Boolean): Library? {
+    suspend fun catalogOf(p: PlaylistSource, allowNetwork: Boolean, background: Boolean = false): Library? {
         if (p.id.equals(source?.id, ignoreCase = true) && !rawLibrary.isEmpty) return rawLibrary
         withContext(Dispatchers.IO) { runCatching { readCache(p) }.getOrNull() }?.let { return it }
         if (!allowNetwork) return null
+        // build 130: op de achtergrond ([background]) hooguit eens per 6 uur per server (ook over herstarts heen); altijd
+        // met een time-out. Aangeklikt door de gebruiker = meteen proberen.
+        if (background && !AllServersLogic.mayFetch(lastFetch(p), System.currentTimeMillis())) return null
+        markFetch(p)
         return try {
-            withTimeoutOrNull(90_000) { fetch(p, quiet = true) }?.also { writeCache(p, it) }
+            withTimeoutOrNull(AllServersLogic.FETCH_TIMEOUT) { fetch(p, quiet = true) }?.also { writeCache(p, it, notify = false) }
         } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
     }
+
+    /** Build 130: laatste poging om server [p] (niet de actieve) op de achtergrond van het netwerk te halen. */
+    private fun fetchKey(p: PlaylistSource) = "allservers.fetch." + p.id.lowercase(java.util.Locale.ROOT)
+    private fun lastFetch(p: PlaylistSource): Long? = Prefs.string(fetchKey(p))?.toLongOrNull()
+    private fun markFetch(p: PlaylistSource) = Prefs.put(fetchKey(p), System.currentTimeMillis().toString())
+
+    /** Build 130: een andere server (niet de actieve) nu verversen, stil en met een time-out. true = gelukt. */
+    private suspend fun refreshOther(p: PlaylistSource): Boolean = try {
+        markFetch(p)
+        val lib = withTimeoutOrNull(AllServersLogic.FETCH_TIMEOUT) { fetch(p, quiet = true) }
+        if (lib != null) writeCache(p, lib)
+        lib != null
+    } catch (e: CancellationException) { throw e } catch (_: Exception) { false }
 
     /** Build 128: de server van een item ([Movie.sourceID] e.d.); null = de actieve. */
     fun sourceFor(id: String?): PlaylistSource? =
@@ -255,10 +281,38 @@ object Playlists {
         refresh(s, showSpinner = false)
     }
 
-    /** Alle afspeellijsten op de achtergrond verversen. */
-    suspend fun refreshAll() {
+    /**
+     * Build 130: alle servers vernieuwen ("Vernieuwen" bij de server en "Alle afspeellijsten nu vernieuwen"): eerst de
+     * actieve (met [spinner] zoals voorheen het volledige laadscherm, anders stil met "Bijwerken…"), daarna de andere één
+     * voor één op de achtergrond, elk met een time-out. Een fout bij één server houdt de rest niet tegen; welke niet
+     * lukten staat daarna in [refreshFailed] (alleen de naam, niets gelogd). Daarna kijkt [AllServers] opnieuw
+     * (catalogmeta, remap en slimme collecties).
+     */
+    suspend fun refreshAll(spinner: Boolean = false) {
+        if (refreshingAll) return
         refreshingAll = true
-        try { for (p in Store.playlists) refresh(p, showSpinner = false) } finally { refreshingAll = false }
+        refreshFailed = emptyList()
+        val failed = ArrayList<String>()
+        try {
+            val active = source
+            val all = Store.playlists.toList()
+            val order = AllServersLogic.refreshOrder(all.map { it.id }, active?.id).mapNotNull { id -> all.firstOrNull { it.id == id } }
+            for ((i, p) in order.withIndex()) {
+                if (order.size > 1) refreshStatus = L("Refreshing %@ (%d of %d)…", p.name, i + 1, order.size)
+                val ok = if (active != null && p.id == active.id) {
+                    if (spinner) { select(p, forceRefresh = true); error == null && !rawLibrary.isEmpty }
+                    else withTimeoutOrNull(180_000) { refresh(p, showSpinner = false) } ?: false
+                } else {
+                    // de andere niet tijdens het afspelen en pas als de actieve klaar is
+                    while (AppState.playing != null || isLoading) kotlinx.coroutines.delay(2_000)
+                    refreshOther(p)
+                }
+                if (!ok) failed += p.name
+            }
+        } finally {
+            refreshingAll = false; refreshStatus = null; refreshFailed = failed
+        }
+        AllServers.catalogsRefreshed()
     }
 
     // MARK: sessies (Plex / Jellyfin / Emby)
@@ -775,7 +829,7 @@ object Playlists {
     }
 
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-    private fun writeCache(p: PlaylistSource, lib: Library) {
+    private fun writeCache(p: PlaylistSource, lib: Library, notify: Boolean = true) {
         val f = cacheFile(p)
         AppScope.launch(Dispatchers.IO) {
             // build 97: direct naar het bestand (encodeToStream) en een eigen tijdelijk bestand per keer, zodat twee
@@ -784,6 +838,8 @@ object Playlists {
             runCatching {
                 tmp.outputStream().buffered(64 * 1024).use { Http.json.encodeToStream(Library.serializer(), lib, it) }
                 if (!tmp.renameTo(f)) { f.delete(); if (!tmp.renameTo(f)) tmp.delete() }
+                // build 130: pas als het bestand er staat (nieuwe tijd), zodat de achtergrond de nieuwe cache leest
+                if (notify) withContext(Dispatchers.Main) { catalogVersion++ }
             }.onFailure { tmp.delete() }
         }
     }

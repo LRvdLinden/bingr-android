@@ -292,4 +292,43 @@ object AllServersLogic {
 
     fun pruneRules(rules: Map<String, Rule>, now: Long): Map<String, Rule> =
         rules.filterValues { it.at >= now - REMAP_KEEP_DAYS * DAY }
+
+    // MARK: build 130: achtergrondwerk voor de andere servers
+
+    /** Een andere server zonder cache hooguit eens per 6 uur van het netwerk halen. */
+    const val FETCH_EVERY = 6 * 3_600_000L
+    /** Time-out per andere server (ophalen op de achtergrond of bij "alles vernieuwen"). */
+    const val FETCH_TIMEOUT = 90_000L
+    /** Na het openen eerst de actieve server: zo lang (minimaal) niets voor de andere servers doen. */
+    const val START_GRACE = 10_000L
+
+    /**
+     * Mag server-catalogus weer van het netwerk gehaald worden? Hooguit eens per [every] sinds de laatste poging
+     * ([last], 0/null = nooit). Een klok die terugloopt (last in de toekomst) telt als "mag".
+     */
+    fun mayFetch(last: Long?, now: Long, every: Long = FETCH_EVERY): Boolean =
+        last == null || last <= 0L || last > now || now - last >= every
+
+    /**
+     * Mag de achtergrond aan de andere servers werken? Niet tijdens het afspelen, niet zolang de actieve server laadt,
+     * ververst of filtert, en niet in de eerste [START_GRACE] ms na het openen.
+     */
+    fun idle(playing: Boolean, loading: Boolean, updating: Boolean, filtering: Boolean, sinceStart: Long): Boolean =
+        !playing && !loading && !updating && !filtering && sinceStart >= START_GRACE
+
+    /** Volgorde voor "alles vernieuwen": de actieve eerst, dan de overige zoals in de lijst; elke server één keer. */
+    fun refreshOrder(ids: List<String>, active: String?): List<String> {
+        val seen = HashSet<String>()
+        val out = ArrayList<String>()
+        ids.firstOrNull { sameServer(it, active) }?.let { out += it; seen += it.lowercase(Locale.ROOT) }
+        for (id in ids) if (seen.add(id.lowercase(Locale.ROOT))) out += id
+        return out
+    }
+
+    /**
+     * Handtekening van één doorzoekronde van een server: dezelfde verwijzingen ([refs], volgorde maakt niet uit), dezelfde
+     * cache ([stamp]) en dezelfde filters ([filters]) = dezelfde uitkomst, dus niet opnieuw inlezen of doorzoeken.
+     */
+    fun scanSig(refs: Collection<String>, stamp: Long, filters: String): String =
+        refs.sorted().joinToString("\u0001") + "\u0002" + stamp + "\u0002" + filters
 }

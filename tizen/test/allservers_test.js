@@ -28,9 +28,10 @@ load('core.js');
 var B = win.B;
 
 // stubs van de modules waar allservers.js en extras.js op leunen
-var idb = {};
-B.idb = { get: function (k) { return Promise.resolve(idb[k]); }, set: function (k, v) { idb[k] = v; return Promise.resolve(); }, del: function (k) { delete idb[k]; return Promise.resolve(); } };
-B.store = { get: function () { return null; }, set: noop, del: noop };
+var idb = {}, idbGets = {};
+B.idb = { get: function (k) { idbGets[k] = (idbGets[k] || 0) + 1; return Promise.resolve(idb[k]); }, set: function (k, v) { idb[k] = v; return Promise.resolve(); }, del: function (k) { delete idb[k]; return Promise.resolve(); } };
+var store = {};
+B.store = { get: function (k, d) { return k in store ? store[k] : (d === undefined ? null : d); }, set: function (k, v) { store[k] = v; }, del: function (k) { delete store[k]; } };
 B.L = function (s) { var a = arguments, i = 1; return String(s).replace(/%@|%d/g, function () { return String(a[i++]); }); };
 var collections = [];
 var D = B.data = {
@@ -39,7 +40,12 @@ var D = B.data = {
   setList: function () { return []; }, progressList: function () { return []; }, history: function () { return []; },
   collectionsFor: function () { return collections; }, collections: null, isMain: function () { return true; }
 };
+var fetched = [];
 B.lib = { source: D.sources[0], lib: { byId: {}, channels: [], movies: [], series: [] }, raw: { channels: [], movies: [], series: [] },
+  stamps: {}, version: 1, loading: false,
+  filterSig: function () { return 'f'; },
+  // build 130: ophalen van het netwerk (hier altijd mislukt), om te tellen hoe vaak het gebeurt
+  fetchOther: function (src) { fetched.push(src.id); return Promise.reject(new Error('offline')); },
   // filter van een andere server: alles wat in een groep "XXX" staat is verborgen (kinderslot/verborgen categorie)
   filterOne: function () {
     function f(x) { return x.group === 'XXX' ? null : B.assign({}, x); }
@@ -52,6 +58,7 @@ B.ui = { h: function () { return el(); }, toast: noop, modal: noop };
 B.screens = {};
 load('allservers.js');
 var AS = B.allservers;
+AS.START_GRACE = 0;   // in de test meteen (op de tv: eerst 10 s de actieve server)
 
 // MARK: normaliseren en samenvoegen (zelfde gevallen als AllServersLogicTest.kt)
 eq('titel: voorvoegsel, jaar, 4K', AS.normTitle('NL | Dune: Part Two (2024) 4K'), 'dune part two');
@@ -94,6 +101,71 @@ var smartFilms = { id: 'coll-2', kind: 'smart', query: 'Marvel', types: [], grou
 var manual = { id: 'coll-3', kind: 'manual', items: [] };
 collections = [smartAll, smartFilms, manual];
 
+// MARK: build 130: niet lang "Bijwerken" na openen (achtergrond rustig, één keer, niet in een lus)
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function build130() {
+  var h = 3600000, t0 = 1700000000000;
+  eq('ophalen: nooit geprobeerd', AS.mayFetch(null, t0), true);
+  eq('ophalen: 5 uur geleden', AS.mayFetch(t0 - 5 * h, t0), false);
+  eq('ophalen: 6 uur geleden', AS.mayFetch(t0 - 6 * h, t0), true);
+  eq('ophalen: klok teruggezet', AS.mayFetch(t0 + h, t0), true);
+  eq('rust: tijdens afspelen niet', AS.idleOK(true, false, 60000), false);
+  eq('rust: actieve laadt nog', AS.idleOK(false, true, 60000), false);
+  eq('rust: alles klaar', AS.idleOK(false, false, 60000), true);
+  eq('vernieuwen: actieve eerst', AS.refreshOrder(['a', 'B', 'c'], 'b'), ['B', 'a', 'c']);
+  eq('vernieuwen: dubbel één keer', AS.refreshOrder(['a', 'A', 'b'], 'x'), ['a', 'b']);
+  eq('scan: volgorde maakt niet uit', AS.scanSig(['s|1', 's|2'], 5, 'f') === AS.scanSig(['s|2', 's|1'], 5, 'f'), true);
+  eq('scan: nieuwe cache = opnieuw', AS.scanSig(['s|1'], 5, 'f') === AS.scanSig(['s|1'], 6, 'f'), false);
+
+  // ronde: Mijn lijst met een titel van srv-b (cache) en van srv-d (geen cache, server onbereikbaar)
+  collections = [];
+  D.sources.push({ id: 'srv-d', name: 'Kapot', kind: 'Xtream Codes' });
+  D.setList = function (f) { return f === 'myList' ? ['srv-b|m1', 'srv-d|q1'] : []; };
+  idbGets = {};
+  var timedOut = false;
+  return AS.withTimeout(new Promise(function () {}), 20).then(function (v) {
+    timedOut = v === null;
+    eq('time-out: trage server geeft na de time-out op', timedOut, true);
+    return AS.refresh();
+  }).then(function () {
+    eq('ronde: titel van de andere server gevonden', !!AS.item('srv-b|m1'), true);
+    eq('ronde: cache van srv-b één keer gelezen', idbGets['lib:srv-b'], 1);
+    eq('ronde: server zonder cache één keer geprobeerd', fetched, ['srv-d']);
+    return AS.refresh();
+  }).then(function () {
+    eq('ronde 2: niets veranderd = cache niet opnieuw inlezen', idbGets['lib:srv-b'], 1);
+    eq('ronde 2: kapotte server niet opnieuw (hooguit eens per 6 uur)', fetched, ['srv-d']);
+    // nieuwe cache van srv-b (bijv. na vernieuwen) → wel opnieuw
+    idb['lib:srv-b'].at = 2; B.lib.stamps['srv-b'] = 2;
+    return AS.refresh();
+  }).then(function () {
+    eq('ronde 3: nieuwe cache = opnieuw inlezen', idbGets['lib:srv-b'], 2);
+    // tijdens het afspelen: wachten
+    B.player.current = { id: 'x' };
+    idb['lib:srv-b'].at = 3; B.lib.stamps['srv-b'] = 3;
+    var done = false;
+    var p = AS.refresh().then(function () { done = true; });
+    return wait(200).then(function () {
+      eq('afspelen: achtergrond wacht', done, false);
+      eq('afspelen: niets ingelezen', idbGets['lib:srv-b'], 2);
+      B.player.current = null;
+      return p;
+    }).then(function () {
+      eq('na afspelen: ronde loopt', done && idbGets['lib:srv-b'] === 3, true);
+      // de actieve server laadt nog: ook wachten
+      B.lib.loading = true;
+      idb['lib:srv-b'].at = 4; B.lib.stamps['srv-b'] = 4;
+      var done2 = false;
+      var p2 = AS.refresh().then(function () { done2 = true; });
+      return wait(200).then(function () {
+        eq('actieve laadt: achtergrond wacht', done2, false);
+        B.lib.loading = false;
+        return p2;
+      });
+    });
+  });
+}
+
 AS._smartRound().then(function () {
   var a = AS.smartFor(smartAll).map(function (e) { return e.type + ':' + e.item._src + '|' + e.item.id; });
   eq('slim: treffers van alle andere servers (filters van het profiel, actieve niet)', a, ['channel:srv-b|c1', 'movie:srv-b|m1', 'movie:SRV-C|x9']);
@@ -125,6 +197,8 @@ AS._smartRound().then(function () {
     'Open', 'Play', 'This title is no longer available.'].forEach(function (k) { eq('vertaling: ' + k, !!nl[k], true); });
   eq('vertaling: Geschiedenis', nl['Watch history'], 'Kijkgeschiedenis');
 
+  return build130();
+}).then(function () {
   console.log(checks + ' controles, ' + failures + ' fout');
   process.exit(failures ? 1 : 0);
 }).catch(function (e) { console.log('FOUT ' + (e && e.stack || e)); process.exit(1); });
