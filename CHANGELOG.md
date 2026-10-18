@@ -4,6 +4,31 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 129
+_18 oktober 2026_
+
+### Alle apps en de website
+
+**Nieuw**
+
+- Slimme collecties zoeken in al je servers: dezelfde titel op twee servers zie je één keer, en openen en afspelen gaat via zijn eigen server
+
+**Verbeterd**
+
+- Zoeken en Andere bronnen tonen titels en zenders van al je servers en openen ze via hun eigen server, zonder van server te wisselen
+
+### Android en Android TV
+
+**Nieuw**
+
+- Terugkijken op MAC-portals, ook via een andere server dan de actieve
+
+### Samsung TV (Tizen)
+
+**Nieuw**
+
+- Nieuw scherm Geschiedenis (Instellingen › Profiel): je kijkgeschiedenis van al je servers, met openen, verwijderen en wissen
+
 ## Versie 1.0.0 · Build 128
 _18 oktober 2026_
 
