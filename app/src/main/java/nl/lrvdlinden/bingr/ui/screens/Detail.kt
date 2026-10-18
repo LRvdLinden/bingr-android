@@ -62,6 +62,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,6 +108,7 @@ import kotlinx.coroutines.withContext
  * Detailpagina in UHF/Netflix-stijl (= DetailView.swift): grote afbeelding met logo, score, afspeelknop,
  * Mijn lijst, trailer, bekeken, andere bronnen, beschrijving, afleveringen, beoordelingen, cast en aanbevelingen.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = null) {
     val tv = AppState.isTV
@@ -405,11 +409,22 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
     val headerHeight: Dp = if (tv) 330.dp else 560.dp
     val contentAlign = if (tv) Alignment.Start else Alignment.CenterHorizontally
 
+    // build 131: TV scrolt de pagina niet meer naar de afspeelknop bij openen (Compose zette het gefocuste element op
+    // TV op ~30% van de hoogte, waardoor de titel tegen de bovenrand viel): alleen scrollen als iets buiten beeld valt,
+    // met een veilige marge (overscan); de rijen binnen de pagina houden hun eigen gedrag
+    val detailScroll = rememberScrollState()
+    val innerSpec = LocalBringIntoViewSpec.current
+    val density = LocalDensity.current
+    val pageSpec = remember(tv, innerSpec, density) {
+        if (tv) SafeMarginBringIntoViewSpec(with(density) { 48.dp.toPx() }, with(density) { 48.dp.toPx() }) else innerSpec
+    }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
+        CompositionLocalProvider(LocalBringIntoViewSpec provides pageSpec) {
         Column(
-            Modifier.fillMaxSize().blockFocus(showSources || ageGate).verticalScroll(rememberScrollState()),
+            Modifier.fillMaxSize().blockFocus(showSources || ageGate).verticalScroll(detailScroll),
             verticalArrangement = Arrangement.spacedBy(tvs(22))
         ) {
+        CompositionLocalProvider(LocalBringIntoViewSpec provides innerSpec) {
             // MARK: kop
             Box(Modifier.fillMaxWidth().height(headerHeight)) {
                 // build 85: speelt de trailer niet (YouTube weigert de embed, geen WebView), dan beweegt de afbeelding rustig
@@ -506,7 +521,11 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                     Box(
                         Modifier.fillMaxWidth()
                             .focusRequester(playFocus)
-                            .onFocusChanged { playFocused = it.isFocused }
+                            .onFocusChanged {
+                                playFocused = it.isFocused
+                                // TV: op de afspeelknop staat de pagina altijd bovenaan, zodat titel/logo in beeld is
+                                if (tv && it.isFocused && detailScroll.value > 0) scope.launch { detailScroll.animateScrollTo(0) }
+                            }
                             .focusLift(if (tv) 1.06f else 1.04f) { play() }
                             .playFocusRing(tv && playFocused, playShape)
                             .height(tvs(52)).clip(playShape).background(Theme.red),
@@ -875,6 +894,8 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                 }
             }
             Spacer(Modifier.navigationBarsPadding().height(40.dp))
+        }
+        }
         }
 
         // sluitknop (telefoon)

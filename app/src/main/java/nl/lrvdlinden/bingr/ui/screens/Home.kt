@@ -52,6 +52,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
@@ -1054,6 +1055,61 @@ fun HeroBanner(target: DetailTarget, onPlay: () -> Unit, onInfo: () -> Unit, pla
                         modifier = if (playFocus != null) Modifier.focusRequester(playFocus) else Modifier, onClick = onPlay
                     )
                     NetflixButton(title = L("More info"), icon = Icons.Outlined.Info, kind = NetflixKind.SECONDARY, onClick = onInfo)
+                }
+            }
+        }
+    } else if (LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp || it.screenWidthDp >= 600 }) {
+        // build 131: liggend/breed scherm (tablet, foldable, telefoon liggend): breed billboard dat binnen de
+        // schermhoogte past (max ~60%), poster rechts en tekst + knoppen links. De staande kaart werd hier 86% van de
+        // schermbreedte en daardoor hoger dan het scherm.
+        val cfg = LocalConfiguration.current
+        val height = (cfg.screenHeightDp * 0.6f).dp.coerceIn(260.dp, 600.dp)
+        val roomy = height >= 380.dp
+        val shape = RoundedCornerShape(12.dp)
+        Box(Modifier.fillMaxWidth().height(height)) {
+            RemoteImage(poster, Modifier.matchParentSize().blur(50.dp).graphicsLayer { alpha = 0.65f })
+            Box(
+                Modifier.align(Alignment.BottomEnd)
+                    .statusBarsPadding()
+                    .padding(top = 72.dp, bottom = 20.dp, end = Theme.edge + 8.dp)
+                    .fillMaxHeight().aspectRatio(2f / 3f)
+                    .shadow(20.dp, shape)
+                    .clip(shape)
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), shape)
+            ) {
+                RemoteImage(poster, Modifier.matchParentSize(), placeholder = target.title)
+            }
+            Box(
+                Modifier.matchParentSize().background(
+                    Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.9f), 0.5f to Color.Black.copy(alpha = 0.35f), 0.75f to Color.Transparent)
+                )
+            )
+            Box(Modifier.matchParentSize().background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black)))
+            Column(
+                Modifier.align(Alignment.BottomStart)
+                    .padding(start = Theme.edge, end = Theme.edge, bottom = 20.dp)
+                    .fillMaxWidth(0.55f).widthIn(max = 560.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    target.title.uppercase(), color = Color.White, fontSize = if (roomy) 34.sp else 26.sp, fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = if (roomy) 38.sp else 29.sp
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    info?.imdbRating?.takeIf { it != "N/A" }?.let { ImdbBadge(it) }
+                    Text(tags, color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis)
+                }
+                if (roomy) {
+                    info?.plot?.takeIf { it.isNotBlank() && it != "N/A" }?.let {
+                        Text(it, color = Color.White.copy(alpha = 0.9f), fontSize = 14.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    NetflixButton(title = L("Play"), icon = Icons.Default.PlayArrow, kind = NetflixKind.PLAY,
+                        modifier = Modifier.widthIn(min = 140.dp), onClick = onPlay)
+                    NetflixButton(title = L("Info"), icon = Icons.Outlined.Info, kind = NetflixKind.SECONDARY,
+                        modifier = Modifier.widthIn(min = 140.dp), onClick = onInfo)
                 }
             }
         }

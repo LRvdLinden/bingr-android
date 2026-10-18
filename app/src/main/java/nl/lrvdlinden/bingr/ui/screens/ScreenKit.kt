@@ -230,3 +230,24 @@ fun screensDate(v: Any?): String? = when (v) {
     is String -> v.ifBlank { null }
     else -> v.toString()
 }
+
+/**
+ * build 131: scrollen naar een gefocust element zoals op een telefoon (alleen als het (deels) buiten beeld valt), maar
+ * met een veilige marge boven en onder (TV-overscan). Vervangt op TV het standaardgedrag van Compose dat het gefocuste
+ * element op ~30% van de hoogte zet (daardoor viel de titel van het detailscherm tegen de bovenrand).
+ */
+@androidx.compose.foundation.ExperimentalFoundationApi
+class SafeMarginBringIntoViewSpec(private val leading: Float, private val trailing: Float) :
+    androidx.compose.foundation.gestures.BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        val start = leading.coerceAtMost(containerSize / 4)
+        val end = trailing.coerceAtMost(containerSize / 4)
+        val room = containerSize - start - end
+        val trailingEdge = offset + size
+        return when {
+            offset >= start && trailingEdge <= containerSize - end -> 0f
+            size > room || offset < start -> offset - start
+            else -> trailingEdge - (containerSize - end)
+        }
+    }
+}
