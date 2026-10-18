@@ -1,0 +1,16 @@
+start 20:35:26
+apparaat: sdk_gphone64_x86_64, API 34
+tijdzone: Etc/GMT-0, tijd: 20:35
+Physical size: 2560x1600
+Override size: 1920x1080
+Physical density: 320
+Override density: 288
+Performing Streamed Install
+Success
+home: 1920x1080
+detail: 1920x1080
+live: 1920x1080
+guide: 1920x1080
+movies: 1920x1080
+picker: 1920x1080
+multiview: 1920x1080
