@@ -18,9 +18,15 @@ data class CollectionImage(val symbol: String = "⭐", val colorIndex: Int = 0, 
     val avatar: PlaylistAvatar get() = PlaylistAvatar(symbol, colorIndex)
 }
 
-/** Eén item in een handmatige collectie: soort ("channel", "movie", "series") en de lokale id. */
+/**
+ * Eén item in een handmatige collectie: soort ("channel", "movie", "series"), de lokale id en (build 128) de server
+ * [sid] waarop het staat. Zonder [sid] (oudere apps): de server van de collectie (`sourceID`), anders de actieve.
+ */
 @Serializable
-data class CollectionRef(val type: String, val id: String)
+data class CollectionRef(val type: String, val id: String, val sid: String? = null) {
+    /** Zelfde item (server-id hoofdletterongevoelig; ontbreekt hij aan één kant, dan telt alleen soort + id). */
+    fun same(o: CollectionRef): Boolean = type == o.type && id == o.id && (sid == null || o.sid == null || sid.equals(o.sid, ignoreCase = true))
+}
 
 /**
  * Eigen rij ("collectie") van een profiel (build 54; daarvoor voor het hele account). [kind] "manual" (vaste lijst [items]) of "smart"
@@ -244,12 +250,62 @@ object Collections {
         })
     }
 
-    fun contains(c: BingrCollection, ref: CollectionRef): Boolean = c.items.any { it.id == ref.id && it.type == ref.type }
+    fun contains(c: BingrCollection, ref: CollectionRef): Boolean = c.items.any { it.same(ref) }
 
     /** Item in een handmatige collectie zetten of eruit halen. */
     fun toggle(c: BingrCollection, ref: CollectionRef) {
-        val items = if (contains(c, ref)) c.items.filterNot { it.id == ref.id && it.type == ref.type } else c.items + ref
+        val items = if (contains(c, ref)) c.items.filterNot { it.same(ref) } else c.items + ref
         upsert(c.copy(items = items))
+    }
+
+    // MARK: build 128: collecties over alle servers
+
+    /** Sleutel "<server>|<item>" van een item (null = server onbekend). */
+    fun keyOf(c: BingrCollection, r: CollectionRef, active: String? = null): String? =
+        (r.sid ?: c.sourceID ?: active)?.let { "$it|${r.id}" }
+
+    /** Sleutels (server kleine letters) van alle handmatige items in alle profielen, voor het opruimen van catalogmeta. */
+    fun referencedKeys(): Set<String> {
+        ensureLoaded()
+        val out = HashSet<String>()
+        for (list in byProfile.values) for (c in list) if (!c.deleted && !c.isSmart) for (r in c.items) keyOf(c, r)?.let { out += AllServersLogic.metaKey(it) }
+        return out
+    }
+
+    /** Remap-regels toepassen op de handmatige collecties van alle profielen (pure functie; zelfde map als er niets verandert). */
+    fun remapped(map: Map<String, List<BingrCollection>>, rules: Map<String, AllServersLogic.Rule>): Map<String, List<BingrCollection>> {
+        if (rules.isEmpty()) return map
+        val now = System.currentTimeMillis()
+        var changed = false
+        val out = map.mapValues { (_, list) ->
+            list.map { c ->
+                if (c.deleted || c.isSmart) return@map c
+                var any = false
+                val items = c.items.map { r ->
+                    val key = keyOf(c, r) ?: return@map r
+                    val t = AllServersLogic.resolve(rules, key)?.first ?: return@map r
+                    any = true
+                    CollectionRef(r.type, AllServersLogic.itemOf(t), AllServersLogic.serverOf(t))
+                }
+                if (!any) c else {
+                    changed = true
+                    val seen = ArrayList<CollectionRef>()
+                    items.forEach { r -> if (seen.none { it.same(r) }) seen += r }
+                    c.copy(items = seen, updatedAt = now)
+                }
+            }
+        }
+        return if (changed) out else map
+    }
+
+    /** Remap meteen lokaal toepassen (main thread). true = gewijzigd (dan uploaden). */
+    fun applyRemap(rules: Map<String, AllServersLogic.Rule>): Boolean {
+        ensureLoaded()
+        val n = remapped(byProfile, rules)
+        if (n === byProfile) return false
+        byProfile = n
+        save()
+        return true
     }
 
     /** Lokale stand voor de sync. */
@@ -286,10 +342,11 @@ object Collections {
         runCatching { legacyFile.delete() }
     }
 
-    fun ref(c: Channel) = CollectionRef(BingrCollection.CHANNEL, c.id)
+    // build 128: met de server van het item
+    fun ref(c: Channel) = CollectionRef(BingrCollection.CHANNEL, c.id, c.sourceID ?: Playlists.source?.id)
     fun ref(t: DetailTarget) = when (t) {
-        is DetailTarget.MovieT -> CollectionRef(BingrCollection.MOVIE, t.id)
-        is DetailTarget.SeriesT -> CollectionRef(BingrCollection.SERIES, t.id)
+        is DetailTarget.MovieT -> CollectionRef(BingrCollection.MOVIE, t.id, t.sourceID ?: Playlists.source?.id)
+        is DetailTarget.SeriesT -> CollectionRef(BingrCollection.SERIES, t.id, t.sourceID ?: Playlists.source?.id)
     }
 
     /**
@@ -303,6 +360,9 @@ object Collections {
         val ix = CollectionIndex.of(lib)
         if (!c.isSmart) {
             return c.items.mapNotNull { r ->
+                // build 128: item van een andere (of verwijderde) server
+                val sid = r.sid ?: c.sourceID
+                if (sid != null && sourceID != null && !sid.equals(sourceID, ignoreCase = true)) return@mapNotNull AllServers.collectionEntry(r.type, "$sid|${r.id}")
                 when (r.type) {
                     BingrCollection.CHANNEL -> ix.channelByID[r.id]?.let { CollectionEntry.C(it) }
                     BingrCollection.MOVIE -> ix.movieByID[r.id]?.let { CollectionEntry.M(it) }

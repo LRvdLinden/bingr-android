@@ -63,13 +63,14 @@ class CollectionIndex private constructor(
 
 object CollectionResolver {
     /** Invoer van één collectierij. De lijst wordt op identiteit vergeleken (een diepe vergelijking is te duur). */
-    class Input(val c: BingrCollection, val lib: Library, val pid: String?, val profile: String?) {
+    /** [v] (build 128): stand van [AllServers] (items van andere servers). */
+    class Input(val c: BingrCollection, val lib: Library, val pid: String?, val profile: String?, val v: Int = AllServers.version) {
         override fun equals(other: Any?): Boolean =
-            other is Input && other.lib === lib && other.c == c && other.pid == pid && other.profile == profile
+            other is Input && other.lib === lib && other.c == c && other.pid == pid && other.profile == profile && other.v == v
         override fun hashCode(): Int = (c.hashCode() * 31 + System.identityHashCode(lib)) * 31 + (pid?.hashCode() ?: 0)
     }
 
-    private data class Key(val profile: String?, val id: String, val updatedAt: Long, val c: BingrCollection, val pid: String?, val limit: Int)
+    private data class Key(val profile: String?, val id: String, val updatedAt: Long, val c: BingrCollection, val pid: String?, val limit: Int, val v: Int)
     private class Entry(val lib: WeakReference<Library>, val result: List<CollectionEntry>)
 
     /** Laatst gebruikte uitkomsten (LRU); een andere lijst (identiteit) telt als niet gevonden. */
@@ -77,7 +78,7 @@ object CollectionResolver {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, Entry>?): Boolean = size > 64
     }
 
-    private fun key(i: Input, limit: Int) = Key(i.profile?.lowercase(), i.c.id.lowercase(), i.c.updatedAt, i.c, i.pid, limit)
+    private fun key(i: Input, limit: Int) = Key(i.profile?.lowercase(), i.c.id.lowercase(), i.c.updatedAt, i.c, i.pid, limit, i.v)
 
     /** Al uitgerekend voor precies deze invoer? (goedkoop, ook op de main thread) */
     fun peek(i: Input, limit: Int = 200): List<CollectionEntry>? = synchronized(cache) {
@@ -113,7 +114,8 @@ object CollectionResolver {
 
 /** Stabiele sleutel van een item in een collectierij (soort + id). */
 val CollectionEntry.key: String get() = when (this) {
-    is CollectionEntry.C -> "c:" + channel.id
-    is CollectionEntry.M -> "m:" + movie.id
-    is CollectionEntry.S -> "s:" + series.id
+    // build 128: met de server erbij (hetzelfde id kan op twee servers staan)
+    is CollectionEntry.C -> "c:" + (channel.sourceID?.let { "$it|" } ?: "") + channel.id
+    is CollectionEntry.M -> "m:" + (movie.sourceID?.let { "$it|" } ?: "") + movie.id
+    is CollectionEntry.S -> "s:" + (series.sourceID?.let { "$it|" } ?: "") + series.id
 }

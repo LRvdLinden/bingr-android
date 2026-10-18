@@ -136,7 +136,8 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
     var versions by remember(target.id) { mutableStateOf(emptyList<ContentLanguage.Version>()) }
     var versionMenu by remember(target.id) { mutableStateOf<ContentLanguage.Version?>(null) }
 
-    val pid = Playlists.source?.id
+    // build 128: titel van een andere server: Mijn lijst, downloads en afspelen op die server (zonder te wisselen)
+    val pid = target.sourceID ?: Playlists.source?.id
     val lib = Playlists.library
     val details = d
     val rawTitle = details?.title?.takeIf { it.isNotBlank() } ?: target.title

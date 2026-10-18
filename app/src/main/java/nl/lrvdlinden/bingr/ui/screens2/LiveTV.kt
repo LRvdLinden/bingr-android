@@ -132,13 +132,15 @@ fun LiveTVScreen() {
                 .filterIsInstance<CollectionEntry.C>().map { it.channel }
         }
     }
-    val channels: List<Channel> = remember(libKey, current, favorites, recents, pid, events, collectionChannels) {
+    val channels: List<Channel> = remember(libKey, current, favorites, recents, pid, events, collectionChannels, AllServers.version) {
         when {
-            current == S2_FAV_KEY -> lib.channels.filter { Store.isFavorite(pid, it.id) }   // server-id hoofdletterongevoelig
+            // build 128: favorieten en recente zenders van alle servers (andere servers spelen daar, zonder te wisselen)
+            current == S2_FAV_KEY -> lib.channels.filter { Store.isFavorite(pid, it.id) } +   // server-id hoofdletterongevoelig
+                AllServers.channels(favorites.filterNot { AllServersLogic.sameServer(AllServersLogic.serverOf(it), pid) }, pid) { null }
             current == S2_RECENT_KEY -> {
                 val byKey = HashMap<String, Channel>()
                 lib.channels.forEach { byKey.putIfAbsent(Store.key(pid, it.id).lowercase(), it) }
-                recents.mapNotNull { byKey[it.lowercase()] }.distinct()
+                AllServers.channels(recents, pid) { byKey[it.lowercase()] }.distinct()
             }
             current == S2_ALL_KEY -> lib.channels
             current == S2_EVENTS_KEY -> events.map { it.first }
@@ -175,6 +177,7 @@ fun LiveTVScreen() {
     val searchPending = searching && found?.first != query
 
     fun play(c: Channel) {
+        if (c.sourceID != null) { AllServers.playChannel(c, visible, if (current == S2_FAV_KEY) AllServers.Field.FAVORITES else AllServers.Field.RECENT); return }
         Store.pushRecentChannel(pid, c.id)
         AppState.play(Playables.channel(c, Playlists.library.nowPlaying(c)), zap = visible)
     }

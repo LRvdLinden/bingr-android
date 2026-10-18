@@ -14,6 +14,7 @@ object Playables {
         return PlayableItem(
             id = m.id, title = m.title, subtitle = m.year?.toString(), url = m.streamURL, type = MediaType.MOVIE,
             imdbID = imdb, artwork = m.poster, stalkerCmd = m.stalkerCmd, resumeAt = resume(m.id, imdb), stremio = stremio,
+            sourceID = m.sourceID,
         )
     }
 
@@ -24,13 +25,13 @@ object Playables {
             subtitle = L("S%d:E%d · %@", e.season, e.number, cleanEpisodeTitle(e)),
             url = e.streamURL, type = MediaType.EPISODE, imdbID = imdb, season = e.season, episode = e.number,
             artwork = e.still ?: s.poster, resumeAt = resume(e.id, null), stremio = stremio,
-            seriesID = s.id,
+            seriesID = s.id, sourceID = s.sourceID,
         )
     }
 
     fun channel(c: Channel, now: EPGProgram?): PlayableItem = PlayableItem(
         id = c.id, title = c.name, subtitle = now?.title, url = c.streamURL, type = MediaType.LIVE,
-        artwork = c.logo, stalkerCmd = c.stalkerCmd, channelID = c.id,
+        artwork = c.logo, stalkerCmd = c.stalkerCmd, channelID = c.id, sourceID = c.sourceID,
     )
 
     fun resume(id: String, imdb: String?): Double =
@@ -91,12 +92,16 @@ data class ResumeChoice(
     /** seconden (null = onbekend) */
     val position: Double? = null,
     val detail: DetailTarget? = null,
+    /** Build 128: server van dit item als die niet de actieve is */
+    val sourceID: String? = null,
 )
 
 /** Speelt een film of aflevering af op basis van de voortgangssleutel (= ResumePlayer in ContinueWatching.swift). */
 object ResumePlayer {
     /** Lukt afspelen niet, dan de serie/film om te openen (anders null). */
-    suspend fun play(key: String, title: String, restart: Boolean): DetailTarget? {
+    suspend fun play(key: String, title: String, restart: Boolean, sourceID: String? = null): DetailTarget? {
+        // build 128: van een andere (of verwijderde) server, zonder te wisselen
+        if (sourceID != null && !AllServers.isActive(sourceID)) return AllServers.resume(sourceID, key, title, restart)
         val lib = Playlists.library
         val m = lib.movies.firstOrNull { it.id == key }
         if (m != null) {

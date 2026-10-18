@@ -51,6 +51,8 @@ object Store {
     var reminders by mutableStateOf(listOf<ProgramReminder>()); private set
     /** Kijkgeschiedenis van het actieve profiel */
     var history by mutableStateOf(listOf<HistoryEntry>()); private set
+    /** Build 128: verborgen categorieën van het actieve profiel, "<server-id>|<categorienaam>" (alle servers) */
+    var hiddenCategories by mutableStateOf(setOf<String>()); private set
     /** Startscherm (build 51) van het actieve profiel */
     var activeHomeLayout by mutableStateOf(HomeLayout()); private set
     var nasServers by mutableStateOf(listOf<NASServer>()); private set
@@ -98,10 +100,12 @@ object Store {
         val watched: Set<String> = emptySet(),
         val recent: List<String> = emptyList(),
         val history: List<HistoryEntry> = emptyList(),
+        /** build 128: verborgen categorieën ("<server-id>|<naam>") */
+        val hiddenCategories: Set<String> = emptySet(),
     )
 
     /** Per-profiel-bestanden (vroeger in store/, nu in store/profile-<id>/) */
-    private val profileFiles = listOf("favorites", "mylist", "progress", "watched", "recent", "history")
+    private val profileFiles = listOf("favorites", "mylist", "progress", "watched", "recent", "history", "hiddencats")
 
     fun init(ctx: Context) {
         dir = File(ctx.filesDir, "store").apply { mkdirs() }
@@ -191,6 +195,7 @@ object Store {
         localWatched = readIn(d, "watched", emptySet())
         recentChannels = readIn(d, "recent", emptyList())
         history = readIn(d, "history", emptyList())
+        hiddenCategories = readIn(d, "hiddencats", emptySet())
         activeHomeLayout = readIn(d, "homelayout", HomeLayout())
     }
 
@@ -555,6 +560,7 @@ object Store {
     fun delete(p: PlaylistSource) {
         // tombstone (build 43): andere apparaten van het account verwijderen deze server ook
         SourceSync.sourceDeleted(p.id)
+        removeServerCategories(p.id)   // build 128
         playlists = playlists.filterNot { it.id == p.id }
         write("playlists", playlists)
         if (mainSourceID == p.id) { mainSourceID = playlists.firstOrNull()?.id; saveMeta() }
@@ -576,6 +582,7 @@ object Store {
         for (id in removed) {
             removeSecrets { it.startsWith("playlist.$id.") }
             runCatching { photoFile(id).delete() }
+            removeServerCategories(id)   // build 128
         }
         if (removed.isNotEmpty()) {
             customizations = customizations - removed.toSet(); write("custom", customizations)
@@ -775,6 +782,19 @@ object Store {
         StateSync.profileDataChanged(activeProfileID)
     }
 
+    /** Build 128: een zender uit Recent halen (alle schrijfwijzen van de server-id). */
+    fun removeRecentChannel(playlist: String, channelID: String) {
+        val n = recentChannels.filterNot { sameKey(it, playlist, channelID) }
+        if (n == recentChannels) return
+        recentChannels = n
+        pwrite("recent", recentChannels)
+        StateSync.profileDataChanged(activeProfileID)
+    }
+
+    /** Build 128: kijkgeschiedenis van het actieve profiel over alle servers (dezelfde titel uit iOS én web: één keer). */
+    fun historyAll() = history.filter { belongsToActive(it.profileID) }
+        .distinctBy { (it.playlistID?.lowercase() ?: "-") + "|" + it.itemID }
+
     // MARK: aanpassingen (hernoemen / verbergen / volgorde / samenvoegen) — gedeeld
 
     fun customization(playlist: String) = customizations[playlist] ?: Customization()
@@ -841,8 +861,9 @@ object Store {
         history = history.filterNot { it in gone }; pwrite("history", history)
         StateSync.historyRemoved(activeProfileID, (gone.map { it.id } + e.id).distinct())
     }
-    fun clearHistory(playlist: String?) {
-        val gone = history.filter { samePlaylist(it.playlistID, playlist) }
+    /** [all] (build 128): de hele geschiedenis van dit profiel, van alle servers. */
+    fun clearHistory(playlist: String?, all: Boolean = false) {
+        val gone = history.filter { if (all) belongsToActive(it.profileID) else samePlaylist(it.playlistID, playlist) }
         history = history.filterNot { it in gone }; pwrite("history", history)
         StateSync.historyRemoved(activeProfileID, gone.map { it.id })
     }
@@ -887,16 +908,73 @@ object Store {
         writeIn(d, "favorites", data.favorites); writeIn(d, "mylist", data.myList)
         writeIn(d, "progress", data.progress); writeIn(d, "watched", data.watched)
         writeIn(d, "recent", data.recent); writeIn(d, "history", data.history)
+        writeIn(d, "hiddencats", data.hiddenCategories)
         if (id == activeProfileID) loadProfileData()
     }
 
     private fun readProfileData(id: String): ProfileData {
-        if (id == activeProfileID) return ProfileData(favorites, myList, progress, localWatched, recentChannels, history)
+        if (id == activeProfileID) return ProfileData(favorites, myList, progress, localWatched, recentChannels, history, hiddenCategories)
         val d = profileDir(id)
         return ProfileData(
             readIn(d, "favorites", emptySet()), readIn(d, "mylist", emptySet()), readIn(d, "progress", emptyMap()),
             readIn(d, "watched", emptySet()), readIn(d, "recent", emptyList()), readIn(d, "history", emptyList()),
+            readIn(d, "hiddencats", emptySet()),
         )
+    }
+
+    // MARK: build 128: categorieën per profiel (docs/ACCOUNT.md → "Categorieën per profiel")
+
+    /** Is categorie [group] (naam zoals de server hem levert) van server [sid] uit voor het actieve profiel? */
+    fun isCategoryHidden(sid: String, group: String): Boolean =
+        key(sid, group) in hiddenCategories || hiddenCategories.any { sameKey(it, sid, group) }
+
+    /** Verborgen categorienamen van server [sid] voor het actieve profiel (voor het filteren). */
+    fun hiddenCategoryNames(sid: String): Set<String> =
+        hiddenCategories.mapNotNullTo(HashSet()) { k -> val bar = k.indexOf('|'); if (bar > 0 && k.regionMatches(0, sid, 0, bar, ignoreCase = true) && bar == sid.length) k.substring(bar + 1) else null }
+
+    /** Categorieën (sleutels "<server-id>|<naam>") aan of uit zetten voor het actieve profiel. */
+    fun setCategoriesHidden(keys: Collection<String>, hidden: Boolean) {
+        val cur = hiddenCategories
+        val n = if (hidden) cur + keys else cur.filterNot { k -> keys.any { w -> sameKey(k, w.substringBefore('|'), w.substringAfter('|')) } }.toSet()
+        if (n == cur) return
+        hiddenCategories = n
+        pwrite("hiddencats", n)
+        StateSync.profileDataChanged(activeProfileID)
+    }
+
+    /** Server verwijderd: zijn categoriekeuzes uit alle profielen (als verwijdering, dus gesynct). */
+    fun removeServerCategories(sid: String) {
+        val prefix = "${sid.lowercase()}|"
+        for (p in profiles) {
+            val d = readProfileData(p.id)
+            val n = d.hiddenCategories.filterNot { it.lowercase().startsWith(prefix) }.toSet()
+            if (n == d.hiddenCategories) continue
+            if (p.id == activeProfileID) { hiddenCategories = n; pwrite("hiddencats", n) }
+            else writeIn(profileDir(p.id), "hiddencats", n)
+            StateSync.profileDataChanged(p.id)
+        }
+    }
+
+    /**
+     * Migratie (eenmalig per apparaat): de verborgen categorieën van vóór build 128 (per server, "group:<naam>" in de
+     * aanpassingen van het android-blok) naar elk profiel, met een oude tijd (epoch), zodat een keuze die een ander
+     * apparaat al per profiel maakte voorgaat. Het oude blok blijft staan.
+     */
+    fun migrateCategoriesToProfiles() {
+        if (Prefs.bool("cats.migrated128", false) || profiles.isEmpty()) return
+        val keys = playlists.flatMap { p ->
+            customization(p.id).hidden.filter { it.startsWith("group:") }.map { key(p.id, it.removePrefix("group:")) }
+        }.toSet()
+        if (keys.isNotEmpty()) for (p in profiles) {
+            StateSync.seedPresent(p.id, "hiddenCategories", keys, 0L)
+            val d = readProfileData(p.id)
+            val n = d.hiddenCategories + keys
+            if (n == d.hiddenCategories) continue
+            if (p.id == activeProfileID) { hiddenCategories = n; pwrite("hiddencats", n) }
+            else writeIn(profileDir(p.id), "hiddencats", n)
+            StateSync.profileDataChanged(p.id)
+        }
+        Prefs.put("cats.migrated128", true)
     }
 
     private fun mergeProfileData(id: String, b: ProfileData) {
@@ -904,6 +982,7 @@ object Store {
         val prog = cur.progress.toMutableMap()
         b.progress.forEach { (k, v) -> if ((prog[k]?.updated ?: 0) < v.updated) prog[k] = v }
         val merged = ProfileData(
+            hiddenCategories = cur.hiddenCategories + b.hiddenCategories,
             favorites = cur.favorites + b.favorites,
             myList = cur.myList + b.myList,
             progress = prog,

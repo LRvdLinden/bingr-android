@@ -151,10 +151,14 @@ fun CollectionRow(c: BingrCollection, only: String? = null) {
                 val long: (() -> Unit)? = if (!c.isSmart) ({ menuFor = e }) else null
                 when (e) {
                     is CollectionEntry.C -> {
-                        val now = lib.nowPlaying(e.channel)
+                        val now = if (e.channel.sourceID == null) lib.nowPlaying(e.channel) else null
                         ChannelCard(e.channel, now, modifier = Modifier.focusLift(onLongClick = long) {
-                            pid?.let { Store.pushRecentChannel(it, e.channel.id) }
-                            AppState.play(Playables.channel(e.channel, now), channels)
+                            // build 128: zender van een andere server: daar spelen (of zoeken als hij weg is)
+                            if (e.channel.sourceID != null) AllServers.playChannel(e.channel, channels, AllServers.Field.COLLECTION)
+                            else {
+                                pid?.let { Store.pushRecentChannel(it, e.channel.id) }
+                                AppState.play(Playables.channel(e.channel, now), channels)
+                            }
                         })
                     }
                     is CollectionEntry.M -> PosterCard(e.movie.title, e.movie.poster,

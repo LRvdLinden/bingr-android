@@ -105,7 +105,7 @@ private enum class PlayerPanel { AUDIO_SUBS, OPENSUBS, OPTIONS, CAST, SOURCES, R
 /** Zender → afspeelbaar item (zoals Playables.channel op iOS). */
 private fun livePlayable(c: Channel): PlayableItem = PlayableItem(
     id = c.id, title = c.name, subtitle = Playlists.library.nowPlaying(c)?.title, url = c.streamURL,
-    type = MediaType.LIVE, artwork = c.logo, stalkerCmd = c.stalkerCmd, channelID = c.id
+    type = MediaType.LIVE, artwork = c.logo, stalkerCmd = c.stalkerCmd, channelID = c.id, sourceID = c.sourceID,
 )
 
 /**
@@ -262,7 +262,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         val cid = itm.channelID
         // laatst bekeken zender van dit profiel (ook vanuit Home, de gids en zoeken; voor "Start bij laatste zender")
         if (itm.type == MediaType.LIVE && cid != null && !itm.id.contains("-cu-")) {
-            Playlists.source?.id?.let { Store.pushRecentChannel(it, cid) }
+            (itm.sourceID ?: Playlists.source?.id)?.let { Store.pushRecentChannel(it, cid) }
         }
         player.catchupProvider =
             if (itm.type == MediaType.LIVE && cid != null) ({ from: Long, to: Long -> Playlists.catchupURL(cid, from, to) }) else null
@@ -346,7 +346,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         val wait = PlayerSettings.zapDelay.toLong()
         zapJob = scope.launch {
             if (wait > 0) delay(wait)
-            Playlists.source?.id?.let { Store.pushRecentChannel(it, next.id) }
+            (next.sourceID ?: Playlists.source?.id)?.let { Store.pushRecentChannel(it, next.id) }
             player.stop()
             start(livePlayable(next))
         }

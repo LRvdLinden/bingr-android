@@ -368,6 +368,8 @@ class ContinueItem(
     val id: String, val title: String, val subtitle: String, val artwork: String?,
     val fraction: Double, val updated: Long, val isMovie: Boolean,
     val position: Double? = null, val traktPlaybackID: Long? = null,
+    /** Build 128: server van dit item als die niet de actieve is (Verder kijken over alle servers) */
+    val sourceID: String? = null,
 )
 
 /**
@@ -379,7 +381,20 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
     val out = ArrayList<ContinueItem>()
     for ((key, e) in progress) {
         if (!Store.belongsToActive(e.profileID)) continue                    // alleen van dit profiel
-        if (e.playlistID != null && !e.playlistID.equals(pid, ignoreCase = true)) continue   // alleen van deze server (iOS: hoofdletters)
+        // build 128: ook van de andere (en verwijderde) servers; titel en artwork staan al in de voortgang
+        if (e.playlistID != null && !e.playlistID.equals(pid, ignoreCase = true)) {
+            val full = "${e.playlistID}|$key"
+            val item = AllServers.item(full)
+            val kind = CatalogMeta.kind(full)
+            val isMovie = item is Movie || (item == null && kind == "movie")
+            if (filter == Filter.MOVIES && !isMovie) continue
+            if (filter == Filter.SERIES && isMovie) continue
+            val left = max(0.0, e.position / max(e.fraction, 0.01) - e.position)
+            val art = e.artwork ?: (item as? Movie)?.poster ?: (item as? Series)?.poster ?: CatalogMeta.image(full)
+            out.add(ContinueItem(key, e.title.ifBlank { CatalogMeta.title(full) ?: L("Unknown title") }, L("%d min left", (left / 60).toInt()),
+                art, e.fraction, e.updated, isMovie, position = if (e.position > 0) e.position else null, sourceID = e.playlistID))
+            continue
+        }
         val isMovie = key in index.movieByID
         if (!isMovie && e.title !in index.seriesTitles) continue
         if (filter == Filter.MOVIES && !isMovie) continue
@@ -393,7 +408,13 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
         val known = out.mapTo(HashSet()) { it.id }
         out.addAll(trakt.filter { it.id !in known })
     }
-    return out.sortedByDescending { it.updated }.take(20)
+    // build 128: hetzelfde werk op twee servers = één tegel (de nieuwste)
+    val seen = HashMap<String, String?>()
+    return out.sortedByDescending { it.updated }.filter { c ->
+        val k = (if (c.isMovie) "m:" else "s:") + AllServersLogic.normTitle(c.title)
+        val prev = seen[k]
+        if (k !in seen) { seen[k] = c.sourceID; true } else AllServersLogic.sameServer(prev ?: pid, c.sourceID ?: pid)
+    }.take(20)
 }
 
 /** Films die je in een andere app (via Trakt) half keek, gekoppeld aan je lijst (op de achtergrond). */
@@ -417,6 +438,14 @@ fun rememberTraktContinue(index: HomeIndex): List<ContinueItem> {
 }
 
 fun ContinueItem.choice(index: HomeIndex): ResumeChoice {
+    sourceID?.let { sid ->
+        val d = when (val x = AllServers.item("$sid|$id")) {
+            is Movie -> DetailTarget.MovieT(x)
+            is Series -> DetailTarget.SeriesT(x)
+            else -> null
+        }
+        return ResumeChoice(id, title, fraction, position, d, sourceID = sid)
+    }
     val d: DetailTarget? = if (isMovie) index.movieByID[id]?.let { DetailTarget.MovieT(it) }
     else index.seriesByTitle[title]?.let { DetailTarget.SeriesT(it) }
     return ResumeChoice(id, title, fraction, position, d)
@@ -453,10 +482,10 @@ fun ResumeDialog(choice: ResumeChoice, onDismiss: () -> Unit) {
     val pct = (choice.fraction * 100).roundToInt()
     val actions = buildList {
         add(S2Action(choice.position?.let { L("Resume from %@", Playables.formatPosition(it)) } ?: L("Resume"), Icons.Default.PlayArrow, primary = true) {
-            AppScope.launch { ResumePlayer.play(choice.id, choice.title, restart = false)?.let { ScreensNav.detail(it) } }
+            AppScope.launch { ResumePlayer.play(choice.id, choice.title, restart = false, sourceID = choice.sourceID)?.let { ScreensNav.detail(it) } }
         })
         add(S2Action(L("Watch from the beginning"), Icons.Default.Replay) {
-            AppScope.launch { ResumePlayer.play(choice.id, choice.title, restart = true)?.let { ScreensNav.detail(it) } }
+            AppScope.launch { ResumePlayer.play(choice.id, choice.title, restart = true, sourceID = choice.sourceID)?.let { ScreensNav.detail(it) } }
         })
         choice.detail?.let { d -> add(S2Action(L("More info"), Icons.Outlined.Info) { ScreensNav.detail(d) }) }
     }
@@ -469,7 +498,7 @@ fun ContinueRow(items: List<ContinueItem>, index: HomeIndex) {
     if (items.isEmpty()) return
     var choice by remember { mutableStateOf<ResumeChoice?>(null) }
     var removing by remember { mutableStateOf<ContinueItem?>(null) }
-    val keys = rememberKeys(items) { it.id }
+    val keys = rememberKeys(items) { "${it.sourceID ?: ""}|${it.id}" }
     MediaRow(L("Continue watching")) {
         keyedItems(items, keys) { c ->
             ContinueCard(
@@ -493,6 +522,8 @@ private fun openCategory(title: String, items: List<DetailTarget>) = ScreensNav.
 private fun homePlay(t: DetailTarget) {
     val ageLimited = Store.activeProfile?.effectiveAgeLimit != null
     when {
+        // build 128: van een verwijderde server (of niet meer op zijn server): eerst zoeken (ScreensNav.detail)
+        t.sourceID != null && AllServers.isOrphan("${t.sourceID}|${t.id}") -> openDetail(t)
         // build 111: TMDB-titel (niet in je bibliotheek, bijv. uit Mijn lijst) → detailpagina
         t is DetailTarget.MovieT && !ageLimited && !DiscoverItem.isExternal(t.movie.id) -> AppState.play(Playables.movie(t.movie, Trakt.imdb(t.movie)))
         else -> openDetail(t)
@@ -517,7 +548,8 @@ fun HomeScreen(filter: Filter) {
     // Verder kijken, Mijn lijst en favorieten via sleutels (snel), niet door de hele bibliotheek te lopen
     val progress = Store.progress
     val traktContinue = rememberTraktContinue(index)
-    val continueList = remember(progress, index, pid, filter, traktContinue, Store.activeProfileID) {
+    val allV = AllServers.version + CatalogMeta.version
+    val continueList = remember(progress, index, pid, filter, traktContinue, Store.activeProfileID, allV) {
         continueItems(filter, index, pid, progress, traktContinue)
     }
     val myList = Store.myList
@@ -525,14 +557,16 @@ fun HomeScreen(filter: Filter) {
     // zonder leeftijdsgrens (die profielen zien alleen hun eigen, gefilterde bibliotheek)
     var knownTick by remember { mutableStateOf(0) }
     val external = Store.activeProfile?.effectiveAgeLimit == null
-    val myMovies = remember(myList, index, pid, external, knownTick) {
-        if (pid == null) emptyList<Movie>()
-        else myList.mapNotNull { index.movie(it, pid) ?: if (external) DiscoverKnown.movie(it, pid) else null }.distinctBy { it.id }.sortedBy { it.title }
+    // build 128: Mijn lijst over alle servers (laatst toegevoegd eerst; hetzelfde werk op twee servers = één tegel)
+    val allMine = remember(myList, index, pid, external, knownTick, allV) {
+        if (pid == null) emptyList<DetailTarget>()
+        else AllServers.myList(myList, pid) { k ->
+            (index.movie(k, pid) ?: if (external) DiscoverKnown.movie(k, pid) else null)?.let { DetailTarget.MovieT(it) }
+                ?: (index.series(k, pid) ?: if (external) DiscoverKnown.series(k, pid) else null)?.let { DetailTarget.SeriesT(it) }
+        }
     }
-    val mySeries = remember(myList, index, pid, external, knownTick) {
-        if (pid == null) emptyList<Series>()
-        else myList.mapNotNull { index.series(it, pid) ?: if (external) DiscoverKnown.series(it, pid) else null }.distinctBy { it.id }.sortedBy { it.title }
-    }
+    val myMovies = remember(allMine) { allMine.mapNotNull { (it as? DetailTarget.MovieT)?.movie } }
+    val mySeries = remember(allMine) { allMine.mapNotNull { (it as? DetailTarget.SeriesT)?.series } }
     // build 111: TMDB-titels in Mijn lijst die dit apparaat nog niet kent (op een ander apparaat toegevoegd)
     LaunchedEffect(myList, pid) {
         val p = pid ?: return@LaunchedEffect
@@ -542,12 +576,16 @@ fun HomeScreen(filter: Filter) {
         if (missing.isNotEmpty() && screensSafe { DiscoverStore.resolve(missing) } == true) knownTick++
     }
     val favorites = Store.favorites
-    val favChannels = remember(favorites, index, pid) {
-        if (pid == null) emptyList<Channel>() else favorites.mapNotNull { index.channel(it, pid) }
+    // build 128: favoriete en recente zenders over alle servers
+    val favChannels = remember(favorites, index, pid, allV) {
+        if (pid == null) emptyList<Channel>() else {
+            val times = StateSync.addedTimes(Store.activeProfileID, "favorites")
+            AllServers.channels(favorites.sortedByDescending { times[it] ?: 0L }, pid) { index.channel(it, pid) }
+        }
     }
     val recentChannels = Store.recentChannels
-    val liveChannels = remember(favChannels, recentChannels, index, pid) {
-        favChannels.ifEmpty { if (pid == null) emptyList() else recentChannels.mapNotNull { index.channel(it, pid) } }
+    val liveChannels = remember(favChannels, recentChannels, index, pid, allV) {
+        favChannels.ifEmpty { if (pid == null) emptyList() else AllServers.channels(recentChannels, pid) { index.channel(it, pid) } }
     }
     val collections = Collections.visible
     val layoutRows = remember(Store.activeHomeLayout, collections) { HomeLayouts.effective(Store.activeHomeLayout, collections) }
@@ -627,11 +665,7 @@ fun HomeScreen(filter: Filter) {
                     "mylist" -> item(key = "mylist") {
                         when (filter) {
                             Filter.ALL -> {
-                                val mine = remember(myMovies, mySeries) {
-                                    val a: List<DetailTarget> = myMovies.map { DetailTarget.MovieT(it) }
-                                    val b: List<DetailTarget> = mySeries.map { DetailTarget.SeriesT(it) }
-                                    a + b
-                                }
+                                val mine = allMine
                                 if (mine.isNotEmpty()) TargetRow(L("My List"), mine, pid)
                             }
                             Filter.MOVIES -> if (myMovies.isNotEmpty()) MovieRow(L("My List"), myMovies, myMovies, pid)
@@ -670,13 +704,15 @@ fun HomeScreen(filter: Filter) {
                     }
                     // favoriete zenders (anders de laatst bekeken zenders)
                     "live" -> { if (filter == Filter.ALL && liveChannels.isNotEmpty()) item(key = "favs") {
-                        val keys = rememberKeys(liveChannels) { it.id }
+                        val keys = rememberKeys(liveChannels) { "${it.sourceID ?: ""}|${it.id}" }
                         MediaRow(if (favChannels.isNotEmpty()) L("Favorite channels") else L("Live TV")) {
                             keyedItems(liveChannels, keys) { c ->
-                                val now = lib.nowPlaying(c)
+                                val now = if (c.sourceID == null) lib.nowPlaying(c) else null
                                 ChannelCard(
                                     c, now, favorite = favChannels.isNotEmpty(),
-                                    modifier = Modifier.focusLift { AppState.play(Playables.channel(c, now), liveChannels) }
+                                    modifier = Modifier.focusLift {
+                                        AllServers.playChannel(c, liveChannels, if (favChannels.isNotEmpty()) AllServers.Field.FAVORITES else AllServers.Field.RECENT)
+                                    }
                                 )
                             }
                         }

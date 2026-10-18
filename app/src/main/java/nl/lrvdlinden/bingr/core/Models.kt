@@ -117,6 +117,8 @@ data class Channel(
     val catchupDays: Int = 0,
     /** Stalker: commando om een link te genereren */
     val stalkerCmd: String? = null,
+    /** Build 128: server van deze zender als die niet de actieve is (null = de actieve server). */
+    val sourceID: String? = null,
 )
 
 @Serializable
@@ -133,6 +135,8 @@ data class Movie(
     val addedAt: Long? = null,
     val stalkerCmd: String? = null,
     val xtreamVodID: Int? = null,
+    /** Build 128: server van deze film als die niet de actieve is (null = de actieve server). */
+    val sourceID: String? = null,
 )
 
 @Serializable
@@ -152,6 +156,8 @@ data class Series(
     val episodes: List<Episode> = emptyList(),
     /** Build 111: laatst toegevoegd/bijgewerkt op de server (Xtream `last_modified`, epoch-ms), voor "Nieuw toegevoegd" */
     val addedAt: Long? = null,
+    /** Build 128: server van deze serie als die niet de actieve is (null = de actieve server). */
+    val sourceID: String? = null,
 )
 
 @Serializable
@@ -233,6 +239,8 @@ data class PlayableItem(
     val channelID: String? = null,
     /** Afleveringen: id van de serie (voor "aflevering bekeken" per profiel en de volgende aflevering) */
     val seriesID: String? = null,
+    /** Build 128: server waarop dit item staat als dat niet de actieve is (afspelen zonder te wisselen) */
+    val sourceID: String? = null,
 )
 
 /** Wat op een detailpagina getoond wordt. */
@@ -246,6 +254,8 @@ sealed class DetailTarget {
     val rating: Double? get() = when (this) { is MovieT -> movie.rating; is SeriesT -> series.rating }
     val year: Int? get() = when (this) { is MovieT -> movie.year; is SeriesT -> series.year }
     val isSeries: Boolean get() = this is SeriesT
+    /** Build 128: server van deze titel als die niet de actieve is (null = de actieve server). */
+    val sourceID: String? get() = when (this) { is MovieT -> movie.sourceID; is SeriesT -> series.sourceID }
 }
 
 @Serializable

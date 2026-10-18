@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.encodeToString
@@ -80,7 +81,8 @@ object Playlists {
     init {
         // aanpassingen of kinderslot gewijzigd → opnieuw toepassen
         AppScope.launch {
-            snapshotFlow { Store.customizations to Store.parental }.drop(1).collect { applyCustomizations() }
+            // build 128: ook de verborgen categorieën van het profiel
+            snapshotFlow { Triple(Store.customizations, Store.parental, Store.hiddenCategories) }.drop(1).collect { applyCustomizations() }
         }
         AppScope.launch {
             snapshotFlow { ParentalControl.unlockedUntil }.drop(1).collect { applyCustomizations() }
@@ -147,58 +149,7 @@ object Playlists {
         val background = !showSpinner && source?.id == s.id
         if (background) updating = true
         try {
-            val password = Store.secret(s.passwordKey) ?: ""
-            var lib: Library
-            when (s.kind) {
-                PlaylistKind.M3U -> {
-                    loadingText = L("Downloading playlist…")
-                    val u = Net.urlValue(s.m3uURL) ?: throw Net.badURL()
-                    val text = Net.text(u)
-                    loadingText = L("Sorting channels and movies…")
-                    lib = withContext(Dispatchers.Default) { M3UParser.library(text, s.id) }
-                    val epg = Net.urlValue(s.epgURL) ?: M3UParser.epgURL(text)
-                    if (epg != null) { loadingText = L("Loading TV guide…"); lib = lib.copy(epg = XMLTVParser.load(epg)) }
-                }
-                PlaylistKind.XTREAM -> {
-                    loadingText = L("Signing in to server…")
-                    val x = XtreamClient(s, password)
-                    x.authenticate()
-                    loadingText = L("Fetching live TV, movies and series…")
-                    lib = x.library()
-                    val epg = Net.urlValue(s.epgURL) ?: x.xmltvURL
-                    if (epg != null) { loadingText = L("Loading TV guide…"); lib = lib.copy(epg = XMLTVParser.load(epg)) }
-                }
-                PlaylistKind.STALKER -> {
-                    loadingText = L("Connecting to portal…")
-                    val st = (if (source?.id == s.id) stalker else null) ?: StalkerClient(s)
-                    st.connect()
-                    loadingText = L("Fetching channels and videos…")
-                    lib = st.library()
-                    Net.urlValue(s.epgURL)?.let { lib = lib.copy(epg = XMLTVParser.load(it)) }
-                }
-                PlaylistKind.JELLYFIN, PlaylistKind.EMBY -> {
-                    loadingText = L("Fetching your library…")
-                    lib = JellyfinClient(s, session(s)).library()
-                }
-                PlaylistKind.PLEX -> {
-                    loadingText = L("Fetching your library…")
-                    var sess = session(s) ?: throw JellyfinClient.notLoggedIn
-                    // server-adres kan veranderen: bij fout opnieuw zoeken
-                    lib = try { PlexClient(sess).library() } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                        val userToken = Store.secret(s.passwordKey) ?: throw e
-                        sess = PlexClient.discoverServer(userToken)
-                        saveSession(s, sess)
-                        PlexClient(sess).library()
-                    }
-                }
-                PlaylistKind.STREMIO -> {
-                    loadingText = L("Loading Stremio add-ons…")
-                    val addons = loadStremioAddons(s)
-                    if (source?.id == s.id) stremioAddons = addons
-                    loadingText = L("Fetching catalogs…")
-                    lib = StremioClient(addons).library()
-                }
-            }
+            val lib = fetch(s)
             writeCache(s, lib)
             if (source?.id == s.id) {
                 setRaw(lib)
@@ -212,6 +163,88 @@ object Playlists {
             isLoading = false; loadingText = ""
             if (background) updating = false
         }
+    }
+
+    /** Inhoud van server [s] ophalen van het netwerk (zonder cache en zonder de stand van de actieve server te wijzigen). */
+    private suspend fun fetch(s: PlaylistSource, quiet: Boolean = false): Library {
+        fun status(t: String) { if (!quiet) loadingText = t }
+        val password = Store.secret(s.passwordKey) ?: ""
+        var lib: Library
+        when (s.kind) {
+            PlaylistKind.M3U -> {
+                status(L("Downloading playlist…"))
+                val u = Net.urlValue(s.m3uURL) ?: throw Net.badURL()
+                val text = Net.text(u)
+                status(L("Sorting channels and movies…"))
+                lib = withContext(Dispatchers.Default) { M3UParser.library(text, s.id) }
+                val epg = Net.urlValue(s.epgURL) ?: M3UParser.epgURL(text)
+                if (epg != null) { status(L("Loading TV guide…")); lib = lib.copy(epg = XMLTVParser.load(epg)) }
+            }
+            PlaylistKind.XTREAM -> {
+                status(L("Signing in to server…"))
+                val x = XtreamClient(s, password)
+                x.authenticate()
+                status(L("Fetching live TV, movies and series…"))
+                lib = x.library()
+                val epg = Net.urlValue(s.epgURL) ?: x.xmltvURL
+                if (epg != null) { status(L("Loading TV guide…")); lib = lib.copy(epg = XMLTVParser.load(epg)) }
+            }
+            PlaylistKind.STALKER -> {
+                status(L("Connecting to portal…"))
+                val st = (if (source?.id == s.id) stalker else null) ?: StalkerClient(s)
+                st.connect()
+                status(L("Fetching channels and videos…"))
+                lib = st.library()
+                Net.urlValue(s.epgURL)?.let { lib = lib.copy(epg = XMLTVParser.load(it)) }
+            }
+            PlaylistKind.JELLYFIN, PlaylistKind.EMBY -> {
+                status(L("Fetching your library…"))
+                lib = JellyfinClient(s, session(s)).library()
+            }
+            PlaylistKind.PLEX -> {
+                status(L("Fetching your library…"))
+                var sess = session(s) ?: throw JellyfinClient.notLoggedIn
+                // server-adres kan veranderen: bij fout opnieuw zoeken
+                lib = try { PlexClient(sess).library() } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                    val userToken = Store.secret(s.passwordKey) ?: throw e
+                    sess = PlexClient.discoverServer(userToken)
+                    saveSession(s, sess)
+                    PlexClient(sess).library()
+                }
+            }
+            PlaylistKind.STREMIO -> {
+                status(L("Loading Stremio add-ons…"))
+                val addons = loadStremioAddons(s)
+                if (source?.id == s.id) stremioAddons = addons
+                status(L("Fetching catalogs…"))
+                lib = StremioClient(addons).library()
+            }
+        }
+        return lib
+    }
+
+    /**
+     * Build 128: ruwe catalogus van server [p] (ook een niet-actieve): de actieve uit het geheugen, anders de cache op dit
+     * apparaat, anders (alleen met [allowNetwork]) stil van het netwerk met een time-out (de cache wordt dan bijgewerkt).
+     */
+    suspend fun catalogOf(p: PlaylistSource, allowNetwork: Boolean): Library? {
+        if (p.id.equals(source?.id, ignoreCase = true) && !rawLibrary.isEmpty) return rawLibrary
+        withContext(Dispatchers.IO) { runCatching { readCache(p) }.getOrNull() }?.let { return it }
+        if (!allowNetwork) return null
+        return try {
+            withTimeoutOrNull(90_000) { fetch(p, quiet = true) }?.also { writeCache(p, it) }
+        } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+    }
+
+    /** Build 128: de server van een item ([Movie.sourceID] e.d.); null = de actieve. */
+    fun sourceFor(id: String?): PlaylistSource? =
+        if (id == null) source else Store.playlists.firstOrNull { it.id.equals(id, ignoreCase = true) } ?: source
+
+    private val otherAddons = java.util.concurrent.ConcurrentHashMap<String, List<StremioClient.Addon>>()
+    private suspend fun addonsFor(src: PlaylistSource): List<StremioClient.Addon> {
+        if (src.id == source?.id) { if (stremioAddons.isEmpty()) stremioAddons = loadStremioAddons(src); return stremioAddons }
+        otherAddons[src.id]?.let { return it }
+        return loadStremioAddons(src).also { otherAddons[src.id] = it }
     }
 
     /** Bij terugkeren in de app: verversen als het volgens de instelling tijd is. */
@@ -265,6 +298,8 @@ object Playlists {
         val lockedGroups: Set<String>,
         val autoLockAdult: Boolean,
         val unlocked: Boolean,
+        /** build 128: verborgen categorieën (naam zoals de server hem levert) van het actieve profiel voor deze server */
+        val hiddenCategories: Set<String> = emptySet(),
     )
 
     /** Filtercontext voor deze bron en het actieve profiel (op de main thread aanroepen: leest Compose-state). */
@@ -276,6 +311,7 @@ object Playlists {
             ageLimit = prof?.effectiveAgeLimit, strict = prof?.strictAgeFilter ?: false,
             parentalEnabled = pc.enabled, lockedGroups = pc.lockedGroups, autoLockAdult = pc.autoLockAdult,
             unlocked = ParentalControl.isUnlocked,
+            hiddenCategories = Store.hiddenCategoryNames(p.id),
         )
     }
 
@@ -340,7 +376,7 @@ object Playlists {
     fun apply(raw: Library, c: Customization, playlist: String, ageLimit: Int? = null, strict: Boolean = false): Library {
         val pc = Store.parental
         return apply(raw, FilterContext(c, playlist, ageLimit, strict, pc.enabled, pc.lockedGroups, pc.autoLockAdult,
-            ParentalControl.isUnlocked))
+            ParentalControl.isUnlocked, Store.hiddenCategoryNames(playlist)))
     }
 
     /** Pure filterfunctie (veilig op de achtergrond; leest alleen de thread-veilige Metadata-cache). */
@@ -365,7 +401,8 @@ object Playlists {
             if (id in c.hidden) return false
             groupOK[g]?.let { return it }
             val m = c.merged[g] ?: g
-            val ok = Customization.groupKey(g) !in c.hidden && Customization.groupKey(m) !in c.hidden &&
+            // build 128: categorieën aan/uit per profiel (hiddenCategories), niet meer "group:" uit de aanpassingen van de server
+            val ok = g !in ctx.hiddenCategories && m !in ctx.hiddenCategories &&
                 !isLocked(g) && !isLocked(m)
             groupOK[g] = ok
             return ok
@@ -409,28 +446,28 @@ object Playlists {
 
     suspend fun episodes(s: Series): List<Episode> {
         if (s.episodes.isNotEmpty()) return s.episodes
-        episodeCache[s.id]?.let { return it }
-        val src = source ?: return emptyList()
+        // build 128: serie van een andere server: niet in de cache van de actieve server (id's kunnen botsen)
+        val foreign = s.sourceID != null && !s.sourceID.equals(source?.id, ignoreCase = true)
+        if (!foreign) episodeCache[s.id]?.let { return it }
+        // build 128: serie van een andere server (zonder te wisselen)
+        val src = sourceFor(s.sourceID) ?: return emptyList()
         val eps: List<Episode> = try {
             when (src.kind) {
                 PlaylistKind.XTREAM -> XtreamClient(src, Store.secret(src.passwordKey) ?: "").episodes(s)
                 PlaylistKind.JELLYFIN, PlaylistKind.EMBY -> JellyfinClient(src, session(src)).episodes(s)
                 PlaylistKind.PLEX -> session(src)?.let { PlexClient(it).episodes(s) } ?: emptyList()
-                PlaylistKind.STREMIO -> {
-                    if (stremioAddons.isEmpty()) stremioAddons = loadStremioAddons(src)
-                    StremioClient(stremioAddons).episodes(s)
-                }
+                PlaylistKind.STREMIO -> StremioClient(addonsFor(src)).episodes(s)
                 else -> emptyList()
             }
         } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
         // alleen bewaren als er iets binnenkwam: bij een time-out of serverfout opnieuw proberen
-        if (eps.isNotEmpty()) episodeCache = episodeCache + (s.id to eps)
+        if (eps.isNotEmpty() && !foreign) episodeCache = episodeCache + (s.id to eps)
         return eps
     }
 
     /** Ruwe Xtream get_series_info (detailpagina). */
     suspend fun xtreamSeriesInfo(series: Series): JsonObject? {
-        val s = source ?: return null
+        val s = sourceFor(series.sourceID) ?: return null
         val id = series.xtreamSeriesID ?: return null
         if (s.kind != PlaylistKind.XTREAM) return null
         return XtreamClient(s, Store.secret(s.passwordKey) ?: "").seriesInfo(id)
@@ -438,7 +475,7 @@ object Playlists {
 
     /** Xtream get_vod_info → "info" (detailpagina). */
     suspend fun xtreamVodInfo(m: Movie): JsonObject? {
-        val s = source ?: return null
+        val s = sourceFor(m.sourceID) ?: return null
         val id = m.xtreamVodID ?: return null
         if (s.kind != PlaylistKind.XTREAM) return null
         return XtreamClient(s, Store.secret(s.passwordKey) ?: "").vodInfo(id)
@@ -447,18 +484,19 @@ object Playlists {
     /** Stremio: alle beschikbare streams voor een titel. */
     suspend fun stremioStreams(item: PlayableItem): List<StremioStream> {
         val ref = item.stremio ?: return emptyList()
-        val s = source ?: return emptyList()
-        if (stremioAddons.isEmpty()) stremioAddons = loadStremioAddons(s)
+        val s = sourceFor(item.sourceID) ?: return emptyList()
         val parts = ref.split("|", limit = 2)
         if (parts.size != 2) return emptyList()
-        return StremioClient(stremioAddons).streams(parts[0], parts[1])
+        return StremioClient(addonsFor(s)).streams(parts[0], parts[1])
     }
 
     /** Geeft de echte afspeel-URL (Stalker maakt per keer een link aan, Stremio zoekt een stream). */
     suspend fun resolve(item: PlayableItem): String? {
         if (item.url != null && item.stalkerCmd == null) return item.url
         val cmd = item.stalkerCmd
-        val st = stalker
+        // build 128: item van een andere server: een eigen MAC-portalverbinding
+        val other = item.sourceID?.takeIf { !it.equals(source?.id, ignoreCase = true) }?.let { sourceFor(it) }
+        val st = if (other != null) (if (other.kind == PlaylistKind.STALKER) StalkerClient(other) else null) else stalker
         if (cmd != null && st != null) {
             val link = try {
                 st.createLink(cmd, if (item.type == MediaType.LIVE) MediaType.LIVE else MediaType.MOVIE)

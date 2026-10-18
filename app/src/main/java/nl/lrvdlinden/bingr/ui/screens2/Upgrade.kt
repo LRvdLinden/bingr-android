@@ -92,7 +92,8 @@ object Upgrade {
         Entitlements.Feature.TRAKT -> L("Trakt is part of Bingr Lifetime.")
         Entitlements.Feature.MULTI_SERVER -> L("More servers are part of Bingr Lifetime. Your current servers keep working.")
         Entitlements.Feature.THEMES -> L("Accent colors are part of Bingr Lifetime.")
-        Entitlements.Feature.STREAMS -> L("With Bingr Lifetime you can watch on up to %d screens at the same time.", Entitlements.LIFETIME_STREAMS)
+        Entitlements.Feature.STREAMS -> L("With Bingr Lifetime you can watch on up to %d screens at the same time.", Entitlements.LIFETIME_STREAMS) +
+            " " + L("How many you can watch at once also depends on your IPTV provider.")
         Entitlements.Feature.DEVICES -> L("With Bingr Lifetime you can use up to %d devices.", Entitlements.LIFETIME_DEVICES)
         null -> L("Get more out of Bingr with a one-time upgrade.")
     }
@@ -213,10 +214,13 @@ private fun PlanComparison() {
     val freeStreams = c?.takeIf { it.isFree }?.streams ?: Entitlements.FREE_STREAMS
     val freeDevices = c?.takeIf { it.isFree }?.devices ?: Entitlements.FREE_DEVICES
     val freeServers = c?.takeIf { it.isFree }?.servers ?: Entitlements.FREE_SERVERS
+    // build 128: de echte waarden van de server als je Lifetime hebt; "tot 3" schermen (hangt ook af van de IPTV-aanbieder)
+    val lifeStreams = c?.takeIf { !it.isFree }?.streams ?: Entitlements.LIFETIME_STREAMS
+    val lifeDevices = c?.takeIf { !it.isFree }?.devices ?: Entitlements.LIFETIME_DEVICES
     val yes = "✓"; val no = "—"
     val rows = listOf(
-        Triple(L("Streams at the same time"), "$freeStreams", "${Entitlements.LIFETIME_STREAMS}"),
-        Triple(L("Devices"), "$freeDevices", "${Entitlements.LIFETIME_DEVICES}"),
+        Triple(L("Streams at the same time"), "$freeStreams", L("up to %d", lifeStreams)),
+        Triple(L("Devices"), "$freeDevices", "$lifeDevices"),
         Triple(L("Servers"), "$freeServers", L("Unlimited")),
         Triple(L("Statistics"), no, yes),
         Triple(L("Watching now"), no, yes),
@@ -228,6 +232,7 @@ private fun PlanComparison() {
         c.isFree -> 0
         else -> 1
     }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(tvs(6))) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Theme.card)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = tvs(8)), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1.6f))
@@ -256,6 +261,9 @@ private fun PlanComparison() {
                 }
             }
         }
+    }
+    Text(L("How many you can watch at once also depends on your IPTV provider."), color = Theme.secondary, fontSize = tsp(12),
+        modifier = Modifier.padding(horizontal = 4.dp))
     }
 }
 

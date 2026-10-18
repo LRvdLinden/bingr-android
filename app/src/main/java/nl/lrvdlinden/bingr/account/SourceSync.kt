@@ -175,6 +175,8 @@ object SourceSync {
         Store.playlists.forEach { Playlists.clearCache(it) }
         Playlists.unload()
         Collections.wipe()
+        CatalogMeta.wipe()   // build 128
+        AllServers.wipe()
         StateSync.applyingChanges {
             Reminders.cancelAll()
             Store.wipeAccountData()
