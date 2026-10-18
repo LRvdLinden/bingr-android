@@ -63,9 +63,14 @@ adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 
 timeout 300 adb install -r -g "$APK" || { echo "::error::installeren mislukt"; exit 1; }
 
 case "$SET" in
-  phone) SCREENS="home detail live guide movies picker categories" ;;
-  *)     SCREENS="home detail live guide movies picker multiview categories" ;;
+  phone)   SCREENS="home detail live guide movies picker categories" ;;
+  tablet7) SCREENS="home detail live guide movies picker multiview" ;;   # Categorieën laat de 7"-emulator vastlopen
+  *)       SCREENS="home detail live guide movies picker multiview categories" ;;
 esac
+W=1080; H=1920
+case "$SET" in tablet7) W=1920; H=1080 ;; tablet10) W=2560; H=1440 ;; esac
+# een stukje omlaag schuiven (vanaf y1 naar y2, als fractie van de hoogte)
+scroll() { timeout 15 adb shell input swipe $((W / 2)) $((H * $1 / 100)) $((W / 2)) $((H * $2 / 100)) 900; sleep 4; }
 
 first=1
 for s in $SCREENS; do
@@ -76,9 +81,16 @@ for s in $SCREENS; do
   sleep 2
   timeout 60 adb shell am start -W -n "$PKG/.MainActivity" --ez bingr.screenshots true --es bingr.screen "$s" >/dev/null
   if [ $first = 1 ]; then sleep 25; first=0; else sleep 15; fi
-  # TV-detail: de focus op "Afspelen" schuift de kop deels weg; één stap omhoog zet hem weer helemaal in beeld
-  if [ "$SET" = "tv" ] && [ "$s" = "detail" ]; then
-    timeout 15 adb shell input keyevent KEYCODE_DPAD_UP; sleep 3
+  # Films: de rijen (Top 10, Mijn lijst) in beeld; tablets liggend: ook Home en Detail iets omlaag (anders één groot beeld)
+  if [ "$SET" = "tv" ]; then
+    if [ "$s" = "movies" ]; then
+      timeout 15 adb shell input keyevent KEYCODE_DPAD_DOWN; sleep 2
+      timeout 15 adb shell input keyevent KEYCODE_DPAD_DOWN; sleep 4
+    fi
+  elif [ "$s" = "movies" ]; then
+    scroll 85 20
+  elif [ "$SET" != "phone" ] && { [ "$s" = "home" ] || [ "$s" = "detail" ]; }; then
+    scroll 80 35
   fi
   timeout 60 adb exec-out screencap -p > "$OUT/$s.png"
   echo "$s: $(python3 -c 'import sys,struct; d=open(sys.argv[1],"rb").read(24); print("%dx%d" % struct.unpack(">II", d[16:24]))' "$OUT/$s.png" 2>/dev/null)"
