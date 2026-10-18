@@ -380,6 +380,7 @@
   var epgs = {};     // metaKey → programma's van een zender van een andere server (gids en terugkijken)
   var absent = {};   // metaKey → true: server bestaat, item staat er niet (meer) in
   var tried = {};    // metaKey → tijd van de laatste zoekpoging
+  var lastSig = '';
   var RETRY = 6 * 3600000;
   AS.version = 0;
 
@@ -588,9 +589,10 @@
     });
     return chain.then(function () {
       Object.keys(bySrc).forEach(function (s) { if (s && !server(s)) needs = needs.concat(bySrc[s]); });
+      // alleen opnieuw tekenen als er echt iets anders is (anders tekent elke ronde de rijen opnieuw)
+      var sig = Object.keys(newFound).sort().join(',') + '#' + Object.keys(newAbsent).sort().join(',') + '#' + Object.keys(newEpg).length;
       found = newFound; absent = newAbsent; epgs = newEpg;
-      AS.version++;
-      B.emit('allservers');
+      if (sig !== lastSig) { lastSig = sig; AS.version++; B.emit('allservers'); }
       var now = Date.now(), seen = {};
       var todo = needs.filter(function (r) {
         var mk = AS.metaKey(r.key);

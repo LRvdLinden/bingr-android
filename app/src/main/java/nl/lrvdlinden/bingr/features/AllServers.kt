@@ -242,9 +242,11 @@ object AllServers {
             if (sid.isEmpty() || server(sid) != null) continue
             needs += list
         }
+        // alleen opnieuw tekenen als er echt iets anders is
+        val changed = newFound != found || newAbsent != absent || newEpg.keys != epg.keys
         found = newFound; absent = newAbsent; epg = newEpg
         withContext(Dispatchers.Main) {
-            version++
+            if (changed) version++
             if (migrating && complete) Prefs.put(MIGRATED, true)
         }
         // alleen voor het actieve profiel zoeken (de regels gelden daarna voor alle profielen)
