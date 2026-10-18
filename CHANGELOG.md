@@ -4,6 +4,27 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.0 · Build 132
+_19 oktober 2026_
+
+### iOS, iPadOS, macOS en Android
+
+**Verbeterd**
+
+- Delen vanaf een film of serie deelt nu een eigen Bingr-link met cover en info. Met Bingr geïnstalleerd opent die meteen de detailpagina in de app
+
+### iOS, iPadOS, tvOS, macOS, Android, Android TV en Website
+
+**Opgelost**
+
+- Een Bingr-link naar een film of serie (ook uit de wekelijkse mail) opent nu de detailpagina als de titel op een andere server van je account staat
+
+### Server
+
+**Nieuw**
+
+- Nieuwe openbare functie voor de titelgegevens van gedeelde links, met cache en limiet
+
 ## Versie 1.0.0 · Build 131
 _18 oktober 2026_
 
