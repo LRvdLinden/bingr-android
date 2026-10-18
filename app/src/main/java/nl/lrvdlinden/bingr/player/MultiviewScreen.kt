@@ -119,6 +119,8 @@ fun MultiviewScreen(onClose: () -> Unit) {
         val t = MultiviewTile(c, ctrl)
         tiles.add(t)
         if (active == null) active = t.id else ctrl.muted = true
+        // screenshotmodus (alleen de screenshot-build): geen stream, de tegel toont een beeld uit de demo
+        if (Screenshots.isActive) return
         scope.launch {
             val u = runCatching { Playlists.resolve(ctrl.item) }.getOrNull()
             if (t !in tiles) return@launch   // intussen weggehaald of multiview gesloten
@@ -158,7 +160,7 @@ fun MultiviewScreen(onClose: () -> Unit) {
             for (c in AppState.multiviewStart.take(4)) add(c)
             if (tiles.isEmpty()) picking = true
         }
-        beginStream()
+        if (!Screenshots.isActive) beginStream()
     }
     DisposableEffect(Unit) {
         MainActivity.current?.keepScreenOn(true)
@@ -283,11 +285,12 @@ private fun MultiviewTileView(t: MultiviewTile, selected: Boolean, modifier: Mod
                 color = if (focused) Color.White else if (selected) Theme.red else Color.Transparent
             )
     ) {
-        EngineView(p, Modifier.fillMaxSize())
-        if ((p.isBuffering || p.reconnecting) && p.errorText == null) {
+        if (Screenshots.isActive) ScreenshotStill(t.channel, Modifier.fillMaxSize())
+        else EngineView(p, Modifier.fillMaxSize())
+        if (!Screenshots.isActive && (p.isBuffering || p.reconnecting) && p.errorText == null) {
             CircularProgressIndicator(color = Color.White, modifier = Modifier.align(Alignment.Center).size(tvs(32)), strokeWidth = 2.5.dp)
         }
-        p.errorText?.let {
+        p.errorText?.takeIf { !Screenshots.isActive }?.let {
             Text(it, color = Theme.secondary, fontSize = tsp(12), modifier = Modifier.align(Alignment.Center).padding(12.dp))
         }
         Row(

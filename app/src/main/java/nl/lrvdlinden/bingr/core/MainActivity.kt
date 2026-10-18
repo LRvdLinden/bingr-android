@@ -27,6 +27,16 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         current = this
+        // screenshotmodus (alleen in de screenshot-build met de intent-extra bingr.screenshots, zie ScreenshotMode.kt)
+        Screenshots.init(intent)
+        if (Screenshots.isActive) {
+            ScreenshotDemo.start()
+            // navigatiebalk weg (schone screenshots); de statusbalk blijft
+            WindowCompat.getInsetsController(window, window.decorView).apply {
+                systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
+            }
+        }
         // build 97: knoppen in het beeld-in-beeld-venster (afspelen/pauzeren)
         androidx.core.content.ContextCompat.registerReceiver(
             this, pipReceiver, IntentFilter(ACTION_PIP), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
@@ -37,7 +47,7 @@ class MainActivity : ComponentActivity() {
         // meldingen (pushmeldingen, herinneringen, downloads): niet meer meteen bij het starten vragen, maar na inloggen in
         // het hoofdscherm met uitleg (Push.mainShown → NotificationPrimerDialog), alleen op telefoon/tablet
         // tik op een pushmelding of een bingr://-link (niet opnieuw na het herstellen van de activity)
-        if (savedInstanceState == null) PushNav.handle(intent)
+        if (savedInstanceState == null && !Screenshots.isActive) PushNav.handle(intent)
     }
 
     override fun onNewIntent(intent: Intent) {

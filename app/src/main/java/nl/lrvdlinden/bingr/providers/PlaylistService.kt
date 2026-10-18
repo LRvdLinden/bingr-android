@@ -123,6 +123,8 @@ object Playlists {
     suspend fun select(p: PlaylistSource, forceRefresh: Boolean = false) {
         source = p
         Store.activePlaylistID = p.id
+        // screenshotmodus (alleen de screenshot-build): de demobibliotheek, zonder cache of netwerk
+        if (Screenshots.isActive) { error = null; setRaw(ScreenshotDemo.library); return }
         stalker = if (p.kind == PlaylistKind.STALKER) StalkerClient(p) else null
         stremioAddons = emptyList()
         episodeCache = emptyMap()
@@ -145,6 +147,7 @@ object Playlists {
     }
 
     suspend fun refresh(s: PlaylistSource, showSpinner: Boolean) {
+        if (Screenshots.isActive) return
         if (showSpinner) isLoading = true
         val background = !showSpinner && source?.id == s.id
         if (background) updating = true

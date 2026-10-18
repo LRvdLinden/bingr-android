@@ -211,7 +211,8 @@ private class HomeModel(val filter: Filter) {
     }
 
     /** Billboard zonder te wachten: iets uit de Top 10, anders willekeurig met poster. */
-    private fun quickHero(lib: Library): DetailTarget? = when (filter) {
+    private fun quickHero(lib: Library): DetailTarget? =
+        if (Screenshots.isActive) ScreenshotDemo.hero(filter, lib) else when (filter) {
         Filter.SERIES -> (trendingSeries.firstOrNull() ?: lib.series.filter { it.poster != null }.randomOrNull())
             ?.let { DetailTarget.SeriesT(it) }
         Filter.MOVIES -> (trendingMovies.firstOrNull() ?: lib.movies.filter { it.poster != null }.randomOrNull())
