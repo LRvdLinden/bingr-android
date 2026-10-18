@@ -5469,7 +5469,8 @@
   "“%@” is no longer on “%@”, and you have no other server to search.": "‘%@’ staat niet meer op ‘%@’, en je hebt geen andere server waarop we kunnen zoeken.",
   "Categories that are off don't appear anywhere in the app. Saved per profile, for all your servers.": "Categorieën die uit staan, zie je nergens in de app. Bewaard per profiel, voor al je servers.",
   "Refreshing %@ (%d of %d)…": "%@ vernieuwen (%d van %d)…",
-  "Couldn't refresh: %@": "Niet vernieuwd: %@"
+  "Couldn't refresh: %@": "Niet vernieuwd: %@",
+  "All servers of the account are available in every profile. Adding, editing and removing servers is done in the main account.": "Alle servers van het account zijn er in elk profiel. Servers toevoegen, wijzigen en verwijderen doe je in het hoofdaccount."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",

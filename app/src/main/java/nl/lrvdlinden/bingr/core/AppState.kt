@@ -116,10 +116,13 @@ object AppState {
         open(src)
     }
 
-    /** Deze server openen (wordt de hoofdserver van alle profielen). */
+    /**
+     * Deze server openen. Vanuit het hoofdprofiel wordt hij de hoofdserver van alle profielen; build 130: een ander
+     * profiel mag ook elke server van het account kiezen, maar verandert de hoofdserver van het account niet.
+     */
     fun open(p: PlaylistSource, thenShow: String? = null) {
         lastPlaylistID = p.id
-        if (Store.mainSourceID != p.id) Store.setMainSource(p.id)
+        if (Store.mainSourceID != p.id && Store.canManage) Store.setMainSource(p.id)
         pendingItemID = thenShow
         stage = Stage.MAIN
         AppScope.launch { Playlists.select(p) }

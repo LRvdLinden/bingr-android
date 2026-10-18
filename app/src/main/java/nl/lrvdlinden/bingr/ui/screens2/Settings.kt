@@ -416,15 +416,18 @@ fun SettingsScreen() {
 
       }
 
-      if (page == MyBingrPage.SETTINGS && isMain) {
+      // build 130: alle servers van het account zijn er voor elk profiel (kiezen en vernieuwen); toevoegen, wijzigen en
+      // verwijderen blijven bij het hoofdprofiel
+      if (page == MyBingrPage.SETTINGS) {
             // MARK: server
             item {
-                S2Section(L("Server"), L("The server, Trakt and OpenSubtitles belong to the main account and are used by all profiles.")) {
+                S2Section(L("Server"), if (isMain) L("The server, Trakt and OpenSubtitles belong to the main account and are used by all profiles.")
+                    else L("All servers of the account are available in every profile. Adding, editing and removing servers is done in the main account.")) {
                     Store.playlists.forEach { src ->
                         val active = src.id == source?.id
                         S2Row(src.name, subtitle = src.kind.title,
                             leading = { AvatarCircle(src, tvs(34)) },
-                            onLongClick = { editing = src },
+                            onLongClick = { if (isMain) editing = src },
                             onClick = { if (!active) AppState.open(src) },
                             trailing = { if (active) Icon(Icons.Default.Check, null, tint = Theme.red, modifier = Modifier.size(tvs(20))) })
                     }
@@ -432,10 +435,12 @@ fun SettingsScreen() {
                         val current = Store.playlists.firstOrNull { it.id == source.id } ?: source
                         S2Row(L("%@ · %d channels · %d movies · %d series", current.kind.title,
                             lib.channels.size, lib.movies.size, lib.series.size), tint = Theme.secondary)
-                        S2Row(L("Edit server"), icon = Icons.Default.Dns, onClick = { editing = current })
-                        S2Row(L("Categories on/off (NL, BE, DE…)"), icon = Icons.Default.FilterList, onClick = { sub = S2SettingsSub.CATEGORIES })
-                        S2Row(L("Manage groups and channels"), icon = Icons.Default.Tune, onClick = { sub = S2SettingsSub.MANAGE })
-                        S2Row(L("Check source"), icon = Icons.Default.Analytics, onClick = { sub = S2SettingsSub.CHECK })
+                        if (isMain) {
+                            S2Row(L("Edit server"), icon = Icons.Default.Dns, onClick = { editing = current })
+                            S2Row(L("Categories on/off (NL, BE, DE…)"), icon = Icons.Default.FilterList, onClick = { sub = S2SettingsSub.CATEGORIES })
+                            S2Row(L("Manage groups and channels"), icon = Icons.Default.Tune, onClick = { sub = S2SettingsSub.MANAGE })
+                            S2Row(L("Check source"), icon = Icons.Default.Analytics, onClick = { sub = S2SettingsSub.CHECK })
+                        }
                         // build 130: eerst deze server, daarna de andere één voor één op de achtergrond
                         S2Row(L("Refresh now"), icon = Icons.Default.Refresh, enabled = !Playlists.refreshingAll,
                             subtitle = refreshSubtitle(), onClick = {
@@ -444,16 +449,31 @@ fun SettingsScreen() {
                     }
                     // build 88: met Gratis één server; bestaande extra servers blijven gewoon werken
                     val canAdd = Entitlements.canAddServer(Store.playlists.size)
-                    S2Row(L("Add server"), icon = Icons.Default.Add,
+                    if (isMain) S2Row(L("Add server"), icon = Icons.Default.Add,
                         onClick = { if (canAdd) addingServer = true else Upgrade.show(Entitlements.Feature.MULTI_SERVER) },
                         trailing = { if (!(canAdd)) LifetimeBadge() })
-                    if (source != null) {
+                    if (source != null && isMain) {
                         val current = Store.playlists.firstOrNull { it.id == source.id } ?: source
                         S2Row(L("Delete server"), icon = Icons.Default.Delete, tint = Theme.red, onClick = { deletingServer = current })
                     }
                 }
             }
 
+      }
+
+      if (page == MyBingrPage.SETTINGS) {
+            // MARK: afspeellijsten bijwerken (build 130: vernieuwen voor elk profiel, het interval alleen in het hoofdprofiel)
+            item {
+                S2Section(L("Update playlists"), L("Channels, movies, series and the TV guide are refreshed in the background at this interval.")) {
+                    if (isMain) S2Dropdown(L("Update playlists"), RefreshPolicy.entries.map { it to it.title }, refreshPolicy) {
+                        refreshPolicy = it; RefreshPolicy.current = it
+                    }
+                    val busy = Playlists.refreshingAll
+                    S2Row(L("Refresh all playlists now"), icon = Icons.Default.Refresh, enabled = !busy, subtitle = refreshSubtitle(),
+                        onClick = { AppScope.launch { runCatching { Playlists.refreshAll() } } },
+                        trailing = { if (busy) CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(18.dp)) })
+                }
+            }
       }
 
       if (page == MyBingrPage.PROFILES) {
@@ -486,18 +506,6 @@ fun SettingsScreen() {
                 }
             }
 
-            // MARK: afspeellijsten bijwerken
-            item {
-                S2Section(L("Update playlists"), L("Channels, movies, series and the TV guide are refreshed in the background at this interval.")) {
-                    S2Dropdown(L("Update playlists"), RefreshPolicy.entries.map { it to it.title }, refreshPolicy) {
-                        refreshPolicy = it; RefreshPolicy.current = it
-                    }
-                    val busy = Playlists.refreshingAll
-                    S2Row(L("Refresh all playlists now"), icon = Icons.Default.Refresh, enabled = !busy, subtitle = refreshSubtitle(),
-                        onClick = { AppScope.launch { runCatching { Playlists.refreshAll() } } },
-                        trailing = { if (busy) CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(18.dp)) })
-                }
-            }
 
       }
 
