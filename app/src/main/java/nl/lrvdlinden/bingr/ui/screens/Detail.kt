@@ -903,8 +903,13 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                 onClose = { showSources = false },
                 onPick = { h ->
                     showSources = false
-                    if (h.playlist.id == pid) openLocal(h.itemID)
-                    else { ScreensNav.clear(); AppState.open(h.playlist, thenShow = h.itemID) }
+                    // build 129: op zijn eigen server openen (afspelen gaat daar ook), zonder de actieve server te wisselen
+                    val active = AllServers.isActive(h.playlist.id)
+                    when (val x = h.item) {
+                        is Movie -> ScreensNav.detail(DetailTarget.MovieT(if (active) x.copy(sourceID = null) else x.copy(sourceID = h.playlist.id)))
+                        is Series -> ScreensNav.detail(DetailTarget.SeriesT(if (active) x.copy(sourceID = null) else x.copy(sourceID = h.playlist.id)))
+                        else -> if (active) openLocal(h.itemID) else Unit
+                    }
                 }
             )
         }

@@ -65,7 +65,11 @@ object AllServers {
 
     private val X = AllServersLogic
 
-    fun wipe() { found = emptyMap(); absent = emptySet(); tried.clear(); notice = null; runCatching { Prefs.remove(MIGRATED) }; version++ }
+    fun wipe() {
+        found = emptyMap(); absent = emptySet(); tried.clear(); notice = null; smart = emptyMap(); smartTried.clear(); libCache.clear()
+        synchronized(seenChannels) { seenChannels.clear(); seenEpg.clear() }
+        runCatching { Prefs.remove(MIGRATED) }; version++
+    }
 
     // MARK: servers
 
@@ -93,6 +97,13 @@ object AllServers {
                     Store.history.size, Collections.byProfile, Store.playlists.map { it.id }, activeID(),
                     System.identityHashCode(Playlists.library), CatalogMeta.version)
             }.debounce(2_000).collectLatest { quietly { refresh() } }
+        }
+        // build 129: slimme collecties over alle servers
+        AppScope.launch {
+            snapshotFlow {
+                listOf(Store.activeProfileID, Collections.visible.filter { it.isSmart }.map { it.id + smartSig(it) },
+                    Store.playlists.map { it.id }, activeID(), System.identityHashCode(Playlists.library))
+            }.debounce(3_000).collectLatest { quietly { refreshSmart() } }
         }
     }
 
@@ -156,9 +167,118 @@ object AllServers {
     /** Gefilterde catalogus van [p] (kinderslot, verborgen groepen, leeftijdsgrens van het actieve profiel). */
     private suspend fun filtered(p: PlaylistSource, allowNetwork: Boolean): Library? {
         if (isActive(p.id)) return Playlists.library.takeIf { !it.isEmpty }
-        val raw = Playlists.catalogOf(p, allowNetwork) ?: return null
         val ctx = withContext(Dispatchers.Main) { Playlists.context(p) }
-        return withContext(Dispatchers.Default) { runCatching { Playlists.apply(raw, ctx) }.getOrNull() }
+        return otherLibrary(p, ctx, allowNetwork)
+    }
+
+    // MARK: build 129: andere servers zonder te wisselen (zoeken, "Andere bronnen", slimme collecties)
+
+    /** Gefilterde catalogus van een andere server, zolang zijn cache en de filters gelijk blijven (zacht: mag weg). */
+    private class Cached(val stamp: Long, val ctx: Playlists.FilterContext, val lib: Library)
+    private val libCache = java.util.concurrent.ConcurrentHashMap<String, java.lang.ref.SoftReference<Cached>>()
+
+    /**
+     * Gefilterde catalogus van server [p] (niet de actieve) voor het actieve profiel ([ctx], op de main thread gemaakt
+     * met Playlists.context): uit het geheugen, anders de cache op dit apparaat, anders (alleen met [allowNetwork]) stil
+     * van het netwerk. Zo leest zoeken niet bij elke letter de hele cache opnieuw in.
+     */
+    suspend fun otherLibrary(p: PlaylistSource, ctx: Playlists.FilterContext, allowNetwork: Boolean): Library? {
+        val k = p.id.lowercase(Locale.ROOT)
+        val stamp = withContext(Dispatchers.IO) { Playlists.cacheStamp(p) }
+        libCache[k]?.get()?.let { if (stamp != 0L && it.stamp == stamp && it.ctx == ctx) return it.lib }
+        val raw = Playlists.catalogOf(p, allowNetwork) ?: return null
+        val lib = withContext(Dispatchers.Default) { runCatching { Playlists.apply(raw, ctx) }.getOrNull() } ?: return null
+        val now = withContext(Dispatchers.IO) { Playlists.cacheStamp(p) }
+        if (now != 0L) libCache[k] = java.lang.ref.SoftReference(Cached(now, ctx, lib))
+        return lib
+    }
+
+    /** Zenders van andere servers die via zoeken of een slimme collectie in beeld kwamen (gids en terugkijken). */
+    private val seenChannels = object : LinkedHashMap<String, Channel>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Channel>?): Boolean = size > 400
+    }
+    private val seenEpg = object : LinkedHashMap<String, List<EPGProgram>>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<EPGProgram>>?): Boolean = size > 200
+    }
+
+    /** Zender van een andere server onthouden (met zijn gids van max. 8 dagen terug), zodat gids en terugkijken werken. */
+    fun remember(c: Channel, programs: List<EPGProgram>?) {
+        val sid = c.sourceID ?: return
+        val mk = X.metaKey("$sid|${c.id}")
+        val cutoff = System.currentTimeMillis() - 8 * 86_400_000L
+        val p = programs?.filter { it.end > cutoff }?.takeIf { it.isNotEmpty() }
+        synchronized(seenChannels) {
+            seenChannels[mk] = c
+            if (p != null) seenEpg[mk] = p
+        }
+    }
+
+    /** Slimme collecties op de andere servers: collectie-id (kleine letters) → (handtekening, items met sourceID). */
+    @Volatile private var smart: Map<String, Pair<String, List<CollectionEntry>>> = emptyMap()
+    private val smartTried = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private fun smartSig(c: BingrCollection) = "${c.query}|${c.types}|${c.group}|${c.sourceID}|${c.updatedAt}"
+
+    /** Treffers van een slimme collectie op de andere servers (leeg tot ze op de achtergrond doorzocht zijn). */
+    fun smartEntries(c: BingrCollection): List<CollectionEntry> =
+        smart[c.id.lowercase(Locale.ROOT)]?.takeIf { it.first == smartSig(c) }?.second ?: emptyList()
+
+    /** Sleutel om dezelfde titel/zender van twee servers samen te voegen. */
+    fun crossKey(e: CollectionEntry): AllServersLogic.Cross? = when (e) {
+        is CollectionEntry.C -> X.crossKey("channel", e.channel.name, null)
+        is CollectionEntry.M -> X.crossKey("movie", e.movie.title, e.movie.year)
+        is CollectionEntry.S -> X.crossKey("series", e.series.title, e.series.year)
+    }
+
+    /** Eén slimme collectie in de (gefilterde) catalogus van server [sid]; zelfde regels als Collections.resolve. */
+    private fun smartIn(c: BingrCollection, lib: Library, sid: String, limit: Int): List<CollectionEntry> {
+        val words = c.keywords
+        if (words.isEmpty() || limit <= 0) return emptyList()
+        val group = c.group?.takeIf { it.isNotBlank() }
+        val types = c.types.ifEmpty { BingrCollection.ALL_TYPES }
+        val out = ArrayList<CollectionEntry>()
+        if (BingrCollection.CHANNEL in types) for (x in lib.channels) { if (out.size >= limit) break; if (X.smartHit(Net.fold(x.name), x.group, words, group)) out += CollectionEntry.C(x.copy(sourceID = sid)) }
+        if (BingrCollection.MOVIE in types) for (x in lib.movies) { if (out.size >= limit) break; if (X.smartHit(Net.fold(x.title), x.group, words, group)) out += CollectionEntry.M(x.copy(sourceID = sid)) }
+        if (BingrCollection.SERIES in types) for (x in lib.series) { if (out.size >= limit) break; if (X.smartHit(Net.fold(x.title), x.group, words, group)) out += CollectionEntry.S(x.copy(sourceID = sid)) }
+        return out
+    }
+
+    /**
+     * Slimme collecties van het actieve profiel op de andere servers doorzoeken (één catalogus tegelijk, rustig, niet
+     * tijdens het afspelen). Een collectie met `sourceID` zoekt alleen op die server.
+     */
+    private suspend fun refreshSmart() {
+        val (cols, servers, ctxs) = withContext(Dispatchers.Main) {
+            val cs = Collections.visible.filter { it.isSmart && it.keywords.isNotEmpty() }
+            val ps = order().filter { !isActive(it.id) }
+            Triple(cs, ps, ps.associate { it.id to Playlists.context(it) })
+        }
+        val out = HashMap<String, MutableList<CollectionEntry>>()
+        for (p in servers) {
+            val mine = cols.filter { it.sourceID == null || it.sourceID.equals(p.id, ignoreCase = true) }
+            if (mine.isEmpty()) continue
+            val ctx = ctxs[p.id] ?: continue
+            val lib = otherLibrary(p, ctx, allowNetwork = false) ?: run {
+                // nog geen cache van die server: hooguit eens per 6 uur stil van het netwerk
+                val k = p.id.lowercase(Locale.ROOT)
+                if (System.currentTimeMillis() - (smartTried[k] ?: 0L) < RETRY) return@run null
+                smartTried[k] = System.currentTimeMillis()
+                waitForIdle()
+                withTimeoutOrNull(120_000) { otherLibrary(p, ctx, allowNetwork = true) }
+            } ?: continue
+            withContext(Dispatchers.Default) {
+                for (c in mine) {
+                    val list = out.getOrPut(c.id.lowercase(Locale.ROOT)) { ArrayList() }
+                    val hits = smartIn(c, lib, p.id, 200 - list.size)
+                    hits.forEach { e -> if (e is CollectionEntry.C) remember(e.channel, lib.epg[e.channel.epgID ?: e.channel.id]) }
+                    list += hits
+                }
+            }
+        }
+        val n = cols.associate { it.id.lowercase(Locale.ROOT) to (smartSig(it) to (out[it.id.lowercase(Locale.ROOT)]?.toList() ?: emptyList())) }
+        if (n != smart) {
+            smart = n
+            withContext(Dispatchers.Main) { version++ }
+        }
     }
 
     private suspend fun waitForIdle() {
@@ -314,10 +434,13 @@ object AllServers {
     // MARK: voor de rijen
 
     /** Gids van een zender van een andere server (leeg als die server geen gids heeft). */
-    fun programs(c: Channel): List<EPGProgram> = c.sourceID?.let { epg[X.metaKey("$it|${c.id}")] } ?: emptyList()
+    fun programs(c: Channel): List<EPGProgram> = c.sourceID?.let { sid ->
+        val mk = X.metaKey("$sid|${c.id}")
+        epg[mk] ?: synchronized(seenChannels) { seenEpg[mk] }
+    } ?: emptyList()
 
-    /** Film/serie/zender van een andere server (gevonden), of null. */
-    fun item(key: String): Any? = found[X.metaKey(key)]
+    /** Film/serie/zender van een andere server (gevonden, of via zoeken/slimme collectie in beeld gekomen), of null. */
+    fun item(key: String): Any? = found[X.metaKey(key)] ?: synchronized(seenChannels) { seenChannels[X.metaKey(key)] }
 
     /** Staat dit item op een andere server die er niet meer is, of niet meer op zijn server? */
     fun isOrphan(key: String): Boolean {

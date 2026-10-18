@@ -685,8 +685,11 @@
     var pal = D.palettes[((i % D.palettes.length) + D.palettes.length) % D.palettes.length];
     return pal[0];
   };
-  /** Mag dit profiel andere afspeellijsten gebruiken? (zoals tvOS: alleen het hoofdprofiel) */
-  P.othersAllowed = function () { return !!B.app.profile && (D.isMain(B.app.profile) || D.profiles.length <= 1) && D.sources.length > 1; };
+  /**
+   * Andere servers gebruiken (zoeken, Andere bronnen)? Build 129: voor elk profiel (één lijst over alle servers); de
+   * filters van het profiel (kinderslot, leeftijdsgrens, categorieën) gelden ook daar (Lib.filterFor).
+   */
+  P.othersAllowed = function () { return !!B.app.profile && D.sources.length > 1; };
   /**
    * Gefilterde bibliotheken van de andere bronnen: [{source, lib}]. Uit IndexedDB; fetch = ontbrekende ophalen
    * (één keer per sessie, één tegelijk). Alleen titels/zenders (geen gids).
@@ -700,9 +703,11 @@
     list.forEach(function (s) {
       chain = chain.then(function () {
         return B.idb.get('lib:' + s.id).then(function (c) {
+          // build 129: gefilterd voor het actieve profiel; een ander profiel (of andere filters) = opnieuw filteren
+          var sig = Lib.filterSig(s);
           if (c && c.lib) {
-            if (others[s.id] && others[s.id].at === c.at) return;
-            others[s.id] = { at: c.at, lib: Lib.filterFor(s, c.lib) };
+            if (others[s.id] && others[s.id].at === c.at && others[s.id].sig === sig) return;
+            others[s.id] = { at: c.at, sig: sig, lib: Lib.filterFor(s, c.lib) };
             return;
           }
           // fetch: true = alles ophalen (zoeken); 'media' = alleen Plex/Jellyfin/Emby/Stremio (klein, via hun API);
@@ -710,7 +715,7 @@
           if (!fetch || othersFetched[s.id]) return;
           if (fetch === 'media' && !(B.media.isMediaServer(s.kind) || s.kind === 'Stremio')) return;
           othersFetched[s.id] = true;
-          return Lib.fetchOther(s).then(function (lib) { if (lib) others[s.id] = { at: Date.now(), lib: Lib.filterFor(s, lib) }; }, B.noop);
+          return Lib.fetchOther(s).then(function (lib) { if (lib) others[s.id] = { at: Date.now(), sig: sig, lib: Lib.filterFor(s, lib) }; }, B.noop);
         }, B.noop);
       });
     });
@@ -735,43 +740,36 @@
     return P.otherLibraries('media').then(function (libs) {
       var out = mine.slice();
       libs.forEach(function (l) {
-        (type === 'movie' ? l.lib.movies : l.lib.series).forEach(function (o) { if (same(o)) out.push({ source: l.source, item: o, type: type, current: false }); });
+        // build 129: met de server erbij (o._src), zodat hij daar opent en speelt zonder te wisselen
+        (type === 'movie' ? l.lib.movies : l.lib.series).forEach(function (o) { if (same(o)) { o._src = l.source.id; out.push({ source: l.source, item: o, type: type, current: false }); } });
       });
       return out.slice(0, 20);
     });
   };
-  /** Naar een andere bron wisselen en daar het item openen (= app.open(playlist, thenShow:) op tvOS). */
-  P.openFromSource = function (source, type, id) {
+  /**
+   * Item van een (andere) bron openen. Build 129: zonder van server te wisselen: van een andere server opent/speelt
+   * het item daar (item._src), zoals de lijsten over alle servers van build 128.
+   */
+  P.openFromSource = function (source, type, id, item) {
     if (!source) return;
-    if (Lib.source && Lib.source.id === source.id) {
+    if (Lib.source && AS0().sameServer(Lib.source.id, source.id)) {
       var hit = Lib.lib.byId[id];
       if (hit) { if (type === 'channel') B.player.playChannel(hit.item, [hit.item]); else U.push(S.detail(hit.type, hit.item)); }
       return;
     }
-    U.toast(L('Switching to %@…', source.name));
-    D.setActiveSource(source.id);
-    var done = false;
-    var off = B.on('library', function () { tryOpen(); });
-    var timer = setTimeout(function () { finish(); }, 30000);
-    function finish() { if (done) return; done = true; off(); clearTimeout(timer); }
-    function tryOpen() {
-      if (done || !Lib.source || Lib.source.id !== source.id || !Lib.lib.byId) return;
-      var hit2 = Lib.lib.byId[id];
-      if (!hit2) return;
-      finish();
-      // even wachten tot het hoofdscherm de nieuwe bibliotheek getekend heeft
-      setTimeout(function () {
-        if (type === 'channel') B.player.playChannel(hit2.item, [hit2.item]);
-        else U.push(S.detail(hit2.type, hit2.item));
-      }, 400);
-    }
-    Lib.select(source).then(tryOpen, finish);
+    var x = item;
+    if (!x) return;
+    x._src = source.id;
+    if (B.allservers && B.allservers.open({ type: type, item: x })) return;
+    if (type === 'channel') { D.pushRecentChannel(source.id, x.id); B.player.playChannel(x, [x]); return; }
+    U.push(S.detail(type, x));
   };
+  function AS0() { return B.allservers || { sameServer: function (a, b) { return String(a).toLowerCase() === String(b).toLowerCase(); } }; }
   /** Kaart van een titel uit een andere bron: gekleurde streep en de naam van de bron. */
   P.otherCard = function (o) {
     var card = h('div.card.poster.other-src.f', [U.img(o.item.poster || o.item.logo, 'poster-img', o.item.title || o.item.name),
       h('div.src-badge', { style: { background: P.sourceColor(o.source) } }, o.source.name)]);
-    card.onEnter = function () { P.openFromSource(o.source, o.type, o.item.id); };
+    card.onEnter = function () { P.openFromSource(o.source, o.type, o.item.id, o.item); };
     card._key = 'other:' + o.source.id + ':' + o.item.id;
     return card;
   };
@@ -844,29 +842,40 @@
     p._key = 'cat:' + c.title;
     return p;
   }
-  /** Treffers in de andere afspeellijsten (alleen hoofdprofiel). Promise → [{source, item, type}] */
-  P.searchOthers = function (q) {
-    var f = B.fold(q).trim();
-    if (f.length < 2) return Promise.resolve([]);
+  /**
+   * Build 129: treffers op de andere servers van het profiel, ontdubbeld tegen de eigen treffers ([local] = Lib.search)
+   * en tegen elkaar (zoals build 128). Promise → {movies, series, channels} met item._src = server-id.
+   */
+  P.searchOthers = function (q, local) {
+    var f = B.fold(q).trim(), none = { movies: [], series: [], channels: [] };
+    if (f.length < 2 || !P.othersAllowed()) return Promise.resolve(none);
+    local = local || none;
     return P.otherLibraries(true).then(function (libs) {
-      var out = [];
+      var groups = { movies: [local.movies || []], series: [local.series || []], channels: [local.channels || []] };
       libs.forEach(function (l) {
-        [['movie', l.lib.movies, 'title'], ['series', l.lib.series, 'title'], ['channel', l.lib.channels, 'name']].forEach(function (pool) {
-          for (var i = 0, n = 0; i < pool[1].length && n < 12; i++) {
-            if (B.fold(pool[1][i][pool[2]]).indexOf(f) >= 0) { out.push({ source: l.source, item: pool[1][i], type: pool[0] }); n++; }
+        [['movies', 'movie', l.lib.movies, 'title', 30], ['series', 'series', l.lib.series, 'title', 30], ['channels', 'channel', l.lib.channels, 'name', 20]].forEach(function (pool) {
+          var hits = [];
+          for (var i = 0; i < pool[2].length && hits.length < pool[4]; i++) {
+            var x = pool[2][i];
+            if (B.fold(x[pool[3]]).indexOf(f) >= 0) { x._src = l.source.id; hits.push(x); }
           }
+          groups[pool[0]].push(hits);
         });
       });
-      // zenders (Live TV) altijd als laatste; verder de volgorde houden (stabiel)
-      out = out.slice(0, 40);
-      return out.filter(function (x) { return x.type !== 'channel'; }).concat(out.filter(function (x) { return x.type === 'channel'; }));
-    });
+      var AS = B.allservers, out = {};
+      Object.keys(groups).forEach(function (k) {
+        var type = k === 'movies' ? 'movie' : k === 'series' ? 'series' : 'channel';
+        var n = groups[k][0].length;
+        out[k] = AS.mergeAcross(groups[k], function (x) { return AS.entryKey({ type: type, item: x }); }, n + 60).slice(n);
+      });
+      return out;
+    }, function () { return none; });
   };
   /**
    * Extra rijen onder de zoekresultaten: Personen, Categorieën, Tv-gids, In je andere afspeellijsten.
    * track = de .sy-track; alive() = nog dezelfde zoekopdracht. Geeft een functie die lopend werk stopt.
    */
-  P.searchExtras = function (q, track, alive, empty) {
+  P.searchExtras = function (q, track, alive, empty, local) {
     var slots = {};
     ['people', 'cats', 'progs', 'others'].forEach(function (k) { slots[k] = h('div.search-slot'); });
     // Live TV (zenders en tv-gids) altijd als laatste, na films, series, categorieën en andere afspeellijsten;
@@ -904,10 +913,34 @@
       hits.forEach(function (x) { if (chans.indexOf(x.ch) < 0) chans.push(x.ch); });
       put(slots.progs, S.rowBlock(L('TV guide'), hits.map(function (x) { return P.programCard(x, chans); }), 'search-progs'));
     });
+    // build 129: treffers van de andere servers in dezelfde rijen (Films, Series, Live TV), zonder te wisselen
     if (P.othersAllowed()) {
-      P.searchOthers(q).then(function (list) {
-        if (list.length) put(slots.others, S.rowBlock(L('In your other playlists'), list.map(P.otherCard), 'search-others'));
+      P.searchOthers(q, local).then(function (o) {
+        if (!alive()) return;
+        addTo('movie', o.movies, L('Movies'));
+        addTo('series', o.series, L('Series'));
+        addTo('channel', o.channels, L('Live TV'));
       });
+    }
+    function rowOf(type) { return track.querySelector(type === 'channel' ? '.row-block.live' : '.row-block.srch-' + type); }
+    function addTo(type, list, title) {
+      if (!list || !list.length) return;
+      var all = type === 'channel' ? ((local && local.channels) || []).concat(list) : null;
+      var cards = list.map(function (x) { return type === 'channel' ? S.channelCard(x, all) : S.posterCard(x, type); });
+      var row = rowOf(type);
+      if (row) {
+        var tr = row.querySelector('.row-track');
+        cards.forEach(function (c) { tr.appendChild(c); });
+        return;
+      }
+      row = S.rowBlock(title, cards, type === 'channel' ? 'live' : 'srch-' + type);
+      if (!row) return;
+      // zelfde volgorde als de eigen treffers: films, series, (categorieën, personen), Live TV, tv-gids
+      if (type === 'channel') track.insertBefore(row, slots.progs);
+      else if (type === 'movie') track.insertBefore(row, track.firstChild);
+      else { var m = rowOf('movie'); track.insertBefore(row, m ? m.nextSibling : track.firstChild); }
+      any = true;
+      if (empty && empty.parentNode) empty.parentNode.removeChild(empty);
     }
     return function () { if (pj.cancel) pj.cancel(); };
   };

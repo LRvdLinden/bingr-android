@@ -44,7 +44,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -231,7 +230,7 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit, initialQuery: String? = nu
                         }
                     }
                 } else if (results.channels.isEmpty() && results.movies.isEmpty() && results.series.isEmpty() &&
-                    (results.other.isEmpty() || !Store.isMainActive) && programs.isEmpty() && groupHits.isEmpty() && people.isEmpty() && !searching) {
+                    programs.isEmpty() && groupHits.isEmpty() && people.isEmpty() && !searching) {
                     full {
                         Text(
                             L("Nothing found for “%@”.", q), color = Theme.secondary, fontSize = tsp(15), textAlign = TextAlign.Center,
@@ -330,38 +329,7 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit, initialQuery: String? = nu
                     }
                 }
 
-                // andere afspeellijsten: tik → wissel van afspeellijst en open het item
-                if (results.other.isNotEmpty() && Store.isMainActive) {
-                    full { SearchSectionTitle(L("In your other playlists")) }
-                    items(results.other, span = { GridItemSpan(maxLineSpan) }) { h ->
-                        Row(
-                            Modifier.fillMaxWidth().focusLift(1.02f) {
-                                if (modal) onClose()
-                                ScreensNav.clear()
-                                AppState.open(h.playlist, thenShow = h.itemID)
-                            }.drawBehind {
-                                drawRect(sourceColor(h.playlist), size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height))
-                            }.padding(start = 10.dp).padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            RemoteImage(
-                                h.artwork,
-                                Modifier.width(tvs(44)).height(tvs(62)).clip(RoundedCornerShape(4.dp)),
-                                placeholder = h.title.take(2)
-                            )
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text(h.title, color = Color.White, fontSize = tsp(14), fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(h.subtitle, color = Theme.secondary, fontSize = tsp(11), maxLines = 1)
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                AvatarCircle(h.playlist, tvs(22))
-                                SourceBadge(h.playlist)
-                            }
-                        }
-                    }
-                }
+                // build 129: treffers van de andere servers staan in de rijen hierboven (en Live TV), zonder te wisselen
 
                 // Live TV (zenders en tv-gids) altijd als laatste, na films en series; de tv-focus volgt deze volgorde
                 // zenders
@@ -369,10 +337,14 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit, initialQuery: String? = nu
                     Box(Modifier.bleedHorizontal(edge)) {
                         MediaRow(L("Channels")) {
                             items(results.channels) { c ->
-                                val now = lib.nowPlaying(c)
+                                // build 129: zender van een andere server: gids en afspelen via die server
+                                val now = if (c.sourceID != null) Playlists.nowOf(c) else lib.nowPlaying(c)
                                 ChannelCard(
                                     c, now,
-                                    modifier = Modifier.focusLift { AppState.play(Playables.channel(c, now), results.channels) },
+                                    modifier = Modifier.focusLift {
+                                        if (c.sourceID != null) AllServers.playChannel(c, results.channels, AllServers.Field.RECENT)
+                                        else AppState.play(Playables.channel(c, now), results.channels.filter { it.sourceID == null })
+                                    },
                                     accent = accent
                                 )
                             }

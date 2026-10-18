@@ -354,7 +354,10 @@ object Collections {
      * volgorde; slim: zenders, films en series waarvan de naam een van de zoekwoorden bevat. Pure functie (achtergrond).
      */
     fun resolve(c: BingrCollection, lib: Library, sourceID: String?, limit: Int = 200): List<CollectionEntry> {
-        if (c.sourceID != null && sourceID != null && !c.sourceID.equals(sourceID, ignoreCase = true)) return emptyList()
+        // build 129: collectie van een andere server: slim → de treffers op die server; handmatig → elk item via zijn
+        // eigen server (hieronder, AllServers.collectionEntry), zonder te wisselen
+        val elsewhere = c.sourceID != null && sourceID != null && !c.sourceID.equals(sourceID, ignoreCase = true)
+        if (elsewhere && c.isSmart) return AllServers.smartEntries(c).take(limit)
         val group = c.group?.takeIf { it.isNotBlank() }
         // build 56: id-tabellen en gevouwen namen één keer per lijst ([CollectionIndex]) in plaats van per collectie
         val ix = CollectionIndex.of(lib)
@@ -382,7 +385,10 @@ object Collections {
         if (BingrCollection.CHANNEL in types) for (i in lib.channels.indices) { if (out.size >= limit) break; val x = lib.channels[i]; if (hit(ix.channelNames[i], x.group)) out.add(CollectionEntry.C(x)) }
         if (BingrCollection.MOVIE in types) for (i in lib.movies.indices) { if (out.size >= limit) break; val x = lib.movies[i]; if (hit(ix.movieNames[i], x.group)) out.add(CollectionEntry.M(x)) }
         if (BingrCollection.SERIES in types) for (i in lib.series.indices) { if (out.size >= limit) break; val x = lib.series[i]; if (hit(ix.seriesNames[i], x.group)) out.add(CollectionEntry.S(x)) }
-        return out
+        // build 129: slimme collecties over alle servers van het profiel (actieve eerst, dubbele titels/zenders één keer)
+        val other = AllServers.smartEntries(c)
+        if (other.isEmpty()) return out
+        return AllServersLogic.mergeAcross(listOf(out, other), { AllServers.crossKey(it) }, limit)
     }
 
     /** Kan deze collectie zenders bevatten (voor Live TV)? */

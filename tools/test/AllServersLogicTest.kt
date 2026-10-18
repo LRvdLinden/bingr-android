@@ -102,6 +102,45 @@ fun main() {
     eq("remap 180 dagen", L.pruneRules(rr, now).keys, setOf("c"))
     eq("metaKey", L.metaKey("ABC-1|Xv9"), "abc-1|Xv9")
 
+    // build 129: zoeken en slimme collecties over alle servers (één lijst, ontdubbeld zoals build 128)
+    data class T(val sid: String, val title: String, val year: Int? = null)
+    val tk: (T) -> AllServersLogic.Cross? = { L.crossKey("movie", it.title, it.year) }
+    val active = listOf(T("A", "Dune (2021)"), T("A", "NL | Dune 2021 4K"), T("A", "Arrival"))
+    val other1 = listOf(T("B", "Dune", 2021), T("B", "Heat (1995)"), T("B", "Heat (1995) HD"))
+    val other2 = listOf(T("C", "Arrival (2016)"), T("C", "Heat", 1995), T("C", "Tenet"))
+    val merged = L.mergeAcross(listOf(active, other1, other2), tk)
+    eq("samenvoegen: actieve server helemaal, ook twee versies", merged.take(3), active)
+    eq("samenvoegen: dubbele van andere servers weg (onbekend jaar = titel), volgorde blijft", merged.drop(3), listOf(T("B", "Heat (1995)"), T("C", "Tenet")))
+    eq("samenvoegen: jaar ±1 is hetzelfde, ±2 niet", L.mergeAcross(listOf(listOf(T("A", "Heat", 1995)), listOf(T("B", "Heat", 1996), T("B", "Heat", 1997))), tk),
+        listOf(T("A", "Heat", 1995), T("B", "Heat", 1997)))
+    eq("samenvoegen: limiet", L.mergeAcross(listOf(active, other1), tk, limit = 4).size, 4)
+    eq("samenvoegen: lege naam wordt niet samengevoegd", L.mergeAcross(listOf(listOf(T("A", "4K")), listOf(T("B", "HD"))), tk).size, 2)
+    eq("crossKey: jaar uit de titel", L.crossKey("movie", "Dune (2021)", null), L.crossKey("movie", "NL: Dune", 2021))
+    eq("crossKey: film ≠ serie", L.crossKey("movie", "Fargo", null) == L.crossKey("series", "Fargo", null), false)
+    eq("crossKey: TMDB gaat voor", L.crossKey("movie", "Anders", 2000, tmdb = 603), AllServersLogic.Cross("m:tmdb:603", null))
+    eq("crossKey: zender op naam", L.crossKey("channel", "NL: NPO 1 HD", null), L.crossKey("channel", "|NL| NPO 1 FHD", null))
+    eq("crossKey: lege zender", L.crossKey("channel", "HD", null), null)
+    val chans = L.mergeAcross(listOf(listOf("NPO 1 HD", "RTL 4"), listOf("NL: NPO 1 FHD", "SBS 6"), listOf("RTL 4 50fps", "Veronica")),
+        { L.crossKey("channel", it, null) })
+    eq("zenders over servers: één per zender", chans, listOf("NPO 1 HD", "RTL 4", "SBS 6", "Veronica"))
+    eq("slim: zoekwoord in naam", L.smartHit("nl: marvel avengers", "Films", listOf("marvel"), null), true)
+    eq("slim: één van de woorden", L.smartHit("star wars", "Films", listOf("marvel", "star"), null), true)
+    eq("slim: geen woord", L.smartHit("dune", "Films", listOf("marvel"), null), false)
+    eq("slim: andere categorie", L.smartHit("marvel", "Kids", listOf("marvel"), "Films"), false)
+    eq("slim: leeg woord telt niet", L.smartHit("dune", "Films", listOf(""), null), false)
+
+    // build 129: terugkijken op een MAC-portal (link pas bij afspelen)
+    val au = L.archiveURL("Srv-1/a b", "st123", 1_700_000_000_000, 1_700_003_600_000)
+    eq("archief: voorvoegsel", au.startsWith(L.ARCHIVE_SCHEME), true)
+    eq("archief: heen en terug", L.parseArchive(au), AllServersLogic.Archive("Srv-1/a b", "st123", 1_700_000_000_000, 1_700_003_600_000))
+    eq("archief: geen archief-adres", L.parseArchive("http://x/y.ts"), null)
+    eq("archief: kapot", L.parseArchive(L.ARCHIVE_SCHEME + "a/b/c"), null)
+    val start = 1_700_000_000_000
+    val progs = listOf(Triple(start - 30 * 60_000L, true, "p0"), Triple(start + 2 * 60_000L, false, "p1"),
+        Triple(start + 3 * 60_000L, true, "p2"), Triple(start + 4 * 60_000L, true, "p3"))
+    eq("archief: programma binnen 5 min en in het archief", L.archiveProgram(progs, start), "p2")
+    eq("archief: niets in de buurt", L.archiveProgram(progs, start + 3_600_000L), null)
+
     println("$checks controles, $failures fout")
     if (failures > 0) kotlin.system.exitProcess(1)
 }

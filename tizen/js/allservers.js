@@ -104,6 +104,48 @@
     return p + AS.normTitle(title) + ':' + (y == null ? '' : y);
   };
 
+  // MARK: build 129: zoeken en slimme collecties over alle servers (= AllServersLogic.crossKey/mergeAcross/smartHit)
+
+  /** Hetzelfde werk op twee servers: {base, year}; base = soort + genormaliseerde titel/zender, jaar ±1; null = niet samenvoegen. */
+  AS.crossKey = function (kind, title, year, tmdb) {
+    if (kind === 'channel') { var n = AS.normChannel(title); return n.length >= 2 ? { base: 'c:' + n, year: null } : null; }
+    var p = kind === 'movie' ? 'm:' : 's:';
+    if (tmdb != null) return { base: p + 'tmdb:' + tmdb, year: null };
+    var t = AS.normTitle(title);
+    if (!t) return null;
+    return { base: p + t, year: year != null ? year : AS.yearIn(title) };
+  };
+  /** Sleutel van een {type, item}-treffer. */
+  AS.entryKey = function (e) {
+    if (!e || !e.item) return null;
+    return e.type === 'channel' ? AS.crossKey('channel', e.item.name) : AS.crossKey(e.type, e.item.rawTitle || e.item.title, e.item.year);
+  };
+  /**
+   * Treffers van meerdere servers tot één lijst: groups op volgorde (actieve server eerst). De eerste groep blijft
+   * helemaal; van de andere servers valt een treffer weg als hetzelfde werk er al in staat. Volgorde blijft.
+   */
+  AS.mergeAcross = function (groups, keyOf, limit) {
+    var seen = {}, out = [];
+    limit = limit == null ? 1e9 : limit;
+    for (var g = 0; g < groups.length; g++) {
+      var list = groups[g] || [];
+      for (var i = 0; i < list.length; i++) {
+        if (out.length >= limit) return out;
+        var k = keyOf(list[i]);
+        if (k && g > 0 && (seen[k.base] || []).some(function (y) { return yearOK(y, k.year); })) continue;
+        if (k) (seen[k.base] = seen[k.base] || []).push(k.year);
+        out.push(list[i]);
+      }
+    }
+    return out;
+  };
+  /** Slimme collectie: past een gevouwen naam bij de zoekwoorden (één is genoeg) en de categorie? */
+  AS.smartHit = function (folded, group, words, wantGroup) {
+    if (wantGroup && group !== wantGroup) return false;
+    for (var i = 0; i < words.length; i++) if (words[i] && folded.indexOf(words[i]) >= 0) return true;
+    return false;
+  };
+
   // MARK: remap-regels
 
   /** Eindsleutel via de regels (ketens, max. 10 stappen, nooit een lus); null = geen regel. */
@@ -285,7 +327,7 @@
     Object.keys(CM.items).sort().forEach(function (k) { items[k] = CM.items[k]; });
     return { items: items, remap: rm, updatedAt: B.iso() };
   }
-  AS.wipe = function () { CM = { items: {}, remap: {} }; reindex(); found = {}; absent = {}; epgs = {}; tried = {}; B.idb.del('catalogmeta'); B.store.del('allservers.migrated128'); };
+  AS.wipe = function () { CM = { items: {}, remap: {} }; reindex(); found = {}; absent = {}; epgs = {}; tried = {}; smart = {}; smartTried = {}; B.idb.del('catalogmeta'); B.store.del('allservers.migrated128'); };
   AS.meta = function (key) { var k = AS.metaKey(key); return CM.items[k] || CM.items[cmIndex[lower(k)]] || null; };
   AS.rules = function () { return CM.remap; };
   AS.target = function (key) { var t = AS.resolve(CM.remap, key); return t ? t.to : null; };
@@ -537,11 +579,78 @@
     return look(raw.movies || [], 'movie', 'movie') || look(raw.series || [], 'series', 'series') || look(raw.channels || [], 'channel', 'channel');
   }
 
+  // MARK: build 129: slimme collecties over alle servers
+
+  var smart = {};        // collectie-id (kleine letters) → {sig, items: [{type, item (met _src)}]}
+  var smartTried = {};   // server-id → tijd van de laatste poging om een catalogus zonder cache op te halen
+  var SMART_MAX = 60;
+  function smartSig(c) { return [c.query, (c.types || []).join(','), c.group || '', c.sourceID || '', c.updatedAt || ''].join('|'); }
+  function smartWords(c) { return String(c.query || '').split(',').map(function (w) { return B.fold(w).trim(); }).filter(Boolean); }
+  /** Treffers van een slimme collectie op de andere servers (leeg tot ze op de achtergrond doorzocht zijn). */
+  AS.smartFor = function (c) {
+    var x = c && smart[lower(c.id)];
+    return x && x.sig === smartSig(c) ? x.items : [];
+  };
+  /** Slimme collecties van het actieve profiel op de andere servers doorzoeken: één catalogus tegelijk, niet tijdens het afspelen. */
+  function smartRound() {
+    var pid = B.app && B.app.profile ? B.app.profile.id : null;
+    var cols = (pid ? D.collectionsFor(pid) : []).filter(function (c) { return c.kind === 'smart' && smartWords(c).length; });
+    var out = {};
+    cols.forEach(function (c) { out[lower(c.id)] = { sig: smartSig(c), items: [] }; });
+    var chain = Promise.resolve();
+    if (cols.length) order().forEach(function (src) {
+      if (AS.isActive(src.id)) return;
+      var mine = cols.filter(function (c) { return !c.sourceID || AS.sameServer(c.sourceID, src.id); });
+      if (!mine.length) return;
+      chain = chain.then(function () {
+        return catalog(src, false).then(function (raw) {
+          if (raw) return raw;
+          // nog geen cache van die server: hooguit eens per 6 uur stil ophalen
+          var k = lower(src.id);
+          if (Date.now() - (smartTried[k] || 0) < RETRY) return null;
+          smartTried[k] = Date.now();
+          return idle().then(function () { return catalog(src, true); });
+        }).then(function (raw) {
+          if (!raw) return;
+          var filter = Lib.filterOne(src);
+          var spec = mine.map(function (c) {
+            var types = Array.isArray(c.types) && c.types.length ? c.types : ['channel', 'movie', 'series'];
+            return { c: c, words: smartWords(c), group: c.group || null, types: types, list: out[lower(c.id)].items };
+          });
+          [['channel', raw.channels || [], 'name'], ['movie', raw.movies || [], 'title'], ['series', raw.series || [], 'title']].forEach(function (pool) {
+            var want = spec.filter(function (x) { return x.types.indexOf(pool[0]) >= 0; });
+            if (!want.length) return;
+            for (var i = 0; i < pool[1].length; i++) {
+              var it = pool[1][i], f = null;
+              for (var w = 0; w < want.length; w++) {
+                var sp = want[w];
+                if (sp.list.length >= SMART_MAX) continue;
+                if (f == null) f = B.fold(it[pool[2]] || '');
+                if (!AS.smartHit(f, it.group, sp.words, sp.group)) continue;
+                var fx = filter[pool[0]](it);   // kinderslot, verborgen of vergrendeld op die server
+                if (!fx) continue;
+                fx._src = src.id;
+                sp.list.push({ type: pool[0], item: fx });
+              }
+            }
+          });
+        });
+      });
+    });
+    return chain.then(function () {
+      var sig = JSON.stringify(Object.keys(out).sort().map(function (k) { return [k, out[k].sig, out[k].items.map(function (e) { return e.type + ':' + e.item._src + '|' + e.item.id; })]; }));
+      var before = JSON.stringify(Object.keys(smart).sort().map(function (k) { return [k, smart[k].sig, smart[k].items.map(function (e) { return e.type + ':' + e.item._src + '|' + e.item.id; })]; }));
+      smart = out;
+      if (sig !== before) { AS.version++; B.emit('allservers'); }
+    });
+  }
+  AS._smartRound = smartRound;
+
   var running = null, again = false;
   /** Eén ronde (rustig, achter elkaar). */
   AS.refresh = function () {
     if (running) { again = true; return running; }
-    running = AS.load().then(round).catch(function (e) { B.log('allservers', e); }).then(function () {
+    running = AS.load().then(round).then(smartRound).catch(function (e) { B.log('allservers', e); }).then(function () {
       running = null;
       if (again) { again = false; setTimeout(AS.refresh, 3000); }
     });

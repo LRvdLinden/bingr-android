@@ -322,6 +322,73 @@
     }, L('No reminders yet. Open a program in the TV guide and choose “Remind me”.'));
   };
 
+  // MARK: geschiedenis (build 129, = HistoryScreen op Android): kijkgeschiedenis van dit profiel over alle servers
+
+  /** "Vandaag 20:15", "Gisteren 18:02", anders de datum in de taal van de app. */
+  S.historyWhen = function (ms, now) {
+    var d = new Date(ms), t = new Date(now || Date.now());
+    var day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    var today = new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
+    var label = day === today ? L('Today') : day === new Date(today - 12 * 3600000).setHours(0, 0, 0, 0) ? L('Yesterday')
+      : d.toLocaleDateString(B.lang, { weekday: 'short', day: 'numeric', month: 'short' });
+    return label + '  ' + B.fmtTime(ms);
+  };
+  /** Item uit de geschiedenis openen: van de actieve server hier, van een andere (of verwijderde) server via die server. */
+  S.openHistory = function (e) {
+    var AS = B.allservers, sid = e.playlistID, live = e.type === 'live';
+    var id = live ? (e.channelID || e.itemID) : e.itemID;
+    if (sid && AS && !AS.isActive(sid)) {
+      var key = sid + '|' + id;
+      var hit = AS.item(key);
+      if (hit && !AS.isOrphan(key)) {
+        if (hit.type === 'channel') { AS.open(hit); return; }
+        if (e.type === 'episode') { AS.resume({ src: sid, key: e.itemID, e: e, type: 'series' }); return; }
+        U.push(S.detail(hit.type, hit.item)); return;
+      }
+      if (e.type === 'episode') { AS.resume({ src: sid, key: e.itemID, e: e, type: 'series' }); return; }
+      // nog niet geladen: de catalogus van die server; verwijderd of er niet meer: eerst zoeken (melding als het niet lukt)
+      if (!AS.isOrphan(key)) { AS.openKey(key, live); return; }
+      var stub = live ? { id: id, name: e.title, logo: e.artwork || null, _src: sid } : { id: id, title: e.title, poster: e.artwork || null, _src: sid };
+      AS.open({ type: live ? 'channel' : 'movie', item: stub });
+      return;
+    }
+    var lib = Lib.lib, h0 = lib.byId ? lib.byId[id] : null;
+    if (live) {
+      if (h0 && h0.type === 'channel') B.player.playChannel(h0.item, lib.channels);
+      else U.toast(L('This channel is not available right now.'));
+      return;
+    }
+    if (h0 && h0.type !== 'channel') { U.push(S.detail(h0.type, h0.item)); return; }
+    var n = AS ? AS.normTitle(e.title) : B.fold(e.title);
+    var s = lib.series.filter(function (x) { return x.id === e.itemID || (AS ? AS.normTitle(x.title) : B.fold(x.title)) === n; })[0];
+    if (s) U.push(S.detail('series', s));
+    else U.toast(L('This title is no longer available.'));
+  };
+  S.historyList = function () {
+    return S.listScreen(L('Watch history'), function () {
+      return Promise.resolve({ items: D.history() });
+    }, function (e, refresh) {
+      var icon = e.type === 'live' ? 'tv' : e.type === 'movie' ? 'movies' : 'play';
+      var row = h('div.st-row.f', [U.icon(icon), h('div.wl-time', S.historyWhen(e.date)),
+        h('div.st-label', [h('div', e.title || L('Unknown title')), e.subtitle ? h('div.dim', e.subtitle) : null])]);
+      row.onEnter = function () {
+        U.modal({ title: e.title || L('Unknown title'), text: S.historyWhen(e.date) + (e.subtitle ? '\n' + e.subtitle : ''), buttons: [
+          { label: e.type === 'live' ? L('Play') : L('Open'), fn: function () { S.openHistory(e); } },
+          { label: L('Remove from history'), fn: function () { D.removeHistory(e); refresh(true); } },
+          { label: L('Cancel') }] });
+      };
+      return row;
+    }, L('Nothing watched yet on this profile.'), function (track, refresh) {
+      if (!D.history().length) return;
+      var clear = h('div.st-row.f.add-row', [U.icon('back'), h('div.st-label', L('Clear watch history'))]);
+      clear.onEnter = function () {
+        U.modal({ title: L('Clear watch history'), buttons: [
+          { label: L('Clear watch history'), fn: function () { D.clearHistory(); refresh(); } }, { label: L('Cancel') }] });
+      };
+      track.appendChild(clear);
+    });
+  };
+
   // MARK: abonnement (build 88)
 
   /** "Lifetime" met het Lifetime-icoon: overal hetzelfde naast iets dat bij Lifetime hoort (alleen met Gratis). */

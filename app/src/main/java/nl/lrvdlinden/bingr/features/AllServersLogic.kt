@@ -129,6 +129,85 @@ object AllServersLogic {
         else -> "${if (kind == "movie") "m" else "s"}:" + normTitle(title) + ":" + (year ?: yearIn(title) ?: "")
     }
 
+    // MARK: build 129: zoeken en slimme collecties over alle servers
+
+    /** Hetzelfde werk op twee servers: [base] gelijk (soort + TMDB-id of genormaliseerde titel/zender) en jaar ±1. */
+    data class Cross(val base: String, val year: Int?)
+
+    /**
+     * Sleutel om treffers van verschillende servers samen te voegen (zelfde regels als het matchen: TMDB-id, anders titel
+     * + jaar ±1, onbekend jaar = alleen de titel; zenders op genormaliseerde naam); null = niet samenvoegen (naam is na
+     * het normaliseren leeg, bijv. alleen "HD").
+     */
+    fun crossKey(kind: String, title: String, year: Int?, tmdb: Int? = null): Cross? {
+        if (kind == "channel") return normChannel(title).takeIf { it.length >= 2 }?.let { Cross("c:$it", null) }
+        val p = if (kind == "movie") "m:" else "s:"
+        if (tmdb != null) return Cross(p + "tmdb:" + tmdb, null)
+        val n = normTitle(title).takeIf { it.isNotEmpty() } ?: return null
+        return Cross(p + n, year ?: yearIn(title))
+    }
+
+    /**
+     * Treffers van meerdere servers tot één lijst: [groups] op volgorde van voorrang (actieve server eerst, dan de
+     * overige zoals in de lijst met servers). De eerste groep blijft helemaal staan (ook twee versies van dezelfde titel
+     * op de actieve server); van de andere servers valt een treffer weg als hetzelfde werk er al in staat. Volgorde blijft.
+     */
+    fun <T> mergeAcross(groups: List<List<T>>, key: (T) -> Cross?, limit: Int = Int.MAX_VALUE): List<T> {
+        val seen = HashMap<String, MutableList<Int?>>()
+        val out = ArrayList<T>()
+        groups.forEachIndexed { gi, list ->
+            for (x in list) {
+                if (out.size >= limit) return out
+                val k = key(x)
+                if (k != null && gi > 0 && seen[k.base]?.any { yearOK(it, k.year) } == true) continue
+                if (k != null) seen.getOrPut(k.base) { ArrayList() } += k.year
+                out += x
+            }
+        }
+        return out
+    }
+
+    /**
+     * Slimme collectie: past dit item? [folded] = gevouwen naam, [words] = gevouwen zoekwoorden (één is genoeg),
+     * [wantGroup] = alleen deze categorie (null = alle). Gelijk aan Collections.resolve op de actieve server.
+     */
+    fun smartHit(folded: String, group: String, words: List<String>, wantGroup: String?): Boolean {
+        if (wantGroup != null && group != wantGroup) return false
+        return words.any { it.isNotEmpty() && folded.contains(it) }
+    }
+
+    // MARK: build 129: terugkijken op een MAC-portal (Stalker) zonder netwerk op het moment van tekenen
+
+    /** Voorvoegsel van een terugkijk-adres dat pas bij het afspelen een echte link wordt (MAC-portal). */
+    const val ARCHIVE_SCHEME = "bingr-archive://"
+
+    /** "bingr-archive://<server>/<zender>/<start>/<eind>" (server en zender URL-gecodeerd, tijden in ms). */
+    fun archiveURL(sid: String, channelID: String, start: Long, end: Long): String =
+        ARCHIVE_SCHEME + enc(sid) + "/" + enc(channelID) + "/" + start + "/" + end
+
+    data class Archive(val sid: String, val channelID: String, val start: Long, val end: Long)
+
+    fun parseArchive(u: String?): Archive? {
+        if (u == null || !u.startsWith(ARCHIVE_SCHEME)) return null
+        val p = u.removePrefix(ARCHIVE_SCHEME).split('/')
+        if (p.size != 4) return null
+        val s = p[2].toLongOrNull() ?: return null
+        val e = p[3].toLongOrNull() ?: return null
+        val sid = dec(p[0]).takeIf { it.isNotEmpty() } ?: return null
+        val ch = dec(p[1]).takeIf { it.isNotEmpty() } ?: return null
+        return Archive(sid, ch, s, e)
+    }
+
+    private fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
+    private fun dec(s: String) = runCatching { java.net.URLDecoder.decode(s, "UTF-8") }.getOrDefault("")
+
+    /**
+     * Programma in het archief van een MAC-portal (epg get_simple_data_table): het item waarvan de start binnen 5 minuten
+     * van [start] ligt en dat in het archief staat (mark_archive 1/true). [items] = (start in ms, in archief, id).
+     */
+    fun archiveProgram(items: List<Triple<Long, Boolean, String?>>, start: Long): String? =
+        items.firstOrNull { kotlin.math.abs(it.first - start) <= 5 * 60_000L && it.second && it.third != null }?.third
+
     // MARK: remap
 
     data class Rule(val to: String, val at: Long)

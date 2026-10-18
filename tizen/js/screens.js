@@ -1524,14 +1524,15 @@
       U.scrollTo(results, 0);
       if (!v.trim()) return;
       var r = Lib.search(v, 30);
-      var a = rowBlock(L('Series'), r.series.map(function (s) { return posterCard(s, 'series'); }));
-      var b = rowBlock(L('Movies'), r.movies.map(function (m) { return posterCard(m, 'movie'); }));
+      var a = rowBlock(L('Series'), r.series.map(function (s) { return posterCard(s, 'series'); }), 'srch-series');
+      var b = rowBlock(L('Movies'), r.movies.map(function (m) { return posterCard(m, 'movie'); }), 'srch-movie');
       var c = rowBlock(L('Live TV'), r.channels.map(function (ch) { return channelCard(ch, r.channels); }), 'live');
       [b, a, c].forEach(function (x) { if (x) results.track.appendChild(x); });
       var empty = null;
       if (!a && !b && !c) results.track.appendChild(empty = h('div.state.dim', L('No results for “%@”', v)));
       // build 102: ook personen (TMDB), categorieën/genres, de tv-gids en je andere afspeellijsten (= SearchView op tvOS)
-      if (B.parity) stopExtras = B.parity.searchExtras(v, results.track, function () { return my === gen && document.body.contains(results); }, empty);
+      // build 129: en de treffers op je andere servers in dezelfde rijen (ontdubbeld, openen zonder te wisselen)
+      if (B.parity) stopExtras = B.parity.searchExtras(v, results.track, function () { return my === gen && document.body.contains(results); }, empty, r);
     }
     pg.destroy = function () { gen++; if (stopExtras) stopExtras(); };
     pg.focusIn = function () { var k = kb.querySelector('.key'); if (k) { U.focus(k); return true; } return false; };
@@ -2086,6 +2087,8 @@
 
       section(L('Profile'));
       row(L('Switch profile'), prof.name, function () { B.app.switchProfile(); });
+      // build 129: kijkgeschiedenis van dit profiel over alle servers (lokaal, = Android)
+      row(L('Watch history'), String(D.history().length), function () { U.push(S.historyList()); });
       // build 128: categorieën aan/uit per profiel, van al je servers
       row(L('Categories on/off (NL, BE, DE…)'), null, function () { U.push(S.categoryChoices()); });
       var accent = D.accentKey(prof);

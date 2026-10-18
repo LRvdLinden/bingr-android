@@ -492,6 +492,8 @@ object Playlists {
 
     /** Geeft de echte afspeel-URL (Stalker maakt per keer een link aan, Stremio zoekt een stream). */
     suspend fun resolve(item: PlayableItem): String? {
+        // build 129: terugkijken op een MAC-portal (ook van een andere server)
+        if (isArchive(item.url)) return resolveArchive(item.url!!)
         if (item.url != null && item.stalkerCmd == null) return item.url
         val cmd = item.stalkerCmd
         // build 128: item van een andere server: een eigen MAC-portalverbinding
@@ -542,11 +544,37 @@ object Playlists {
     fun catchupURL(channelID: String, start: Long, end: Long, sourceID: String?): String? {
         if (!foreign(sourceID)) return catchupURL(channelID, start, end)
         val s = sourceFor(sourceID) ?: return null
-        if (s.kind != PlaylistKind.XTREAM) return null
         val ch = (AllServers.item("${s.id}|$channelID") as? Channel) ?: return null
         if (ch.catchupDays <= 0) return null
         val shift = (s.catchupOffsets[channelID] ?: 0) * 60_000L
+        // build 129: MAC-portal: de link komt pas bij het afspelen ([resolveArchive]), met een eigen portalverbinding
+        if (s.kind == PlaylistKind.STALKER) return AllServersLogic.archiveURL(s.id, channelID, start + shift, end + shift)
+        if (s.kind != PlaylistKind.XTREAM) return null
         return XtreamClient(s, Store.secret(s.passwordKey) ?: "").catchupURL(ch, start + shift, end + shift)
+    }
+
+    /** Build 129: MAC-portalverbindingen van andere servers (terugkijken), zodat niet elke keer opnieuw ingelogd wordt. */
+    private val otherStalkers = java.util.concurrent.ConcurrentHashMap<String, StalkerClient>()
+
+    /** Is dit een terugkijk-adres van een MAC-portal dat nog een echte link moet worden? */
+    fun isArchive(u: String?): Boolean = u != null && u.startsWith(AllServersLogic.ARCHIVE_SCHEME)
+
+    /**
+     * Build 129: terugkijk-adres van een MAC-portal ([AllServersLogic.archiveURL]) → echte afspeel-link, via de
+     * portalverbinding van die server (de actieve, of een eigen verbinding voor een andere server). null = lukt niet.
+     */
+    suspend fun resolveArchive(u: String): String? {
+        val a = AllServersLogic.parseArchive(u) ?: return null
+        val s = Store.playlists.firstOrNull { it.id.equals(a.sid, ignoreCase = true) } ?: return null
+        if (s.kind != PlaylistKind.STALKER) return null
+        val active = !foreign(s.id)
+        val ch = if (active) rawLibrary.channels.firstOrNull { it.id == a.channelID }
+            else AllServers.item("${s.id}|${a.channelID}") as? Channel
+        val st = if (active) (stalker ?: StalkerClient(s).also { stalker = it })
+            else otherStalkers.getOrPut(s.id.lowercase()) { StalkerClient(s) }
+        return try {
+            withTimeoutOrNull(30_000) { st.archiveLink(a.channelID, ch?.stalkerCmd, a.start) }
+        } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
     }
 
     /**
@@ -555,10 +583,12 @@ object Playlists {
      */
     fun catchupURL(channelID: String, start: Long, end: Long): String? {
         val s = source ?: return null
-        if (s.kind != PlaylistKind.XTREAM) return null
+        if (s.kind != PlaylistKind.XTREAM && s.kind != PlaylistKind.STALKER) return null
         val ch = rawLibrary.channels.firstOrNull { it.id == channelID } ?: return null
         if (ch.catchupDays <= 0) return null
         val shift = (Store.playlists.firstOrNull { it.id == s.id }?.catchupOffsets?.get(channelID) ?: 0) * 60_000L
+        // build 129: MAC-portal (ook de actieve server): de link komt pas bij het afspelen ([resolveArchive])
+        if (s.kind == PlaylistKind.STALKER) return AllServersLogic.archiveURL(s.id, channelID, start + shift, end + shift)
         return XtreamClient(s, Store.secret(s.passwordKey) ?: "").catchupURL(ch, start + shift, end + shift)
     }
 
@@ -596,22 +626,26 @@ object Playlists {
                 series = lib.series.asSequence().filter { m(it.title) }.take(200).toList(),
             )
             if (!allPlaylists) return@withContext r
-            // zoeken in de cache van alle andere afspeellijsten
-            val hits = ArrayList<OtherHit>()
+            // build 129: treffers van de andere servers van het profiel in dezelfde rijen (zelfde filters als het
+            // actieve profiel), ontdubbeld zoals in build 128; openen/afspelen via die server, zonder te wisselen
+            val ch = ArrayList<List<Channel>>().apply { add(r.channels) }
+            val mv = ArrayList<List<Movie>>().apply { add(r.movies) }
+            val se = ArrayList<List<Series>>().apply { add(r.series) }
             for (p in others) {
-                val olib = withContext(Dispatchers.IO) { readCache(p) }?.let { raw ->
-                    contexts[p.id]?.let { apply(raw, it) } ?: raw
-                } ?: continue
-                for (c in olib.channels) {
-                    if (!m(c.name)) continue
-                    hits.add(OtherHit(p, c.id, c.name, "Live TV", c.logo, isLive = true))
-                    if (hits.size > 80) break
-                }
-                for (mv in olib.movies) if (m(mv.title)) hits.add(OtherHit(p, mv.id, mv.title, mv.year?.toString() ?: "", mv.poster))
-                for (se in olib.series) if (m(se.title)) hits.add(OtherHit(p, se.id, se.title, se.year?.toString() ?: "", se.poster))
+                val ctx = contexts[p.id] ?: continue
+                val olib = AllServers.otherLibrary(p, ctx, allowNetwork = false) ?: continue
+                val c = olib.channels.asSequence().filter { m(it.name) }.take(40).map { it.copy(sourceID = p.id) }.toList()
+                c.forEach { AllServers.remember(it, olib.epg[it.epgID ?: it.id]) }
+                ch += c
+                mv += olib.movies.asSequence().filter { m(it.title) }.take(120).map { it.copy(sourceID = p.id) }.toList()
+                se += olib.series.asSequence().filter { m(it.title) }.take(120).map { it.copy(sourceID = p.id) }.toList()
             }
-            // Live TV altijd als laatste; sortedBy is stabiel, dus verder blijft de volgorde gelijk
-            r.copy(other = hits.take(120).sortedBy { it.isLive })
+            val X = AllServersLogic
+            SearchResults(
+                channels = X.mergeAcross(ch, { X.crossKey("channel", it.name, null) }, 120),
+                movies = X.mergeAcross(mv, { X.crossKey("movie", it.title, it.year) }, 300),
+                series = X.mergeAcross(se, { X.crossKey("series", it.title, it.year) }, 300),
+            )
         }
     }
 
@@ -626,16 +660,16 @@ object Playlists {
         return withContext(Dispatchers.Default) {
             val hits = ArrayList<OtherHit>()
             for (p in all) {
-                val lib = if (p.id == current?.id) currentLib else {
-                    val raw = withContext(Dispatchers.IO) { readCache(p) } ?: Library()
-                    contexts[p.id]?.let { apply(raw, it) } ?: raw
-                }
+                val isCurrent = p.id == current?.id
+                // build 129: andere servers uit het geheugen of de cache (gefilterd voor dit profiel); item met sourceID,
+                // zodat de keuze daar opent en speelt zonder van server te wisselen
+                val lib = if (isCurrent) currentLib else contexts[p.id]?.let { AllServers.otherLibrary(p, it, allowNetwork = false) } ?: continue
                 if (isShow) {
                     for (s in lib.series) if (s.id != excludingID && Net.normTitle(s.title) == norm && (year == null || s.year == null || s.year == year))
-                        hits.add(OtherHit(p, s.id, s.title, s.group, s.poster))
+                        hits.add(OtherHit(p, s.id, s.title, s.group, s.poster, item = if (isCurrent) s else s.copy(sourceID = p.id)))
                 } else {
                     for (m in lib.movies) if (m.id != excludingID && Net.normTitle(m.title) == norm && (year == null || m.year == null || m.year == year))
-                        hits.add(OtherHit(p, m.id, m.title, m.group, m.poster))
+                        hits.add(OtherHit(p, m.id, m.title, m.group, m.poster, item = if (isCurrent) m else m.copy(sourceID = p.id)))
                 }
             }
             hits
@@ -731,6 +765,9 @@ object Playlists {
     }
 
     /** Leeftijd van de cache in ms (null = geen cache). */
+    /** Build 129: tijd van de cache van [p] (0 = geen cache), om een gefilterde kopie te kunnen hergebruiken. */
+    fun cacheStamp(p: PlaylistSource): Long = cacheFile(p).let { if (it.exists()) it.lastModified() else 0L }
+
     fun cacheAge(p: PlaylistSource): Long? {
         val f = cacheFile(p)
         if (!f.exists()) return null
@@ -816,6 +853,8 @@ data class OtherHit(
     val playlist: PlaylistSource, val itemID: String, val title: String, val subtitle: String, val artwork: String?,
     /** zender (Live TV): in de zoekresultaten altijd na films en series */
     val isLive: Boolean = false,
+    /** build 129: de film/serie zelf (met sourceID als hij op een andere server staat), om zonder wisselen te openen */
+    val item: Any? = null,
 ) {
     val id: String get() = "${playlist.id}-$itemID"
 }

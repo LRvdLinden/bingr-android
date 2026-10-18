@@ -592,6 +592,8 @@
     lib.epg = {};
     return lib;
   };
+  /** build 129: handtekening van de filters van het actieve profiel voor een bron (gefilterde kopieën hergebruiken). */
+  Lib.filterSig = function (src) { try { return JSON.stringify(context(src)); } catch (e) { return String(Date.now()); } };
   /** build 128: filter per item (kinderslot, verborgen, leeftijd) voor een andere bron, zonder de hele lijst te kopiëren. */
   Lib.filterOne = function (src) { return makeFilter(context(src)); };
   /** build 128: gids van een paar zenders van een andere server (cache van die server, anders alleen deze zenders uit XMLTV). */
@@ -679,7 +681,10 @@
     var lib = Lib.lib, out = [];
     var src = Lib.source ? String(Lib.source.id).toLowerCase() : '';
     if (c.kind === 'smart') {
-      if (c.sourceID && String(c.sourceID).toLowerCase() !== src) return [];
+      // build 129: ook de treffers op de andere servers van het profiel (js/allservers.js), dubbele titels één keer
+      var AS = B.allservers;
+      var other = AS ? AS.smartFor(c) : [];
+      if (c.sourceID && String(c.sourceID).toLowerCase() !== src) return other.slice(0, limit);
       var words = String(c.query || '').split(',').map(function (w) { return B.fold(w).trim(); }).filter(Boolean);
       if (!words.length) return [];
       var types = Array.isArray(c.types) && c.types.length ? c.types : ['channel', 'movie', 'series'];
@@ -693,7 +698,7 @@
           for (var w = 0; w < words.length; w++) if (t.indexOf(words[w]) >= 0) { out.push({ type: p[0], item: x }); break; }
         }
       });
-      return out;
+      return other.length ? AS.mergeAcross([out, other], AS.entryKey, limit) : out;
     }
     (c.items || []).forEach(function (it) {
       if (!it || out.length >= limit) return;

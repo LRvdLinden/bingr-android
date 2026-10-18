@@ -128,6 +128,41 @@ class StalkerClient(source: PlaylistSource) {
         return directURL(js(u).jS("cmd"))
     }
 
+    /**
+     * Build 129: terugkijken op een MAC-portal (= Stalker.archiveLink op Samsung TV): het programma in het archief zoeken
+     * (epg get_simple_data_table, hooguit 6 pagina's) en daarvoor een tv_archive-link maken. Lukt dat niet, dan de
+     * live-link met ?utc=…&lutc=… (Flussonic-stijl, veel portals). [start] in ms (met de terugkijk-correctie).
+     */
+    suspend fun archiveLink(channelID: String, cmd: String?, start: Long): String? {
+        suspend fun fallback(): String? {
+            val c = cmd ?: return null
+            val u = runCatching { createLink(c, MediaType.LIVE) }.getOrNull() ?: return null
+            return u + (if (u.contains('?')) "&" else "?") + "utc=${start / 1000}&lutc=${System.currentTimeMillis() / 1000}"
+        }
+        if (token == null) runCatching { connect() }.onFailure { return fallback() }
+        val cid = channelID.removePrefix("st")
+        val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(start))
+        var progID: String? = null
+        var page = 1
+        while (progID == null && page <= 6) {
+            val u = url(listOf("type" to "epg", "action" to "get_simple_data_table", "ch_id" to cid, "date" to day, "p" to page.toString())) ?: break
+            val res = runCatching { js(u) }.getOrNull() ?: break
+            val list = res.jList("data")
+            if (list.isEmpty()) break
+            progID = AllServersLogic.archiveProgram(list.map { i ->
+                Triple(((i.jD("start_timestamp") ?: 0.0) * 1000).toLong(), i.jB("mark_archive") == true, i.jS("id"))
+            }, start)
+            val total = res.jI("total_items") ?: 0
+            val per = res.jI("max_page_items") ?: list.size
+            if (per <= 0 || page * per >= total) break
+            page++
+        }
+        val id = progID ?: return fallback()
+        val u = url(listOf("type" to "tv_archive", "action" to "create_link", "cmd" to "auto /media/$id.mpg",
+            "forced_storage" to "undefined", "disable_ad" to "0")) ?: return fallback()
+        return runCatching { directURL(js(u).jS("cmd")) }.getOrNull() ?: fallback()
+    }
+
     suspend fun shortEPG(channelID: String): List<EPGProgram> {
         if (token == null) runCatching { connect() }
         val id = channelID.removePrefix("st")

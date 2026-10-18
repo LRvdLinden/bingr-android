@@ -923,6 +923,31 @@
     P.st.history[id] = { at: e.date, v: e };
     changed(false);
   };
+  /**
+   * Build 129 (scherm Geschiedenis): één item uit de geschiedenis van het actieve profiel, met alle schrijfwijzen van
+   * de sleutel (iOS hoofdletters, web/Samsung TV kleine letters); als verwijdering, zodat het ook elders weggaat.
+   */
+  D.removeHistory = function (e) {
+    if (!P.st || !e) return;
+    var n = normKey(historyId(e)), now = Date.now(), any = false;
+    Object.keys(P.st.history).forEach(function (k) {
+      if (normKey(k) !== n || !P.st.history[k].v) return;
+      P.st.history[k] = { at: Math.max(now, (P.st.history[k].at || 0) + 1), v: null };
+      any = true;
+    });
+    if (any) changed(false);
+  };
+  /** Build 129: hele geschiedenis van het actieve profiel wissen (over alle servers). */
+  D.clearHistory = function () {
+    if (!P.st) return;
+    var now = Date.now(), any = false;
+    Object.keys(P.st.history).forEach(function (k) {
+      if (!P.st.history[k].v) return;
+      P.st.history[k] = { at: Math.max(now, (P.st.history[k].at || 0) + 1), v: null };
+      any = true;
+    });
+    if (any) changed(false);
+  };
 
   // MARK: collecties (section `collections`, version 2: per profiel)
 

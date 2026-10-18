@@ -860,6 +860,18 @@
     "ar": "هذه القناة غير متاحة الآن.",
     "zh-Hans": "该频道目前不可用。"
   },
+  "This title is no longer available.": {
+    "nl": "Deze titel is niet meer beschikbaar.",
+    "de": "Dieser Titel ist nicht mehr verfügbar.",
+    "fr": "Ce titre n'est plus disponible.",
+    "es": "Este título ya no está disponible.",
+    "it": "Questo titolo non è più disponibile.",
+    "pt": "Este título já não está disponível.",
+    "pl": "Ten tytuł nie jest już dostępny.",
+    "tr": "Bu içerik artık mevcut değil.",
+    "ar": "هذا العنوان لم يعد متاحًا.",
+    "zh-Hans": "此内容已不再提供。"
+  },
   "This kind of server is not supported on Samsung TV yet.": {
     "nl": "Dit soort server werkt nog niet op Samsung TV.",
     "de": "Diese Art von Server wird auf Samsung TV noch nicht unterstützt.",

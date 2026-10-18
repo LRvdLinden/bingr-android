@@ -190,6 +190,18 @@ class PlayerController(item: PlayableItem) {
 
     fun start(url: String, forceExo: Boolean? = null) {
         if (dismissed) return
+        // build 129: terugkijken op een MAC-portal (ook van een andere server): eerst de echte link bij het portal aanvragen
+        if (Playlists.isArchive(url)) {
+            isBuffering = true
+            val forItem = item.id
+            scope.launch {
+                val real = runCatching { Playlists.resolveArchive(url) }.getOrNull()
+                if (dismissed || item.id != forItem) return@launch
+                if (real == null || Playlists.isArchive(real)) fail(L("This stream can't be played right now."))
+                else start(real, forceExo)
+            }
+            return
+        }
         this.url = url
         errorText = null; didScrobbleStart = false; stallSince = null
         tracksApplied = false; playingTicks = 0

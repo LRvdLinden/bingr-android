@@ -205,6 +205,14 @@ jobs:
           echo "NODE_PATH=$RUNNER_TEMP/compat/node_modules" >> "$GITHUB_ENV"
           NODE_PATH="$RUNNER_TEMP/compat/node_modules" node tizen/tools/check_compat.js 2>&1 | tee "$RUNNER_TEMP/tlogs/compat.log"
 
+      # build 129: logica van "één lijst over alle servers" (samenvoegen, slimme collecties, geschiedenis) zonder tv
+      - name: Logica-tests (Samsung TV)
+        shell: bash
+        run: |
+          set -eo pipefail
+          node tizen/test/allservers_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/logic.log"
+          echo "::notice title=Logica-tests Samsung TV::$(tail -1 "$RUNNER_TEMP/tlogs/logic.log")"
+
       - name: Tizen Studio CLI uit de cache
         id: cache
         uses: actions/cache@v4
