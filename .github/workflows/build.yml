@@ -246,6 +246,8 @@ jobs:
           if "android.intent.category.LAUNCHER" not in cats: err.append("LAUNCHER (telefoon/tablet) ontbreekt")
           sdk = m.find("uses-sdk")
           tgt = sdk.get(A + "targetSdkVersion") if sdk is not None else "?"
+          # Google Play: nieuwe apps en updates vanaf 31 aug. 2026 minimaal targetSdk 36 (Android TV-only: 34)
+          if not (tgt or "").isdigit() or int(tgt) < 36: print(f"::warning title=App Bundle::targetSdk {tgt}: Google Play eist targetSdk 36 voor nieuwe apps en updates")
           for e in err: print(f"::error title=App Bundle::{e}")
           if err: sys.exit(1)
           print(f"::notice title=App Bundle::versie {ver} (versionCode {build}), targetSdk {tgt}; telefoon, tablet en Android TV (leanback niet verplicht, banner, LEANBACK_LAUNCHER)")

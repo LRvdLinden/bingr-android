@@ -28,12 +28,13 @@ if (hasGoogleServices) apply(plugin = "com.google.gms.google-services")
 
 android {
     namespace = "nl.lrvdlinden.bingr"
-    compileSdk = 35
+    // Google Play: nieuwe apps en updates targetSdk 36 (Android 16) vanaf 31 aug. 2026 (Android TV: 34)
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "nl.lrvdlinden.bingr"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = buildNumber
         versionName = marketing
         // screenshot-build: ook x86/x86_64 voor de emulators in de workflow
