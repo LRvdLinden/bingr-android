@@ -298,7 +298,7 @@ object Downloads {
         val info = JobInfo.Builder(JOB_ID, ComponentName(ctx, DownloadJobService::class.java))
             .setUserInitiated(true)
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-            .apply { if (left > 0) setEstimatedNetworkBytes(left, JobInfo.NETWORK_BYTES_UNKNOWN) }
+            .apply { if (left > 0) setEstimatedNetworkBytes(left, JobInfo.NETWORK_BYTES_UNKNOWN.toLong()) }
             .build()
         js.schedule(info) == JobScheduler.RESULT_SUCCESS
     }.getOrDefault(false)
