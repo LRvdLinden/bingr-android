@@ -55,7 +55,7 @@ object TraktDetails {
             }
             val rel = related.await().jItems.map { x ->
                 TitleDetails.Recommendation(title = x.jS("title") ?: "?", year = x.jI("year"), poster = image(x.jO("images"), "poster"),
-                    imdbID = x.jO("ids").jS("imdb"), isShow = isShow)
+                    imdbID = x.jO("ids").jS("imdb"), isShow = isShow, tmdbID = x.jO("ids").jI("tmdb"))
             }
             val eps = HashMap<String, TitleDetails.EpisodeInfo>()
             for (s in seasons.await().jItems) {
@@ -194,7 +194,8 @@ object TMDB {
             recommendations = f.jO("recommendations").jList("results").take(15).map { r ->
                 TitleDetails.Recommendation(title = r.jS("title") ?: r.jS("name") ?: "?",
                     year = yearOf(r.jS("release_date") ?: r.jS("first_air_date")),
-                    poster = img(r.jS("poster_path"), "w342"), imdbID = null, isShow = isShow)
+                    poster = img(r.jS("poster_path"), "w342"), imdbID = null, isShow = isShow,
+                    tmdbID = r.jI("id"), posterPath = r.jS("poster_path"))
             },
             originalLanguage = f.jS("original_language"),
         )

@@ -26,6 +26,8 @@ object Http {
         // screenshotmodus (alleen de screenshot-build, ScreenshotMode.kt): geen netwerk
         .addInterceptor { chain ->
             if (Screenshots.isActive) throw java.io.IOException("Screenshot mode: no network")
+            // build 141: belastingmodus (alleen de rooktest-build): ook geen netwerk
+            if (BuildConfig.STRESS) throw java.io.IOException("Stress mode: no network")
             chain.proceed(chain.request())
         }
         .build()

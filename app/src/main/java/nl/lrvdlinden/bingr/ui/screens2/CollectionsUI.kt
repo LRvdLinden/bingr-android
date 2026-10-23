@@ -437,7 +437,8 @@ fun HomeScreenSettings(onClose: () -> Unit) {
     // build 86: de rij "Categorieën" hier alleen aan/uit, apart van de volgorde. Standaard staat hij direct na "live"
     // (= op Home vijf rijen tussen "Nu live" en Categorieën); is hij op een ander apparaat verplaatst, dan blijft hij
     // na dezelfde rij staan.
-    val initial = remember { HomeLayouts.effective(Store.activeHomeLayout) }
+    // build 141: zonder "Nieuw toegevoegd" (Nieuw op Bingr staat op die plek); bij opslaan zet HomeLayouts.save hem terug
+    val initial = remember { HomeLayouts.displayed(Store.activeHomeLayout) }
     var rows by remember { mutableStateOf(initial.filter { it.key != HomeLayouts.CATEGORY_TILES }) }
     var tiles by remember { mutableStateOf(initial.firstOrNull { it.key == HomeLayouts.CATEGORY_TILES } ?: HomeRow(HomeLayouts.CATEGORY_TILES)) }
     // de rij waar Categorieën na staat ("" = bovenaan)

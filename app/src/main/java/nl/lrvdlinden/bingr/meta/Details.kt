@@ -39,7 +39,9 @@ data class TitleDetails(
     data class CastMember(val name: String, val role: String? = null, val photo: String? = null, val tmdbID: Int? = null) {
         val id: String get() = name + (role ?: "")
     }
-    data class Recommendation(val title: String, val year: Int?, val poster: String?, val imdbID: String?, val isShow: Boolean) {
+    /** Build 141: [tmdbID] en [posterPath] (TMDB), zodat een aanbeveling die niet in je bibliotheek staat in Mijn lijst kan. */
+    data class Recommendation(val title: String, val year: Int?, val poster: String?, val imdbID: String?, val isShow: Boolean,
+                              val tmdbID: Int? = null, val posterPath: String? = null) {
         val id: String get() = imdbID ?: title
     }
     /** [airDate] in epoch-ms, [runtime] in minuten */

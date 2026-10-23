@@ -18,8 +18,6 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.decodeFromStream
-import kotlinx.serialization.json.encodeToStream
 import java.io.File
 
 /**
@@ -149,9 +147,16 @@ object Playlists {
                 setRaw(cached)
                 // build 140: daarna alle servers die aan de beurt zijn (deze eerst), ook terwijl de app open blijft
                 startAutoRefresh()
-                if (!RefreshPolicy.current.isDue(cacheAge(p))) return
+                if (!RefreshPolicy.current.isDue(withContext(Dispatchers.IO) { cacheAge(p) })) return
                 refreshedThisLaunch += p.id.lowercase(java.util.Locale.ROOT)
-                AppScope.launch { refresh(p, showSpinner = false) }
+                // build 141: eerst het scherm (de lijst uit de cache, gefilterd en met de rijen), pas daarna het netwerk.
+                // Tot build 140 begon het verversen meteen, tegelijk met het filteren en het opbouwen van Home: twee
+                // volledige catalogi plus de gids tegelijk in het geheugen, terwijl het scherm nog moest verschijnen.
+                AppScope.launch {
+                    kotlinx.coroutines.delay(Build141Feedback.Background.ACTIVE_REFRESH_DELAY_MS)
+                    withTimeoutOrNull(30_000) { while (isFiltering || AppState.playing != null) kotlinx.coroutines.delay(1_000) }
+                    if (source?.id == p.id) refresh(p, showSpinner = false)
+                }
                 return
             }
         }
@@ -168,8 +173,12 @@ object Playlists {
         val background = !showSpinner && source?.id == s.id
         if (background) updating = true
         try {
-            val lib = fetch(s)
-            writeCache(s, lib)
+            val fetched = fetch(s)
+            // build 141: eerst wegschrijven, dan de gids van schijf gebruiken (DiskEpg) in plaats van de hele gids in het
+            // geheugen te houden; lukt het schrijven niet, dan zoals vroeger in het geheugen
+            writeCacheNow(s, fetched)
+            val lib = if (fetched.epg.isEmpty()) fetched
+                else withContext(Dispatchers.IO) { CatalogFiles.openEpg(cachePaths(s), Http.json) }?.let { fetched.copy(epg = it) } ?: fetched
             if (source?.id == s.id) {
                 setRaw(lib)
                 saveSplashPosters(lib)
@@ -188,6 +197,8 @@ object Playlists {
 
     /** Inhoud van server [s] ophalen van het netwerk (zonder cache en zonder de stand van de actieve server te wijzigen). */
     private suspend fun fetch(s: PlaylistSource, quiet: Boolean = false): Library {
+        // build 141: belastingmodus (alleen de rooktest-build): nepcatalogus in plaats van het netwerk
+        if (StressMode.isActive) return StressMode.fetch(s)
         fun status(t: String) { if (!quiet) loadingText = t }
         val password = Store.secret(s.passwordKey) ?: ""
         var lib: Library
@@ -250,14 +261,16 @@ object Playlists {
      */
     suspend fun catalogOf(p: PlaylistSource, allowNetwork: Boolean, background: Boolean = false): Library? {
         if (p.id.equals(source?.id, ignoreCase = true) && !rawLibrary.isEmpty) return rawLibrary
-        withContext(Dispatchers.IO) { runCatching { readCache(p) }.getOrNull() }?.let { return it }
+        // build 141: van een andere server alleen titels en zenders, zonder gids (zie [readCatalog])
+        withContext(Dispatchers.IO) { runCatching { readCatalog(p) }.getOrNull() }?.let { return it }
         if (!allowNetwork) return null
         // build 130: op de achtergrond ([background]) hooguit eens per 6 uur per server (ook over herstarts heen); altijd
         // met een time-out. Aangeklikt door de gebruiker = meteen proberen.
         if (background && !AllServersLogic.mayFetch(lastFetch(p), System.currentTimeMillis())) return null
         markFetch(p)
         return try {
-            withTimeoutOrNull(AllServersLogic.FETCH_TIMEOUT) { fetch(p, quiet = true) }?.also { writeCache(p, it, notify = false) }
+            withTimeoutOrNull(AllServersLogic.FETCH_TIMEOUT) { fetch(p, quiet = true) }?.also { writeCacheNow(p, it, notify = false) }
+                ?.copy(epg = emptyMap())
         } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
     }
 
@@ -270,7 +283,8 @@ object Playlists {
     private suspend fun refreshOther(p: PlaylistSource): Boolean = try {
         markFetch(p)
         val lib = withTimeoutOrNull(AllServersLogic.FETCH_TIMEOUT) { fetch(p, quiet = true) }
-        if (lib != null) writeCache(p, lib)
+        // build 141: meteen wegschrijven (niet in een losse taak die de catalogus nog vasthoudt terwijl het volgende begint)
+        if (lib != null) writeCacheNow(p, lib)
         lib != null
     } catch (e: CancellationException) { throw e } catch (_: Exception) { false }
 
@@ -329,8 +343,10 @@ object Playlists {
                 val p = all.firstOrNull { it.id == id } ?: continue
                 // niet tijdens het afspelen of terwijl de actieve server laadt
                 while (AppState.playing != null || isLoading || refreshingAll) kotlinx.coroutines.delay(5_000)
+                // build 141: een andere server alleen als de achtergrond rustig is, en niet tegelijk met ander zwaar werk aan
+                // de andere servers (één catalogus tegelijk in het geheugen, zie AllServers.heavy)
                 val ok = if (p.id == source?.id) withTimeoutOrNull(180_000) { refresh(p, showSpinner = false) } ?: false
-                    else refreshOther(p)
+                    else AllServers.heavy { refreshOther(p) }
                 refreshedThisLaunch += p.id.lowercase(java.util.Locale.ROOT)
                 if (ok) any = true
             }
@@ -395,6 +411,8 @@ object Playlists {
     // MARK: aanpassingen toepassen
 
     private fun setRaw(lib: Library) {
+        // build 141: een vervangen gids op schijf straks dichtdoen
+        if (rawLibrary.epg !== lib.epg) retireEpg(rawLibrary.epg)
         rawLibrary = lib
         applyCustomizations()
     }
@@ -482,7 +500,9 @@ object Playlists {
         val ch = if (old.channels == new.channels) old.channels else new.channels
         val mv = if (old.movies == new.movies) old.movies else new.movies
         val se = if (old.series == new.series) old.series else new.series
-        val epg = if (old.epg === new.epg || old.epg == new.epg) old.epg else new.epg
+        // build 141: een gids op schijf (DiskEpg) niet inhoudelijk vergelijken (dat zou hem helemaal inlezen)
+        val epg = if (old.epg === new.epg) old.epg else if (old.epg is DiskEpg || new.epg is DiskEpg) new.epg
+            else if (old.epg == new.epg) old.epg else new.epg
         if (ch === old.channels && mv === old.movies && se === old.series && epg === old.epg) return old
         return Library(ch, mv, se, epg)
     }
@@ -534,17 +554,29 @@ object Playlists {
             else -> allowed(md?.rated, g, md?.genre, info)
         }
 
+        // build 141: alleen een kopie als er echt iets hernoemd/samengevoegd is; anders hetzelfde object (de gefilterde lijst
+        // deelt zo de titels met de ruwe lijst, in plaats van tienduizenden kopieën per filterronde en per server)
+        val plain = c.renamed.isEmpty() && c.merged.isEmpty()
         var channels = raw.channels.filter { visible(it.id, it.group) }
-            .map { ch -> ch.copy(group = group(ch.group), name = c.renamed[ch.id] ?: ch.name) }
+            .let { l -> if (plain) l else l.map { ch ->
+                val g = group(ch.group); val n = c.renamed[ch.id] ?: ch.name
+                if (g == ch.group && n == ch.name) ch else ch.copy(group = g, name = n)
+            } }
         // leeftijdsgrens: geen volwassenen-zenders (streng: alleen kinderzenders). Build 140: een kinderprofiel volgt alleen
         // de categorie (de zendernaam telt niet mee)
         if (ageLimit != null && !ctx.unlocked && !kids) channels = channels.filter { ParentalControl.channelAllowedFor(it.name, it.group, ageLimit, ctx.strict) }
         val movies = raw.movies.filter {
             visible(it.id, it.group) && (ageLimit == null || ageOK(Metadata.cached(it), AgeRatings.cached(it), it.group))
-        }.map { m -> m.copy(group = group(m.group), title = c.renamed[m.id] ?: m.title) }
+        }.let { l -> if (plain) l else l.map { m ->
+            val g = group(m.group); val t = c.renamed[m.id] ?: m.title
+            if (g == m.group && t == m.title) m else m.copy(group = g, title = t)
+        } }
         val series = raw.series.filter {
             visible(it.id, it.group) && (ageLimit == null || ageOK(Metadata.cached(it), AgeRatings.cached(it), it.group))
-        }.map { se -> se.copy(group = group(se.group), title = c.renamed[se.id] ?: se.title) }
+        }.let { l -> if (plain) l else l.map { se ->
+            val g = group(se.group); val t = c.renamed[se.id] ?: se.title
+            if (g == se.group && t == se.title) se else se.copy(group = g, title = t)
+        } }
 
         // eigen volgorde: groepen, dan kanalen binnen een groep
         if (c.groupOrder.isNotEmpty() || c.channelOrder.isNotEmpty()) {
@@ -721,8 +753,10 @@ object Playlists {
         if (st != null && library.epg[c.epgID ?: c.id] == null) {
             val p = st.shortEPG(c.id)
             if (p.isNotEmpty()) {
-                rawLibrary = rawLibrary.copy(epg = rawLibrary.epg + (c.id to p))
-                library = library.copy(epg = library.epg + (c.id to p))
+                // build 141: gids op schijf (DiskEpg) niet kopiëren (dat leest alles in), maar aanvullen
+                fun add(m: Map<String, List<EPGProgram>>) = (m as? DiskEpg)?.with(c.id, p) ?: (m + (c.id to p))
+                rawLibrary = rawLibrary.copy(epg = add(rawLibrary.epg))
+                library = library.copy(epg = add(library.epg))
             }
             return p
         }
@@ -759,7 +793,11 @@ object Playlists {
                 val ctx = contexts[p.id] ?: continue
                 val olib = AllServers.otherLibrary(p, ctx, allowNetwork = false) ?: continue
                 val c = olib.channels.asSequence().filter { m(it.name) }.take(40).map { it.copy(sourceID = p.id) }.toList()
-                c.forEach { AllServers.remember(it, olib.epg[it.epgID ?: it.id]) }
+                // build 141: alleen de gids van deze zenders uit de cache van die server (niet de hele gids)
+                if (c.isNotEmpty()) {
+                    val g = epgOf(p, c.mapTo(HashSet()) { CatalogFiles.epgKey(it) })
+                    c.forEach { AllServers.remember(it, g[CatalogFiles.epgKey(it)]) }
+                }
                 ch += c
                 mv += olib.movies.asSequence().filter { m(it.title) }.take(120).map { it.copy(sourceID = p.id) }.toList()
                 se += olib.series.asSequence().filter { m(it.title) }.take(120).map { it.copy(sourceID = p.id) }.toList()
@@ -860,6 +898,7 @@ object Playlists {
         episodeCache = emptyMap()
         error = null
         isFiltering = false
+        retireEpg(rawLibrary.epg)
         rawLibrary = Library()
         library = Library()
     }
@@ -888,47 +927,108 @@ object Playlists {
         return f
     }
 
+    /** Build 141: de cache in het nieuwe formaat (catalogus, gids en index apart, zie [CatalogFiles]). */
+    private fun cachePaths(p: PlaylistSource): CatalogFiles.Paths {
+        val dir = File(AppState.appContext.filesDir, "servercache")
+        return CatalogFiles.Paths(File(dir, "lib-${p.id}.json"), File(dir, "epg-${p.id}.bin"), File(dir, "epg-${p.id}.idx"))
+    }
+
+    /** Het bestand waarvan de tijd de versie van de cache is: de nieuwe catalogus, anders het oude bestand. */
+    private fun stampFile(p: PlaylistSource): File = cachePaths(p).core.takeIf { it.exists() } ?: cacheFile(p)
+
     /**
-     * Gecachete inhoud (blokkeert: aanroepen buiten de main thread). build 97: direct uit het bestand lezen
-     * (decodeFromStream) in plaats van eerst het hele bestand als één String in het geheugen.
+     * Gecachete inhoud mét gids (blokkeert: aanroepen buiten de main thread), voor de server die geopend wordt.
+     * Build 141: nieuw formaat (catalogus + gids apart); een cache van vóór build 141 wordt gelezen en meteen in het nieuwe
+     * formaat herschreven (het oude bestand gaat dan weg).
      */
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     fun readCache(p: PlaylistSource): Library? {
-        val f = cacheFile(p)
-        if (!f.exists()) return null
-        return runCatching {
-            f.inputStream().buffered(64 * 1024).use { Http.json.decodeFromStream(Library.serializer(), it) }
-        }.getOrNull()
+        val paths = cachePaths(p)
+        if (paths.exists) {
+            val core = CatalogFiles.readCore(paths.core, Http.json) ?: return null
+            // build 141: de gids blijft op schijf en wordt per zender gelezen (DiskEpg), niet alles in het geheugen
+            return core.copy(epg = CatalogFiles.openEpg(paths, Http.json) ?: emptyMap())
+        }
+        val legacy = CatalogFiles.readLegacy(cacheFile(p), Http.json) ?: return null
+        val ok = runCatching { synchronized(cacheWriteLock) { CatalogFiles.write(legacy, paths, Http.json); cacheFile(p).delete() } }.isSuccess
+        if (!ok) return legacy
+        return legacy.copy(epg = CatalogFiles.openEpg(paths, Http.json) ?: legacy.epg)
+    }
+
+    /**
+     * Build 141: alleen de titels en zenders van server [p] (zonder gids), voor een server die niet open is: Nieuw op
+     * Bingr, Mijn lijst/Verder kijken over alle servers, zoeken, slimme collecties. Tot build 140 kwam de hele gids mee
+     * (honderdduizenden programma's per server), soms voor meerdere servers tegelijk: daardoor liep het geheugen op een tv
+     * vol na het kiezen van een profiel. Een oud bestand wordt zonder gids gelezen (het `epg`-veld wordt overgeslagen).
+     */
+    fun readCatalog(p: PlaylistSource): Library? {
+        val paths = cachePaths(p)
+        return if (paths.exists) CatalogFiles.readCore(paths.core, Http.json) else CatalogFiles.readCore(cacheFile(p), Http.json)
+    }
+
+    /**
+     * Build 141: de gids van alleen deze zenders ([keys] = epgID of zender-id) van server [p] uit de cache. Een cache in het
+     * oude formaat heeft geen index: dan leeg (bij het volgende verversen komt het nieuwe formaat).
+     */
+    fun epgOf(p: PlaylistSource, keys: Set<String>): Map<String, List<EPGProgram>> {
+        if (keys.isEmpty()) return emptyMap()
+        if (p.id.equals(source?.id, ignoreCase = true) && !rawLibrary.isEmpty) {
+            val e = rawLibrary.epg
+            return keys.mapNotNull { k -> e[k]?.let { k to it } }.toMap()
+        }
+        return runCatching { CatalogFiles.readEpg(cachePaths(p), Http.json, keys) }.getOrDefault(emptyMap())
     }
 
     /** Leeftijd van de cache in ms (null = geen cache). */
     /** Build 129: tijd van de cache van [p] (0 = geen cache), om een gefilterde kopie te kunnen hergebruiken. */
-    fun cacheStamp(p: PlaylistSource): Long = cacheFile(p).let { if (it.exists()) it.lastModified() else 0L }
+    fun cacheStamp(p: PlaylistSource): Long = stampFile(p).let { if (it.exists()) it.lastModified() else 0L }
 
     fun cacheAge(p: PlaylistSource): Long? {
-        val f = cacheFile(p)
+        val f = stampFile(p)
         if (!f.exists()) return null
         return System.currentTimeMillis() - f.lastModified()
     }
 
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    private val cacheWriteLock = Any()
+
+    /** Build 141: alleen in de belastingmodus (StressMode): nepcatalogus wegschrijven in het nieuwe of het oude formaat. */
+    fun writeCacheForStress(p: PlaylistSource, lib: Library) {
+        if (!StressMode.isActive) return
+        synchronized(cacheWriteLock) { CatalogFiles.write(lib, cachePaths(p), Http.json) }
+    }
+    fun writeLegacyCacheForStress(p: PlaylistSource, lib: Library) {
+        if (!StressMode.isActive) return
+        synchronized(cacheWriteLock) { cachePaths(p).delete(); CatalogFiles.writeLegacy(lib, cacheFile(p), Http.json) }
+    }
+
+    /** Build 141: zoals [writeCache], maar wachtend tot het bestand er staat. */
+    private suspend fun writeCacheNow(p: PlaylistSource, lib: Library, notify: Boolean = true) {
+        val ok = withContext(Dispatchers.IO) {
+            runCatching { synchronized(cacheWriteLock) { CatalogFiles.write(lib, cachePaths(p), Http.json); cacheFile(p).delete() } }.isSuccess
+        }
+        if (ok && notify) withContext(Dispatchers.Main) { catalogVersion++ }
+    }
+
     private fun writeCache(p: PlaylistSource, lib: Library, notify: Boolean = true) {
-        val f = cacheFile(p)
         AppScope.launch(Dispatchers.IO) {
-            // build 97: direct naar het bestand (encodeToStream) en een eigen tijdelijk bestand per keer, zodat twee
-            // gelijktijdige schrijfacties elkaar niet in de weg zitten
-            f.parentFile?.mkdirs()
-            val tmp = File(f.parentFile, f.name + "." + System.nanoTime() + ".tmp")
+            // build 141: nieuw formaat (catalogus, gids en index apart); één schrijfactie tegelijk per app
             runCatching {
-                tmp.outputStream().buffered(64 * 1024).use { Http.json.encodeToStream(Library.serializer(), lib, it) }
-                if (!tmp.renameTo(f)) { f.delete(); if (!tmp.renameTo(f)) tmp.delete() }
+                synchronized(cacheWriteLock) {
+                    CatalogFiles.write(lib, cachePaths(p), Http.json)
+                    cacheFile(p).delete()
+                }
                 // build 130: pas als het bestand er staat (nieuwe tijd), zodat de achtergrond de nieuwe cache leest
                 if (notify) withContext(Dispatchers.Main) { catalogVersion++ }
-            }.onFailure { tmp.delete() }
+            }
         }
     }
 
-    fun clearCache(p: PlaylistSource) { runCatching { cacheFile(p).delete() } }
+    /** Build 141: de vorige gids op schijf over een minuut dichtdoen (wie hem nu nog leest, kan dat afmaken). */
+    private fun retireEpg(old: Map<String, List<EPGProgram>>) {
+        val d = old as? DiskEpg ?: return
+        AppScope.launch { kotlinx.coroutines.delay(60_000); if (!d.sharesSource(rawLibrary.epg) && !d.sharesSource(library.epg)) d.close() }
+    }
+
+    fun clearCache(p: PlaylistSource) { runCatching { cacheFile(p).delete(); cachePaths(p).delete() } }
 
     // MARK: posters voor de intro
 

@@ -79,7 +79,7 @@ object BackupSources {
 
     /** Cache van een andere server, gefilterd voor het actieve profiel (kinderprofiel, verborgen en vergrendelde groepen). */
     private suspend fun filtered(p: PlaylistSource, ctx: Playlists.FilterContext?): Library? {
-        val raw = withContext(Dispatchers.IO) { runCatching { Playlists.readCache(p) }.getOrNull() } ?: return null
+        val raw = withContext(Dispatchers.IO) { runCatching { Playlists.readCatalog(p) }.getOrNull() } ?: return null
         return if (ctx != null) runCatching { Playlists.apply(raw, ctx) }.getOrNull() else raw
     }
 

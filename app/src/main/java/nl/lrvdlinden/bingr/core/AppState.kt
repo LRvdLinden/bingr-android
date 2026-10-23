@@ -103,6 +103,9 @@ object AppState {
     fun open(profile: ViewerProfile) {
         // build 140: weer in een kinderprofiel → bij het verlaten opnieuw de rekensom
         if (profile.kids) KidsGate.kidsOpened()
+        // build 141: het werk aan de andere servers wacht weer tot het nieuwe profiel (actieve server, Home) klaar is
+        AllServers.profileOpened()
+        StressMode.profileOpened(profile)
         Store.selectProfile(profile)
         pendingLastChannel = PlayerSettings.resumeLastChannel
         val main = Store.isMain(profile)

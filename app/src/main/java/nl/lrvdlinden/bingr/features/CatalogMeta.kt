@@ -120,6 +120,8 @@ object CatalogMeta {
         return items[k] ?: lowerIndex[k.lowercase(Locale.ROOT)]?.let { items[it] }
     }
     fun title(key: String): String? = item(key).jS("t")?.takeIf { it.isNotBlank() }
+    /** Build 141: jaar uit de meta (getal, of een getal als tekst). */
+    fun year(key: String): Int? = item(key).jI("y") ?: item(key).jS("y")?.toIntOrNull()
     fun image(key: String): String? = item(key).jS("img")?.takeIf { it.isNotBlank() }
     fun kind(key: String): String? = item(key).jS("k")
     fun serverName(key: String): String? = item(key).jS("sname")?.takeIf { it.isNotBlank() }

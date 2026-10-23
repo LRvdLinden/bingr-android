@@ -182,10 +182,12 @@ private class HomeModel(val filter: Filter) {
     /** Build 140: vaste selectie voor uitgelicht (om en om Voor jou en Nieuw op Bingr), wisselt om de 8 s. */
     var heroPool by mutableStateOf(emptyList<DetailTarget>())
 
-    /** Wat niet (meer) in de gefilterde lijst staat weghalen (ander profiel, leeftijdsgrens, verborgen groep). */
-    fun prune(lib: Library) {
-        val movieIDs = lib.movies.mapTo(HashSet()) { it.id }
-        val seriesIDs = lib.series.mapTo(HashSet()) { it.id }
+    /**
+     * Wat niet (meer) in de gefilterde lijst staat weghalen (ander profiel, leeftijdsgrens, verborgen groep).
+     * Build 141: de opzoektabellen (tienduizenden id's) op de achtergrond, niet op de main thread.
+     */
+    suspend fun prune(lib: Library) {
+        val (movieIDs, seriesIDs) = withContext(Dispatchers.Default) { lib.movies.mapTo(HashSet()) { it.id } to lib.series.mapTo(HashSet()) { it.id } }
         // build 140: titels van een andere server staan niet in deze lijst (die zijn al met de filters van hun server gekozen)
         fun ok(t: DetailTarget) = t.sourceID != null || (if (t.isSeries) t.id in seriesIDs else t.id in movieIDs)
         hero?.let { if (!ok(it)) hero = null }
@@ -219,11 +221,9 @@ private class HomeModel(val filter: Filter) {
         applyTrending(lib, matcher, TrendingStore.cached(false, kidsProfile()), TrendingStore.cached(true, kidsProfile()))
         if (forYou.isEmpty()) setForYou(buildForYou(lib, false, matcher))
         if (hero == null) hero = quickHero(lib)
-        // build 140: Nieuw op Bingr (alle servers, uit de cache op dit apparaat), daarna de vaste selectie voor uitgelicht
-        val raw = Playlists.rawLibrary
-        val pid = Playlists.source?.id
-        newOnBingr = screensSafe { NewOnBingr.build(lib, raw, pid) } ?: newOnBingr
-        updateHeroPool()
+        // build 140: Nieuw op Bingr (alle servers, uit de cache op dit apparaat), daarna de vaste selectie voor uitgelicht.
+        // Build 141: eerst de actieve server; de andere servers komen op de achtergrond (NewOnBingr.version → [refreshNew])
+        refreshNew()
 
         // 2. daarna pas het netwerk (gedeeld door alle tabbladen)
         val (m, s) = coroutineScope {
@@ -235,6 +235,17 @@ private class HomeModel(val filter: Filter) {
         setForYou(buildForYou(lib, true, matcher))
         updateHeroPool()
         prune(Playlists.library)
+    }
+
+    /** Build 141: Nieuw op Bingr opnieuw samenstellen (snel: de andere servers komen uit de cache van NewOnBingr). */
+    suspend fun refreshNew() {
+        val lib = Playlists.library
+        if (lib.movies.isEmpty() && lib.series.isEmpty()) return
+        val raw = Playlists.rawLibrary
+        val pid = Playlists.source?.id
+        val n = screensSafe { NewOnBingr.build(lib, raw, pid) } ?: return
+        if (n != newOnBingr) newOnBingr = n
+        updateHeroPool()
     }
 
     private fun setForYou(r: Pair<List<DetailTarget>, Boolean>) {
@@ -454,7 +465,12 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
             if (filter == Filter.MOVIES && !isMovie) continue
             if (filter == Filter.SERIES && isMovie) continue
             val left = max(0.0, e.position / max(e.fraction, 0.01) - e.position)
-            val art = e.artwork ?: (item as? Movie)?.poster ?: (item as? Series)?.poster ?: CatalogMeta.image(full)
+            // build 141: de poster van de film/serie, niet de still van de aflevering die de voortgang bewaarde
+            val seriesKey = CatalogMeta.episode(full)?.series
+            val art = Build141Feedback.ContinueArt.pick(
+                (item as? Movie)?.poster ?: (item as? Series)?.poster,
+                if (seriesKey != null) CatalogMeta.image(seriesKey) else if (kind != "episode") CatalogMeta.image(full) else null,
+                e.artwork)
             out.add(ContinueItem(key, e.title.ifBlank { CatalogMeta.title(full) ?: L("Unknown title") }, L("%d min left", (left / 60).toInt()),
                 art, e.fraction, e.updated, isMovie, position = if (e.position > 0) e.position else null, sourceID = e.playlistID))
             continue
@@ -464,7 +480,9 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
         if (filter == Filter.MOVIES && !isMovie) continue
         if (filter == Filter.SERIES && isMovie) continue
         val left = max(0.0, e.position / max(e.fraction, 0.01) - e.position)
-        val art = e.artwork ?: if (isMovie) index.movieByID[key]?.poster else index.seriesByTitle[e.title]?.poster
+        // build 141: de poster van de film/serie gaat voor (bij een aflevering bewaarde de voortgang vaak een still)
+        val art = Build141Feedback.ContinueArt.pick(
+            if (isMovie) index.movieByID[key]?.poster else index.seriesByTitle[e.title]?.poster, null, e.artwork)
         out.add(ContinueItem(key, e.title, L("%d min left", (left / 60).toInt()), art, e.fraction, e.updated, isMovie,
             position = if (e.position > 0) e.position else null))
     }
@@ -520,7 +538,11 @@ fun removeFromContinue(c: ContinueItem) {
     c.traktPlaybackID?.let { id -> AppScope.launch { screensSafe { Trakt.removePlayback(id) } } }
 }
 
-/** Kaart voor "Verder kijken": poster met afspeelicoon, daaronder een duidelijke voortgangsbalk en de resterende tijd. */
+/**
+ * Kaart voor "Verder kijken": de poster (cover) van de film of serie met de afspeelknop en de voortgangsbalk erover,
+ * daaronder de resterende tijd. Build 141: de balk staat op de poster (niet eronder) en de poster is die van de titel,
+ * niet een still van de scène.
+ */
 @Composable
 fun ContinueCard(title: String, poster: String?, fraction: Double, caption: String?, modifier: Modifier = Modifier) {
     Column(modifier.width(Theme.posterWidth), verticalArrangement = Arrangement.spacedBy(tvs(5))) {
@@ -531,8 +553,15 @@ fun ContinueCard(title: String, poster: String?, fraction: Double, caption: Stri
                     .border(1.5.dp, Color.White.copy(alpha = 0.9f), CircleShape),
                 contentAlignment = Alignment.Center
             ) { Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(tvs(20))) }
+            // voortgang over de onderkant van de poster, op een donkere band zodat hij op elke cover te zien is
+            Box(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f))))
+                    .padding(start = tvs(8), end = tvs(8), top = tvs(14), bottom = tvs(8))
+            ) {
+                ProgressBar(max(fraction, 0.03), Modifier.fillMaxWidth().height(tvs(4)).clip(RoundedCornerShape(50)))
+            }
         }
-        ProgressBar(max(fraction, 0.03), Modifier.width(Theme.posterWidth).height(tvs(4)).clip(RoundedCornerShape(50)))
         if (caption != null) {
             Text(caption, color = Theme.secondary, fontSize = tsp(10), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.width(Theme.posterWidth))
@@ -633,8 +662,9 @@ fun HomeScreen(filter: Filter) {
     val mySeries = remember(allMine) { allMine.mapNotNull { (it as? DetailTarget.SeriesT)?.series } }
     // build 111: TMDB-titels in Mijn lijst die dit apparaat nog niet kent (op een ander apparaat toegevoegd)
     LaunchedEffect(myList, pid) {
-        val p = pid ?: return@LaunchedEffect
-        val ids = myList.filter { it.startsWith("$p|", ignoreCase = true) }.map { it.substring(p.length + 1) }.filter { DiscoverItem.isExternal(it) }
+        if (pid == null) return@LaunchedEffect
+        // build 141: ook TMDB-titels die onder een andere server staan (op een ander apparaat toegevoegd)
+        val ids = myList.mapNotNull { Build141Feedback.MyListKeys.externalID(it) }.distinct()
         if (ids.isEmpty()) return@LaunchedEffect
         val missing = withContext(Dispatchers.IO) { ids.filter { !DiscoverKnown.contains(it) } }
         if (missing.isNotEmpty() && screensSafe { DiscoverStore.resolve(missing) } == true) knownTick++
@@ -652,7 +682,10 @@ fun HomeScreen(filter: Filter) {
         favChannels.ifEmpty { if (pid == null) emptyList() else AllServers.channels(recentChannels, pid) { index.channel(it, pid) } }
     }
     val collections = Collections.visible
-    val layoutRows = remember(Store.activeHomeLayout, collections) { HomeLayouts.effective(Store.activeHomeLayout, collections) }
+    // build 141: zonder "Nieuw toegevoegd"; "Nieuw op Bingr" staat op die plek (HomeLayouts.displayed)
+    val layoutRows = remember(Store.activeHomeLayout, collections) { HomeLayouts.displayed(Store.activeHomeLayout, collections) }
+    // build 141: Nieuw op Bingr van de andere servers is (op de achtergrond) klaar → de rij bijwerken
+    LaunchedEffect(NewOnBingr.version) { if (NewOnBingr.version > 0) model.refreshNew() }
 
     // build 111: Binnenkort op Bingr / Nieuw op Bingr (TMDB): alleen de rijen die in de indeling aan staan; eerst wat
     // bewaard is, daarna het netwerk (12 uur bewaard), koppelen aan je bibliotheek op de achtergrond
@@ -752,21 +785,18 @@ fun HomeScreen(filter: Filter) {
                             Filter.SERIES -> if (mySeries.isNotEmpty()) SeriesRow(L("My List"), mySeries, mySeries)
                         }
                     }.also { shown(myMovies.isNotEmpty() || mySeries.isNotEmpty()) }
-                    // Onlangs toegevoegd
-                    // build 111: op Home "Nieuw toegevoegd" met films én series van de laatste 30 dagen
-                    "recent" -> if (filter == Filter.ALL) item(key = "recent") {
-                        val all = index.recentTitles
-                        if (all.isNotEmpty()) TargetRow(L("Recently added"), all, pid)
-                    }.also { shown(index.recentTitles.isNotEmpty()) }
-                    else if (filter != Filter.SERIES) item(key = "recent") {
-                        val all = index.recent
-                        if (all.isNotEmpty()) MovieRow(L("Recently added"), all.take(30), all, pid)
-                    }.also { shown(index.recent.isNotEmpty()) }
+                    // build 141: "Nieuw toegevoegd" is weg (HomeLayouts.displayed zet Nieuw op Bingr op zijn plek)
+                    "recent" -> {}
                     // build 111: Binnenkort op Bingr / Nieuw op Bingr (TMDB)
-                    // build 140: Nieuw op Bingr = laatst toegevoegd aan je bibliotheek (alle servers), nieuwste eerst
-                    "streaming" -> if (filter == Filter.ALL) {
-                        val list = model.newOnBingr
-                        if (list.isNotEmpty()) item(key = "d|streaming") { TargetRow(L("New on Bingr"), list, pid) }
+                    // build 140: Nieuw op Bingr = laatst toegevoegd aan je bibliotheek (alle servers), nieuwste eerst.
+                    // Build 141: met het label Film/Serie op de tegels (zoals Voor jou), ook op Films en Series (alleen die soort)
+                    "streaming" -> {
+                        val list = when (filter) {
+                            Filter.ALL -> model.newOnBingr
+                            Filter.MOVIES -> model.newOnBingr.filter { !it.isSeries }
+                            Filter.SERIES -> model.newOnBingr.filter { it.isSeries }
+                        }
+                        if (list.isNotEmpty()) item(key = "d|streaming") { LabeledTargetRow(L("New on Bingr"), list) }
                         shown(list.isNotEmpty())
                     }
                     "upcoming" -> if (filter == Filter.ALL) {
@@ -855,7 +885,8 @@ fun HomeScreen(filter: Filter) {
                 }
                 if (autoTiles) placeTiles()
             } else {
-                listOf("continue", "mylist", "recent", "foryou", "top10").forEach { section(it) }
+                // build 141: Nieuw op Bingr op de plek van "Nieuw toegevoegd"
+                listOf("continue", "mylist", "streaming", "foryou", "top10").forEach { section(it) }
                 layoutRows.filter { it.visible && it.key.startsWith("collection:") }.forEach { section(it.key) }
                 section("categories")
             }
@@ -1049,6 +1080,28 @@ private fun ForYouRow(filter: Filter, all: List<DetailTarget>, popular: Boolean 
     MediaRow(title, onSeeAll = { openCategory(title, items) }) {
         keyedItems(items, keys) { t ->
             // build 75: bekeken-label onder het SERIE/FILM-label, vinkje rechtsboven voor bekeken films
+            PosterCard(
+                t.title, t.poster,
+                modifier = Modifier.focusLift { openDetail(t) },
+                watched = (t as? DetailTarget.MovieT)?.let { Playables.isWatched(it.movie, Trakt.imdb(it.movie)) } ?: false,
+                badge = if (t.isSeries) L("SERIES") else L("MOVIE"),
+                language = languageLabel(t),
+                badgeTopStart = true,
+                watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.watchedEpisodeCount(it.series) } ?: 0
+            )
+        }
+    }
+}
+
+/**
+ * Build 141: rij in de volgorde van [items] (Nieuw op Bingr: nieuwste eerst) met het label FILM/SERIE linksboven op elke
+ * tegel, zoals bij Voor jou.
+ */
+@Composable
+private fun LabeledTargetRow(title: String, items: List<DetailTarget>) {
+    val keys = rememberKeys(items) { (if (it.isSeries) "s:" else "m:") + (it.sourceID?.lowercase() ?: "") + "|" + it.id }
+    MediaRow(title, onSeeAll = { openCategory(title, items) }) {
+        keyedItems(items, keys) { t ->
             PosterCard(
                 t.title, t.poster,
                 modifier = Modifier.focusLift { openDetail(t) },

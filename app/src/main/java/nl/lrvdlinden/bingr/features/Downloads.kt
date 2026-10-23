@@ -7,7 +7,11 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
+import android.app.job.JobInfo
+import android.app.job.JobParameters
+import android.app.job.JobScheduler
+import android.app.job.JobService
+import android.content.ComponentName
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -27,7 +31,11 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -72,8 +80,14 @@ data class DownloadItem(
 
 /**
  * Offline downloads (build 52), alleen op telefoon/tablet. Directe videobestanden (Xtream, M3U, Plex/Jellyfin/Emby,
- * MAC-portal na het aanmaken van een link) worden met een WorkManager-taak in een voorgronddienst gedownload, met
- * een voortgangsmelding (ook op het vergrendelscherm). Hervat na netwerkverlies of een herstart (HTTP Range).
+ * MAC-portal na het aanmaken van een link) worden op de achtergrond gedownload, met een voortgangsmelding (ook op het
+ * vergrendelscherm). Hervat na netwerkverlies of een herstart (HTTP Range).
+ *
+ * Build 141: geen voorgronddienst van het type `dataSync` meer (en dus geen FOREGROUND_SERVICE_DATA_SYNC, waarvoor
+ * Google Play een verklaring vraagt). Android 14+: een door de gebruiker gestarte gegevensoverdracht ("user-initiated
+ * data transfer job", [DownloadJobService], zoals Google voor downloads aanraadt). Android 7–13: WorkManager met
+ * setForeground zonder type (daar is geen type nodig). Kan de taak op Android 14+ niet als door de gebruiker gestart
+ * worden ingepland (app niet in beeld), dan WorkManager zonder voorgronddienst; die gaat verder zodra het mag.
  * HLS/DASH-streams (.m3u8/.mpd) kunnen niet gedownload worden.
  * Gegevens: files/downloads.json; bestanden in de app-map "downloads" (externe app-opslag, anders intern).
  */
@@ -110,7 +124,15 @@ object Downloads {
         publish(save = false)
         verifyFiles()
         createChannel()
-        if (list.any { it.status == QUEUED }) schedule()
+        // build 141: Android 14+ pas als de app in beeld is ([resumeIfQueued] vanuit MainActivity.onResume), want alleen dan
+        // mag een door de gebruiker gestarte overdracht ingepland worden
+        if (list.any { it.status == QUEUED } && Build.VERSION.SDK_INT < 34) schedule()
+    }
+
+    /** Build 141: app weer in beeld (MainActivity.onResume): wat nog in de wachtrij staat verder downloaden. */
+    fun resumeIfQueued() {
+        if (!::ctx.isInitialized || !supported) return
+        if (synchronized(lock) { list.any { it.status == QUEUED } } && !DownloadRunner.running) schedule()
     }
 
     private val metaFile: File get() = File(ctx.filesDir, "downloads.json")
@@ -254,13 +276,32 @@ object Downloads {
 
     // MARK: achtergrond
 
+    private const val JOB_ID = 5201
+
     fun schedule() {
+        // build 141: loopt er al een download, dan pakt die de wachtrij op (niet opnieuw inplannen: dat stopt hem)
+        if (DownloadRunner.running) return
+        if (Build.VERSION.SDK_INT >= 34 && scheduleUserInitiated()) return
         val req = OneTimeWorkRequestBuilder<DownloadWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
             .build()
         runCatching { WorkManager.getInstance(ctx).enqueueUniqueWork(WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, req) }
     }
+
+    /** Android 14+: door de gebruiker gestarte gegevensoverdracht (zonder voorgronddienst). false = lukte niet. */
+    @androidx.annotation.RequiresApi(34)
+    private fun scheduleUserInitiated(): Boolean = runCatching {
+        val js = ctx.getSystemService(JobScheduler::class.java) ?: return false
+        val left = synchronized(lock) { list.filter { it.status == QUEUED || it.status == DOWNLOADING } }
+            .sumOf { d -> if (d.totalBytes > 0) (d.totalBytes - d.bytes).coerceAtLeast(0) else 0L }
+        val info = JobInfo.Builder(JOB_ID, ComponentName(ctx, DownloadJobService::class.java))
+            .setUserInitiated(true)
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .apply { if (left > 0) setEstimatedNetworkBytes(left, JobInfo.NETWORK_BYTES_UNKNOWN.toLong()) }
+            .build()
+        js.schedule(info) == JobScheduler.RESULT_SUCCESS
+    }.getOrDefault(false)
 
     private fun askNotificationPermission() {
         if (Build.VERSION.SDK_INT < 33) return
@@ -305,37 +346,40 @@ object Downloads {
 }
 
 /**
- * Werkt de wachtrij af, één download tegelijk, als voorgronddienst (dataSync) met voortgangsmelding.
- * Zonder netwerk stopt WorkManager de taak en start hem weer zodra er verbinding is; na een herstart ook.
+ * Build 141: werkt de wachtrij af, één download tegelijk (voor [DownloadWorker] en [DownloadJobService]).
+ * [stopped] = het systeem stopt de taak; [progress] = voortgangsmelding bijwerken.
  */
-class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-    private val nm get() = applicationContext.getSystemService(NotificationManager::class.java)
-    private val notifID = 5200
+class DownloadRunner(
+    private val context: Context,
+    private val stopped: () -> Boolean,
+    private val progress: (android.app.Notification) -> Unit,
+) {
+    companion object {
+        /** Er loopt nu een download (in deze app). */
+        @Volatile var running = false
+            private set
+    }
+    private val nm get() = context.getSystemService(NotificationManager::class.java)
 
-    private class NetworkLost : Exception()
+    class NetworkLost : Exception()
 
-    private fun foregroundInfo(n: android.app.Notification): ForegroundInfo =
-        if (Build.VERSION.SDK_INT >= 29) ForegroundInfo(notifID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        else ForegroundInfo(notifID, n)
-
-    override suspend fun getForegroundInfo(): ForegroundInfo =
-        foregroundInfo(Downloads.notification(applicationContext, L("Downloads"), L("Downloading…"), null, false))
-
-    override suspend fun doWork(): Result {
-        // voorgronddienst; mag soms niet (Android 12+ vanaf de achtergrond): dan gewoon zonder
-        try { setForeground(getForegroundInfo()) } catch (e: CancellationException) { throw e } catch (_: Exception) { }
-        while (!isStopped) {
-            val d = Downloads.nextQueued() ?: break
-            try {
-                download(d)
-            } catch (e: CancellationException) {
-                requeue(d); throw e
-            } catch (_: NetworkLost) {
-                requeue(d)
-                return Result.retry()
+    /** true = later opnieuw proberen (geen netwerk, of gestopt met nog iets in de wachtrij). */
+    suspend fun run(): Boolean {
+        running = true
+        try {
+            while (!stopped()) {
+                val d = Downloads.nextQueued() ?: break
+                try {
+                    download(d)
+                } catch (e: CancellationException) {
+                    requeue(d); throw e
+                } catch (_: NetworkLost) {
+                    requeue(d)
+                    return true
+                }
             }
-        }
-        return if (isStopped && Downloads.nextQueued() != null) Result.retry() else Result.success()
+            return stopped() && Downloads.nextQueued() != null
+        } finally { running = false }
     }
 
     private fun requeue(d: DownloadItem) {
@@ -386,11 +430,11 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                                 val cur = Downloads.get(key)
                                 if (cur == null) { runCatching { file.delete() }; return@withContext }   // verwijderd
                                 if (cur.status == Downloads.PAUSED) { Downloads.update(key) { it.copy(bytes = have) }; return@withContext }
-                                if (isStopped) throw NetworkLost()
+                                if (stopped()) throw NetworkLost()
                                 Downloads.update(key) { it.copy(bytes = have) }
                                 val pct = if (total > 0) (have * 100 / total).toInt() else null
                                 val text = if (total > 0) "${Downloads.formatBytes(have)} / ${Downloads.formatBytes(total)}" else Downloads.formatBytes(have)
-                                runCatching { setForegroundAsync(foregroundInfo(Downloads.notification(applicationContext, cur.subtitle?.let { "${cur.seriesTitle ?: cur.title} · $it" } ?: cur.title, text, pct, false))) }
+                                runCatching { progress(Downloads.notification(context, cur.subtitle?.let { "${cur.seriesTitle ?: cur.title} · $it" } ?: cur.title, text, pct, false)) }
                             }
                         }
                     }
@@ -413,7 +457,71 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
     private fun finished(d: DownloadItem, ok: Boolean) {
         val title = d.subtitle?.let { "${d.seriesTitle ?: d.title} · $it" } ?: d.title
-        val n = Downloads.notification(applicationContext, title, if (ok) L("Download complete") else L("Download failed"), null, true)
+        val n = Downloads.notification(context, title, if (ok) L("Download complete") else L("Download failed"), null, true)
         runCatching { nm?.notify(d.key.hashCode(), n) }
+    }
+}
+
+/**
+ * Downloads via WorkManager: Android 7–13 als voorgronddienst zonder type (met voortgangsmelding); Android 14+ alleen als
+ * terugval (zonder voorgronddienst, zie [Downloads.schedule]). Zonder netwerk stopt WorkManager de taak en start hem weer
+ * zodra er verbinding is; na een herstart ook.
+ */
+class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    private val notifID = 5200
+
+    // build 141: zonder type (FOREGROUND_SERVICE_DATA_SYNC is weg); alleen gebruikt op Android 13 en ouder
+    private fun foregroundInfo(n: android.app.Notification): ForegroundInfo = ForegroundInfo(notifID, n)
+
+    override suspend fun getForegroundInfo(): ForegroundInfo =
+        foregroundInfo(Downloads.notification(applicationContext, L("Downloads"), L("Downloading…"), null, false))
+
+    override suspend fun doWork(): Result {
+        val fg = Build.VERSION.SDK_INT < 34
+        // voorgronddienst (Android 13 en ouder); mag soms niet (Android 12+ vanaf de achtergrond): dan gewoon zonder
+        if (fg) try { setForeground(getForegroundInfo()) } catch (e: CancellationException) { throw e } catch (_: Exception) { }
+        val nm = applicationContext.getSystemService(NotificationManager::class.java)
+        val retry = DownloadRunner(applicationContext, { isStopped }) { n ->
+            if (fg) setForegroundAsync(foregroundInfo(n)) else runCatching { nm?.notify(notifID, n) }
+        }.run()
+        if (!fg) runCatching { nm?.cancel(notifID) }
+        return if (retry) Result.retry() else Result.success()
+    }
+}
+
+/**
+ * Build 141: Android 14+: downloads als door de gebruiker gestarte gegevensoverdracht (JobScheduler, setUserInitiated),
+ * met de voortgangsmelding van het systeem (setNotification). Geen voorgronddienst en geen FOREGROUND_SERVICE_DATA_SYNC.
+ */
+@androidx.annotation.RequiresApi(34)
+class DownloadJobService : JobService() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var job: Job? = null
+    @Volatile private var stopped = false
+    private val notifID = 5200
+
+    override fun onStartJob(params: JobParameters): Boolean {
+        stopped = false
+        // binnen 10 s een melding (verplicht voor deze soort taak)
+        runCatching {
+            setNotification(params, notifID, Downloads.notification(this, L("Downloads"), L("Downloading…"), null, false),
+                JOB_END_NOTIFICATION_POLICY_REMOVE)
+        }
+        job = scope.launch {
+            val retry = try {
+                DownloadRunner(applicationContext, { stopped }) { n ->
+                    runCatching { setNotification(params, notifID, n, JOB_END_NOTIFICATION_POLICY_REMOVE) }
+                }.run()
+            } catch (e: CancellationException) { throw e } catch (_: Exception) { true }
+            jobFinished(params, retry && !stopped)
+        }
+        return true
+    }
+
+    override fun onStopJob(params: JobParameters): Boolean {
+        stopped = true
+        job?.cancel()
+        // opnieuw inplannen als er nog iets in de wachtrij staat
+        return Downloads.nextQueued() != null
     }
 }

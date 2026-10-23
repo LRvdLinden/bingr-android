@@ -1,6 +1,7 @@
 /*
  * Build 141 (versie 1.0.1): beveiliging, gelijk aan Build141Logic.kt op Android (zelfde gevallen in
- * tizen/test/build141_test.js en tools/test/Build141LogicTest.kt).
+ * tizen/test/build141_test.js en tools/test/Build141LogicTest.kt), en de feedback van gebruikers (Home-indeling,
+ * Mijn lijst, Verder kijken; gelijk aan Build141Feedback.kt, tools/test/Build141FeedbackTest.kt).
  * - lockout: oplopende wachttijd na 5 foute pincodes op rij (30 s, 1 min, 5 min, 15 min, 1 uur)
  * - traktOAuthBase / osHost: vaste lijst voor Trakt (OAuth) en OpenSubtitles
  * - B.vault: gevoelige waarden (sessie van het account, servers met wachtwoorden, pincodes, Trakt/OpenSubtitles-tokens,
@@ -79,6 +80,47 @@
     if (!s || !/^[a-z0-9.-]+$/.test(s)) return OS_DEFAULT;
     return (s === 'opensubtitles.com' || /\.opensubtitles\.com$/.test(s)) ? s : OS_DEFAULT;
   };
+
+  // MARK: feedback (zelfde regels als Build141Feedback.kt op Android, tools/test/Build141FeedbackTest.kt)
+
+  /**
+   * Home: de rij "Nieuw toegevoegd" (recent) is weg; "Nieuw op Bingr" (streaming) staat op zijn plek, met zijn eigen
+   * aan/uit. rows = [{key, visible}] (de opgeslagen indeling verandert niet; andere apps kennen beide rijen nog).
+   */
+  X.homeRows = {
+    displayed: function (rows) {
+      var iR = -1, iN = -1, i;
+      for (i = 0; i < rows.length; i++) { if (rows[i].key === 'recent' && iR < 0) iR = i; if (rows[i].key === 'streaming' && iN < 0) iN = i; }
+      if (iR < 0) return rows.slice();
+      var out = [];
+      for (i = 0; i < rows.length; i++) {
+        if (i === iR) { if (iN >= 0) out.push(rows[iN]); }
+        else if (i !== iN) out.push(rows[i]);
+      }
+      return out;
+    }
+  };
+
+  /** Mijn lijst: TMDB-titels ("tmdb-movie-123") horen bij geen server; ook onder een andere server-id tellen ze mee. */
+  X.myList = {
+    itemOf: function (k) { var bar = String(k).indexOf('|'); return bar < 0 ? String(k) : String(k).slice(bar + 1); },
+    isExternal: function (id) { return String(id || '').indexOf('tmdb-') === 0; },
+    externalID: function (k) { var id = X.myList.itemOf(k); return X.myList.isExternal(id) ? id : null; },
+    /** Sleutel voor een titel: een TMDB-titel met een bestaande sleutel (andere server) houdt die; anders src|id. */
+    keyFor: function (existing, src, id) {
+      if (X.myList.isExternal(id)) for (var i = 0; i < existing.length; i++) if (X.myList.itemOf(existing[i]) === id) return existing[i];
+      return src + '|' + id;
+    }
+  };
+
+  /** Verder kijken: de poster van de film/serie gaat voor; de bewaarde afbeelding (vaak een still) alleen als terugval. */
+  X.continueArt = function (titlePoster, metaPoster, stored) {
+    function ok(v) { return v && String(v).trim() ? v : null; }
+    return ok(titlePoster) || ok(metaPoster) || ok(stored) || null;
+  };
+
+  /** Label op de tegels van Nieuw op Bingr en Voor jou: FILM of SERIE. */
+  X.typeBadge = function (type) { return type === 'series' ? B.L('SERIES') : B.L('FILM'); };
 
   // MARK: kluis (gevoelige waarden)
 

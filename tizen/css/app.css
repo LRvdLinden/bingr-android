@@ -251,6 +251,10 @@ html.playing .layer:not(.player):not(.modal):not(.multiview) { visibility: hidde
 .card.focused { transform: scale(1.1); box-shadow: 0 0 0 5px #fff, 0 8px 18px rgba(0,0,0,0.7); z-index: 2; }
 .card-progress { position: absolute; left: 12px; right: 12px; bottom: 12px; height: 6px; background: rgba(255,255,255,0.3); border-radius: 3px; overflow: hidden; }
 .card-progress > div { height: 100%; background: var(--accent); }
+/* build 141: Verder kijken: afspeelknop midden op de poster */
+.card-play { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%;
+  background: rgba(0,0,0,0.55); border: 2px solid rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; }
+.card-play .ic { width: 30px; height: 30px; color: #fff; fill: #fff; }
 .card-progress.inline { position: relative; left: 0; right: 0; bottom: 0; width: 220px; display: inline-block; margin-right: 16px; vertical-align: middle; }
 .card-label { position: absolute; left: 0; bottom: 0; right: 0; padding: 8px 12px; background: linear-gradient(transparent, rgba(0,0,0,0.85)); font-size: 22px; }
 /* taal van de titel: kleine doorschijnende strook onder op de poster (zoals UHF) */

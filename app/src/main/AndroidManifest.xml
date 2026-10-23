@@ -10,10 +10,12 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Herinneringen (Reminders): exact alarm als het mag, anders valt de code terug op een gewoon alarm -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Downloads op Android 7–13: WorkManager-voorgronddienst zonder type (met voortgangsmelding) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- build 97: FOREGROUND_SERVICE_MEDIA_PLAYBACK weg (er is geen voorgronddienst voor afspelen) -->
-    <!-- Downloads (build 52): voorgronddienst met voortgangsmelding -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- build 141: FOREGROUND_SERVICE_DATA_SYNC weg. Downloads op Android 14+ zijn een door de gebruiker gestarte
+         gegevensoverdracht (DownloadJobService, JobScheduler setUserInitiated); daar is geen voorgronddienst voor nodig -->
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Werkt op telefoon/tablet én Android TV / Google TV / Fire TV -->
@@ -138,11 +140,16 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- WorkManager-voorgronddienst voor downloads -->
+        <!-- WorkManager-voorgronddienst voor downloads (alleen Android 13 en ouder, zonder type; build 141: geen dataSync meer) -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
-            android:foregroundServiceType="dataSync"
+            tools:remove="android:foregroundServiceType"
             tools:node="merge" />
+        <!-- build 141: downloads op Android 14+ (door de gebruiker gestarte gegevensoverdracht) -->
+        <service
+            android:name=".DownloadJobService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="false" />
 
         <!-- Pushmeldingen (FCM): alleen actief als de build een google-services.json had (anders start Firebase niet) -->
         <service

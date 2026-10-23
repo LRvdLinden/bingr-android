@@ -78,5 +78,5 @@ object Secrets {
     /** Bingr-account (Supabase): alleen uit BuildConfig, niet in de app aan te passen. */
     val supabaseUrl: String get() = BuildConfig.SUPABASE_URL.trim().trimEnd('/')
     val supabaseAnonKey: String get() = BuildConfig.SUPABASE_ANON_KEY.trim()
-    val accountsConfigured: Boolean get() = isSet(supabaseUrl) && isSet(supabaseAnonKey)
+    val accountsConfigured: Boolean get() = !BuildConfig.STRESS && isSet(supabaseUrl) && isSet(supabaseAnonKey)
 }

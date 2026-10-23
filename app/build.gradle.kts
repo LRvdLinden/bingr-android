@@ -13,6 +13,11 @@ val buildNumber = (findProperty("BINGR_BUILD") as String?)?.toIntOrNull() ?: 1
 val marketing = (findProperty("BINGR_VERSION") as String?) ?: "1.0.0"
 // Screenshotmodus voor Google Play (core/ScreenshotMode.kt): alleen met -PBINGR_SCREENSHOTS=true (workflow playstore-screenshots.yml)
 val screenshotBuild = (findProperty("BINGR_SCREENSHOTS") as String?) == "true"
+// Build 141: belastingmodus voor de rooktest in de emulator (core/StressMode.kt): alleen met -PBINGR_STRESS=true (workflow smoke.yml)
+val stressBuild = (findProperty("BINGR_STRESS") as String?) == "true"
+if (stressBuild && gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) || it.contains("bundle", ignoreCase = true) }) {
+    throw GradleException("BINGR_STRESS is alleen voor de debug-build van de rooktest, nooit voor een release")
+}
 
 // App-sleutels: uit GitHub Secrets (CI) of local.properties
 val localProps = Properties().apply {
@@ -38,7 +43,7 @@ android {
         versionCode = buildNumber
         versionName = marketing
         // screenshot-build: ook x86/x86_64 voor de emulators in de workflow
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") + (if (screenshotBuild) listOf("x86", "x86_64") else emptyList()) }
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") + (if (screenshotBuild || stressBuild) listOf("x86", "x86_64") else emptyList()) }
         buildConfigField("String", "TRAKT_CLIENT_ID", "\"${key("TRAKT_CLIENT_ID")}\"")
         buildConfigField("String", "TRAKT_CLIENT_SECRET", "\"${key("TRAKT_CLIENT_SECRET")}\"")
         buildConfigField("String", "OPENSUBTITLES_API_KEY", "\"${key("OPENSUBTITLES_API_KEY")}\"")
@@ -49,6 +54,8 @@ android {
         buildConfigField("boolean", "PUSH_CONFIGURED", hasGoogleServices.toString())
         // in gewone builds altijd false (zie screenshotBuild hierboven)
         buildConfigField("boolean", "SCREENSHOTS", screenshotBuild.toString())
+        // in gewone builds altijd false (zie stressBuild hierboven)
+        buildConfigField("boolean", "STRESS", stressBuild.toString())
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${key("SUPABASE_ANON_KEY").ifEmpty { "sb_publishable_lpIup6Omq5kW2k3oICGZ4g_HPGac5A3" }}\"")
     }
 

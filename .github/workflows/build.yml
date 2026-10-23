@@ -93,7 +93,13 @@ jobs:
               -include-runtime -d "$RUNNER_TEMP/b141-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b141-test.jar" | tee "$RUNNER_TEMP/b141-test.txt"; rc4=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 141::$(tail -1 "$RUNNER_TEMP/b141-test.txt")"
-            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ]
+            # build 141: feedback (Nieuw op Bingr, Home-indeling, Mijn lijst, Verder kijken, achtergrondwerk)
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/AllServersLogic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build140Logic.kt \
+              app/src/main/java/nl/lrvdlinden/bingr/features/Build141Feedback.kt \
+              tools/test/Build141FeedbackTest.kt -include-runtime -d "$RUNNER_TEMP/b141f-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b141f-test.jar" | tee "$RUNNER_TEMP/b141f-test.txt"; rc5=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 141 feedback::$(tail -1 "$RUNNER_TEMP/b141f-test.txt")"
+            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi
@@ -154,6 +160,54 @@ jobs:
           else
             echo "::warning::APK met een tijdelijke sleutel getekend (BINGR_KEYSTORE_BASE64 ontbreekt); deze vingerafdruk hoort NIET in assetlinks.json: $FP"
           fi
+
+      # build 141: geen voorgronddienst van het type dataSync (Google Play vraagt per type een verklaring); downloads op
+      # Android 14+ zijn een door de gebruiker gestarte gegevensoverdracht. Controle op het samengevoegde manifest in de APK.
+      - name: Voorgronddiensten controleren (geen dataSync)
+        if: success()
+        run: |
+          set -euo pipefail
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          AAPT2=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
+          "$AAPT2" dump xmltree --file AndroidManifest.xml "$APK" > "$RUNNER_TEMP/manifest.txt"
+          if grep -qiE 'FOREGROUND_SERVICE_DATA_SYNC|foregroundServiceType' "$RUNNER_TEMP/manifest.txt"; then
+            grep -iE -B3 'FOREGROUND_SERVICE_|foregroundServiceType' "$RUNNER_TEMP/manifest.txt" | head -40
+            echo "::error::Het manifest vraagt nog FOREGROUND_SERVICE_DATA_SYNC of een dataSync-voorgronddienst."
+            exit 1
+          fi
+          perms=$(grep -oE '"android.permission.(FOREGROUND_SERVICE[A-Z_]*|RUN_USER_INITIATED_JOBS)"' "$RUNNER_TEMP/manifest.txt" | sort -u | tr '\n' ' ')
+          echo "::notice title=Voorgronddiensten::geen dataSync; permissies: $perms"
+
+      # build 141: belastingtest zonder emulator: profiel openen met 3 servers × (30.000 films, 20.000 series, 5.000 zenders
+      # met gids), oud tegen nieuw (cacheformaat, gedeelde filterlijsten, Nieuw op Bingr), met tijd en geheugen; de JVM krijgt
+      # een heap zoals een tv (zie tools/test/ProfileOpenStressTest.kt). Na het bouwen: kotlinx-serialization uit de Gradle-cache.
+      - name: Belastingtest (grote nepcatalogus, oud tegen nieuw)
+        if: success()
+        run: |
+          set -uo pipefail
+          # vaste compiler (Kotlin 2.1.0, gelijk aan de app; sha256 gecontroleerd) en kotlinx-serialization 1.7.3 uit de Gradle-cache
+          curl -fsSL -o "$RUNNER_TEMP/kotlinc.zip" https://github.com/JetBrains/kotlin/releases/download/v2.1.0/kotlin-compiler-2.1.0.zip
+          echo "b6698d5728ad8f9edcdd01617d638073191d8a03139cc538a391b4e3759ad297  $RUNNER_TEMP/kotlinc.zip" | sha256sum -c - >/dev/null \
+            || { echo "::error::kotlin-compiler-2.1.0.zip: sha256 klopt niet"; exit 1; }
+          unzip -q -o "$RUNNER_TEMP/kotlinc.zip" -d "$RUNNER_TEMP"
+          KH="$RUNNER_TEMP/kotlinc"
+          C=$(find ~/.gradle/caches -name 'kotlinx-serialization-core-jvm-1.7.3.jar' | head -1)
+          J=$(find ~/.gradle/caches -name 'kotlinx-serialization-json-jvm-1.7.3.jar' | head -1)
+          if [ -z "$C" ] || [ -z "$J" ]; then echo "::error::kotlinx-serialization 1.7.3 niet in de Gradle-cache"; exit 1; fi
+          "$KH/bin/kotlinc" -Xplugin="$KH/lib/kotlinx-serialization-compiler-plugin.jar" -cp "$C:$J" app/src/main/java/nl/lrvdlinden/bingr/core/Models.kt \
+            app/src/main/java/nl/lrvdlinden/bingr/features/CatalogFiles.kt \
+            app/src/main/java/nl/lrvdlinden/bingr/features/Build141Feedback.kt tools/test/StressStubs.kt tools/test/ProfileOpenStressTest.kt \
+            -d "$RUNNER_TEMP/stress-classes" 2>&1 | grep -v '^warning' || true
+          CP="$RUNNER_TEMP/stress-classes:$C:$J:$KH/lib/kotlin-stdlib.jar"
+          M=nl.lrvdlinden.bingr.ProfileOpenStressTestKt
+          java -Xmx2g -cp "$CP" $M prepare "$RUNNER_TEMP/stress" || { echo "::error::nepgegevens voor de belastingtest niet te maken"; exit 1; }
+          # nieuw: moet slagen met een tv-heap (256 MB); oud: ter vergelijking met dezelfde heap (mag mislukken)
+          java -Xmx256m -cp "$CP" $M new "$RUNNER_TEMP/stress" | tee "$RUNNER_TEMP/stress-new.txt"; rcn=${PIPESTATUS[0]}
+          java -Xmx256m -cp "$CP" $M old "$RUNNER_TEMP/stress" | tee "$RUNNER_TEMP/stress-old.txt"; rco=${PIPESTATUS[0]}
+          { echo '### Belastingtest (heap 256 MB)'; echo '```'; tail -12 "$RUNNER_TEMP/stress-new.txt"; echo '---'; tail -12 "$RUNNER_TEMP/stress-old.txt"; echo "oud: exit $rco"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Belastingtest::$(tail -1 "$RUNNER_TEMP/stress-new.txt") · oud: $(tail -1 "$RUNNER_TEMP/stress-old.txt")"
+          rm -rf "$RUNNER_TEMP/stress" "$RUNNER_TEMP/stress-classes"
+          [ $rcn -eq 0 ]
 
       - name: Foutmeldingen samenvatten
         if: failure()
