@@ -3,7 +3,7 @@ on:
   push:
     branches: ['smoke/apkfix']
 permissions:
-  contents: read
+  contents: write
 jobs:
   diag:
     runs-on: ubuntu-latest
@@ -90,9 +90,10 @@ jobs:
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
           script: bash tools/smoke/release.sh tv-140 diag/tv-140 app/build/outputs/apk/release/app-release.apk app/build/outputs/mapping/release/mapping.txt "$RUNNER_TEMP/old140.apk" || true
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - name: Uitslag op branch ci-logs-diag
         if: always()
-        with:
-          name: diag
-          path: diag
-          retention-days: 3
+        run: |
+          mkdir -p /tmp/d; cp -r diag/* /tmp/d/ 2>/dev/null; find /tmp/d -name '*.png' -delete; find /tmp/d -name 'logcat-*' -delete
+          cd /tmp/d && git init -q -b ci-logs-diag && git add -A
+          git -c user.name=github-actions -c user.email=actions@github.com commit -qm diag
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs-diag
