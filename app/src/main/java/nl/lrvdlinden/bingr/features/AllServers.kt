@@ -9,7 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -72,6 +72,7 @@ object AllServers {
 
     fun wipe() {
         found = emptyMap(); absent = emptySet(); tried.clear(); notice = null; smart = emptyMap(); smartTried.clear(); libCache.clear()
+        synchronized(libOrder) { libOrder.clear() }
         scans.clear(); smartDone = null
         synchronized(seenChannels) { seenChannels.clear(); seenEpg.clear() }
         runCatching { Prefs.remove(MIGRATED) }; version++
@@ -103,15 +104,32 @@ object AllServers {
                 listOf(Store.activeProfileID, Store.myList, Store.favorites, Store.recentChannels, Store.progress.keys,
                     Store.history.size, Collections.byProfile, Store.playlists.map { it.id }, activeID(),
                     System.identityHashCode(Playlists.library), CatalogMeta.version, Playlists.catalogVersion)
-            }.debounce(2_000).collectLatest { quietly { refresh() } }
+            }.debounce(2_000).conflate().collect { quietly { refresh() } }
         }
         // build 129: slimme collecties over alle servers
         AppScope.launch {
             snapshotFlow {
                 listOf(Store.activeProfileID, Collections.visible.filter { it.isSmart }.map { it.id + smartSig(it) },
                     Store.playlists.map { it.id }, activeID(), System.identityHashCode(Playlists.library), Playlists.catalogVersion)
-            }.debounce(3_000).collectLatest { quietly { refreshSmart() } }
+            }.debounce(3_000).conflate().collect { quietly { refreshSmart() } }
         }
+    }
+
+    /**
+     * Build 141: een profiel is (opnieuw) gekozen. Het werk aan de andere servers wacht dan weer even (de actieve server
+     * eerst: laden, filteren, Home), zie [waitForIdle].
+     */
+    fun profileOpened() { startedAt = System.currentTimeMillis() }
+
+    /**
+     * Build 141: zwaar werk aan een andere server (catalogus inlezen of van het netwerk halen): pas als het rustig is, en
+     * één tegelijk met [refresh], de slimme collecties en Nieuw op Bingr. Zo staat er nooit meer dan één catalogus van een
+     * andere server tegelijk in het geheugen. Tot build 140 liepen die los van elkaar (en Nieuw op Bingr per tabblad), op
+     * een tv met een kleine heap tot de app vastliep en afsloot.
+     */
+    suspend fun <T> heavy(block: suspend () -> T): T = lock.withLock {
+        waitForIdle()
+        block()
     }
 
     /**
@@ -191,20 +209,37 @@ object AllServers {
     /** Gefilterde catalogus van een andere server, zolang zijn cache en de filters gelijk blijven (zacht: mag weg). */
     private class Cached(val stamp: Long, val ctx: Playlists.FilterContext, val lib: Library)
     private val libCache = java.util.concurrent.ConcurrentHashMap<String, java.lang.ref.SoftReference<Cached>>()
+    /** Build 141: volgorde van gebruik van [libCache] (nieuwste achteraan). */
+    private val libOrder = ArrayList<String>()
+
+    /**
+     * Build 141: hooguit 1 (kleine heap, bijv. tv) of 2 gefilterde catalogi van andere servers bewaren. Tot build 140 bleven
+     * ze allemaal (zacht) staan, mét gids; samen met de actieve catalogus en het verversen liep de heap van een tv vol.
+     */
+    private fun keep(k: String, c: Cached) {
+        val max = Build141Feedback.Background.otherLibrariesToKeep(Runtime.getRuntime().maxMemory() / (1024 * 1024))
+        synchronized(libOrder) {
+            libCache[k] = java.lang.ref.SoftReference(c)
+            libOrder.remove(k); libOrder.add(k)
+            while (libOrder.size > max) libCache.remove(libOrder.removeAt(0))
+        }
+    }
 
     /**
      * Gefilterde catalogus van server [p] (niet de actieve) voor het actieve profiel ([ctx], op de main thread gemaakt
      * met Playlists.context): uit het geheugen, anders de cache op dit apparaat, anders (alleen met [allowNetwork]) stil
      * van het netwerk. Zo leest zoeken niet bij elke letter de hele cache opnieuw in.
      */
-    suspend fun otherLibrary(p: PlaylistSource, ctx: Playlists.FilterContext, allowNetwork: Boolean, background: Boolean = false): Library? {
+    suspend fun otherLibrary(p: PlaylistSource, ctx: Playlists.FilterContext, allowNetwork: Boolean, background: Boolean = false,
+                             raw: Library? = null): Library? {
         val k = p.id.lowercase(Locale.ROOT)
         val stamp = withContext(Dispatchers.IO) { Playlists.cacheStamp(p) }
         libCache[k]?.get()?.let { if (stamp != 0L && it.stamp == stamp && it.ctx == ctx) return it.lib }
-        val raw = Playlists.catalogOf(p, allowNetwork, background) ?: return null
+        // build 141: [raw] = al ingelezen ruwe catalogus (niet nog een keer van schijf)
+        val raw = raw ?: Playlists.catalogOf(p, allowNetwork, background) ?: return null
         val lib = withContext(Dispatchers.Default) { runCatching { Playlists.apply(raw, ctx) }.getOrNull() } ?: return null
         val now = withContext(Dispatchers.IO) { Playlists.cacheStamp(p) }
-        if (now != 0L) libCache[k] = java.lang.ref.SoftReference(Cached(now, ctx, lib))
+        if (now != 0L) keep(k, Cached(now, ctx, lib))
         return lib
     }
 
@@ -299,13 +334,20 @@ object AllServers {
                 waitForIdle()
                 withTimeoutOrNull(120_000) { otherLibrary(p, ctx, allowNetwork = true, background = true) }
             } ?: run { complete = false; null } ?: continue
-            withContext(Dispatchers.Default) {
+            val chans = withContext(Dispatchers.Default) {
+                val cs = ArrayList<Channel>()
                 for (c in mine) {
                     val list = out.getOrPut(c.id.lowercase(Locale.ROOT)) { ArrayList() }
                     val hits = smartIn(c, lib, p.id, 200 - list.size)
-                    hits.forEach { e -> if (e is CollectionEntry.C) remember(e.channel, lib.epg[e.channel.epgID ?: e.channel.id]) }
+                    hits.forEach { e -> if (e is CollectionEntry.C) cs += e.channel }
                     list += hits
                 }
+                cs
+            }
+            // build 141: alleen de gids van deze zenders (niet de hele gids van die server)
+            if (chans.isNotEmpty()) {
+                val g = withContext(Dispatchers.IO) { Playlists.epgOf(p, chans.mapTo(HashSet()) { CatalogFiles.epgKey(it) }) }
+                chans.forEach { remember(it, g[CatalogFiles.epgKey(it)]) }
             }
         }
         val n = cols.associate { it.id.lowercase(Locale.ROOT) to (smartSig(it) to (out[it.id.lowercase(Locale.ROOT)]?.toList() ?: emptyList())) }
@@ -395,8 +437,18 @@ object AllServers {
                 waitForIdle()
                 filtered(p, allowNetwork = true, background = true)
             }
-            if (lib == null) { complete = false; continue }
-            val ix = withContext(Dispatchers.Default) { Ix(lib) }
+            if (lib == null) {
+                complete = false
+                // build 141: catalogus (nu) niet te lezen: wat we van deze server al wisten blijven tonen. Tot build 140 viel
+                // het dan weg, en verdwenen titels van die server uit Mijn lijst tot de volgende geslaagde ronde.
+                val pre = "$pk|"
+                prev?.let { newFound.putAll(it.found); newEpg.putAll(it.epg); newAbsent.addAll(it.absent) }
+                    ?: run { newFound.putAll(found.filterKeys { it.startsWith(pre) }); newEpg.putAll(epg.filterKeys { it.startsWith(pre) }) }
+                continue
+            }
+            // build 141: het doorlopen van de verwijzingen (en de meta) op de achtergrond, niet op de main thread
+            withContext(Dispatchers.Default) {
+            val ix = Ix(lib)
             for (r in list) {
                 val id = X.itemOf(r.key)
                 val item: Any? = when (r.kind) {
@@ -416,15 +468,22 @@ object AllServers {
                         if (CatalogMeta.wanted(r.key) == null) continue
                     }
                     sAbsent += mk; sNeeds += r
-                } else if (!isActive(p.id)) sFound[mk] = when (item) {
-                    // build 128: gids van deze zender (alleen wat er nog toe doet: max. 8 dagen terug), voor gids en terugkijken
-                    is Channel -> item.copy(sourceID = p.id).also { c ->
-                        val cutoff = System.currentTimeMillis() - 8 * 86_400_000L
-                        lib.epg[c.epgID ?: c.id]?.filter { it.end > cutoff }?.takeIf { it.isNotEmpty() }?.let { sEpg[mk] = it }
-                    }
+                } else if (!active) sFound[mk] = when (item) {
+                    is Channel -> item.copy(sourceID = p.id)
                     is Movie -> item.copy(sourceID = p.id)
                     is Series -> item.copy(sourceID = p.id)
                     else -> item
+                }
+            }
+            }
+            // build 128: gids van de gevonden zenders (alleen wat er nog toe doet: max. 8 dagen terug), voor gids en terugkijken.
+            // Build 141: alleen die zenders uit de gids van die server lezen, niet de hele gids.
+            if (!active) {
+                val chans = sFound.filterValues { it is Channel }.mapValues { it.value as Channel }
+                if (chans.isNotEmpty()) {
+                    val g = withContext(Dispatchers.IO) { Playlists.epgOf(p, chans.values.mapTo(HashSet()) { CatalogFiles.epgKey(it) }) }
+                    val cutoff = System.currentTimeMillis() - 8 * 86_400_000L
+                    for ((mk, c) in chans) g[CatalogFiles.epgKey(c)]?.filter { it.end > cutoff }?.takeIf { it.isNotEmpty() }?.let { sEpg[mk] = it }
                 }
             }
             // stamp opnieuw lezen: alleen bewaren als de cache intussen niet veranderd is
@@ -530,12 +589,29 @@ object AllServers {
         return server(sid) == null || X.metaKey(key) in absent
     }
 
+    /**
+     * Build 141: tegels uit de meta voor items van een bestaande andere server die (nog) niet in [found] staan, bijv. vlak
+     * na het starten, op een tweede apparaat of terwijl de catalogus van die server nog niet gelezen is. Tot build 140 stond
+     * zo'n titel dan niet in Mijn lijst (tot de achtergrond klaar was, en soms nooit). Aanklikken opent het echte item van
+     * die server ([intercept] → [openStub]).
+     */
+    private val stubs = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+
+    private fun stub(key: String, kind: String): Boolean {
+        val sid = X.serverOf(key) ?: return false
+        if (isActive(sid) || server(sid) == null || Store.activeProfile?.kids == true) return false
+        if (CatalogMeta.kind(key) != kind || CatalogMeta.title(key).isNullOrBlank()) return false
+        stubs += X.metaKey(key)
+        return true
+    }
+
     /** Tegel voor een item van een andere server: het echte item, anders uit de meta ("Onbekende titel"). */
     fun movieTile(key: String): Movie? {
         val sid = X.serverOf(key) ?: return null
         (found[X.metaKey(key)] as? Movie)?.let { return it }
         if (found[X.metaKey(key)] != null) return null
-        if (!isOrphan(key)) return null
+        if (!isOrphan(key)) return if (stub(key, "movie")) Movie(id = X.itemOf(key), title = CatalogMeta.title(key)!!,
+            year = CatalogMeta.year(key), poster = CatalogMeta.image(key), sourceID = sid) else null
         val k = CatalogMeta.kind(key)
         if (k != null && k != "movie") return null
         return Movie(id = X.itemOf(key), title = CatalogMeta.title(key) ?: L("Unknown title"), poster = CatalogMeta.image(key), sourceID = sid)
@@ -543,7 +619,9 @@ object AllServers {
     fun seriesTile(key: String): Series? {
         val sid = X.serverOf(key) ?: return null
         (found[X.metaKey(key)] as? Series)?.let { return it }
-        if (found[X.metaKey(key)] != null || !isOrphan(key)) return null
+        if (found[X.metaKey(key)] != null) return null
+        if (!isOrphan(key)) return if (stub(key, "series")) Series(id = X.itemOf(key), title = CatalogMeta.title(key)!!,
+            year = CatalogMeta.year(key), poster = CatalogMeta.image(key), sourceID = sid) else null
         if (CatalogMeta.kind(key) != "series") return null
         return Series(id = X.itemOf(key), title = CatalogMeta.title(key) ?: L("Unknown title"), poster = CatalogMeta.image(key), sourceID = sid)
     }
@@ -576,8 +654,13 @@ object AllServers {
         val out = ArrayList<DetailTarget>()
         // eerst de actieve server (voorrang bij dubbele), daarna de rest; volgorde komt van [sorted]
         val picked = HashMap<String, DetailTarget>()
+        // build 141: TMDB-titels (niet in een bibliotheek) ook als ze onder een andere server staan (op een ander apparaat of
+        // met een andere actieve server toegevoegd); niet voor profielen met een leeftijdsgrens (alleen hun bibliotheek)
+        val external = Store.activeProfile?.effectiveAgeLimit == null
         for (k in sorted.sortedBy { if (X.sameServer(X.serverOf(it), pid)) 0 else 1 }) {
-            val t = if (X.sameServer(X.serverOf(k), pid)) local(k) else
+            val ext = Build141Feedback.MyListKeys.externalID(k)
+            val t = if (ext != null) (if (external) DiscoverKnown.item(ext)?.target else null)
+                else if (X.sameServer(X.serverOf(k), pid)) local(k) else
                 movieTile(k)?.let { DetailTarget.MovieT(it) } ?: seriesTile(k)?.let { DetailTarget.SeriesT(it) }
                     ?: (found[X.metaKey(k)] as? Series)?.let { DetailTarget.SeriesT(it) }
             t ?: continue
@@ -632,6 +715,8 @@ object AllServers {
     fun intercept(t: DetailTarget): Boolean {
         val sid = t.sourceID ?: return false
         val key = "$sid|${t.id}"
+        // build 141: tegel uit de meta (het echte item is nog niet geladen): eerst het item van die server ophalen
+        if (X.metaKey(key) in stubs && found[X.metaKey(key)] == null && !isActive(sid)) { openStub(t); return true }
         if (!isOrphan(key)) return false
         val field = fieldOf(key)
         rescue(key, if (t.isSeries) "series" else "movie", field, CatalogMeta.title(key) ?: t.title) { nk -> openKey(nk) }
@@ -699,6 +784,24 @@ object AllServers {
             Store.progress[id]?.playlistID?.let { X.sameServer(it, sid) } == true -> Field.CONTINUE
             Store.recentChannels.any { Store.sameKey(it, sid, id) } -> Field.RECENT
             else -> null
+        }
+    }
+
+    /** Build 141: tegel uit de meta: het echte item van zijn server openen; lukt dat niet, dan de detailpagina van de tegel. */
+    private fun openStub(t: DetailTarget) {
+        val sid = t.sourceID ?: return
+        AppScope.launch {
+            val p = server(sid)
+            val lib = if (p != null) screensSafe { withTimeoutOrNull(60_000) { filtered(p, allowNetwork = true) } } else null
+            val real: DetailTarget? = when (t) {
+                is DetailTarget.MovieT -> lib?.movies?.firstOrNull { it.id == t.id }?.let { DetailTarget.MovieT(it.copy(sourceID = p!!.id)) }
+                is DetailTarget.SeriesT -> lib?.series?.firstOrNull { it.id == t.id }?.let { DetailTarget.SeriesT(it.copy(sourceID = p!!.id)) }
+            }
+            if (real != null) {
+                found = found + (X.metaKey("$sid|${t.id}") to (if (real is DetailTarget.MovieT) real.movie else (real as DetailTarget.SeriesT).series))
+                version++
+            }
+            ScreensNav.push(ScreenEntry.Detail(real ?: t))
         }
     }
 

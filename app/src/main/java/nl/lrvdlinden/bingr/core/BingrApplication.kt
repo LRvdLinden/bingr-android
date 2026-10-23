@@ -31,6 +31,8 @@ class BingrApplication : Application(), ImageLoaderFactory {
         AppState.appContext = applicationContext
         Prefs.init(this)
         Secrets.init(this)
+        // build 141: belastingmodus (alleen de rooktest-build, BuildConfig.STRESS): geen account, main-thread-wachter
+        StressMode.initApp()
         Store.init(this)
         Collections.ensureLoaded()
         Localizer.init(this)

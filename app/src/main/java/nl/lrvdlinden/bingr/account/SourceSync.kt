@@ -177,6 +177,7 @@ object SourceSync {
         Collections.wipe()
         CatalogMeta.wipe()   // build 128
         AllServers.wipe()
+        NewOnBingr.wipe(); FirstSeen.wipe()   // build 141: ook "eerst gezien" en de Nieuw op Bingr-cache van het vorige account
         StateSync.applyingChanges {
             Reminders.cancelAll()
             Store.wipeAccountData()

@@ -480,10 +480,21 @@ object HomeLayouts {
         Collections.visible.firstOrNull { it.id.equals(id, ignoreCase = true) }?.homeKey ?: k
     } else aliases[k] ?: k
 
+    /**
+     * Build 141: de rijen zoals Home ze toont en "Startscherm" ze laat bewerken: zonder "Nieuw toegevoegd" (`recent`), met
+     * "Nieuw op Bingr" (`streaming`) op die plek (Build141Feedback.HomeRows).
+     */
+    fun displayed(layout: HomeLayout?, collections: List<BingrCollection> = Collections.visible): List<HomeRow> =
+        Build141Feedback.HomeRows.displayed(effective(layout, collections)) { it.key }
+
     /** Opslaan voor het actieve profiel; onbekende sleutels uit de oude versie blijven achteraan bewaard. */
-    fun save(rows: List<HomeRow>) {
+    fun save(rows0: List<HomeRow>) {
         val id = Store.activeProfileID ?: return
         val old = Store.homeLayout(id)
+        // build 141: "Nieuw toegevoegd" (niet meer te zien of te bewerken) weer direct vóór Nieuw op Bingr, zoals hij stond,
+        // zodat iOS, web en oudere apps hun eigen rij houden
+        val oldRecent = effective(old).firstOrNull { it.key == Build141Feedback.HomeRows.RECENT }?.visible
+        val rows = Build141Feedback.HomeRows.forSave(rows0, { it.key }, { v -> HomeRow(Build141Feedback.HomeRows.RECENT, v) }, oldRecent)
         val ids = Collections.visible.map { it.id.lowercase() }.toSet()
         val unknown = old.rows.filter { !known(normalize(it.key), ids) && rows.none { r -> r.key.equals(it.key, ignoreCase = true) } }
         Store.setHomeLayout(id, HomeLayout(rows + unknown, System.currentTimeMillis()))

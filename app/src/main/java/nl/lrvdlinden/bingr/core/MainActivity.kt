@@ -29,6 +29,8 @@ class MainActivity : ComponentActivity() {
         current = this
         // screenshotmodus (alleen in de screenshot-build met de intent-extra bingr.screenshots, zie ScreenshotMode.kt)
         Screenshots.init(intent)
+        // build 141: belastingmodus (alleen de rooktest-build): nepgegevens klaarzetten of zelf een profiel kiezen
+        StressMode.handle(intent)
         if (Screenshots.isActive) {
             ScreenshotDemo.start()
             // navigatiebalk weg (schone screenshots); de statusbalk blijft
@@ -69,6 +71,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // bestand van een download buiten de app verwijderd → niet meer als "Gedownload" tonen
         Downloads.verifyFiles()
+        // build 141: wachtrij verder (Android 14+ alleen als de app in beeld is: door de gebruiker gestarte overdracht)
+        Downloads.resumeIfQueued()
         // build 75: terug in de app → Trakt-vinkjes bijwerken (wat je intussen elders keek), zoals iOS bij "active".
         // Zonder force: eerst /sync/last_activities, dus goedkoop als er niets veranderd is.
         if (AppState.stage == AppState.Stage.MAIN && Trakt.isLoggedIn) AppScope.launch { runCatching { Trakt.refresh() } }

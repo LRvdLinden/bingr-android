@@ -343,7 +343,28 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
 
     fun toggleMyList() {
         val p = pid ?: return
+        // build 141: een aanbeveling zonder TMDB-id ("rec-…") kan zo niet in Mijn lijst (geen apparaat vindt die sleutel
+        // terug): eerst de titel in je bibliotheken zoeken (alle servers) en die toevoegen
+        if (target.id.startsWith(Build141Feedback.MyListKeys.RECOMMENDATION) && !Store.inMyList(p, target.id)) {
+            scope.launch {
+                val hit = screensSafe { Playlists.otherSources(target.title, target.year, target.isSeries, excludingID = "") }
+                    ?.firstOrNull { !it.isLive }
+                val t: DetailTarget? = when (val x = hit?.item) {
+                    is Movie -> DetailTarget.MovieT(x)
+                    is Series -> DetailTarget.SeriesT(x)
+                    else -> null
+                }
+                if (t == null) { flash(L("Not in your playlists")); return@launch }
+                AllServers.setMyList(t, true, hit!!.playlist.id)
+                flash(L("Added to My List"))
+            }
+            return
+        }
         val on = !Store.inMyList(p, target.id)
+        // build 141: TMDB-titel: gegevens (poster, datum) ophalen voor de rij Mijn lijst, als die nog niet bekend zijn
+        if (on && DiscoverItem.isExternal(target.id) && !DiscoverKnown.contains(target.id)) {
+            AppScope.launch { screensSafe { DiscoverStore.resolve(listOf(target.id)) } }
+        }
         // build 140: titel van een andere server meteen in de rij Mijn lijst (niet pas na de volgende ronde)
         AllServers.setMyList(target, on, p)
         // de Trakt-watchlist volgt alleen voor het hoofdaccount
@@ -867,9 +888,15 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                                         val y = r.year
                                         val poster = screensText(r.poster)
                                         val rid = screensText(r.imdbID)
+                                        // build 141: met een TMDB-id als TMDB-titel ("tmdb-movie-123"): die kan in Mijn lijst
+                                        // (ook op je andere apparaten); een "rec-…"-id kon niemand terugvinden
+                                        val tid = r.tmdbID?.takeIf { it > 0 }
+                                        val id = Build141Feedback.MyListKeys.storableID("rec-${r.id}", tid, r.isShow) ?: "rec-${r.id}"
+                                        if (tid != null) DiscoverKnown.remember(listOf(DiscoverItem(tmdbID = tid, isShow = r.isShow, title = r.title,
+                                            posterPath = r.posterPath, kind = DiscoverKind.STREAMING.key)))
                                         ScreensNav.detail(
-                                            if (r.isShow) DetailTarget.SeriesT(Series(id = "rec-${r.id}", title = r.title, year = y, poster = poster, imdbID = rid))
-                                            else DetailTarget.MovieT(Movie(id = "rec-${r.id}", title = r.title, year = y, poster = poster, imdbID = rid))
+                                            if (r.isShow) DetailTarget.SeriesT(Series(id = id, title = r.title, year = y, poster = poster, imdbID = rid))
+                                            else DetailTarget.MovieT(Movie(id = id, title = r.title, year = y, poster = poster, imdbID = rid))
                                         )
                                     }
                                 },

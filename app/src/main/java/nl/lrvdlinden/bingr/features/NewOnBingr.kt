@@ -1,6 +1,11 @@
 package nl.lrvdlinden.bingr
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
@@ -21,44 +26,105 @@ import java.util.concurrent.ConcurrentHashMap
 object NewOnBingr {
     private const val MAX = 30
 
-    /** Op de achtergrond aanroepen. [active] = gefilterde bibliotheek van de actieve server; andere servers uit de cache. */
+    /** Build 141: verhoogt als de titels van de andere servers (op de achtergrond) klaar of veranderd zijn. */
+    var version by mutableStateOf(0); private set
+
+    /** Nieuwste titels van één server, met waarvoor ze berekend zijn (cache, filters, eerst gezien). */
+    private class Part(val sig: String, val items: List<Pair<DetailTarget, Long>>)
+    /** Andere servers (kleine letters id) → hun nieuwste titels (alleen [MAX] per server, geen catalogus). */
+    private val parts = ConcurrentHashMap<String, Part>()
+    @Volatile private var activePart: Part? = null
+    private var warmJob: Job? = null
+
+    fun wipe() { parts.clear(); activePart = null }
+
+    /**
+     * Op de main thread aanroepen. Build 141: meteen de actieve server (de nieuwste 30 zonder de hele lijst te sorteren
+     * of te kopiëren) plus wat er van de andere servers al klaarstaat; de andere servers zelf op de achtergrond
+     * ([warmOthers], één catalogus tegelijk, pas als het rustig is), daarna verhoogt [version] en bouwt Home de rij opnieuw.
+     * Tot build 140 las elke aanroep (per tabblad en bij elke wijziging van de bibliotheek) de catalogus van álle andere
+     * servers van schijf, met de hele gids, en maakte van elke titel een kopie: na het kiezen van een profiel liep het
+     * geheugen op een tv met grote catalogi vol.
+     */
     suspend fun build(active: Library, activeRaw: Library, pid: String?): List<DetailTarget> {
-        val out = ArrayList<Pair<DetailTarget, Long>>()
-        if (pid != null) collect(active, FirstSeen.known(pid, System.identityHashCode(activeRaw).toLong())
-            ?: FirstSeen.update(pid, activeRaw, System.identityHashCode(activeRaw).toLong()), null, out)
-        val others = withContext(Dispatchers.Main) {
-            Store.playlists.filter { !it.id.equals(pid, ignoreCase = true) }.map { it to Playlists.context(it) }
-        }
+        val lists = ArrayList<List<Pair<DetailTarget, Long>>>()
+        if (pid != null) lists += activeTop(active, activeRaw, pid)
+        val others = Store.playlists.filter { !it.id.equals(pid, ignoreCase = true) }.map { it to Playlists.context(it) }
         for ((p, ctx) in others) {
-            // eerst gezien alleen opnieuw als de cache van die server veranderde (niet bij elke opening van schijf lezen)
-            val stamp = withContext(Dispatchers.IO) { Playlists.cacheStamp(p) }
-            if (stamp == 0L) continue
-            val seen = FirstSeen.known(p.id, stamp) ?: run {
-                val raw = Playlists.catalogOf(p, allowNetwork = false) ?: return@run null
-                FirstSeen.update(p.id, raw, stamp)
-            } ?: continue
-            val lib = AllServers.otherLibrary(p, ctx, allowNetwork = false) ?: continue
-            collect(lib, seen, p.id, out)
+            val part = parts[p.id.lowercase(Locale.ROOT)] ?: continue
+            if (part.sig.endsWith("#" + ctx.hashCode())) lists += part.items
         }
+        if (others.isNotEmpty()) warmOthers()
         return withContext(Dispatchers.Default) {
-            val seen = HashSet<String>()
-            out.sortedWith(compareByDescending<Pair<DetailTarget, Long>> { it.second }.thenBy { it.first.title })
-                .filter { (t, _) -> seen.add(AllServersLogic.dedupKey(if (t.isSeries) "series" else "movie", t.title, t.year, null)) }
-                .take(MAX).map { it.first }
+            Build141Feedback.Recent.merge(lists, MAX, { it.title }) { t ->
+                AllServersLogic.dedupKey(if (t.isSeries) "series" else "movie", t.title, t.year, null)
+            }
         }
     }
 
-    private suspend fun collect(lib: Library, seen: Map<String, Long>, sid: String?, out: MutableList<Pair<DetailTarget, Long>>) =
-        withContext(Dispatchers.Default) {
-            for (m in lib.movies) {
-                val d = Build140Logic.Picks.addedDate(m.addedAt, seen["m:" + m.id])
-                if (d > 0) out += DetailTarget.MovieT(if (sid != null) m.copy(sourceID = sid) else m) to d
+    private suspend fun activeTop(active: Library, activeRaw: Library, pid: String): List<Pair<DetailTarget, Long>> {
+        val stamp = System.identityHashCode(activeRaw).toLong()
+        val sig = "$pid|$stamp|${System.identityHashCode(active)}"
+        activePart?.takeIf { it.sig == sig }?.let { return it.items }
+        val seen = FirstSeen.known(pid, stamp) ?: FirstSeen.update(pid, activeRaw, stamp)
+        val items = withContext(Dispatchers.Default) { top(active, seen, null) }
+        activePart = Part(sig, items)
+        return items
+    }
+
+    /** De nieuwste [MAX] titels van één (gefilterde) bibliotheek; alleen die krijgen een kopie met de server. */
+    private fun top(lib: Library, seen: Map<String, Long>, sid: String?): List<Pair<DetailTarget, Long>> {
+        val P = Build140Logic.Picks
+        val all: Sequence<Any> = lib.movies.asSequence() + lib.series.asSequence()
+        return Build141Feedback.Recent.top(all, MAX, { x ->
+            when (x) {
+                is Movie -> P.addedDate(x.addedAt, seen["m:" + x.id])
+                is Series -> P.addedDate(x.addedAt, seen["s:" + x.id])
+                else -> 0L
             }
-            for (s in lib.series) {
-                val d = Build140Logic.Picks.addedDate(s.addedAt, seen["s:" + s.id])
-                if (d > 0) out += DetailTarget.SeriesT(if (sid != null) s.copy(sourceID = sid) else s) to d
+        }, { x -> (x as? Movie)?.title ?: (x as? Series)?.title ?: "" }).map { (x, d) ->
+            val t: DetailTarget = when (x) {
+                is Movie -> DetailTarget.MovieT(if (sid != null) x.copy(sourceID = sid) else x)
+                else -> (x as Series).let { DetailTarget.SeriesT(if (sid != null) it.copy(sourceID = sid) else it) }
             }
+            t to d
         }
+    }
+
+    /** De andere servers bijwerken (één taak tegelijk; via AllServers.heavy, dus rustig en één catalogus tegelijk). */
+    private fun warmOthers() {
+        if (warmJob?.isActive == true) return
+        warmJob = AppScope.launch {
+            var changed = false
+            try {
+                AllServers.heavy {
+                    val others = withContext(Dispatchers.Main) {
+                        val pid = Playlists.source?.id
+                        Store.playlists.filter { !it.id.equals(pid, ignoreCase = true) }.map { it to Playlists.context(it) }
+                    }
+                    for ((p, ctx) in others) {
+                        val k = p.id.lowercase(Locale.ROOT)
+                        val stamp = withContext(Dispatchers.IO) { Playlists.cacheStamp(p) }
+                        if (stamp == 0L) continue
+                        val sig = "$stamp#${ctx.hashCode()}"
+                        if (parts[k]?.sig == sig) continue
+                        // eerst gezien alleen opnieuw als de cache van die server veranderde
+                        var raw: Library? = null
+                        val seen = FirstSeen.known(p.id, stamp) ?: run {
+                            raw = Playlists.catalogOf(p, allowNetwork = false) ?: return@run null
+                            FirstSeen.update(p.id, raw!!, stamp)
+                        } ?: continue
+                        val lib = AllServers.otherLibrary(p, ctx, allowNetwork = false, raw = raw) ?: continue
+                        raw = null
+                        parts[k] = Part(sig, withContext(Dispatchers.Default) { top(lib, seen, p.id) })
+                        changed = true
+                    }
+                    parts.keys.retainAll(others.map { it.first.id.lowercase(Locale.ROOT) }.toSet())
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Throwable) { }
+            if (changed) withContext(Dispatchers.Main) { version++ }
+        }
+    }
 }
 
 /**

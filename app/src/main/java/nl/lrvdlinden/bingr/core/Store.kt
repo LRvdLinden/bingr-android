@@ -775,13 +775,23 @@ object Store {
     }
     fun isFavorite(playlist: String, item: String) = inSet(favorites, playlist, item)
 
+    /**
+     * Build 141: een TMDB-titel ("tmdb-movie-123", niet in een bibliotheek) hoort bij geen enkele server: hij staat in Mijn
+     * lijst onder de server die toen actief was. Een ander apparaat of profiel met een andere actieve server moet hem
+     * ook als "in Mijn lijst" zien (en kunnen weghalen), anders kwam hij er dubbel in of leek hij te ontbreken.
+     */
+    private fun myListKeys(playlist: String, item: String): Set<String> =
+        if (item.startsWith(Build141Feedback.MyListKeys.EXTERNAL)) myList.filterTo(HashSet()) { Build141Feedback.MyListKeys.itemOf(it) == item }
+        else keysFor(myList, playlist, item)
+
     fun toggleMyList(playlist: String, item: String) {
-        val found = keysFor(myList, playlist, item)
+        val found = myListKeys(playlist, item)
         myList = if (found.isNotEmpty()) myList - found else myList + key(playlist, item)
         pwrite("mylist", myList)
         StateSync.profileDataChanged(activeProfileID)
     }
-    fun inMyList(playlist: String, item: String) = inSet(myList, playlist, item)
+    fun inMyList(playlist: String, item: String) =
+        if (item.startsWith(Build141Feedback.MyListKeys.EXTERNAL)) myListKeys(playlist, item).isNotEmpty() else inSet(myList, playlist, item)
     fun setMyList(playlist: String, item: String, on: Boolean) {
         if (inMyList(playlist, item) != on) toggleMyList(playlist, item)
     }

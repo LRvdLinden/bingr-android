@@ -68,7 +68,20 @@ private fun searchGuide(q: String, lib: Library): List<ProgramHit> {
     val now = System.currentTimeMillis()
     val needle = screensFold(q)
     val hits = ArrayList<ProgramHit>()
-    for (c in lib.channels) {
+    val disk = lib.epg as? DiskEpg
+    if (disk != null) {
+        // build 141: de gids staat op schijf (DiskEpg): per zender eerst op de ruwe tekst filteren (snel, zonder alles in het
+        // geheugen te halen), alleen bij een mogelijke treffer de programma's omzetten
+        val byKey = HashMap<String, MutableList<Channel>>()
+        for (c in lib.channels) byKey.getOrPut(c.epgID ?: c.id) { ArrayList(1) }.add(c)
+        disk.scan(byKey.keys.toList(), { looseFold(it).contains(needle) }) { k, list ->
+            for (c in byKey[k].orEmpty()) {
+                val from = now - maxOf(c.catchupDays, 0) * 86_400_000L
+                for (p in list) if (p.end > from && screensFold(p.title).contains(needle)) hits.add(ProgramHit(c, p))
+            }
+            hits.size <= 400
+        }
+    } else for (c in lib.channels) {
         val list = lib.epg[c.epgID ?: c.id] ?: continue
         val from = now - maxOf(c.catchupDays, 0) * 86_400_000L
         for (p in list) if (p.end > from && screensFold(p.title).contains(needle)) hits.add(ProgramHit(c, p))
@@ -80,6 +93,37 @@ private fun searchGuide(q: String, lib: Library): List<ProgramHit> {
         val ra = rank(a); val rb = rank(b)
         if (ra != rb) ra - rb else if (ra == 2) b.p.start.compareTo(a.p.start) else a.p.start.compareTo(b.p.start)
     }.take(60)
+}
+
+/**
+ * Build 141: snelle benadering van [screensFold] voor het voorfilteren van ruwe gidstekst: kleine letters en de gangbare
+ * Latijnse accenten weg (zonder Normalizer/regex, want dit loopt over de hele gids). Mag te ruim zijn, nooit te krap voor
+ * Latijnse tekst; de echte vergelijking gebeurt daarna met screensFold.
+ */
+private fun looseFold(s: String): String {
+    val sb = StringBuilder(s.length)
+    for (ch in s) {
+        val c = if (ch.code < 128) ch.lowercaseChar() else when (ch.lowercaseChar()) {
+            'à', 'á', 'â', 'ã', 'ä', 'å', 'ā', 'ă', 'ą' -> 'a'
+            'ç', 'ć', 'č' -> 'c'
+            'è', 'é', 'ê', 'ë', 'ē', 'ė', 'ę', 'ě' -> 'e'
+            'ì', 'í', 'î', 'ï', 'ī', 'į' -> 'i'
+            'ñ', 'ń', 'ň' -> 'n'
+            'ò', 'ó', 'ô', 'õ', 'ö', 'ø', 'ō', 'ő' -> 'o'
+            'ù', 'ú', 'û', 'ü', 'ū', 'ů', 'ű' -> 'u'
+            'ý', 'ÿ' -> 'y'
+            'š', 'ś' -> 's'
+            'ž', 'ź', 'ż' -> 'z'
+            'ğ' -> 'g'
+            'ł' -> 'l'
+            'ř' -> 'r'
+            'ť' -> 't'
+            'ď' -> 'd'
+            else -> ch.lowercaseChar()
+        }
+        sb.append(c)
+    }
+    return sb.toString()
 }
 
 /** Categorieën (films en series) waarvan de naam overeenkomt. */

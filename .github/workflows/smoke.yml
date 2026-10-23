@@ -1,0 +1,97 @@
+name: Rooktest
+
+# Build 141: rooktest in de emulator met grote nepgegevens (core/StressMode.kt, tools/smoke/stress.sh): Android TV en
+# telefoon, 3 servers × (30.000 films, 20.000 series, 5.000 zenders met 4 dagen gids), profiel kiezen (hoofd, kind, wisselen)
+# en 60 s lang toetsen sturen. Faalt bij een ANR, een crash (ook OutOfMemoryError), als Home niet binnen 15 s bruikbaar is
+# of als de main thread langer dan 4 s vastzit.
+# De belastingbuild (debug, -PBINGR_STRESS=true: geen netwerk, geen account) gaat alleen als kortlevend artefact (1 dag)
+# naar de emulator-jobs; hij is nooit een release en komt nooit in de inbox. Geen secrets in deze workflow.
+
+on:
+  push:
+    branches: [main, 'smoke/**']
+    paths-ignore: ['docs/**', '**/*.md']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (v5.1.0)
+
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Belastingbuild (debug, met BINGR_STRESS)
+        run: |
+          gradle --no-daemon assembleDebug -PBINGR_STRESS=true 2>&1 | tee build.log | tail -n 60; rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then grep -E "^e: |error:" build.log | head -40; exit $rc; fi
+          cp app/build/outputs/apk/debug/*.apk bingr-stress.apk
+          ls -la bingr-stress.apk
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: stress-apk
+          path: bingr-stress.apk
+          retention-days: 1
+
+  emulator:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { set: tv,    api: 33, target: android-tv,  arch: x86,    profile: tv_1080p, ram: 2048M }
+          - { set: phone, api: 34, target: google_apis, arch: x86_64, profile: pixel_6,  ram: 3072M }
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (v5.1.0)
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: stress-apk
+
+      - name: KVM aan
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Rooktest in de emulator
+        timeout-minutes: 45
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        with:
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.target }}
+          arch: ${{ matrix.arch }}
+          profile: ${{ matrix.profile }}
+          ram-size: ${{ matrix.ram }}
+          disk-size: 6000M
+          force-avd-creation: true
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: timeout 2400 bash tools/smoke/stress.sh ${{ matrix.set }} smoke/${{ matrix.set }} bingr-stress.apk
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: smoke-${{ matrix.set }}
+          path: smoke
+          retention-days: 7
