@@ -239,12 +239,12 @@
   /** TMDB-titels uit Mijn lijst van deze bron ([{type, item}]); niet bij een leeftijdsgrens. */
   X.myListHits = function () {
     if (ageLimited()) return [];
-    var src = Lib.source ? Lib.source.id : '', out = [];
+    var out = [], seen = {};
+    // build 141: ook onder een andere server-id (op een ander apparaat of met een andere actieve server toegevoegd)
     D.setList('myList').forEach(function (k) {
-      var bar = k.indexOf('|');
-      if (bar < 0 || k.slice(0, bar).toLowerCase() !== String(src).toLowerCase()) return;   // server-id hoofdletterongevoelig
-      var id = k.slice(bar + 1);
-      if (!X.isExternal(id)) return;
+      var id = B.b141.myList.externalID(k);
+      if (!id || seen[id]) return;
+      seen[id] = true;
       var t = X.known(id);
       if (t) out.push({ type: t.isShow ? 'series' : 'movie', item: X.asItem(t) });
     });
@@ -263,10 +263,9 @@
   /** TMDB-titels in Mijn lijst die deze tv nog niet kent (op een ander apparaat toegevoegd) opzoeken. */
   X.resolveMissing = function () {
     if (resolving || !AR.hasKey()) return;
-    var src = Lib.source ? Lib.source.id : '';
-    var pre = String(src).toLowerCase() + '|';
-    var ids = D.setList('myList').filter(function (k) { return k.toLowerCase().indexOf(pre) === 0; }).map(function (k) { return k.slice(pre.length); })
-      .filter(function (id) { return X.isExternal(id) && !X.known(id); }).slice(0, 20);
+    // build 141: van alle servers (een TMDB-titel hoort bij geen server)
+    var ids = D.setList('myList').map(function (k) { return B.b141.myList.externalID(k); })
+      .filter(function (id, i, a) { return id && a.indexOf(id) === i && !X.known(id); }).slice(0, 20);
     if (!ids.length) return;
     resolving = true;
     Promise.all(ids.map(function (id) { var p = X.parse(id); return p ? fetchOne(p) : null; })).then(function (list) {
@@ -320,7 +319,8 @@
     var p = X.parse(x.id) || { id: x.tmdb, isShow: isShow };
     var P = B.parity;
     var alive = true, trailer = null;
-    var listKey = D.key(Lib.source ? Lib.source.id : '', x.id);
+    // build 141: een bestaande sleutel van een andere server-id telt ook (zie B.parity.listKey)
+    var listKey = B.parity && B.parity.listKey ? B.parity.listKey(x) : D.key(Lib.source ? Lib.source.id : '', x.id);
     var meta = h('div.dt-meta', [x.year ? String(x.year) : '', isShow ? L('Series') : L('Movie')].filter(Boolean).join('  ·  '));
     var plot = h('p.dt-plot', x.plot || '');
     var creditsEl = h('div.dt-credits'), extraEl = h('div.dt-extra'), altEl = h('div.dt-alt-slot');

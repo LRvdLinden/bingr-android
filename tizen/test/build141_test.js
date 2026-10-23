@@ -136,6 +136,26 @@ eq('os: met poort', X.osHost('api.opensubtitles.com:8443'), 'api.opensubtitles.c
 eq('os: met gebruiker', X.osHost('x@evil.example'), 'api.opensubtitles.com');
 eq('os: http niet', X.osHost('http://api.opensubtitles.com'), 'api.opensubtitles.com');
 
+// MARK: feedback (zelfde gevallen als tools/test/Build141FeedbackTest.kt)
+var HR = X.homeRows, ML = X.myList;
+function rows(keys) { return keys.map(function (k) { return { key: k, visible: true }; }); }
+function keys(rs) { return rs.map(function (r) { return r.key; }); }
+eq('home: recent weg, streaming op die plek', keys(HR.displayed(rows(['continue', 'mylist', 'top10', 'foryou', 'recent', 'upcoming', 'streaming', 'live']))),
+  ['continue', 'mylist', 'top10', 'foryou', 'streaming', 'upcoming', 'live']);
+eq('home: zichtbaarheid van Nieuw op Bingr blijft', HR.displayed([{ key: 'streaming', visible: false }, { key: 'continue', visible: true }, { key: 'recent', visible: true }, { key: 'live', visible: true }]),
+  [{ key: 'continue', visible: true }, { key: 'streaming', visible: false }, { key: 'live', visible: true }]);
+eq('home: zonder recent ongewijzigd', keys(HR.displayed(rows(['streaming', 'live']))), ['streaming', 'live']);
+eq('home: zonder streaming alleen recent weg', keys(HR.displayed(rows(['recent', 'live']))), ['live']);
+eq('lijst: TMDB-titel op een andere server', ML.externalID('SERVER-B|tmdb-movie-603'), 'tmdb-movie-603');
+eq('lijst: gewone titel is geen TMDB', ML.externalID('srv|xv123'), null);
+eq('lijst: bestaande TMDB-sleutel hergebruiken', ML.keyFor(['OTHER|tmdb-movie-1', 'a|xv1'], 'active', 'tmdb-movie-1'), 'OTHER|tmdb-movie-1');
+eq('lijst: nieuwe sleutel op de actieve server', ML.keyFor(['a|xv1'], 'active', 'tmdb-movie-2'), 'active|tmdb-movie-2');
+eq('lijst: gewone titel altijd met zijn server', ML.keyFor(['other|xv1'], 'active', 'xv1'), 'active|xv1');
+eq('verder: poster gaat voor still', X.continueArt('poster.jpg', null, 'still.jpg'), 'poster.jpg');
+eq('verder: meta-poster (serie)', X.continueArt(null, 'series.jpg', 'still.jpg'), 'series.jpg');
+eq('verder: anders de bewaarde afbeelding', X.continueArt(null, null, 'still.jpg'), 'still.jpg');
+eq('verder: lege poster telt niet', X.continueArt(' ', '', 'still.jpg'), 'still.jpg');
+
 // MARK: kluis
 var SESSION = { access_token: 'AT-geheim', refresh_token: 'RT-geheim', expires_at: 1, email: 'x@example.invalid' };
 var SOURCES = [{ id: 'S1', kind: 'xtream', username: 'u', password: 'wachtwoord123' }];

@@ -484,11 +484,35 @@
   /** Gids van een zender van een andere server. */
   AS.programs = function (ch) { return (ch && ch._src && epgs[AS.metaKey(ch._src + '|' + ch.id)]) || []; };
 
+  /**
+   * Build 141: titel van een andere server meteen bekend maken (toegevoegd aan Mijn lijst vanuit een zoekresultaat), met
+   * zijn meta (voor je andere apparaten), zonder op de achtergrond te wachten.
+   */
+  AS.adopt = function (key, hit) {
+    if (!hit || !hit.item || AS.isActive(AS.serverOf(key))) return;
+    var x = hit.item, sid = AS.serverOf(key), srv = server(sid);
+    found[AS.metaKey(key)] = hit;
+    if (hit.type === 'channel') AS.record(key, { t: x.name, k: 'channel', img: x.logo, sid: sid, sname: srv ? srv.name : null, ch: { name: x.name, epg: x.epgID || null } });
+    else AS.record(key, { t: x.rawTitle || x.title, k: hit.type, y: x.year || AS.yearIn(x.title), img: x.poster, sid: sid, sname: srv ? srv.name : null });
+    B.emit('allservers');
+  };
+
   /** Tegel voor een item van een andere server: het echte item, anders uit de meta ("Onbekende titel"). */
   AS.tile = function (key, wantType) {
     var f = found[AS.metaKey(key)];
     if (f) return (!wantType || f.type === wantType || (wantType === 'vod' && f.type !== 'channel')) ? f : null;
-    if (!AS.isOrphan(key)) return null;
+    if (!AS.isOrphan(key)) {
+      // build 141: bestaande server, catalogus (nog) niet gelezen (vlak na het starten, tweede apparaat, weinig geheugen):
+      // tegel uit de meta; openen gaat via die server (AS.open). Niet bij een kinderprofiel (alleen de gefilterde bibliotheek).
+      var sm = AS.meta(key), ssid = AS.serverOf(key);
+      if (!sm || !sm.t || kidsActive() || AS.isActive(ssid) || !server(ssid)) return null;
+      var st = sm.k === 'channel' ? 'channel' : (sm.k === 'series') ? 'series' : sm.k === 'movie' ? 'movie' : null;
+      if (!st || (wantType === 'channel' && st !== 'channel') || (wantType === 'vod' && st === 'channel') ||
+        (wantType && wantType !== 'channel' && wantType !== 'vod' && st !== wantType)) return null;
+      var si = st === 'channel' ? { id: AS.itemOf(key), name: sm.t, logo: sm.img || null, group: '', _src: ssid, _stub: true }
+        : { id: AS.itemOf(key), title: sm.t, poster: sm.img || null, group: '', year: sm.y, _src: ssid, _stub: true };
+      return { type: st, item: si };
+    }
     var m = AS.meta(key), sid = AS.serverOf(key), id = AS.itemOf(key);
     var k = m ? m.k : null;
     var type = k === 'channel' ? 'channel' : (k === 'series' || k === 'episode') ? 'series' : 'movie';
@@ -545,8 +569,10 @@
         if (!hit) {
           var m = AS.meta(full);
           var t = m && m.k === 'movie' ? 'movie' : 'series';
+          // build 141: de poster van de film/serie (meta van de serie) gaat voor de still die de voortgang bewaarde
+          var sm = m && m.ep && m.ep.series ? AS.meta(m.ep.series) : null;
           hit = { type: t, item: { id: t === 'movie' ? pe.key : (m && m.ep && m.ep.series ? AS.itemOf(m.ep.series) : pe.key), title: pe.e.title || (m && m.t) || L('Unknown title'),
-            poster: pe.e.artwork || (m && m.img) || null, group: '', _src: pid, _orphan: AS.isOrphan(full) } };
+            poster: B.b141.continueArt(null, sm ? sm.img : (t === 'movie' && m ? m.img : null), pe.e.artwork || (m && m.img)), group: '', _src: pid, _orphan: AS.isOrphan(full) } };
         }
       }
       if (!hit) return;
@@ -975,6 +1001,8 @@
     var x = entry.item, sid = x._src;
     if (!sid || AS.isActive(sid)) return false;
     var key = sid + '|' + x.id;
+    // build 141: tegel uit de meta: eerst het echte item van die server ophalen
+    if (x._stub && !found[AS.metaKey(key)]) { openKey(key, entry.type === 'channel'); return true; }
     if (!AS.isOrphan(key)) {
       if (entry.type === 'channel') { D.pushRecentChannel(sid, x.id); B.player.playChannel(x, [x]); return true; }
       return false;   // gewone detailpagina, met item._src

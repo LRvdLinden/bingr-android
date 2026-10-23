@@ -40,7 +40,10 @@ jobs:
       - name: Belastingbuild (debug, met BINGR_STRESS)
         run: |
           gradle --no-daemon assembleDebug -PBINGR_STRESS=true 2>&1 | tee build.log | tail -n 60; rc=${PIPESTATUS[0]}
-          if [ $rc -ne 0 ]; then grep -E "^e: |error:" build.log | head -40; exit $rc; fi
+          if [ $rc -ne 0 ]; then
+            grep -E "^e: |error:|What went wrong" -A2 build.log | head -60 | while IFS= read -r l; do echo "::error::${l:0:400}"; done
+            exit $rc
+          fi
           cp app/build/outputs/apk/debug/*.apk bingr-stress.apk
           ls -la bingr-stress.apk
 

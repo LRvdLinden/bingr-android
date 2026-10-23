@@ -163,12 +163,20 @@
   };
   /** Mijn lijst aan/uit; voor het hoofdprofiel ook op de Trakt-watchlist (= TraktSync.setWatchlist). */
   P.toggleMyList = function (type, x) {
-    var k = D.key(src(x), x.id);
+    var k = P.listKey(x);
     D.toggleSet('myList', k);
     var on = D.inSet('myList', k);
+    // build 141: titel van een andere server (zoekresultaat, Andere bronnen) meteen in de rij Mijn lijst, niet pas als de
+    // achtergrond die server gelezen heeft (op een tv met weinig geheugen soms nooit)
+    if (on && x._src && B.allservers && B.allservers.adopt) B.allservers.adopt(k, { type: type, item: x });
     if (type === 'movie' || type === 'series') T.setWatchlist(x, type === 'series', on);
     return on;
   };
+  /**
+   * Build 141: sleutel van een titel in Mijn lijst. Een TMDB-titel ("tmdb-movie-123") hoort bij geen server: staat hij al
+   * onder een andere server-id in de lijst (ander apparaat, andere actieve server), dan die sleutel.
+   */
+  P.listKey = function (x) { return B.b141.myList.keyFor(D.setList('myList'), src(x), x.id); };
 
   // MARK: contextmenu (lang OK of Tools)
 
@@ -214,7 +222,7 @@
       } });
       return P.menu(x.name, items);
     }
-    var lk = D.key(src(x), x.id), inList = D.inSet('myList', lk);
+    var lk = P.listKey(x), inList = D.inSet('myList', lk);
     items.push({ key: 'open', icon: 'info', label: L('More info'), fn: function () { U.push(S.detail(type, x)); } });
     items.push({ key: 'mylist', icon: U.plusCheckIcon(inList), label: inList ? L('Remove from My List') : L('Add to My List'), fn: function () {
       var on = P.toggleMyList(type, x);

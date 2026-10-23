@@ -305,6 +305,8 @@
     var title = type === 'series' || type === 'movie' ? x.title : x.name;
     var card = h('div.card.poster.f', [U.img(x.poster || x.logo, 'poster-img', title)]);
     var p = opts.progress;
+    // build 141: Verder kijken: afspeelknop over de poster (de voortgang staat er al over)
+    if (opts.play) card.appendChild(h('div.card-play', [U.icon('play')]));
     if (p != null) card.appendChild(h('div.card-progress', [h('div', { style: { width: Math.round(B.clamp(p, 0, 1) * 100) + '%' } })]));
     if (opts.label) card.appendChild(h('div.card-label', opts.label));
     // build 112: rood label linksboven (zelfde stijl als "N BEKEKEN"), bv. de datum bij Binnenkort op Bingr
@@ -737,7 +739,8 @@
     function continueRow() {
       // build 128: Verder kijken over alle servers (js/allservers.js); van een andere server: daar verder
       var cards = B.allservers.continueList().map(function (c) {
-        var card = posterCard(c.item, c.type, { progress: c.e.fraction, progressKey: c.key });
+        // build 141: de poster (cover) van de film/serie met afspeelknop en voortgang erover, niet een still van de scène
+        var card = posterCard(c.item, c.type, { progress: c.e.fraction, progressKey: c.key, play: true });
         if (c.src) card.onEnter = function () { B.allservers.resume(c); };
         return card;
       });
@@ -786,19 +789,17 @@
             return !D.progress(e.item.id) && !(e.type === 'movie' && B.parity.movieWatched(e.item));
           });
           var title = B.parity && B.parity.forYouPopular && B.parity.forYouPopular() ? L('Popular') : L('For you');
-          return rowBlock(title, list.map(function (e) { return posterCard(e.item, e.type); }), 'foryou', seeAll(title, list));
+          // build 141: label FILM/SERIE op de tegels (zoals op Android en Apple TV)
+          return rowBlock(title, list.map(function (e) { return posterCard(e.item, e.type, { badge: B.b141.typeBadge(e.type) }); }), 'foryou', seeAll(title, list));
         },
-        // build 111: "Nieuw toegevoegd": films én series van de laatste 30 dagen (max. 30), nieuwste eerst
-        'recent': function () {
-          var list = B.discover ? B.discover.recentTitles() : entries(Lib.recent(lib.movies, 30), 'movie');
-          return rowBlock(L('Recently added'), list.map(function (e) { return posterCard(e.item, e.type); }), null, seeAll(L('Recently added'), list));
-        },
+        // build 141: "Nieuw toegevoegd" is weg; Nieuw op Bingr staat op die plek (B.b141.homeRows.displayed)
         // build 111: Binnenkort op Bingr / Nieuw op Bingr (TMDB), met bronvermelding onder de rij
         'upcoming': function () { return B.discover ? B.discover.row('upcoming') : null; },
         // build 140: Nieuw op Bingr = laatst toegevoegd aan je bibliotheek (alle servers), nieuwste eerst (js/newonbingr.js)
+        // build 141: op de plek van "Nieuw toegevoegd", met het label FILM/SERIE op de tegels (zoals Voor jou)
         'streaming': function () {
           var list = B.newOnBingr ? B.newOnBingr.list() : [];
-          return rowBlock(L('New on Bingr'), list.map(function (e) { return posterCard(e.item, e.type); }), null, seeAll(L('New on Bingr'), list));
+          return rowBlock(L('New on Bingr'), list.map(function (e) { return posterCard(e.item, e.type, { badge: B.b141.typeBadge(e.type) }); }), null, seeAll(L('New on Bingr'), list));
         },
         'movies': function () { return rowBlock(L('Movies'), lib.movies.slice(0, 30).map(function (m) { return posterCard(m, 'movie'); }), null, seeAll(L('Movies'), entries(lib.movies, 'movie'))); },
         'series': function () { return rowBlock(L('Series'), lib.series.slice(0, 30).map(function (s) { return posterCard(s, 'series'); }), null, seeAll(L('Series'), entries(lib.series, 'series'))); },
@@ -848,7 +849,8 @@
         seen[k] = true;
         out.push({ key: k, visible: r.visible !== false });
       });
-      return out;
+      // build 141: zonder "Nieuw toegevoegd"; Nieuw op Bingr staat op die plek
+      return B.b141.homeRows.displayed(out);
     }
     /** Categorieën op de standaardplek (in de indeling direct na "live", of niet in de indeling)? Dan 5 rijen onder Nu live. */
     function autoTiles() {
@@ -860,7 +862,8 @@
     function order(b) {
       var colls = Object.keys(b).filter(function (k) { return k.indexOf('collection:') === 0; });
       // build 111: Binnenkort op Bingr / Nieuw op Bingr (TMDB) na Nieuw toegevoegd
-      var o = ['continue', 'mylist', 'foryou', 'top10', 'live', 'recent', 'upcoming', 'streaming'].concat(colls).concat(['categories']);
+      // build 141: Nieuw op Bingr op de plek van "Nieuw toegevoegd" (die rij is weg)
+      var o = ['continue', 'mylist', 'foryou', 'top10', 'live', 'streaming', 'upcoming'].concat(colls).concat(['categories']);
       var layout = homeLayout();
       var auto = autoTiles();
       if (layout) {
@@ -885,7 +888,7 @@
         // (of na Verder kijken / Mijn lijst / Voor jou als die rij uit staat)
         ['upcoming', 'streaming'].forEach(function (k, n) {
           if (known[k]) return;
-          var da = Math.max(o.indexOf('recent'), n ? o.indexOf('upcoming') : -1) + 1;
+          var da = Math.max(o.indexOf('streaming'), o.indexOf('upcoming')) + 1;
           if (da <= 0) ['continue', 'mylist', 'foryou'].forEach(function (x) { var j = o.indexOf(x); if (j >= da) da = j + 1; });
           o.splice(da, 0, k);
         });
