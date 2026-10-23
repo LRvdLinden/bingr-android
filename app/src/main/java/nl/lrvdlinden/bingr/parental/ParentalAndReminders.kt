@@ -45,8 +45,9 @@ object ParentalControl {
     /** Pincode van het hoofdaccount/kinderslot zetten (null = wissen). */
     fun setPIN(pin: String?) { Store.setSecret(PIN_KEY, pin); pinVersion++ }
 
-    /** Juiste pincode van het hoofdaccount? Dan 30 min ontgrendelen. */
+    /** Juiste pincode van het hoofdaccount? Dan 30 min ontgrendelen. (Build 141: niet tijdens de wachttijd.) */
     fun verify(pin: String): Boolean {
+        if (lockoutRemaining() > 0) return false
         val stored = Store.secret(PIN_KEY) ?: return false
         if (stored != pin) return false
         unlock()
@@ -55,8 +56,45 @@ object ParentalControl {
 
     /** Alleen controleren (één titel toestaan), zónder de hele bibliotheek te ontgrendelen. */
     fun check(pin: String): Boolean {
+        if (lockoutRemaining() > 0) return false
         val stored = Store.secret(PIN_KEY) ?: return false
         return stored == pin
+    }
+
+    // MARK: build 141 (M6): limiet op pincodepogingen
+
+    /**
+     * Na 5 foute pincodes op rij een oplopende wachttijd (30 s, 1 min, 5 min, 15 min, 1 uur), voor alle pincodes samen.
+     * Bewaard in [Store.setLocalSecret] (versleuteld, alleen dit apparaat), zodat een herstart hem niet wist; daarnaast
+     * een teller op de monotone klok, zodat de systeemklok verzetten ook niet helpt zolang de app draait.
+     * [PinPad] telt de pogingen (via [pinFailed]/[pinSucceeded]); [verify]/[check] weigeren tijdens de wachttijd.
+     */
+    private const val LOCKOUT_KEY = "pin.lockout"
+    /** Verandert bij elke fout/succes (schermen die de wachttijd tonen tekenen opnieuw). */
+    var lockoutVersion by mutableStateOf(0); private set
+    @Volatile private var monoUntil = 0L
+
+    private fun lockoutState() = Build141Logic.PinLockout.decode(Store.secret(LOCKOUT_KEY))
+
+    /** Resterende wachttijd in ms (0 = je mag een pincode invoeren). */
+    fun lockoutRemaining(): Long {
+        val wall = Build141Logic.PinLockout.remaining(lockoutState(), System.currentTimeMillis())
+        val mono = (monoUntil - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+        return maxOf(wall, mono)
+    }
+
+    fun pinFailed() {
+        val s = Build141Logic.PinLockout.failed(lockoutState(), System.currentTimeMillis())
+        Store.setLocalSecret(LOCKOUT_KEY, Build141Logic.PinLockout.encode(s))
+        val w = Build141Logic.PinLockout.waitAfter(s.failures)
+        monoUntil = if (w > 0) android.os.SystemClock.elapsedRealtime() + w else 0L
+        lockoutVersion++
+    }
+
+    fun pinSucceeded() {
+        if (Store.secret(LOCKOUT_KEY) != null) Store.setLocalSecret(LOCKOUT_KEY, null)
+        monoUntil = 0L
+        lockoutVersion++
     }
 
     /** 30 min ontgrendelen; daarna gaat het slot vanzelf weer dicht (en wordt de bibliotheek opnieuw gefilterd). */
@@ -97,6 +135,7 @@ object ParentalControl {
     /** Juiste pincode voor dit profiel? (Bij het hoofdaccount ook meteen 30 min ontgrendelen.) */
     fun verify(pin: String, profile: ViewerProfile): Boolean = verify(pin, profile.id)
     fun verify(pin: String, profileID: String): Boolean {
+        if (lockoutRemaining() > 0) return false
         val stored = Store.secret(pinKey(profileID)) ?: return false
         if (stored != pin) return false
         if (Store.mainProfileID == profileID) unlock()

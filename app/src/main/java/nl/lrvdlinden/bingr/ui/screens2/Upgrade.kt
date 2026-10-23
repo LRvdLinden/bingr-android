@@ -80,6 +80,8 @@ object Upgrade {
 
     /** Telefoon/tablet: bingr.online/upgrade in de browser; lukt dat niet, dan de QR-code. */
     fun openInBrowser(ctx: Context) {
+        // build 141: het adres komt van de server; alleen http(s) naar de browser, anders de QR-code
+        if (!Build141Logic.TrustedHosts.isWebURL(Entitlements.upgradeUrl)) { forceQR = true; return }
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(Entitlements.upgradeUrl))
             .addCategory(Intent.CATEGORY_BROWSABLE)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

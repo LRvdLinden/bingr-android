@@ -64,8 +64,8 @@ object Account {
     fun init(ctx: Context) {
         val p = ctx.getSharedPreferences("bingr.account", Context.MODE_PRIVATE)
         sp = p
-        refreshToken = p.getString("refresh_token", null)
-        accessToken = p.getString("access_token", null)
+        refreshToken = readToken(p, "refresh_token")
+        accessToken = readToken(p, "access_token")
         expiresAt = p.getLong("expires_at", 0L)
         email = p.getString("email", null)
         storedUserId = p.getString("user_id", null)
@@ -80,6 +80,20 @@ object Account {
 
     // MARK: sessie opslaan
 
+    /**
+     * Build 141 (M5): access- en refresh-token versleuteld ([SecureBox], AES-GCM met een Keystore-sleutel), net als de
+     * IPTV-wachtwoorden. Een waarde van vóór build 141 (platte tekst) wordt gelezen en meteen versleuteld opgeslagen.
+     * Werkt de Keystore niet (sommige tv-boxen), dan blijft het zoals vroeger (platte tekst, alleen in de app-opslag).
+     */
+    private fun readToken(p: SharedPreferences, key: String): String? {
+        val raw = runCatching { p.getString(key, null) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return null
+        val v = SecureBox.decrypt(raw) ?: return null
+        if (!SecureBox.isEncrypted(raw)) SecureBox.encrypt(v)?.let { enc -> p.edit().putString(key, enc).apply() }
+        return v
+    }
+
+    private fun sealed(v: String): String = SecureBox.encrypt(v) ?: v
+
     private fun store(session: JsonElement, fallbackEmail: String? = null): Boolean {
         val access = session.jS("access_token")?.takeIf { it.isNotEmpty() } ?: return false
         val refresh = session.jS("refresh_token")?.takeIf { it.isNotEmpty() } ?: return false
@@ -90,7 +104,7 @@ object Account {
         accessToken = access; refreshToken = refresh; expiresAt = exp; email = mail; storedUserId = uid
         blockedNotice = false
         sp?.edit()?.apply {
-            putString("access_token", access); putString("refresh_token", refresh)
+            putString("access_token", sealed(access)); putString("refresh_token", sealed(refresh))
             putLong("expires_at", exp); if (mail != null) putString("email", mail) else remove("email")
             if (uid != null) putString("user_id", uid) else remove("user_id")
         }?.apply()
@@ -210,10 +224,21 @@ object Account {
     }
 
     private val emailRegex = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
-    fun validate(email: String, password: String?) {
+    /** Build 141: de server eist minimaal 8 tekens voor een nieuw wachtwoord (was 6). */
+    const val PASSWORD_MIN = 8
+
+    /**
+     * [newPassword] = een nieuw wachtwoord (aanmelden): minimaal [PASSWORD_MIN] tekens. Bij inloggen alleen niet leeg,
+     * zodat een bestaand account met een korter (oud) wachtwoord gewoon kan inloggen.
+     */
+    fun validate(email: String, password: String?, newPassword: Boolean = false) {
         if (!emailRegex.matches(email.trim())) throw AccountException(L("Enter a valid email address."))
-        if (password != null && password.length < 6) throw AccountException(L("Password must be at least 6 characters."))
+        if (password == null) return
+        if (newPassword && password.length < PASSWORD_MIN) throw AccountException(L("Password must be at least 8 characters."))
+        if (password.isEmpty()) throw AccountException(L("Incorrect email or password."))
     }
+
+    private fun tooMany() = AccountException(L("Too many attempts. Wait a few minutes and try again."))
 
     private fun creds(email: String, password: String) = buildJsonObject {
         put("email", email.trim()); put("password", password)
@@ -244,7 +269,7 @@ object Account {
         val last = cleanName(lastName)
         if (first.isEmpty()) throw AccountException(L("Enter your first name."))
         if (last.isEmpty()) throw AccountException(L("Enter your last name."))
-        validate(email, password)
+        validate(email, password, newPassword = true)
         val r = post("/auth/v1/signup", buildJsonObject {
             put("email", email.trim()); put("password", password)
             // taal van de bevestigings- en resetmails; naam voor de aanhef
@@ -263,9 +288,10 @@ object Account {
                 throw AccountException(L("An account with this email already exists."))
             return@working false
         }
+        if (r.code == 429) throw tooMany()
         throw when (r.errorCode) {
             "user_already_exists", "email_exists" -> AccountException(L("An account with this email already exists."))
-            "weak_password" -> AccountException(L("Password must be at least 6 characters."))
+            "weak_password" -> AccountException(L("Password must be at least 8 characters."))
             "email_address_invalid", "validation_failed" -> AccountException(L("Enter a valid email address."))
             else -> generic()
         }
@@ -276,7 +302,10 @@ object Account {
         val r = post("/auth/v1/token?grant_type=password", creds(email, password))
         if (r.ok) { if (!store(r.json ?: throw generic(), email.trim())) throw generic(); return@working }
         if (isBanned(r)) throw banned()
+        // build 141: te vaak geprobeerd (rate limit van /auth/v1/token)
+        if (r.code == 429 || r.errorCode == "over_request_rate_limit") throw tooMany()
         throw when {
+            r.errorCode == "weak_password" -> AccountException(L("Password must be at least 8 characters."))
             r.errorCode == "email_not_confirmed" -> AccountException(L("Confirm your email address first. Check your inbox."))
             r.errorCode == "invalid_credentials" || r.errorCode == "invalid_grant" || r.code == 400 ->
                 AccountException(L("Incorrect email or password."))
@@ -366,6 +395,37 @@ object Account {
         if (r.code == 429) throw AccountException(L("Too many attempts. Wait a few minutes and try again."))
         if (!r.ok || r.json.jB("ok") != true) throw generic()
         clear()
+    }
+
+    /**
+     * Build 141 (M3): wat hoort er bij deze code? (device-auth `code_info`): naam en soort apparaat zoals de tv ze
+     * opgaf, en hoe lang geleden de code is gemaakt. Velden die de server later toevoegt ([platform], [location])
+     * worden getoond als ze er zijn.
+     */
+    data class TvCodeInfo(
+        val device: String, val label: String?, val kind: String?, val ageSeconds: Long?, val expiresIn: Long?,
+        val platform: String?, val location: String?,
+    )
+
+    suspend fun tvCodeInfo(code: String): TvCodeInfo = working {
+        val clean = normalizeCode(code)
+        if (clean.isEmpty()) throw AccountException(L("That code is invalid or has expired."))
+        val token = validAccessToken()
+        val r = post("/functions/v1/device-auth", buildJsonObject { put("action", "code_info"); put("code", clean) }, bearer = token)
+        if (r.code == 404 || r.errorCode == "invalid_code") throw AccountException(L("That code is invalid or has expired."))
+        if (r.code == 429) throw AccountException(L("Too many attempts. Wait a few minutes and try again."))
+        if (!r.ok || r.json.jB("ok") != true) throw generic()
+        val j = r.json
+        fun text(k: String) = j.jS(k)?.trim()?.takeIf { it.isNotEmpty() }?.take(80)
+        TvCodeInfo(
+            device = text("device") ?: "TV",
+            label = text("label"),
+            kind = text("kind"),
+            ageSeconds = j.jL("age_s"),
+            expiresIn = j.jL("expires_in"),
+            platform = text("platform"),
+            location = text("location") ?: listOfNotNull(text("city"), text("country")).joinToString(", ").takeIf { it.isNotEmpty() },
+        )
     }
 
     /** Tv koppelen met de code op de tv; geeft de apparaatnaam terug. */

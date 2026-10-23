@@ -682,21 +682,42 @@
     return s;
   };
 
-  /** Pincode vragen (4 cijfers; cijfertoetsen van de afstandsbediening werken ook). fn(pin) → true = goed. */
+  /**
+   * Pincode vragen (4 cijfers; cijfertoetsen van de afstandsbediening werken ook). fn(pin) → true = goed.
+   * Build 141 (M6): na 5 foute pincodes op rij een oplopende wachttijd (B.b141), voor alle pincodes samen en ook na een
+   * herstart; tijdens het wachten doen de toetsen niets.
+   */
   U.askPIN = function (title, check, onOK) {
     var dots = U.h('div.pin-dots');
     var err = U.h('div.pin-error');
     var pin = '';
+    var X = B.b141;
+    var timer = null;
     function draw() {
       U.clear(dots);
       for (var i = 0; i < 4; i++) dots.appendChild(U.h('span.pin-dot' + (i < pin.length ? '.on' : '')));
     }
+    function waitLeft() { return X ? X.pinRemaining() : 0; }
+    function showWait() {
+      if (timer) { clearTimeout(timer); timer = null; }
+      var w = waitLeft();
+      if (w <= 0) { if (err.getAttribute && err.getAttribute('data-wait')) { err.textContent = ''; err.removeAttribute('data-wait'); } return; }
+      err.textContent = L('Too many incorrect PINs. Try again in %@.', X.lockout.shortText(w));
+      if (err.setAttribute) err.setAttribute('data-wait', '1');
+      timer = setTimeout(showWait, 1000);
+    }
     var s;
     function typed(v) {
+      if (waitLeft() > 0) { pin = ''; kb.setValue(''); draw(); showWait(); return; }
       pin = v; draw(); err.textContent = '';
       if (pin.length === 4) {
-        if (check(pin)) { U.pop(); onOK(pin); }
-        else { err.textContent = L('Incorrect PIN'); pin = ''; kb.setValue(''); setTimeout(draw, 300); }
+        var good = check(pin);
+        if (X) { if (good) X.pinSucceeded(); else X.pinFailed(); }
+        if (good) { if (timer) clearTimeout(timer); U.pop(); onOK(pin); }
+        else {
+          err.textContent = L('Incorrect PIN'); pin = ''; kb.setValue(''); setTimeout(draw, 300);
+          if (waitLeft() > 0) showWait();
+        }
       }
     }
     var kb = U.keyboard({ layout: 'pin', max: 4, onChange: typed, onDone: function () { typed(pin); } });
@@ -705,9 +726,10 @@
       if (name.charAt(0) === 'd' && name.length === 2) { kb.press(name.charAt(1)); return true; }
       return false;
     };
-    s.onBack = function () { U.pop(); };
+    s.onBack = function () { if (timer) clearTimeout(timer); U.pop(); };
     draw();
     U.push(s);
+    showWait();
   };
 
   // MARK: plaatjes

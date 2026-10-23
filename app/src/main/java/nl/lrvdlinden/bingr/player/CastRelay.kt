@@ -1,6 +1,5 @@
 package nl.lrvdlinden.bingr
 
-import android.util.Base64
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import java.io.BufferedInputStream
@@ -13,7 +12,6 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketTimeoutException
 import java.util.Locale
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -31,11 +29,15 @@ import java.util.concurrent.atomic.AtomicInteger
  * Een gekozen ondertitel (OpenSubtitles-download of ander bestand, of een los SRT/VTT-adres) staat hier als
  * `/<token>/sub/<n>.vtt`, omgezet naar WebVTT ([WebVTT]). Dat werkt ook als de stream zelf rechtstreeks gaat.
  *
- * Alleen bereikbaar met een willekeurig token in het pad, en alleen zolang er een Cast-sessie is.
+ * Build 141 (M1): alleen wat de app zelf registreert ([Build141Logic.RelayRegistry]): de stream die gecast wordt, de
+ * adressen in de HLS-playlist daarvan, ondertitels, en downloads uit de downloadmap. Een adres of bestand in het pad
+ * van de aanvraag wordt nooit meer opgehaald, en niets uit de interne app-opslag. Het token is nieuw per Cast-sessie
+ * ([beginSession]) en vervalt met [stop]; de server luistert alleen op het wifi-adres en geeft alleen antwoord aan
+ * de Chromecast (zijn adres als de Cast-SDK het geeft, anders het eerste apparaat dat met het token iets ophaalt).
  */
 object CastRelay {
     private var server: ServerSocket? = null
-    private val token = UUID.randomUUID().toString().replace("-", "")
+    private val registry = Build141Logic.RelayRegistry()
     private val pool = Executors.newCachedThreadPool { r -> Thread(r, "cast-relay").apply { isDaemon = true } }
     @Volatile private var host: String? = null
 
@@ -44,17 +46,40 @@ object CastRelay {
     private val subs = ConcurrentHashMap<String, SubSource>()
     private val subCounter = AtomicInteger(0)
 
+    /** Nieuwe Cast-sessie (Casting.attach): nieuw token; [receiver] = adres van de Chromecast (als bekend). */
+    @Synchronized
+    fun beginSession(receiver: InetAddress?) {
+        stop()
+        registry.begin()
+        // alleen IPv4: de server luistert op het IPv4-adres van de telefoon
+        (receiver as? Inet4Address)?.hostAddress?.let { registry.expectPeer(it) }
+    }
+
     /** Begin van elk adres ("http://ip:poort/token"); start de server als dat nodig is. null = geen wifi-adres. */
     @Synchronized
     private fun base(): String? {
         val ip = localIPv4() ?: return null
-        val s = server ?: runCatching { start() }.getOrNull() ?: return null
+        if (!registry.active) registry.begin()
+        val current = server?.takeIf { !it.isClosed && it.inetAddress?.hostAddress == ip }
+        val s = current ?: run {
+            runCatching { server?.close() }
+            server = null
+            runCatching { start(ip) }.getOrNull()
+        } ?: return null
         host = "$ip:${s.localPort}"
+        val token = registry.currentToken ?: return null
         return "http://$host/$token"
     }
 
-    /** Lokaal adres waarop de Chromecast [upstream] via de telefoon kan ophalen; null = geen wifi-adres. */
-    fun url(upstream: String, ext: String): String? = base()?.let { "$it/${encode(upstream)}/s.$ext" }
+    /** Lokaal adres waarop de Chromecast [upstream] via de telefoon kan ophalen; null = geen wifi-adres of niet toegestaan. */
+    fun url(upstream: String, ext: String): String? {
+        val item: Build141Logic.RelayItem =
+            if (upstream.startsWith("file:", true)) localItem(upstream) ?: return null
+            else Build141Logic.RelayItem.Remote(upstream)
+        val b = base() ?: return null
+        val id = registry.register(item) ?: return null
+        return "$b/i/$id/s.${ext.filter { it.isLetterOrDigit() }.take(5).ifEmpty { "ts" }}"
+    }
 
     /**
      * Adres van een ondertitel als WebVTT voor de Chromecast: [file] (lokaal) of [remote] (http(s), SRT of VTT).
@@ -62,6 +87,7 @@ object CastRelay {
      */
     fun subtitleUrl(file: File? = null, remote: String? = null, shiftSeconds: Double = 0.0): String? {
         if (file == null && remote.isNullOrBlank()) return null
+        if (file == null && remote != null && !Build141Logic.isRelayableRemote(remote)) return null
         val b = base() ?: return null
         val id = subCounter.incrementAndGet().toString()
         // alleen de laatste paar bewaren
@@ -70,15 +96,19 @@ object CastRelay {
         return "$b/sub/$id.vtt"
     }
 
+    /** Einde van de Cast-sessie: server dicht, token en alle registraties vervallen. */
     @Synchronized
     fun stop() {
         runCatching { server?.close() }
         server = null
+        host = null
+        registry.end()
         subs.clear()
     }
 
-    private fun start(): ServerSocket {
-        val s = ServerSocket(0, 16, InetAddress.getByName("0.0.0.0"))
+    private fun start(ip: String): ServerSocket {
+        // build 141: alleen op het wifi-adres (niet 0.0.0.0, dus niet via mobiele data, VPN of hotspot)
+        val s = ServerSocket(0, 16, InetAddress.getByName(ip))
         server = s
         Thread({
             while (!s.isClosed) {
@@ -89,8 +119,18 @@ object CastRelay {
         return s
     }
 
-    private fun encode(u: String) = Base64.encodeToString(u.toByteArray(), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-    private fun decode(s: String) = runCatching { String(Base64.decode(s, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)) }.getOrNull()
+    /** Mappen waaruit downloads gecast mogen worden (alleen de downloadmap; nooit de interne app-opslag). */
+    private fun downloadRoots(): List<String> {
+        val ctx = AppState.appContext
+        return listOfNotNull(ctx.getExternalFilesDir("downloads")).mapNotNull { runCatching { it.canonicalPath }.getOrNull() }
+    }
+
+    /** file://-adres van een download → item; null als het geen bestand in de downloadmap is. */
+    private fun localItem(uri: String): Build141Logic.RelayItem.Local? {
+        val f = runCatching { File(java.net.URI(uri)).canonicalFile }.getOrNull() ?: return null
+        if (!f.isFile || !Build141Logic.isInside(f.path, downloadRoots())) return null
+        return Build141Logic.RelayItem.Local(f.path)
+    }
 
     /** IPv4-adres van de telefoon in het lokale netwerk (wifi/ethernet, geen mobiele data of VPN als het kan). */
     private fun localIPv4(): String? {
@@ -116,14 +156,19 @@ object CastRelay {
         val method = parts.getOrNull(0) ?: return
         val path = parts.getOrNull(1) ?: return
         val out = sock.getOutputStream()
+        if (method != "GET" && method != "HEAD" && method != "OPTIONS") { writeHead(out, 405, "Method Not Allowed", emptyMap()); return }
+        // build 141: alleen met het token van deze sessie, en alleen voor de Chromecast
+        val rp = Build141Logic.parseRelayPath(path)
+        if (rp == null || !registry.tokenMatches(rp.token)) { writeHead(out, 404, "Not Found", emptyMap()); return }
+        if (!registry.allowPeer(sock.inetAddress?.hostAddress)) { writeHead(out, 403, "Forbidden", emptyMap()); return }
         if (method == "OPTIONS") { writeHead(out, 204, "No Content", emptyMap()); return }
-        val segs = path.substringBefore('?').split('/').filter { it.isNotEmpty() }
-        if (segs.size < 2 || segs[0] != token) { writeHead(out, 404, "Not Found", emptyMap()); return }
-        if (segs[1] == "sub") { serveSubtitle(out, method, segs.getOrNull(2)?.substringBefore('.')); return }
-        val target = decode(segs[1]) ?: run { writeHead(out, 400, "Bad Request", emptyMap()); return }
-        // build 60: een download (bestand op de telefoon) casten; de Chromecast kan geen file://-adres openen
-        if (target.startsWith("file:", true)) { serveFile(out, method, target, headers["range"]); return }
-        val upstream = target.takeIf { it.startsWith("http", true) } ?: run { writeHead(out, 400, "Bad Request", emptyMap()); return }
+        if (rp.kind == "sub") { serveSubtitle(out, method, rp.id); return }
+        val upstream = when (val item = registry.item(rp.id)) {
+            null -> { writeHead(out, 404, "Not Found", emptyMap()); return }
+            // build 60: een download (bestand op de telefoon) casten; de Chromecast kan geen file://-adres openen
+            is Build141Logic.RelayItem.Local -> { serveFile(out, method, item.path, headers["range"]); return }
+            is Build141Logic.RelayItem.Remote -> item.url
+        }
 
         val rb = Request.Builder().url(upstream).header("User-Agent", Http.USER_AGENT)
         headers["range"]?.let { rb.header("Range", it) }
@@ -170,12 +215,12 @@ object CastRelay {
     }
 
     /**
-     * Lokaal bestand (download, build 60) met HTTP Range, zodat de Chromecast kan spoelen. Alleen bestanden in de
-     * eigen app-mappen; al het andere geeft 404.
+     * Lokaal bestand (download, build 60) met HTTP Range, zodat de Chromecast kan spoelen. Build 141: alleen een
+     * geregistreerde download in de downloadmap (opnieuw gecontroleerd); al het andere geeft 404.
      */
-    private fun serveFile(out: OutputStream, method: String, uri: String, range: String?) {
-        val f = runCatching { File(java.net.URI(uri)).canonicalFile }.getOrNull()
-        if (f == null || !f.isFile || !allowedFile(f)) { writeHead(out, 404, "Not Found", emptyMap()); return }
+    private fun serveFile(out: OutputStream, method: String, path: String, range: String?) {
+        val f = runCatching { File(path).canonicalFile }.getOrNull()
+        if (f == null || !f.isFile || !Build141Logic.isInside(f.path, downloadRoots())) { writeHead(out, 404, "Not Found", emptyMap()); return }
         val len = f.length()
         val type = when (f.extension.lowercase(Locale.ROOT)) {
             "mp4", "m4v", "mov" -> "video/mp4"
@@ -224,12 +269,6 @@ object CastRelay {
         }
     }
 
-    private fun allowedFile(f: File): Boolean {
-        val ctx = AppState.appContext
-        val roots = listOfNotNull(ctx.getExternalFilesDir(null), ctx.filesDir).mapNotNull { runCatching { it.canonicalPath }.getOrNull() }
-        return roots.any { f.path.startsWith(it + File.separator) }
-    }
-
     /** Ondertitel als WebVTT (UTF-8) met CORS-headers; de ontvanger weigert tekstsporen zonder Access-Control-Allow-Origin. */
     private fun serveSubtitle(out: OutputStream, method: String, id: String?) {
         val src = id?.let { subs[it] } ?: run { writeHead(out, 404, "Not Found", emptyMap()); return }
@@ -251,14 +290,20 @@ object CastRelay {
         if (method != "HEAD") { out.write(body); out.flush() }
     }
 
-    /** Elk adres in een HLS-playlist (regels en URI="…") omzetten naar een adres via het doorgeefluik. */
+    /**
+     * Elk adres in een HLS-playlist (regels en URI="…") omzetten naar een adres via het doorgeefluik. Build 141: elk
+     * adres wordt geregistreerd (alleen http(s), niet de telefoon zelf); wat niet mag, blijft het oorspronkelijke adres.
+     */
     internal fun rewritePlaylist(text: String, base: String): String {
         val b = base.toHttpUrlOrNull() ?: return text
+        val h = host ?: return text
+        val token = registry.currentToken ?: return text
         fun relay(ref: String): String {
             val abs = b.resolve(ref.trim())?.toString() ?: return ref
             val ext = abs.substringBefore('?').substringAfterLast('/').substringAfterLast('.', "").lowercase(Locale.ROOT)
-                .takeIf { it.isNotEmpty() && it.length <= 5 } ?: "ts"
-            return "http://$host/$token/${encode(abs)}/s.$ext"
+                .takeIf { it.isNotEmpty() && it.length <= 5 && it.all { c -> c.isLetterOrDigit() } } ?: "ts"
+            val id = registry.register(Build141Logic.RelayItem.Remote(abs)) ?: return abs
+            return "http://$h/$token/i/$id/s.$ext"
         }
         val uriAttr = Regex("URI=\"([^\"]+)\"")
         return text.lineSequence().joinToString("\n") { line ->

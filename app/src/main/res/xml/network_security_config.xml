@@ -1,7 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- IPTV-servers gebruiken vaak gewoon http -->
+<!--
+    IPTV-servers gebruiken vaak gewoon http (willekeurige hosts die de gebruiker zelf invult): daarom mag cleartext
+    in het algemeen. Build 141: de eigen en vaste diensten (Bingr-account, Trakt, TMDB-API, OMDb, OpenSubtitles, Plex,
+    Stremio-account) alleen via https, zodat een codefout of een http-redirect nooit een token onversleuteld verstuurt.
+    Niet hard: image.tmdb.org (posters van IPTV-servers staan soms op http) en eigen Plex/Jellyfin/Emby-servers.
+    Alleen systeem-CA's.
+-->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors><certificates src="system" /></trust-anchors>
     </base-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">bingr.online</domain>
+        <domain includeSubdomains="true">supabase.co</domain>
+        <domain includeSubdomains="true">trakt.tv</domain>
+        <domain includeSubdomains="true">api.themoviedb.org</domain>
+        <domain includeSubdomains="true">omdbapi.com</domain>
+        <domain includeSubdomains="true">opensubtitles.com</domain>
+        <domain includeSubdomains="true">plex.tv</domain>
+        <domain includeSubdomains="true">api.strem.io</domain>
+        <trust-anchors><certificates src="system" /></trust-anchors>
+    </domain-config>
 </network-security-config>

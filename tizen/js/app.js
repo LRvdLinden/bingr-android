@@ -174,6 +174,12 @@
     document.addEventListener('keyup', U.onKeyUp, true);
     document.addEventListener('visibilitychange', onVisibility);
     U.push(S.splash());
+    // build 141: eerst de kluis laden (sessie, servers, pincodes); daarna pas verder
+    var vault = B.vault ? B.vault.ready : Promise.resolve();
+    vault.then(afterVault, afterVault);
+  }
+
+  function afterVault() {
     if (A.isSignedIn()) playIntro();
     B.on('signedOut', function () { toLogin(); });
     B.on('sessionInvalid', function () { A.revokedSignOut(); });

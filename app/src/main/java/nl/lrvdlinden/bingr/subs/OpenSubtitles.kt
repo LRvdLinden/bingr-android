@@ -80,7 +80,8 @@ object OpenSubtitles {
         path: String, method: String = "GET", query: Map<String, String> = emptyMap(), body: JsonObject? = null,
         base: String? = null,
     ): String {
-        val host = base ?: session?.baseURL ?: DEFAULT_HOST
+        // build 141: alleen (een subdomein van) opensubtitles.com; token en API-sleutel gaan nooit naar een andere host
+        val host = Build141Logic.TrustedHosts.openSubtitlesHost(base ?: session?.baseURL)
         val u = Net.url("https://$host/api/v1$path", query.entries.sortedBy { it.key }.map { it.key to it.value })
             ?: throw Net.badURL()
         val headers = HashMap<String, String>()
@@ -103,7 +104,7 @@ object OpenSubtitles {
         val body = buildJsonObject { put("username", user); put("password", pass) }
         val r = Net.parse(request("/login", "POST", body = body, base = DEFAULT_HOST))
         val token = r.jS("token") ?: throw Net.decoding("token")
-        session = Session(token, r.jS("base_url") ?: DEFAULT_HOST, user)
+        session = Session(token, Build141Logic.TrustedHosts.openSubtitlesHost(r.jS("base_url")), user)
         val u = r.jO("user")
         remainingDownloads = u.jI("remaining_downloads") ?: u.jI("allowed_downloads")
     }
@@ -115,7 +116,7 @@ object OpenSubtitles {
     /** Sessie uit het Bingr-account (build 44); null = elders uitgelogd (lokaal wissen, geen /logout). */
     fun applySyncedSession(token: String?, username: String?, baseURL: String?) {
         if (token.isNullOrEmpty()) { clearLocal(); return }
-        val n = Session(token, baseURL?.takeIf { it.isNotBlank() } ?: DEFAULT_HOST, username ?: session?.username ?: "")
+        val n = Session(token, Build141Logic.TrustedHosts.openSubtitlesHost(baseURL), username ?: session?.username ?: "")
         if (n == session) return
         session = n
         remainingDownloads = null

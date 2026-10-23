@@ -88,10 +88,33 @@ jobs:
               tools/test/Build140LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b140-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b140-test.jar" | tee "$RUNNER_TEMP/b140-test.txt"; rc3=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 140::$(tail -1 "$RUNNER_TEMP/b140-test.txt")"
-            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ]
+            # build 141: beveiliging (pincode-limiet, Cast-doorgeefluik, vaste hosts)
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build141Logic.kt tools/test/Build141LogicTest.kt \
+              -include-runtime -d "$RUNNER_TEMP/b141-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b141-test.jar" | tee "$RUNNER_TEMP/b141-test.txt"; rc4=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 141::$(tail -1 "$RUNNER_TEMP/b141-test.txt")"
+            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi
+
+      # build 141 (M4): welke app-sleutels worden in de APK ingebouwd? Alleen namen (ja/nee), nooit waarden.
+      # De apps halen ze sinds build 41 ook bij de server op (device-auth config); een ingebouwde sleutel is uit de
+      # openbare APK te halen.
+      - name: Ingebouwde app-sleutels (alleen namen)
+        env:
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TMDB_ACCESS_TOKEN: ${{ secrets.TMDB_ACCESS_TOKEN }}
+          OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
+          OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+        run: |
+          out=""
+          for n in TRAKT_CLIENT_ID TRAKT_CLIENT_SECRET TMDB_API_KEY TMDB_ACCESS_TOKEN OMDB_API_KEY OPENSUBTITLES_API_KEY; do
+            if [ -n "${!n}" ]; then out="$out $n=ingebouwd"; else out="$out $n=leeg"; fi
+          done
+          echo "::notice title=Ingebouwde app-sleutels::$out"
 
       - name: APK bouwen
         env:
@@ -342,6 +365,9 @@ jobs:
           # build 140: categorieën per account, kinderfilter, ouderpoort, Voor jou/Nieuw op Bingr/uitgelicht, vernieuwen, Mijn lijst
           node tizen/test/build140_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b140.log"
           echo "::notice title=Logica-tests build 140 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b140.log")"
+          # build 141: beveiliging (pincode-limiet, vaste hosts, kluis voor gevoelige waarden)
+          node tizen/test/build141_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b141.log"
+          echo "::notice title=Logica-tests build 141 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b141.log")"
 
       - name: Tizen Studio CLI uit de cache
         id: cache

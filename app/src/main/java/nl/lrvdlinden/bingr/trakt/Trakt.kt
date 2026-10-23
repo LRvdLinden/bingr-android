@@ -151,9 +151,10 @@ object Trakt {
     private fun saveTokens(t: Tokens?) =
         Store.setSecret(TOKEN_KEY, t?.let { Http.json.encodeToString(Tokens.serializer(), it) })
 
+    // build 141: alleen api.trakt.tv / auth.trakt.tv (tokens en client-id gaan nooit naar een andere host)
     private var oauthBase: String
-        get() = Prefs.string("trakt.oauthHost") ?: "https://api.trakt.tv"
-        set(v) = Prefs.put("trakt.oauthHost", v)
+        get() = Build141Logic.TrustedHosts.traktOAuthBase(Prefs.string("trakt.oauthHost"))
+        set(v) = Prefs.put("trakt.oauthHost", Build141Logic.TrustedHosts.traktOAuthBase(v))
 
     /**
      * Trakt hoort bij het hoofdaccount: andere kijkprofielen zien geen Trakt-vinkjes, -voortgang of -aanbevelingen

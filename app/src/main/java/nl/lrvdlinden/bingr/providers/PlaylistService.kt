@@ -873,7 +873,20 @@ object Playlists {
 
     // MARK: cache
 
-    private fun cacheFile(p: PlaylistSource) = File(AppState.appContext.filesDir, "cache-${p.id}.json")
+    /**
+     * Build 141: de cache staat in een eigen map (`files/servercache/`), zodat de Google-back-up hem kan overslaan
+     * (backup_rules.xml / data_extraction_rules.xml): er staan stream-adressen met inloggegevens in. Een cache van vóór
+     * build 141 (`files/cache-<id>.json`) wordt één keer verplaatst.
+     */
+    private fun cacheFile(p: PlaylistSource): File {
+        val dir = File(AppState.appContext.filesDir, "servercache")
+        val f = File(dir, "cache-${p.id}.json")
+        if (!f.exists()) {
+            val legacy = File(AppState.appContext.filesDir, "cache-${p.id}.json")
+            if (legacy.exists()) runCatching { dir.mkdirs(); if (!legacy.renameTo(f)) legacy.delete() }
+        }
+        return f
+    }
 
     /**
      * Gecachete inhoud (blokkeert: aanroepen buiten de main thread). build 97: direct uit het bestand lezen
@@ -904,6 +917,7 @@ object Playlists {
         AppScope.launch(Dispatchers.IO) {
             // build 97: direct naar het bestand (encodeToStream) en een eigen tijdelijk bestand per keer, zodat twee
             // gelijktijdige schrijfacties elkaar niet in de weg zitten
+            f.parentFile?.mkdirs()
             val tmp = File(f.parentFile, f.name + "." + System.nanoTime() + ".tmp")
             runCatching {
                 tmp.outputStream().buffered(64 * 1024).use { Http.json.encodeToStream(Library.serializer(), lib, it) }

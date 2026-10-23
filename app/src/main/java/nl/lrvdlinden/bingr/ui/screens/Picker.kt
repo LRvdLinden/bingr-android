@@ -977,7 +977,7 @@ fun ProfileEditScreen(existing: ViewerProfile?, onClose: () -> Unit) {
         }
     }
     if (settingPIN && existing != null) {
-        PinSetupScreen(profileID = existing.id) { settingPIN = false }
+        PinChangeScreen(profileID = existing.id) { settingPIN = false }   // build 141 (H1): eerst de huidige pincode
     }
     if (removingPIN && existing != null) {
         PinPad(L("Enter PIN to turn off"), onDismiss = { removingPIN = false }) { pin ->

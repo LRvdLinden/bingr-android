@@ -911,7 +911,19 @@
   "Ask a grown-up": "اطلب من شخص بالغ",
   "Solve this sum to leave the kids profile.": "حُلّ هذه العملية لمغادرة ملف الأطفال.",
   "That's not right. Try again.": "هذا غير صحيح. حاول مرة أخرى.",
-  "New sum": "عملية جديدة"
+  "New sum": "عملية جديدة",
+  "Too many incorrect PINs. Try again in %@.": "رموز PIN خاطئة كثيرة. حاول مرة أخرى بعد %@.",
+  "Enter your current PIN": "أدخل رمز PIN الحالي",
+  "Export": "تصدير",
+  "The file contains the passwords of your servers and your PINs. Only share it with yourself, and delete it after importing.": "يحتوي الملف على كلمات مرور خوادمك ورموز PIN. شاركه مع نفسك فقط واحذفه بعد الاستيراد.",
+  "Code created just now": "تم إنشاء الرمز للتو",
+  "Code created %d min ago": "تم إنشاء الرمز منذ %d د",
+  "Platform: %@": "المنصة: %@",
+  "Location: %@": "الموقع: %@",
+  "Give this device access to your Bingr account?": "هل تريد منح هذا الجهاز حق الوصول إلى حسابك في Bingr؟",
+  "Allow access": "السماح بالوصول",
+  "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "تابع فقط إذا كان هذا الجهاز أمامك وأدخلت الرمز من شاشته بنفسك. لا تُدخل أبدًا رمزًا أرسله إليك شخص ما: سيحصل على وصول كامل إلى حسابك، بما في ذلك كلمات مرور خوادمك.",
+  "Password must be at least 8 characters.": "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل."
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -1825,7 +1837,19 @@
   "Ask a grown-up": "Frag einen Erwachsenen",
   "Solve this sum to leave the kids profile.": "Löse diese Rechenaufgabe, um das Kinderprofil zu verlassen.",
   "That's not right. Try again.": "Das stimmt nicht. Versuch es noch einmal.",
-  "New sum": "Neue Aufgabe"
+  "New sum": "Neue Aufgabe",
+  "Too many incorrect PINs. Try again in %@.": "Zu oft eine falsche PIN. Versuche es in %@ erneut.",
+  "Enter your current PIN": "Gib deine aktuelle PIN ein",
+  "Export": "Exportieren",
+  "The file contains the passwords of your servers and your PINs. Only share it with yourself, and delete it after importing.": "Die Datei enthält die Passwörter deiner Server und deine PINs. Teile sie nur mit dir selbst und lösche sie nach dem Import.",
+  "Code created just now": "Code gerade erstellt",
+  "Code created %d min ago": "Code vor %d Min. erstellt",
+  "Platform: %@": "Plattform: %@",
+  "Location: %@": "Standort: %@",
+  "Give this device access to your Bingr account?": "Diesem Gerät Zugriff auf dein Bingr-Konto geben?",
+  "Allow access": "Zugriff erlauben",
+  "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Fahre nur fort, wenn das Gerät vor dir steht und du den Code selbst vom Bildschirm abgelesen hast. Gib nie einen Code ein, den dir jemand schickt: Diese Person bekäme vollen Zugriff auf dein Konto, auch auf die Passwörter deiner Server.",
+  "Password must be at least 8 characters.": "Das Passwort muss mindestens 8 Zeichen lang sein."
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -2739,7 +2763,19 @@
   "Ask a grown-up": "Pregunta a un adulto",
   "Solve this sum to leave the kids profile.": "Resuelve esta operación para salir del perfil infantil.",
   "That's not right. Try again.": "No es correcto. Inténtalo de nuevo.",
-  "New sum": "Nueva operación"
+  "New sum": "Nueva operación",
+  "Too many incorrect PINs. Try again in %@.": "Demasiados PIN incorrectos. Inténtalo de nuevo en %@.",
+  "Enter your current PIN": "Introduce tu PIN actual",
+  "Export": "Exportar",
+  "The file contains the passwords of your servers and your PINs. Only share it with yourself, and delete it after importing.": "El archivo contiene las contraseñas de tus servidores y tus PIN. Compártelo solo contigo mismo y elimínalo después de importarlo.",
+  "Code created just now": "Código creado ahora mismo",
+  "Code created %d min ago": "Código creado hace %d min",
+  "Platform: %@": "Plataforma: %@",
+  "Location: %@": "Ubicación: %@",
+  "Give this device access to your Bingr account?": "¿Dar a este dispositivo acceso a tu cuenta de Bingr?",
+  "Allow access": "Permitir acceso",
+  "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Continúa solo si este dispositivo está delante de ti y has introducido tú mismo el código de su pantalla. Nunca introduzcas un código que alguien te haya enviado: tendría acceso completo a tu cuenta, incluidas las contraseñas de tus servidores.",
+  "Password must be at least 8 characters.": "La contraseña debe tener al menos 8 caracteres."
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -3653,7 +3689,19 @@
   "Ask a grown-up": "Demande à un adulte",
   "Solve this sum to leave the kids profile.": "Résous ce calcul pour quitter le profil enfant.",
   "That's not right. Try again.": "Ce n'est pas ça. Réessaie.",
-  "New sum": "Nouveau calcul"
+  "New sum": "Nouveau calcul",
+  "Too many incorrect PINs. Try again in %@.": "Trop de codes PIN incorrects. Réessayez dans %@.",
+  "Enter your current PIN": "Saisissez votre code PIN actuel",
+  "Export": "Exporter",
+  "The file contains the passwords of your servers and your PINs. Only share it with yourself, and delete it after importing.": "Le fichier contient les mots de passe de vos serveurs et vos codes PIN. Ne le partagez qu'avec vous-même et supprimez-le après l'importation.",
+  "Code created just now": "Code créé à l'instant",
+  "Code created %d min ago": "Code créé il y a %d min",
+  "Platform: %@": "Plateforme : %@",
+  "Location: %@": "Emplacement : %@",
+  "Give this device access to your Bingr account?": "Donner à cet appareil l'accès à votre compte Bingr ?",
+  "Allow access": "Autoriser l'accès",
+  "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Ne continuez que si cet appareil est devant vous et que vous avez saisi vous-même le code affiché à l'écran. Ne saisissez jamais un code que quelqu'un vous a envoyé : cette personne aurait un accès complet à votre compte, y compris aux mots de passe de vos serveurs.",
+  "Password must be at least 8 characters.": "Le mot de passe doit contenir au moins 8 caractères."
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -4567,7 +4615,19 @@
   "Ask a grown-up": "Chiedi a un adulto",
   "Solve this sum to leave the kids profile.": "Risolvi questo calcolo per uscire dal profilo bambini.",
   "That's not right. Try again.": "Non è corretto. Riprova.",
-  "New sum": "Nuovo calcolo"
+  "New sum": "Nuovo calcolo",
+  "Too many incorrect PINs. Try again in %@.": "Troppi PIN errati. Riprova tra %@.",
+  "Enter your current PIN": "Inserisci il PIN attuale",
+  "Export": "Esporta",
+  "The file contains the passwords of your servers and your PINs. Only share it with yourself, and delete it after importing.": "Il file contiene le password dei tuoi server e i tuoi PIN. Condividilo solo con te stesso ed eliminalo dopo l'importazione.",
+  "Code created just now": "Codice creato ora",
+  "Code created %d min ago": "Codice creato %d min fa",
+  "Platform: %@": "Piattaforma: %@",
+  "Location: %@": "Posizione: %@",
+  "Give this device access to your Bingr account?": "Dare a questo dispositivo l'accesso al tuo account Bingr?",
+  "Allow access": "Consenti accesso",
+  "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Continua solo se questo dispositivo è davanti a te e hai inserito tu il codice mostrato sullo schermo. Non inserire mai un codice che qualcuno ti ha inviato: avrebbe accesso completo al tuo account, comprese le password dei tuoi server.",
+  "Password must be at least 8 characters.": "La password deve contenere almeno 8 caratteri."
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -5495,7 +5555,19 @@
   "Solve this sum to leave the kids profile.": "Los deze som op om het kinderprofiel te verlaten.",
   "That's not right. Try again.": "Dat klopt niet. Probeer het nog eens.",
   "New sum": "Nieuwe som",
-  "Categories that are off don't appear anywhere in the app. Saved for your whole account (all profiles except kids profiles), for all your servers.": "Categorieën die uit staan, zie je nergens meer in de app. Opgeslagen voor je hele account (alle profielen behalve kinderprofielen), voor al je servers."
+  "Categories that are off don't appear anywhere in the app. Saved for your whole account (all profiles except kids profiles), for all your servers.": "Categorieën die uit staan, zie je nergens meer in de app. Opgeslagen voor je hele account (alle profielen behalve kinderprofielen), voor al je servers.",
+  "Too many incorrect PINs. Try again in %@.": "Te vaak een verkeerde pincode. Probeer het over %@ opnieuw.",
+  "Enter your current PIN": "Voer je huidige pincode in",
+  "Export": "Exporteren",
+  "The file contains the passwords of your servers and your PINs. Only share it with yourself, and delete it after importing.": "Het bestand bevat de wachtwoorden van je servers en je pincodes. Deel het alleen met jezelf en verwijder het na het importeren.",
+  "Code created just now": "Code zojuist gemaakt",
+  "Code created %d min ago": "Code %d min geleden gemaakt",
+  "Platform: %@": "Platform: %@",
+  "Location: %@": "Locatie: %@",
+  "Give this device access to your Bingr account?": "Dit apparaat toegang geven tot je Bingr-account?",
+  "Allow access": "Toegang geven",
+  "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Ga alleen verder als dit apparaat voor je staat en je de code zelf van het scherm hebt overgenomen. Vul nooit een code in die iemand je stuurt: die krijgt dan volledige toegang tot je account, ook tot de wachtwoorden van je servers.",
+  "Password must be at least 8 characters.": "Wachtwoord moet minimaal 8 tekens hebben."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -6409,7 +6481,19 @@
   "Ask a grown-up": "Poproś dorosłego",
   "Solve this sum to leave the kids profile.": "Rozwiąż to działanie, aby opuścić profil dziecka.",
   "That's not right. Try again.": "To nie jest poprawne. Spróbuj ponownie.",
-  "New sum": "Nowe działanie"
+  "New sum": "Nowe działanie",
+  "Too many incorrect PINs. Try again in %@.": "Zbyt wiele błędnych kodów PIN. Spróbuj ponownie za %@.",
+  "Enter your current PIN": "Wpisz obecny kod PIN",
+  "Export": "Eksportuj",
+  "The file contains the passwords of your servers and your PINs. Only share it with yourself, and delete it after importing.": "Plik zawiera hasła do Twoich serwerów i kody PIN. Udostępniaj go tylko sobie i usuń go po zaimportowaniu.",
+  "Code created just now": "Kod utworzony przed chwilą",
+  "Code created %d min ago": "Kod utworzony %d min temu",
+  "Platform: %@": "Platforma: %@",
+  "Location: %@": "Lokalizacja: %@",
+  "Give this device access to your Bingr account?": "Dać temu urządzeniu dostęp do konta Bingr?",
+  "Allow access": "Zezwól na dostęp",
+  "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Kontynuuj tylko wtedy, gdy to urządzenie stoi przed Tobą, a kod przepisałeś sam z jego ekranu. Nigdy nie wpisuj kodu, który ktoś Ci wysłał: ta osoba uzyskałaby pełny dostęp do konta, także do haseł Twoich serwerów.",
+  "Password must be at least 8 characters.": "Hasło musi mieć co najmniej 8 znaków."
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -7323,7 +7407,19 @@
   "Ask a grown-up": "Pede a um adulto",
   "Solve this sum to leave the kids profile.": "Resolve esta conta para sair do perfil infantil.",
   "That's not right. Try again.": "Não está certo. Tenta novamente.",
-  "New sum": "Nova conta"
+  "New sum": "Nova conta",
+  "Too many incorrect PINs. Try again in %@.": "Demasiados PIN incorretos. Tente novamente dentro de %@.",
+  "Enter your current PIN": "Introduza o seu PIN atual",
+  "Export": "Exportar",
+  "The file contains the passwords of your servers and your PINs. Only share it with yourself, and delete it after importing.": "O ficheiro contém as palavras-passe dos seus servidores e os seus PIN. Partilhe-o apenas consigo e elimine-o depois de importar.",
+  "Code created just now": "Código criado agora mesmo",
+  "Code created %d min ago": "Código criado há %d min",
+  "Platform: %@": "Plataforma: %@",
+  "Location: %@": "Localização: %@",
+  "Give this device access to your Bingr account?": "Dar a este dispositivo acesso à sua conta Bingr?",
+  "Allow access": "Permitir acesso",
+  "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Continue apenas se este dispositivo estiver à sua frente e tiver introduzido o código do ecrã. Nunca introduza um código que alguém lhe enviou: essa pessoa teria acesso total à sua conta, incluindo às palavras-passe dos seus servidores.",
+  "Password must be at least 8 characters.": "A palavra-passe deve ter pelo menos 8 caracteres."
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -8237,7 +8333,19 @@
   "Ask a grown-up": "Bir yetişkine sor",
   "Solve this sum to leave the kids profile.": "Çocuk profilinden çıkmak için bu işlemi çöz.",
   "That's not right. Try again.": "Bu doğru değil. Tekrar dene.",
-  "New sum": "Yeni işlem"
+  "New sum": "Yeni işlem",
+  "Too many incorrect PINs. Try again in %@.": "Çok fazla yanlış PIN. %@ sonra tekrar deneyin.",
+  "Enter your current PIN": "Mevcut PIN'inizi girin",
+  "Export": "Dışa aktar",
+  "The file contains the passwords of your servers and your PINs. Only share it with yourself, and delete it after importing.": "Dosya, sunucularınızın şifrelerini ve PIN'lerinizi içerir. Yalnızca kendinizle paylaşın ve içe aktardıktan sonra silin.",
+  "Code created just now": "Kod az önce oluşturuldu",
+  "Code created %d min ago": "Kod %d dk önce oluşturuldu",
+  "Platform: %@": "Platform: %@",
+  "Location: %@": "Konum: %@",
+  "Give this device access to your Bingr account?": "Bu cihaza Bingr hesabınıza erişim verilsin mi?",
+  "Allow access": "Erişime izin ver",
+  "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Yalnızca bu cihaz önünüzdeyse ve kodu ekranından kendiniz girdiyseniz devam edin. Birinin size gönderdiği bir kodu asla girmeyin: o kişi sunucu şifreleriniz dahil hesabınıza tam erişim elde eder.",
+  "Password must be at least 8 characters.": "Şifre en az 8 karakter olmalı."
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -9151,6 +9259,18 @@
   "Ask a grown-up": "请大人帮忙",
   "Solve this sum to leave the kids profile.": "解答这道算术题即可离开儿童资料。",
   "That's not right. Try again.": "答案不对，请再试一次。",
-  "New sum": "新题目"
+  "New sum": "新题目",
+  "Too many incorrect PINs. Try again in %@.": "PIN 错误次数过多。请在 %@ 后重试。",
+  "Enter your current PIN": "输入当前 PIN",
+  "Export": "导出",
+  "The file contains the passwords of your servers and your PINs. Only share it with yourself, and delete it after importing.": "该文件包含你的服务器密码和 PIN。只与自己分享，导入后请删除。",
+  "Code created just now": "代码刚刚生成",
+  "Code created %d min ago": "代码于 %d 分钟前生成",
+  "Platform: %@": "平台：%@",
+  "Location: %@": "位置：%@",
+  "Give this device access to your Bingr account?": "允许此设备访问你的 Bingr 账户？",
+  "Allow access": "允许访问",
+  "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "只有当此设备就在你面前、且代码是你自己从其屏幕上输入时才继续。切勿输入别人发给你的代码：对方将完全访问你的账户，包括你的服务器密码。",
+  "Password must be at least 8 characters.": "密码至少需要 8 个字符。"
  }
 }

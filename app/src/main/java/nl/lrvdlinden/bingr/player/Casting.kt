@@ -175,6 +175,8 @@ object Casting {
     private fun attach(session: CastSession, castCurrent: Boolean) {
         connected = true
         deviceName = session.castDevice?.friendlyName
+        // build 141 (M1): nieuw token voor het doorgeefluik, en alleen deze Chromecast mag iets ophalen
+        CastRelay.beginSession(receiverAddress(session.castDevice))
         client?.unregisterCallback(clientCallback)
         client = session.remoteMediaClient
         client?.registerCallback(clientCallback)
@@ -191,6 +193,17 @@ object Casting {
         if (ok) p.pause()
         return ok
     }
+
+    /**
+     * IP-adres van de Chromecast. Via reflectie: de naam van de getter verschilt tussen versies van de Cast-SDK
+     * (getInetAddress / getIpAddress); ontbreekt hij, dan zet het doorgeefluik het eerste apparaat vast.
+     */
+    private fun receiverAddress(device: Any?): java.net.InetAddress? = runCatching {
+        val d = device ?: return null
+        val m = d.javaClass.methods.firstOrNull { it.name == "getInetAddress" && it.parameterTypes.isEmpty() }
+            ?: d.javaClass.methods.firstOrNull { it.name == "getIpAddress" && it.parameterTypes.isEmpty() }
+        m?.invoke(d) as? java.net.InetAddress
+    }.getOrNull()
 
     private fun detach() {
         client?.unregisterCallback(clientCallback)

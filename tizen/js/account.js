@@ -2,7 +2,7 @@
  * Bingr-account (Supabase via gewone REST), volgens docs/ACCOUNT.md van de iOS-repo.
  * Zelfde aanroepen als AccountService.kt op Android: tv-koppeling met QR, sessie vernieuwen,
  * apparaten (platform "tizen"), servers, state-onderdelen, tegelijk kijken en kijkgeschiedenis.
- * De sessie staat alleen op deze tv (localStorage "bingr.auth"); device_id blijft na uitloggen.
+ * De sessie staat alleen op deze tv (build 141: in de kluis B.vault, zie js/build141.js); device_id blijft na uitloggen.
  */
 (function () {
   'use strict';
@@ -15,6 +15,8 @@
 
   var A = B.account = {};
   var session = B.store.get('auth', null); // {access_token, refresh_token, expires_at (s), email, user_id}
+  // build 141: de sessie staat in de kluis; die is pas na het laden (app.js wacht erop) te lezen
+  if (B.vault) B.vault.onLoad(function () { session = B.store.get('auth', null); });
   var refreshing = null;
 
   A.isSignedIn = function () { return !!(session && session.refresh_token); };

@@ -67,7 +67,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // build 141 (M4): R8 aan (code verkleinen en namen verbergen); resources blijven staan (sommige gaan op naam)
+            isMinifyEnabled = true
+            isShrinkResources = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = if (hasKeystore) signingConfigs.getByName("bingr") else signingConfigs.getByName("debug")
         }
     }

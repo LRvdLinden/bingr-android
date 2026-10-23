@@ -27,6 +27,11 @@
   D.pins = B.store.get('pins', {}) || {};                // kleine letters profiel-id → pincode
   // instellingen die op deze tv gewijzigd zijn maar nog niet geüpload (offline): {shared: {sleutel: waarde}, intro: {sleutel: markering}}
   var pendingSettings = B.store.get('settingsPending', null);
+  // build 141: servers (met wachtwoorden) en pincodes staan in de kluis; na het laden opnieuw lezen
+  if (B.vault) B.vault.onLoad(function () {
+    D.sources = B.store.get('sources', []) || [];
+    D.pins = B.store.get('pins', {}) || {};
+  });
 
   function save() {
     B.store.set('profiles', D.profiles);

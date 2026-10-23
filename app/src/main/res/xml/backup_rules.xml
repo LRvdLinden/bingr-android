@@ -10,4 +10,6 @@
     <exclude domain="sharedpref" path="bingr.device.xml" />
     <exclude domain="sharedpref" path="bingr.secrets.xml" />
     <exclude domain="sharedpref" path="bingr.serverkeys.xml" />
+    <!-- build 141: bibliotheekcache per server (stream-adressen met inloggegevens); wordt opnieuw opgebouwd -->
+    <exclude domain="file" path="servercache" />
 </full-backup-content>

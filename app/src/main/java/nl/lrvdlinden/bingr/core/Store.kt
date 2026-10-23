@@ -565,6 +565,9 @@ object Store {
         }
     }
 
+    /** Build 141: geheim alleen op dit apparaat (niet naar het account), zoals de pincode-limiet. */
+    fun setLocalSecret(key: String, value: String?) = putSecret(key, value)
+
     fun setSecret(key: String, value: String?) {
         val old = secret(key)
         putSecret(key, value)

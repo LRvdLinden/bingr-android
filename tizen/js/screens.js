@@ -128,7 +128,9 @@
       if (signup && !firstName) { err.textContent = L('Enter your first name.'); return; }
       if (signup && !lastName) { err.textContent = L('Enter your last name.'); return; }
       if (!validEmail()) { err.textContent = L('Enter a valid email address.'); return; }
-      if (pw.length < 6) { err.textContent = L('Password must be at least 6 characters.'); return; }
+      // build 141: nieuw wachtwoord minimaal 8 tekens (server); inloggen met een ouder, korter wachtwoord blijft kunnen
+      if (signup && pw.length < 8) { err.textContent = L('Password must be at least 8 characters.'); return; }
+      if (!pw) { err.textContent = L('Incorrect email or password.'); return; }
       busy = true; err.textContent = '';
       var req = signup ? auth('/auth/v1/signup', { email: email.trim(), password: pw, data: { lang: B.lang, first_name: firstName, last_name: lastName } })
         : auth('/auth/v1/token?grant_type=password', { email: email.trim(), password: pw });
@@ -150,7 +152,9 @@
           signup = false; pw = ''; draw();
           return;
         }
-        if (codeErr === 'user_already_exists' || codeErr === 'email_exists') err.textContent = L('An account with this email already exists.');
+        if (r.status === 429 || codeErr === 'over_request_rate_limit') err.textContent = L('Too many attempts. Wait a few minutes and try again.');
+        else if (codeErr === 'weak_password') err.textContent = L('Password must be at least 8 characters.');
+        else if (codeErr === 'user_already_exists' || codeErr === 'email_exists') err.textContent = L('An account with this email already exists.');
         else if (codeErr === 'email_not_confirmed') err.textContent = L('Confirm your email address first. Check your inbox.');
         else if (codeErr === 'invalid_credentials' || (!signup && r.status === 400)) err.textContent = L('Incorrect email or password.');
         else err.textContent = L('Something went wrong. Please try again.');

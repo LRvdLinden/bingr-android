@@ -47,6 +47,8 @@ Beperkingen die blijven:
 - Downloaden, casten en het wijzigen van profielen, slimme collecties of de startscherm-indeling doe je in de andere apps of op bingr.online; op de tv zie je het resultaat. Handmatige collecties maken en vullen kan wel op de tv (contextmenu).
 - Stremio speelt alleen bronnen met een gewone URL (geen torrents).
 - Inloggen bij Jellyfin/Emby gebeurt met gebruikersnaam en wachtwoord; Bingr bewaart alleen de sessie, niet het wachtwoord.
+- Gevoelige gegevens (build 141): de sessie van je Bingr-account, je servers met wachtwoorden, pincodes, Trakt- en OpenSubtitles-tokens en app-sleutels staan niet meer in localStorage maar in IndexedDB, versleuteld (AES-GCM, Web Crypto) met een sleutel die per installatie wordt gemaakt en niet uit te lezen is. Tizen heeft voor web-apps geen keystore: die sleutel staat in dezelfde app-opslag. Dat beschermt tegen uitlezen van localStorage of een gekopieerd opslagbestand, niet tegen iemand met volledige toegang tot het bestandssysteem van de tv. Kent een tv Web Crypto niet, dan staan de waarden onversleuteld in IndexedDB; werkt IndexedDB niet, dan blijft alles in localStorage zoals vroeger (`js/build141.js`).
+- Pincode: na 5 foute pogingen op rij een oplopende wachttijd (30 s tot 1 uur), ook na een herstart.
 
 ## Bediening
 

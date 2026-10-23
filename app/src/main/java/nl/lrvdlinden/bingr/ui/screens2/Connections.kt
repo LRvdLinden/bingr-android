@@ -53,6 +53,8 @@ private const val S2_OS_CONSUMERS = "https://www.opensubtitles.com/consumers"
 private const val S2_TRAKT_REDIRECT = "https://github.com/LRvdLinden/iptv-ios-appletv"
 
 internal fun s2OpenURL(ctx: Context, url: String) {
+    // build 141: alleen http(s) naar de browser (geen intent:, file:, content: of javascript:)
+    if (!Build141Logic.TrustedHosts.isWebURL(url)) return
     runCatching {
         ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }

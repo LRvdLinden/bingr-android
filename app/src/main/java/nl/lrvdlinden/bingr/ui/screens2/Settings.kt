@@ -128,10 +128,17 @@ private enum class S2SettingsSub { CATEGORIES, MANAGE, HISTORY, NAS, CHECK, COLL
 private enum class S2PinMode { SET, UNLOCK, DISABLE }
 
 private const val S2_FILE_AUTHORITY = "nl.lrvdlinden.bingr.files"
+private const val S2_BACKUP_NAME = "Bingr-backup.json"
 
-/** Alles (incl. wachtwoorden) als .json-bestand delen (deelmenu). */
-private fun s2ExportBackup(ctx: Context): Boolean = runCatching {
-    val f = File(ctx.cacheDir, "Bingr-backup.json")
+/** Build 141 (M7): tijdelijk exportbestand weghalen (na het delen, en bij het openen van Mijn Bingr als het nog staat). */
+internal fun s2DeleteBackupFile(ctx: Context) { runCatching { File(ctx.cacheDir, S2_BACKUP_NAME).delete() } }
+
+/**
+ * Alles (incl. wachtwoorden) als .json-bestand delen (deelmenu). Build 141 (M7): het deelmenu start met [launch]
+ * (resultaat = deelmenu dicht), zodat het tijdelijke bestand daarna meteen weg kan.
+ */
+private fun s2ExportBackup(ctx: Context, launch: (Intent) -> Unit): Boolean = runCatching {
+    val f = File(ctx.cacheDir, S2_BACKUP_NAME)
     f.writeText(Store.exportJSON())
     val uri: Uri = FileProvider.getUriForFile(ctx, S2_FILE_AUTHORITY, f)
     val send = Intent(Intent.ACTION_SEND).apply {
@@ -141,9 +148,9 @@ private fun s2ExportBackup(ctx: Context): Boolean = runCatching {
         clipData = ClipData.newRawUri("Bingr", uri)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    ctx.startActivity(Intent.createChooser(send, L("Export to file")).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    launch(Intent.createChooser(send, L("Export to file")).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     true
-}.getOrDefault(false)
+}.getOrElse { s2DeleteBackupFile(ctx); false }
 
 /**
  * "Mijn Bingr": zelfde secties en volgorde als SettingsView.swift.
@@ -164,6 +171,9 @@ fun SettingsScreen() {
     var showOSLogin by remember { mutableStateOf(false) }
     var setup by remember { mutableStateOf<String?>(null) }
     var pinMode by remember { mutableStateOf<S2PinMode?>(null) }
+    /** Build 141 (H1/M7): wacht op de pincode van het hoofdaccount: titel + wat er daarna gebeurt. */
+    var mainPinFor by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
+    var confirmExport by remember { mutableStateOf(false) }
     var shareStatus by remember { mutableStateOf<String?>(null) }
     var linkingTv by remember { mutableStateOf(false) }
     var showDevices by remember { mutableStateOf(false) }
@@ -193,6 +203,11 @@ fun SettingsScreen() {
     var resumeLastChannel by remember { mutableStateOf(PlayerSettings.resumeLastChannel) }
     var iconConfirm by remember { mutableStateOf<String?>(null) }
 
+    // build 141 (M7): deelmenu voor de export; als het dicht is, het tijdelijke bestand weghalen
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        s2DeleteBackupFile(ctx)
+    }
+    LaunchedEffect(Unit) { s2DeleteBackupFile(ctx) }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             val text = runCatching { ctx.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() } }.getOrNull()
@@ -657,6 +672,7 @@ fun SettingsScreen() {
                         icon = if (has) Icons.Default.Lock else Icons.Default.LockOpen,
                         tint = if (has) Theme.green else Theme.secondary)
                     if (has) {
+                        // build 141 (H1): eerst de huidige pincode (PinChangeScreen)
                         S2Row(L("Change PIN"), onClick = { pinMode = S2PinMode.SET })
                         S2Row(L("Remove PIN"), tint = Theme.red, onClick = { pinMode = S2PinMode.DISABLE })
                     } else {
@@ -666,12 +682,15 @@ fun SettingsScreen() {
                 val mainHasPIN = profile?.let { ParentalControl.hasPIN(it) } ?: ParentalControl.hasPIN
                 if (isMain && mainHasPIN) {
                     val parental = Store.parental
+                    // build 141 (H1): uitzetten alleen met de pincode (aanzetten mag altijd)
                     S2Toggle(L("Lock adult content with this PIN"), parental.enabled) { v ->
-                        Store.updateParental { it.copy(enabled = v) }
+                        if (v) Store.updateParental { it.copy(enabled = true) }
+                        else mainPinFor = L("Enter PIN to turn off") to { Store.updateParental { it.copy(enabled = false) } }
                     }
                     if (parental.enabled) {
                         S2Toggle(L("Lock adult groups automatically"), parental.autoLockAdult) { v ->
-                            Store.updateParental { it.copy(autoLockAdult = v) }
+                            if (v) Store.updateParental { it.copy(autoLockAdult = true) }
+                            else mainPinFor = L("Enter PIN to turn off") to { Store.updateParental { it.copy(autoLockAdult = false) } }
                         }
                         val unlocked = ParentalControl.isUnlocked
                         S2Row(if (unlocked) L("Unlocked for 30 minutes") else L("Locked"),
@@ -760,9 +779,8 @@ fun SettingsScreen() {
                     L("Export saves your playlists (incl. passwords), favorites, My List, watch progress, history and your changes to a file. Import it on another device to merge.")) {
                     S2Row(L("Playlists"), value = "${Store.playlists.size}")
                     S2Row(L("Watch progress"), value = L("%d titles", Store.progress.size))
-                    S2Row(L("Export to file"), icon = Icons.Default.Upload, onClick = {
-                        if (!s2ExportBackup(ctx)) shareStatus = L("Export failed")
-                    })
+                    // build 141 (M7): eerst een waarschuwing, dan de pincode (als die er is), dan pas het deelmenu
+                    S2Row(L("Export to file"), icon = Icons.Default.Upload, onClick = { confirmExport = true })
                     S2Row(L("Import from file"), icon = Icons.Default.Download, onClick = {
                         val ok = runCatching { importLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream")) }.isSuccess
                         if (!ok) shareStatus = L("Import failed")
@@ -839,9 +857,28 @@ fun SettingsScreen() {
             onDismiss = { deletingServer = null }
         )
     }
+    if (confirmExport) {
+        S2ActionDialog(
+            L("Export to file"),
+            listOf(S2Action(L("Export"), Icons.Default.Upload) {
+                val run: () -> Unit = {
+                    val ok = s2ExportBackup(ctx) { i -> runCatching { exportLauncher.launch(i) }.onFailure { s2DeleteBackupFile(ctx) } }
+                    if (!ok) shareStatus = L("Export failed")
+                }
+                val main = Store.mainProfileID
+                val needsPIN = if (main != null) ParentalControl.hasPIN(main) else ParentalControl.hasPIN
+                if (needsPIN) mainPinFor = L("Enter PIN") to run else run()
+            }),
+            onDismiss = { confirmExport = false },
+            message = L("The file contains the passwords of your servers and your PINs. Only share it with yourself, and delete it after importing."),
+        )
+    }
+    mainPinFor?.let { (title, action) ->
+        MainPinGate(title, onDismiss = { mainPinFor = null }, onOK = action)
+    }
     val prof = Store.activeProfile
     when (pinMode) {
-        S2PinMode.SET -> PinSetupScreen(profileID = prof?.id) { pinMode = null }
+        S2PinMode.SET -> PinChangeScreen(profileID = prof?.id) { pinMode = null }
         S2PinMode.UNLOCK -> PinPad(L("Enter PIN"), onDismiss = { pinMode = null }) { pin ->
             if (prof != null) ParentalControl.verify(pin, prof) else ParentalControl.verify(pin)
         }
@@ -999,6 +1036,8 @@ private fun S2LinkTvScreen(onClose: () -> Unit) {
     var code by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var done by remember { mutableStateOf<String?>(null) }
+    /** Build 141 (M3): eerst tonen welk apparaat toegang vraagt, pas na bevestigen goedkeuren. */
+    var confirm by remember { mutableStateOf<Account.TvCodeInfo?>(null) }
     S2FullDialog(onClose) {
         S2Page(L("Link a TV"), onClose = onClose) {
             item {
@@ -1020,7 +1059,7 @@ private fun S2LinkTvScreen(onClose: () -> Unit) {
                             if (!ok) return@NetflixButton
                             error = null; done = null
                             AppScope.launch {
-                                try { done = Account.approveTv(code); code = "" }
+                                try { confirm = Account.tvCodeInfo(code) }
                                 catch (e: AccountException) { error = e.message }
                                 catch (e: Exception) { error = L("Something went wrong. Please try again.") }
                             }
@@ -1030,6 +1069,45 @@ private fun S2LinkTvScreen(onClose: () -> Unit) {
             }
         }
     }
+    // na het scherm, zodat het venster erboven ligt
+    confirm?.let { info ->
+        S2LinkTvConfirmDialog(info, onDismiss = { confirm = null }) {
+            confirm = null
+            error = null
+            AppScope.launch {
+                try { done = Account.approveTv(code); code = "" }
+                catch (e: AccountException) { error = e.message }
+                catch (e: Exception) { error = L("Something went wrong. Please try again.") }
+            }
+        }
+    }
+}
+
+/**
+ * Build 141 (M3): bevestigen vóór een tv toegang krijgt: soort apparaat, de naam die het apparaat opgaf, hoe lang
+ * geleden de code is gemaakt (en plaats/platform als de server die geeft), met een waarschuwing tegen codes van anderen.
+ */
+@Composable
+private fun S2LinkTvConfirmDialog(info: Account.TvCodeInfo, onDismiss: () -> Unit, onApprove: () -> Unit) {
+    val what = listOfNotNull(info.label ?: info.platform, info.device.takeIf { it != info.label }?.let { "“$it”" }).joinToString(" · ")
+    val age = info.ageSeconds?.let { a ->
+        if (a < 90) L("Code created just now") else L("Code created %d min ago", ((a + 30) / 60).toInt())
+    }
+    val details = listOfNotNull(
+        what.ifEmpty { info.device },
+        info.platform?.takeIf { it != info.label }?.let { L("Platform: %@", it) },
+        info.location?.let { L("Location: %@", it) },
+        age,
+    ).joinToString("\n")
+    S2ActionDialog(
+        L("Give this device access to your Bingr account?"),
+        listOf(
+            S2Action(L("Allow access"), Icons.Default.Tv, primary = true) { onApprove() },
+            S2Action(L("Cancel")) { },
+        ),
+        onDismiss = onDismiss,
+        message = details + "\n\n" + L("Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords."),
+    )
 }
 
 /**

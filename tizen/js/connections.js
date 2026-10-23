@@ -16,6 +16,8 @@
   // MARK: lokale kopie en samenvoegen
 
   var local = B.store.get('connections', null);   // {data, at}
+  // build 141: Trakt- en OpenSubtitles-tokens staan in de kluis; na het laden opnieuw lezen
+  if (B.vault) B.vault.onLoad(function () { local = B.store.get('connections', null); });
   function save() { B.store.set('connections', local); }
   function at(v) { return B.parseISO(v) || 0; }
   C.data = function () { return (local && local.data) || {}; };
@@ -161,7 +163,8 @@
     if (sec) o.client_secret = sec;
     return o;
   }
-  var oauthBase = B.store.get('trakt.oauthHost', BASE) || BASE;
+  // build 141: alleen api.trakt.tv / auth.trakt.tv
+  var oauthBase = B.b141 ? B.b141.traktOAuthBase(B.store.get('trakt.oauthHost', BASE)) : (B.store.get('trakt.oauthHost', BASE) || BASE);
   function oauthPost(path, body, host) {
     return B.http((host || oauthBase) + path, { method: 'POST', headers: apiHeaders(null), body: body, timeout: 20000 });
   }
@@ -551,6 +554,8 @@
     var o = C.opensubtitles();
     var h = host || (o && o.baseURL) || OS_HOST;
     h = String(h).replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    // build 141: token en API-sleutel alleen naar (een subdomein van) opensubtitles.com
+    if (B.b141) h = B.b141.osHost(h);
     var u = 'https://' + h + '/api/v1' + path;
     if (params) {
       var list = [];
@@ -568,7 +573,7 @@
   OS.login = function (user, pass) {
     return osRequest('/login', 'POST', null, { username: user, password: pass }, OS_HOST).then(function (j) {
       if (!j.token) throw new Error(L('Incorrect email or password.'));
-      return changed(function (d) { d.opensubtitles = { token: j.token, username: user, baseURL: j.base_url || OS_HOST }; });
+      return changed(function (d) { d.opensubtitles = { token: j.token, username: user, baseURL: B.b141 ? B.b141.osHost(j.base_url) : (j.base_url || OS_HOST) }; });
     });
   };
   OS.logout = function () {

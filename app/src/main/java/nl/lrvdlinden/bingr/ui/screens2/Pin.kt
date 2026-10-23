@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -59,21 +60,34 @@ import kotlinx.coroutines.launch
  * Telefoon/tablet: compact 3×4-toetsenblok dat zich aan de schermhoogte aanpast.
  * TV: één rij cijfers 1–9, 0, ⌫ (zoals de tvOS-versie), past ook met overscan.
  * [onSubmit] geeft true bij een juiste code (dan sluit het scherm via [onDismiss]), anders schudt het en begint opnieuw.
+ * Build 141 (M6): [guarded] (standaard) telt foute pogingen; na 5 fouten op rij volgt een oplopende wachttijd
+ * ([ParentalControl.lockoutRemaining]) waarin de toetsen niets doen. Alleen bij het kiezen van een nieuwe pincode
+ * (PinSetupScreen) staat het uit.
  */
 @Composable
-fun PinPad(title: String, onDismiss: () -> Unit, onSubmit: (String) -> Boolean) {
+fun PinPad(title: String, onDismiss: () -> Unit, guarded: Boolean = true, onSubmit: (String) -> Boolean) {
     var pin by remember { mutableStateOf("") }
     val shake = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val tv = AppState.isTV
+    var wait by remember { mutableStateOf(if (guarded) ParentalControl.lockoutRemaining() else 0L) }
+    val lockVersion = ParentalControl.lockoutVersion
+    LaunchedEffect(guarded, lockVersion) {
+        if (!guarded) return@LaunchedEffect
+        wait = ParentalControl.lockoutRemaining()
+        while (wait > 0) { delay(1000); wait = ParentalControl.lockoutRemaining() }
+    }
 
     fun tap(k: String) {
+        if (guarded && ParentalControl.lockoutRemaining() > 0) { pin = ""; return }
         if (k == "⌫") { if (pin.isNotEmpty()) pin = pin.dropLast(1); return }
         if (pin.length >= 4) return
         pin += k
         if (pin.length == 4) {
             val entered = pin
-            if (onSubmit(entered)) onDismiss()
+            val ok = onSubmit(entered)
+            if (guarded) { if (ok) ParentalControl.pinSucceeded() else ParentalControl.pinFailed() }
+            if (ok) onDismiss()
             else {
                 pin = ""
                 scope.launch {
@@ -117,6 +131,7 @@ fun PinPad(title: String, onDismiss: () -> Unit, onSubmit: (String) -> Boolean) 
                         maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 820.dp))
                     Spacer(Modifier.height(22.dp))
                     PinDots(pin.length, 18.dp, 18.dp, shake.value)
+                    PinWait(wait, 18)
                     Spacer(Modifier.height(26.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
                         listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "⌫").forEach { k ->
@@ -145,6 +160,7 @@ fun PinPad(title: String, onDismiss: () -> Unit, onSubmit: (String) -> Boolean) 
                         modifier = Modifier.widthIn(max = 420.dp))
                     Spacer(Modifier.height(16.dp))
                     PinDots(pin.length, 14.dp, 14.dp, shake.value)
+                    PinWait(wait, 14)
                     Spacer(Modifier.height(18.dp))
                     val rows = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("", "0", "⌫"))
                     Column(verticalArrangement = Arrangement.spacedBy(gap)) {
@@ -165,6 +181,15 @@ fun PinPad(title: String, onDismiss: () -> Unit, onSubmit: (String) -> Boolean) 
         }
         LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
     }
+}
+
+/** Build 141: melding tijdens de wachttijd na te veel foute pincodes. */
+@Composable
+private fun PinWait(waitMs: Long, size: Int) {
+    if (waitMs <= 0) return
+    Spacer(Modifier.height(10.dp))
+    Text(L("Too many incorrect PINs. Try again in %@.", Build141Logic.PinLockout.shortText(waitMs)),
+        color = Theme.red, fontSize = size.sp, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 520.dp))
 }
 
 @Composable
@@ -210,9 +235,9 @@ fun PinSetupScreen(profileID: String? = null, enableParental: Boolean = false, o
     var first by remember { mutableStateOf<String?>(null) }
     key(step) {
         if (step == 0) {
-            PinPad(L("Choose a 4-digit PIN"), onDismiss = onClose) { pin -> first = pin; step = 1; false }
+            PinPad(L("Choose a 4-digit PIN"), onDismiss = onClose, guarded = false) { pin -> first = pin; step = 1; false }
         } else {
-            PinPad(L("Enter the PIN again"), onDismiss = onClose) { pin ->
+            PinPad(L("Enter the PIN again"), onDismiss = onClose, guarded = false) { pin ->
                 if (pin != first) { step = 0; false }
                 else {
                     val id = profileID ?: Store.activeProfileID ?: Store.mainProfileID
@@ -223,5 +248,41 @@ fun PinSetupScreen(profileID: String? = null, enableParental: Boolean = false, o
                 }
             }
         }
+    }
+}
+
+/**
+ * Build 141 (H1): pincode wijzigen. Heeft het profiel al een pincode, dan eerst de huidige (die van het profiel, of die
+ * van het hoofdaccount); daarna pas een nieuwe kiezen ([PinSetupScreen]). Zonder pincode meteen kiezen.
+ */
+@Composable
+fun PinChangeScreen(profileID: String? = null, onClose: () -> Unit) {
+    val id = profileID ?: Store.activeProfileID ?: Store.mainProfileID
+    val has = if (id != null) ParentalControl.hasPIN(id) else ParentalControl.hasPIN
+    var verified by remember { mutableStateOf(!has) }
+    val ok = remember { booleanArrayOf(false) }
+    if (!verified) {
+        PinPad(L("Enter your current PIN"), onDismiss = { if (ok[0]) verified = true else onClose() }) { pin ->
+            ok[0] = (if (id != null) ParentalControl.verify(pin, id) else ParentalControl.verify(pin)) || ParentalControl.check(pin)
+            ok[0]
+        }
+    } else {
+        PinSetupScreen(profileID = profileID, onClose = onClose)
+    }
+}
+
+/**
+ * Build 141 (H1): iets van het kinderslot uitzetten of een groep ontgrendelen mag alleen met de pincode van het
+ * hoofdaccount. Zonder pincode (nog niet ingesteld) gaat [onOK] meteen.
+ */
+@Composable
+fun MainPinGate(title: String, onDismiss: () -> Unit, onOK: () -> Unit) {
+    val main = Store.mainProfileID
+    val needed = if (main != null) ParentalControl.hasPIN(main) else ParentalControl.hasPIN
+    if (!needed) { LaunchedEffect(Unit) { onOK(); onDismiss() }; return }
+    PinPad(title, onDismiss = onDismiss) { pin ->
+        val good = if (main != null) ParentalControl.verify(pin, main) else ParentalControl.verify(pin)
+        if (good) onOK()
+        good
     }
 }

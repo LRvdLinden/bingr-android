@@ -235,6 +235,8 @@ fun ManageScreen(onClose: () -> Unit) {
     var kind by remember { mutableStateOf(S2Kind.LIVE) }
     var channelsOf by remember { mutableStateOf<String?>(null) }
     var menuFor by remember { mutableStateOf<String?>(null) }
+    /** Build 141 (H1): groep die ontgrendeld wordt; eerst de pincode van het hoofdaccount. */
+    var unlocking by remember { mutableStateOf<String?>(null) }
     var renaming by remember { mutableStateOf<Pair<String, String>?>(null) }
     var merging by remember { mutableStateOf<String?>(null) }
 
@@ -322,7 +324,8 @@ fun ManageScreen(onClose: () -> Unit) {
             add(S2Action(L("Merge into…"), Icons.AutoMirrored.Filled.MergeType) { merging = g })
             if (Store.parental.enabled && pid != null) {
                 add(S2Action(if (locked) L("Unlock") else L("Lock with PIN"), if (locked) Icons.Default.LockOpen else Icons.Default.Lock) {
-                    ParentalControl.toggleLock(pid, g)
+                    // build 141 (H1): op slot zetten mag altijd, ontgrendelen alleen met de pincode
+                    if (locked) unlocking = g else ParentalControl.toggleLock(pid, g)
                 })
             }
             if (kind == S2Kind.LIVE) {
@@ -331,6 +334,11 @@ fun ManageScreen(onClose: () -> Unit) {
             }
         }
         S2ActionDialog(display(g), actions, onDismiss = { menuFor = null })
+    }
+    unlocking?.let { g ->
+        MainPinGate(L("Enter PIN"), onDismiss = { unlocking = null }) {
+            if (pid != null && "$pid|$g" in Store.parental.lockedGroups) ParentalControl.toggleLock(pid, g)
+        }
     }
     merging?.let { m ->
         S2ActionDialog(L("Merge into…"), groups.filter { it != m }.map { target ->
