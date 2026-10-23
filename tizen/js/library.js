@@ -36,6 +36,12 @@
   function lower(s) { return String(s == null ? '' : s).toLowerCase(); }
   // build 128: categoriekeuzes per profiel kunnen via de sync veranderen (applyFilters doet niets als er niets anders is)
   B.on('profileData', function () { if (Lib.raw) Lib.applyFilters(); });
+  // build 140: categorieën aan/uit (account-set): pas filteren als er even niet getikt wordt (niet bij elke tik)
+  var catTimer = null;
+  B.on('accountCats', function () {
+    clearTimeout(catTimer);
+    catTimer = setTimeout(function () { if (Lib.raw) Lib.applyFilters(); }, 450);
+  });
   function anyIn(s, words) { for (var i = 0; i < words.length; i++) if (s.indexOf(words[i]) >= 0) return true; return false; }
   PC.isAdultGroup = function (g) { return anyIn(String(g || '').toLowerCase(), adultWords); };
   PC.isKidsGroup = function (g) {
@@ -112,8 +118,10 @@
       parentalEnabled: !!B.bool(D.shared('parentalControl', false)),
       autoLockAdult: B.bool(D.shared('parentalAutoLockAdult', true)) !== false,
       lockedGroups: D.lockedGroups(src), unlocked: PC.isUnlocked(),
-      // build 128: categorieën aan/uit per profiel (hiddenCategories, "<server-id>|<naam>"), niet meer "group:" uit het android-blok
-      hiddenCats: src ? D.hiddenCategoryNames(src.id) : {}
+      // build 128: categorieën aan/uit (build 140: voor het hele account, section `account`; kinderprofiel: geen)
+      hiddenCats: src ? D.hiddenCategoryNames(src.id) : {},
+      // build 140: kinderprofiel: alleen inhoud uit kindercategorieën
+      kids: !!(p && p.kids)
     };
   }
   /** Filter per item (= Playlists.apply): geeft per soort een functie item → gefilterde kopie of null. */
@@ -132,12 +140,14 @@
       return c.renamed['group:' + m] || m;
     }
     var groupOK = {};
+    var kids = !!ctx.kids && !ctx.unlocked;
     function visible(id, g) {
       if (hidden[id]) return false;
       if (B.has(groupOK, g)) return groupOK[g];
       var m = c.merged[g] || g;
       var hc = ctx.hiddenCats || {};
-      var ok = !hc[g] && !hc[m] && !isLocked(g) && !isLocked(m);
+      // build 140: kinderprofiel: alleen kindercategorieën (naam zoals de server hem levert)
+      var ok = (!kids || B.b140.isKidsCategory(g)) && !hc[g] && !hc[m] && !isLocked(g) && !isLocked(m);
       groupOK[g] = ok;
       return ok;
     }
@@ -145,13 +155,17 @@
     var CLs = B.clang ? B.clang.strip : function (t) { return t; };
     function ageOK(x, isShow) {
       if (ageLimit == null) return true;
-      return PC.allowedFor(x.rated, x.group, ageLimit, x.genre, ctx.strict, AR ? AR.cached(x.title, x.year, isShow) : null);
+      var info = AR ? AR.cached(x.title, x.year, isShow) : null;
+      // build 140: kinderprofiel: bekende classificatie boven de grens niet, zonder bekende classificatie wel
+      if (kids) return B.b140.kidsAgeAllowed(info && info.age != null ? info.age : PC.minimumAge(x.rated), ageLimit);
+      return PC.allowedFor(x.rated, x.group, ageLimit, x.genre, ctx.strict, info);
     }
     return {
       channel: function (ch) {
         if (!visible(ch.id, ch.group)) return null;
         var o = B.assign({}, ch, { group: group(ch.group), name: c.renamed[ch.id] || ch.name, rawGroup: ch.group });
-        if (ageLimit != null && !PC.channelAllowedFor(o.name, o.rawGroup, ageLimit, ctx.strict)) return null;
+        // build 140: een kinderprofiel volgt alleen de categorie (de zendernaam telt niet mee)
+        if (ageLimit != null && !kids && !PC.channelAllowedFor(o.name, o.rawGroup, ageLimit, ctx.strict)) return null;
         return o;
       },
       movie: function (m) {
@@ -416,9 +430,11 @@
         Lib.applyFilters();
         loadEpg(src, Lib.raw, false);
         // build 102: verversen volgens settings.shared.refreshInterval (= RefreshPolicy op iOS en Android)
+        refreshedThisLaunch[lower(src.id)] = true;
         if (Lib.refreshDue(Date.now() - cached.at)) Lib.refresh(src, my);
         return;
       }
+      refreshedThisLaunch[lower(src.id)] = true;
       return Lib.refresh(src, my);
     });
   };
@@ -441,18 +457,49 @@
       default: return ageMs > 86400000;
     }
   };
-  /** build 102: tijdens het gebruik: is de cache van de actieve server oud volgens het beleid? Dan op de achtergrond verversen. */
+  /**
+   * Build 140: tijdens het gebruik (elke 10 minuten, na terugkeer op de tv en na het openen van een profiel): ALLE servers
+   * van het account die volgens het beleid aan de beurt zijn verversen (zoals de knop sinds build 130), de actieve eerst.
+   * Tot build 139 keek dit alleen naar de actieve server, en bij "Elke keer dat de app opent" helemaal niet: de andere
+   * servers werden dus nooit automatisch ververst. Niet tijdens het kijken; elk met een time-out.
+   */
+  var refreshedThisLaunch = {}, autoBusy = false;
   Lib.refreshIfDue = function () {
-    var src = Lib.source;
-    if (!src || Lib.loading) return Promise.resolve(false);
-    var p = Lib.refreshPolicy();
-    if (p === 'manual' || p === 'launch') return Promise.resolve(false);
-    return B.idb.get('lib:' + src.id).then(function (c) {
-      if (Lib.source !== src || Lib.loading || !c || !Lib.refreshDue(Date.now() - c.at)) return false;
-      B.log('playlist verversen (' + p + ')');
-      Lib.refresh(src);
-      return true;
-    }, function () { return false; });
+    if (autoBusy || Lib.refreshingAll || !D.sources.length) return Promise.resolve(false);
+    var pol = Lib.refreshPolicy();
+    if (pol === 'manual') return Promise.resolve(false);
+    autoBusy = true;
+    var now = Date.now(), ages = {}, any = false, AS = B.allservers;
+    return Promise.all(D.sources.map(function (s) {
+      return B.idb.get('lib:' + s.id).then(function (c) { ages[s.id] = c && c.at ? now - c.at : null; }, function () { ages[s.id] = null; });
+    })).then(function () {
+      var active = Lib.source;
+      var due = B.b140.refresh.dueServers(D.sources.map(function (s) { return s.id; }), active ? active.id : null, pol,
+        function (id) { return ages[id]; }, refreshedThisLaunch);
+      var chain = Promise.resolve();
+      due.forEach(function (id) {
+        chain = chain.then(function () {
+          var src = D.sourceById(id);
+          // niet tijdens het kijken (parsen kost op een oude tv beeld): de volgende ronde
+          if (!src || (B.player && B.player.current) || (B.multiview && B.multiview.current)) return;
+          if (Lib.source && src.id === Lib.source.id) {
+            if (Lib.loading) return;
+            B.log('playlist verversen (' + pol + ')');
+            refreshedThisLaunch[lower(src.id)] = true;
+            return Lib.refresh(src).then(function (ok) { if (ok) any = true; });
+          }
+          if (AS && AS.markFetched) AS.markFetched(src.id);
+          refreshedThisLaunch[lower(src.id)] = true;
+          var job = Lib.fetchOther(src);
+          return (AS && AS.withTimeout ? AS.withTimeout(job, 90000) : job).then(function (lib) { if (lib) any = true; }, B.noop);
+        });
+      });
+      return chain;
+    }).catch(B.noop).then(function () {
+      autoBusy = false;
+      if (any && AS && AS.refreshed) AS.refreshed();
+      return any;
+    });
   };
   Lib.refresh = function (src, my) {
     my = my || gen;

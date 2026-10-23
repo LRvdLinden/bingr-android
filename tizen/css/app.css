@@ -875,3 +875,13 @@ html.mv-hole .layer.multiview { background: transparent; }
 .cat-kinds, .cat-codes { display: flex; flex-wrap: wrap; margin: 10px 0 6px 12px; }
 .cat-kinds > *, .cat-codes > * { margin: 0 14px 14px 0; }
 .st-note-small { font-size: 20px; margin: 0 18px 18px 18px; }
+
+/* build 140: ouderpoort (rekensom om een kinderprofiel te verlaten) */
+.kg-box { min-width: 680px; }
+.kg-text { font-size: 24px; margin-top: 8px; }
+.kg-sum { font-size: 56px; font-weight: 800; margin-top: 22px; }
+.kg-input { font-size: 46px; font-weight: 700; min-height: 60px; margin-top: 8px; letter-spacing: 6px; }
+.kg-shake { animation: kg-shake 0.35s; }
+@keyframes kg-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-12px); } 75% { transform: translateX(12px); } }
+.kg-buttons { display: flex; justify-content: center; margin-top: 22px; }
+.kg-buttons > * { margin: 0 10px; }

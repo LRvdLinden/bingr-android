@@ -83,7 +83,12 @@ jobs:
               -include-runtime -d "$RUNNER_TEMP/share-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/share-test.jar" | tee "$RUNNER_TEMP/share-test.txt"; rc2=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests deellink::$(tail -1 "$RUNNER_TEMP/share-test.txt")"
-            [ $rc -eq 0 ] && [ $rc2 -eq 0 ]
+            # build 140: categorieën per account, kinderfilter, ouderpoort, Voor jou/Nieuw op Bingr/uitgelicht, vernieuwen, Mijn lijst
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/AllServersLogic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build140Logic.kt \
+              tools/test/Build140LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b140-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b140-test.jar" | tee "$RUNNER_TEMP/b140-test.txt"; rc3=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 140::$(tail -1 "$RUNNER_TEMP/b140-test.txt")"
+            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi
@@ -334,6 +339,9 @@ jobs:
           set -eo pipefail
           node tizen/test/allservers_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/logic.log"
           echo "::notice title=Logica-tests Samsung TV::$(tail -1 "$RUNNER_TEMP/tlogs/logic.log")"
+          # build 140: categorieën per account, kinderfilter, ouderpoort, Voor jou/Nieuw op Bingr/uitgelicht, vernieuwen, Mijn lijst
+          node tizen/test/build140_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b140.log"
+          echo "::notice title=Logica-tests build 140 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b140.log")"
 
       - name: Tizen Studio CLI uit de cache
         id: cache

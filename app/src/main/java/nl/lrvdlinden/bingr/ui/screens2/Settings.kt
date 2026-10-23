@@ -230,7 +230,7 @@ fun SettingsScreen() {
 
     // volledige subschermen (vervangen de lijst, zodat de focus erin blijft)
     if (lockedSub == null) when (sub) {
-        S2SettingsSub.CATEGORIES -> { ManageCategoriesScreen { sub = null }; return }
+        S2SettingsSub.CATEGORIES -> { if (Store.activeProfile?.kids != true) { ManageCategoriesScreen { sub = null }; return } else sub = null }
         S2SettingsSub.MANAGE -> { ManageScreen { sub = null }; return }
         S2SettingsSub.HISTORY -> { HistoryScreen { sub = null }; return }
         S2SettingsSub.NAS -> { NetworkBrowserScreen { sub = null }; return }
@@ -693,8 +693,10 @@ fun SettingsScreen() {
                     listOf(0 to L("Home"), 1 to L("Live TV"), 2 to L("Movies"), 3 to L("Series")), startTab) {
                     startTab = it; Prefs.put("ui.startTab", it)
                 }
-                // build 128: categorieën aan/uit per profiel (elk profiel zijn eigen keuzes)
-                S2Row(L("Categories on/off (NL, BE, DE…)"), icon = Icons.Default.FilterList, onClick = { sub = S2SettingsSub.CATEGORIES })
+                // build 140: categorieën aan/uit voor het hele account (alle profielen behalve kinderprofielen; die zien dit niet)
+                if (Store.activeProfile?.kids != true) {
+                    S2Row(L("Categories on/off (NL, BE, DE…)"), icon = Icons.Default.FilterList, onClick = { sub = S2SettingsSub.CATEGORIES })
+                }
                 S2Toggle(L("Show Live TV"), showLive) { showLive = it; Prefs.put("ui.showLive", it) }
                 S2Toggle(L("Show Movies"), showMovies) { showMovies = it; Prefs.put("ui.showMovies", it) }
                 S2Toggle(L("Show Series"), showSeries) { showSeries = it; Prefs.put("ui.showSeries", it) }

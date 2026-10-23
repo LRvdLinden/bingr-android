@@ -267,9 +267,14 @@
           p.kids ? h('div.prof-kids', L('Kids')) : null]);
         if (B.store.get('lastProfile', null) === p.id) tile.classList.add('autofocus');
         tile.onEnter = function () {
-          var pin = D.pinFor(p);
-          if (pin) U.askPIN(L('Enter PIN'), function (x) { return x === pin; }, function () { onPick(p); });
-          else onPick(p);
+          var go = function () {
+            var pin = D.pinFor(p);
+            if (pin) U.askPIN(L('Enter PIN'), function (x) { return x === pin; }, function () { onPick(p); });
+            else onPick(p);
+          };
+          // build 140: was het laatst actieve profiel op deze tv een kinderprofiel, dan eerst de rekensom (ouderpoort)
+          var last = D.profileById(B.store.get('lastProfile', null));
+          if (B.kidsGate) B.kidsGate.guardPicker(p, !!(last && last.kids), go); else go();
         };
         row.appendChild(tile);
       });
@@ -428,7 +433,8 @@
   var NAV = [
     ['search', 'search', 'Search'], ['home', 'home', 'Home'], ['live', 'live', 'Live TV'], ['movies', 'movies', 'Movies'],
     // build 86: Categorieën zit niet meer in het menu, maar in het profielmenu en als rij op Home
-    ['series', 'series', 'Series'], ['mylist', 'list', 'My List'],
+    // build 140: Categorieën naast Series (bladeren door de categorieën; kinderprofiel: alleen kindercategorieën)
+    ['series', 'series', 'Series'], ['categories', 'grid', 'Categories'], ['mylist', 'list', 'My List'],
     ['settings', 'gear', 'Settings']
   ];
   S.main = function () {
@@ -452,7 +458,11 @@
       // build 102: tabbladen die verborgen zijn (settings.shared.hiddenTabs) niet in het menu
       if (B.app.tabHidden(n[0])) return;
       var it = h('div.nav-item.f', [U.icon(n[1]), h('span.nav-label', L(n[2]))]);
-      it.onEnter = function () { show(n[0], true); };
+      // build 140: Instellingen vanuit een kinderprofiel: eerst de rekensom (ouderpoort)
+      it.onEnter = function () {
+        if (n[0] === 'settings' && B.kidsGate) B.kidsGate.guard(function () { show(n[0], true); });
+        else show(n[0], true);
+      };
       it.onFocus = function () { nav.classList.add('open'); };
       it.onBlur = function () { setTimeout(function () { if (!nav.contains(U.focused)) nav.classList.remove('open'); }, 0); };
       it.onKey = function (name) {
@@ -624,17 +634,63 @@
     var pg = { el: scroller };
     var blocks = {};      // rij-sleutel → element (voor gedeeltelijk vernieuwen)
     var buildJob = 0;
+    /**
+     * Build 140: uitgelicht = een vaste selectie (max. 8): om en om uit Voor jou en Nieuw op Bingr, dubbele weg. Wisselt om
+     * de 8 s; waar hij begint schuift elke dag één plek op. Zolang die er nog niet is: de Top 10 van vandaag (per dag
+     * dezelfde keuze). Geen willekeur per opening meer.
+     */
+    function heroPool() {
+      var P = B.parity, fy = P && P.forYouRanked ? P.forYouRanked() : [], nw = B.newOnBingr ? B.newOnBingr.list() : [];
+      return B.b140.picks.heroPool(fy, nw, function (e) { return e.type + ':' + String(e.item._src || '').toLowerCase() + '|' + e.item.id; });
+    }
     function heroFor() {
       var lib = Lib.lib;
       return Lib.memo('hero', function () {
         var cands = lib.movies.filter(function (m) { return m.poster; }).slice(0, 400);
         if (!cands.length) cands = lib.series.filter(function (s) { return s.poster; }).slice(0, 400);
         if (!cands.length) return null;
-        // build 102: billboard uit de Top 10 van vandaag (trending, = quickHero op tvOS)
+        // build 102: billboard uit de Top 10 van vandaag (trending, = quickHero op tvOS); build 140: per dag vast
         var top = B.parity ? B.parity.top10(lib.movies.length ? 'movie' : 'series') : Lib.top10(lib.movies.length ? lib.movies : lib.series);
-        var pick = top.length ? top[Math.floor(Math.random() * Math.min(5, top.length))] : cands[Math.floor(Math.random() * cands.length)];
+        var day = B.b140.picks.today();
+        var list = top.length ? top.slice(0, 5) : cands;
+        var pick = list[B.b140.picks.heroStart(day, list.length)];
         return { item: pick, type: lib.movies.indexOf(pick) >= 0 ? 'movie' : 'series' };
       });
+    }
+    var heroEl = null, heroTimer = null, heroList = [], heroAt = 0, heroSig = '';
+    /** Build 140: de vaste selectie (opnieuw) zetten en om de 8 s de volgende tonen. */
+    function startHero() {
+      var pool = heroPool();
+      var sig = pool.map(function (e) { return e.type + e.item.id; }).join(',');
+      if (sig === heroSig && heroTimer) return;
+      heroSig = sig;
+      clearInterval(heroTimer); heroTimer = null;
+      if (!pool.length) return;
+      heroList = pool;
+      heroAt = B.b140.picks.heroStart(B.b140.picks.today(), pool.length);
+      showHero(pool[heroAt]);
+      if (pool.length > 1) heroTimer = setInterval(function () {
+        if (!document.body.contains(scroller)) { clearInterval(heroTimer); heroTimer = null; return; }
+        // niet terwijl er een venster over Home ligt of de speler loopt
+        var top = U.top();
+        if (B.player.current || !top || !top.el || !top.el.contains(scroller)) return;
+        heroAt = (heroAt + 1) % heroList.length;
+        showHero(heroList[heroAt]);
+      }, B.b140.picks.HERO_INTERVAL);
+    }
+    function showHero(hf) {
+      if (!hf || !hf.item) return;
+      var el = hero(hf);
+      var hadFocus = heroEl && U.focused && heroEl.contains(U.focused);
+      var focusKey = hadFocus ? U.focused._key : null;
+      if (heroEl && heroEl.parentNode) heroEl.parentNode.replaceChild(el, heroEl);
+      else track.insertBefore(el, track.firstChild);
+      heroEl = el;
+      if (hadFocus) {
+        var c = el.querySelectorAll('.f'), hit = c[0];
+        for (var i = 0; i < c.length; i++) if (c[i]._key === focusKey) { hit = c[i]; break; }
+        if (hit) U.focus(hit, true);
+      }
     }
     function hero(hf) {
       var x = hf.item;
@@ -713,12 +769,14 @@
           return out;
         },
         // build 102: "Voor jou" (= forYouRow op tvOS), alfabetisch, films en series door elkaar
+        // build 140: per actief profiel; zonder kijkgeschiedenis heet de rij "Populair"
         'foryou': function () {
           // zonder wat intussen voortgang heeft of bekeken is
           var list = (B.parity ? B.parity.forYou() : []).filter(function (e) {
             return !D.progress(e.item.id) && !(e.type === 'movie' && B.parity.movieWatched(e.item));
           });
-          return rowBlock(L('For you'), list.map(function (e) { return posterCard(e.item, e.type); }), 'foryou', seeAll(L('For you'), list));
+          var title = B.parity && B.parity.forYouPopular && B.parity.forYouPopular() ? L('Popular') : L('For you');
+          return rowBlock(title, list.map(function (e) { return posterCard(e.item, e.type); }), 'foryou', seeAll(title, list));
         },
         // build 111: "Nieuw toegevoegd": films én series van de laatste 30 dagen (max. 30), nieuwste eerst
         'recent': function () {
@@ -727,7 +785,11 @@
         },
         // build 111: Binnenkort op Bingr / Nieuw op Bingr (TMDB), met bronvermelding onder de rij
         'upcoming': function () { return B.discover ? B.discover.row('upcoming') : null; },
-        'streaming': function () { return B.discover ? B.discover.row('streaming') : null; },
+        // build 140: Nieuw op Bingr = laatst toegevoegd aan je bibliotheek (alle servers), nieuwste eerst (js/newonbingr.js)
+        'streaming': function () {
+          var list = B.newOnBingr ? B.newOnBingr.list() : [];
+          return rowBlock(L('New on Bingr'), list.map(function (e) { return posterCard(e.item, e.type); }), null, seeAll(L('New on Bingr'), list));
+        },
         'movies': function () { return rowBlock(L('Movies'), lib.movies.slice(0, 30).map(function (m) { return posterCard(m, 'movie'); }), null, seeAll(L('Movies'), entries(lib.movies, 'movie'))); },
         'series': function () { return rowBlock(L('Series'), lib.series.slice(0, 30).map(function (s) { return posterCard(s, 'series'); }), null, seeAll(L('Series'), entries(lib.series, 'series'))); },
         'categories': function () {
@@ -879,7 +941,8 @@
       var st = stateBox();
       if (st) { track.appendChild(st); return; }
       var hf = heroFor();
-      if (hf) track.appendChild(hero(hf));
+      heroEl = null; heroSig = ''; clearInterval(heroTimer); heroTimer = null;
+      if (hf) { heroEl = hero(hf); track.appendChild(heroEl); }
       var b = builders(), keys = order(b);
       var end = h('div.page-end');
       track.appendChild(end);
@@ -950,7 +1013,7 @@
     var offDiscover = B.on('discover', function () {
       B.whenQuiet(function () { if (document.body.contains(scroller)) refreshRows(['mylist', 'upcoming', 'streaming']); }, 300);
     });
-    pg.destroy = function () { offCats(); offDiscover(); };
+    pg.destroy = function () { offCats(); offDiscover(); clearInterval(heroTimer); heroTimer = null; };
     pg.refresh = render;
     // build 102: ook de collectierijen (toevoegen via het contextmenu) en Voor jou (bekeken/voortgang)
     pg.onData = function () {
@@ -971,6 +1034,15 @@
         return P.loadForYou().then(function (ch2) {
           if (my !== extrasJob || !document.body.contains(scroller)) return;
           if (ch2 || changed) B.whenQuiet(function () { if (document.body.contains(scroller)) refreshRows(['foryou']); }, 300);
+          // build 140: Nieuw op Bingr (alle servers), daarna de vaste selectie voor uitgelicht
+          return (B.newOnBingr ? B.newOnBingr.load() : Promise.resolve(false)).then(function (ch3) {
+            if (my !== extrasJob || !document.body.contains(scroller)) return;
+            B.whenQuiet(function () {
+              if (!document.body.contains(scroller)) return;
+              if (ch3) refreshRows(['streaming']);
+              startHero();
+            }, 300);
+          });
         });
       }).catch(B.noop);
     }
@@ -1463,35 +1535,41 @@
     }
     function sep() { list.appendChild(h('div.pm-sep')); }
     var cur = B.app.profile;
+    // build 140: een kinderprofiel verlaten (wisselen, instellingen, account, uitloggen) = eerst de rekensom
+    function gate(fn) { if (B.kidsGate) B.kidsGate.guard(fn); else fn(); }
     var others = D.profiles.filter(function (p) { return !cur || p.id !== cur.id; });
     others.forEach(function (p) {
       var el = item(S.avatar(p, 'mini'), p.name, function () {
-        var pin = D.pinFor(p);
-        if (pin) U.askPIN(L('PIN for %@', p.name), function (x) { return x === pin; }, function () { B.app.openProfile(p); });
-        else B.app.openProfile(p);
+        gate(function () {
+          var pin = D.pinFor(p);
+          if (pin) U.askPIN(L('PIN for %@', p.name), function (x) { return x === pin; }, function () { B.app.openProfile(p); });
+          else B.app.openProfile(p);
+        });
       });
       if (D.pinFor(p)) el.appendChild(U.icon('lock', 'pm-lock'));
     });
     if (others.length) sep();
-    item(U.icon('people'), L('Switch profile'), function () { B.app.switchProfile(); });
+    item(U.icon('people'), L('Switch profile'), function () { gate(function () { B.app.switchProfile(); }); });
     item(U.icon('list'), L('My List'), function () { go('mylist'); });
     // build 86: Categorieën (eerst een menu-item links)
     var lib = Lib.lib;
     if (lib.movies.length || lib.series.length) item(U.icon('grid'), L('Categories'), function () { go('categories'); });
-    item(U.icon('gear'), L('Settings'), function () { go('settings'); });
+    item(U.icon('gear'), L('Settings'), function () { gate(function () { go('settings'); }); });
     if (A.isSignedIn()) {
-      item(U.icon('person'), L('Account & devices'), function () { U.push(S.devices()); });
+      item(U.icon('person'), L('Account & devices'), function () { gate(function () { U.push(S.devices()); }); });
       // build 88: abonnement (Gratis / Lifetime)
       var ent = A.entitlements();
-      if (ent) item(U.icon('lifetime'), L('Subscription') + ': ' + (ent.free ? L('Free') : L('Lifetime')), function () { S.upgrade(null); });
+      if (ent) item(U.icon('lifetime'), L('Subscription') + ': ' + (ent.free ? L('Free') : L('Lifetime')), function () { gate(function () { S.upgrade(null); }); });
     }
     // build 75: support.bingr.online als QR-code
     item(U.icon('help'), L('Support'), function () { S.support(); });
     if (A.isSignedIn()) {
       sep();
       item(U.icon('signout'), L('Sign out'), function () {
-        U.modal({ title: L('Sign out'), text: L('Sign out of Bingr on this device?'), buttons: [
-          { label: L('Sign out'), fn: function () { B.app.signOut(); } }, { label: L('Cancel') }] });
+        gate(function () {
+          U.modal({ title: L('Sign out'), text: L('Sign out of Bingr on this device?'), buttons: [
+            { label: L('Sign out'), fn: function () { B.app.signOut(); } }, { label: L('Cancel') }] });
+        });
       }, '.danger');
     }
     s.onBack = function () { U.pop(); };
@@ -2090,7 +2168,8 @@
       // build 129: kijkgeschiedenis van dit profiel over alle servers (lokaal, = Android)
       row(L('Watch history'), String(D.history().length), function () { U.push(S.historyList()); });
       // build 128: categorieën aan/uit per profiel, van al je servers
-      row(L('Categories on/off (NL, BE, DE…)'), null, function () { U.push(S.categoryChoices()); });
+      // build 140: voor het hele account; kinderprofielen zien dit scherm niet
+      if (!(B.app.profile && B.app.profile.kids)) row(L('Categories on/off (NL, BE, DE…)'), null, function () { U.push(S.categoryChoices()); });
       var accent = D.accentKey(prof);
       // build 88: accentkleuren horen bij Lifetime
       if (!A.allowed('themes')) row(L('Accent color'), h('span', [L('Red'), S.lifetimeBadge()]), function () { S.upgrade('themes'); });
@@ -2358,15 +2437,33 @@
   var catPrefix = /^\s*[|\[({]?\s*([A-Z]{2,4}|[A-Z]{2}\+)\s*(?:[|\])}:\-–•]|\s+\|)/;
   var catSkip = { THE: 1, AND: 1, FOR: 1, ALL: 1, NEW: 1, TOP: 1, VOD: 1, TV: 1 };
   function catCode(g) { var m = catPrefix.exec(g); var c = m ? m[1].toUpperCase() : null; return c && !catSkip[c] ? c : null; }
-  /** Categorienamen van alle servers (actieve eerst, de rest uit de cache op deze tv): [{name, sids}]. */
+  /**
+   * Categorienamen van alle servers (actieve eerst, de rest uit de cache op deze tv): [{name, sids}].
+   * Build 140: bewaard zolang de caches niet veranderen (niet bij elke tik alle bibliotheken opnieuw uit IndexedDB).
+   */
+  var groupMemo = {};
   function allGroups(kind) {
+    var sig = kind + '|' + (Lib.source ? Lib.source.id : '') + '|' + Lib.version + '|' +
+      D.sources.map(function (s) { return s.id + ':' + (Lib.stamps[s.id] || 0); }).join(',');
+    if (groupMemo[kind] && groupMemo[kind].sig === sig) return Promise.resolve(groupMemo[kind].list);
+    return loadGroups(kind).then(function (list) {
+      var sig2 = kind + '|' + (Lib.source ? Lib.source.id : '') + '|' + Lib.version + '|' +
+        D.sources.map(function (s) { return s.id + ':' + (Lib.stamps[s.id] || 0); }).join(',');
+      groupMemo[kind] = { sig: sig2, list: list };
+      return list;
+    });
+  }
+  function loadGroups(kind) {
     var field = kind === 'live' ? 'channels' : kind === 'movies' ? 'movies' : 'series';
     var cur = Lib.source ? Lib.source.id : null, byName = {}, out = [];
     var list = D.sources.slice().sort(function (a, b) { return (a.id === cur ? 0 : 1) - (b.id === cur ? 0 : 1); });
     var chain = Promise.resolve();
     list.forEach(function (src) {
       chain = chain.then(function () {
-        var p = src.id === cur ? Promise.resolve(Lib.raw) : B.idb.get('lib:' + src.id).then(function (c) { return c && c.lib; });
+        var p = src.id === cur ? Promise.resolve(Lib.raw) : B.idb.get('lib:' + src.id).then(function (c) {
+          if (c && Lib.stamps) Lib.stamps[src.id] = c.at || 0;
+          return c && c.lib;
+        });
         return p.then(function (raw) {
           var items = (raw && raw[field]) || [], seen = {};
           for (var i = 0; i < items.length; i++) {
@@ -2384,8 +2481,16 @@
   S.categoryChoices = function () {
     var kind = 'live', groups = [];
     function keys(gs) { var out = []; gs.forEach(function (g) { g.sids.forEach(function (sid) { out.push(D.key(sid, g.name)); }); }); return out; }
-    function isOn(g) { return g.sids.every(function (sid) { return !D.hiddenCategoryNames(sid)[g.name]; }); }
-    function set(gs, on, refresh) { D.setCategoriesHidden(keys(gs), !on); refresh(true); }
+    // build 140: account-set via een index per server (geen kopie per regel); één regel aan/uit tekent alleen die regel
+    // opnieuw, de tellers per land daarna als de afstandsbediening even stil is
+    function isOn(g) { return g.sids.every(function (sid) { var x = D.accountHiddenIndex()[String(sid).toLowerCase()]; return !(x && x[g.name]); }); }
+    var later = null;
+    function set(gs, on, refresh, quiet) {
+      D.setCategoriesHidden(keys(gs), !on);
+      if (!quiet) { refresh(true); return; }
+      clearTimeout(later);
+      later = setTimeout(function () { B.whenQuiet(function () { if (U.top() === scr) refresh(true); }, 1500); }, 800);
+    }
     function serverNames(g) {
       if (D.sources.length < 2) return '';
       return g.sids.map(function (id) { var s = D.sourceById(id); return s ? s.name : ''; }).filter(Boolean).join(', ');
@@ -2394,8 +2499,9 @@
       return allGroups(kind).then(function (gs) { groups = gs; return { items: gs, header: L('Categories (%d)', gs.length) }; });
     }, function (g, refresh) {
       var sub = serverNames(g);
-      var r = h('div.st-row.f', [h('div.st-label', [h('div', g.name || '—'), sub ? h('div.dim', sub) : null]), h('div.st-value', isOn(g) ? L('On') : L('Off'))]);
-      r.onEnter = function () { set([g], !isOn(g), refresh); };
+      var val = h('div.st-value', isOn(g) ? L('On') : L('Off'));
+      var r = h('div.st-row.f', [h('div.st-label', [h('div', g.name || '—'), sub ? h('div.dim', sub) : null]), val]);
+      r.onEnter = function () { set([g], !isOn(g), refresh, true); val.textContent = isOn(g) ? L('On') : L('Off'); };
       return r;
     }, L('No categories'), function (track, refresh) {
       var kinds = h('div.cat-kinds.fm', [['live', L('Live TV')], ['movies', L('Movies')], ['series', L('Series')]].map(function (k) {
@@ -2418,7 +2524,7 @@
         U.button(L('All on'), function () { set(groups, true, refresh); }),
         U.button(L('All off'), function () { set(groups, false, refresh); })
       ]));
-      track.appendChild(h('div.dim.st-note-small', L('Categories that are off don\'t appear anywhere in the app. Saved per profile, for all your servers.')));
+      track.appendChild(h('div.dim.st-note-small', L('Categories that are off don\'t appear anywhere in the app. Saved for your whole account (all profiles except kids profiles), for all your servers.')));
     });
     return scr;
   };

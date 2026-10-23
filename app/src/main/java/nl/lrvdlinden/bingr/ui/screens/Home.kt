@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.max
@@ -173,22 +175,40 @@ private class HomeModel(val filter: Filter) {
     var trendingMovies by mutableStateOf(emptyList<Movie>())
     var trendingSeries by mutableStateOf(emptyList<Series>())
     var forYou by mutableStateOf(emptyList<DetailTarget>())
+    /** Build 140: geen kijkgeschiedenis in dit profiel → de rij heet "Populair" (populaire titels uit je bibliotheek). */
+    var forYouPopular by mutableStateOf(false)
+    /** Build 140: Nieuw op Bingr: laatst aan de bibliotheek (alle servers) toegevoegd, nieuwste eerst. */
+    var newOnBingr by mutableStateOf(emptyList<DetailTarget>())
+    /** Build 140: vaste selectie voor uitgelicht (om en om Voor jou en Nieuw op Bingr), wisselt om de 8 s. */
+    var heroPool by mutableStateOf(emptyList<DetailTarget>())
 
     /** Wat niet (meer) in de gefilterde lijst staat weghalen (ander profiel, leeftijdsgrens, verborgen groep). */
     fun prune(lib: Library) {
         val movieIDs = lib.movies.mapTo(HashSet()) { it.id }
         val seriesIDs = lib.series.mapTo(HashSet()) { it.id }
-        fun ok(t: DetailTarget) = if (t.isSeries) t.id in seriesIDs else t.id in movieIDs
+        // build 140: titels van een andere server staan niet in deze lijst (die zijn al met de filters van hun server gekozen)
+        fun ok(t: DetailTarget) = t.sourceID != null || (if (t.isSeries) t.id in seriesIDs else t.id in movieIDs)
         hero?.let { if (!ok(it)) hero = null }
         if (trendingMovies.any { it.id !in movieIDs }) trendingMovies = trendingMovies.filter { it.id in movieIDs }
         if (trendingSeries.any { it.id !in seriesIDs }) trendingSeries = trendingSeries.filter { it.id in seriesIDs }
         if (forYou.any { !ok(it) }) forYou = forYou.filter { ok(it) }
+        if (newOnBingr.any { !ok(it) }) newOnBingr = newOnBingr.filter { ok(it) }
+        if (heroPool.any { !ok(it) }) heroPool = heroPool.filter { ok(it) }
+    }
+
+    private fun updateHeroPool() {
+        val key: (DetailTarget) -> String = { (if (it.isSeries) "s:" else "m:") + (it.sourceID?.lowercase() ?: "") + "|" + it.id }
+        val fy = forYou.filter { t -> when (filter) { Filter.MOVIES -> !t.isSeries; Filter.SERIES -> t.isSeries; Filter.ALL -> true } }
+        val nw = newOnBingr.filter { t -> when (filter) { Filter.MOVIES -> !t.isSeries; Filter.SERIES -> t.isSeries; Filter.ALL -> true } }
+        val pool = Build140Logic.Picks.heroPool(fy, nw, key)
+        if (pool.map(key) != heroPool.map(key)) heroPool = pool
     }
 
     suspend fun prepare(key: String) {
         val lib = Playlists.library
         if (lib.movies.isEmpty() && lib.series.isEmpty()) {
             hero = null; trendingMovies = emptyList(); trendingSeries = emptyList(); forYou = emptyList()
+            newOnBingr = emptyList(); heroPool = emptyList()
             return
         }
         // 0. wat niet (meer) in de gefilterde lijst staat weghalen
@@ -197,8 +217,13 @@ private class HomeModel(val filter: Filter) {
         if (hero == null) hero = quickHero(lib)
         val matcher = screensSafe { MatcherCache.matcher(lib, key) }
         applyTrending(lib, matcher, TrendingStore.cached(false, kidsProfile()), TrendingStore.cached(true, kidsProfile()))
-        if (forYou.isEmpty()) forYou = buildForYou(lib, false, matcher)
+        if (forYou.isEmpty()) setForYou(buildForYou(lib, false, matcher))
         if (hero == null) hero = quickHero(lib)
+        // build 140: Nieuw op Bingr (alle servers, uit de cache op dit apparaat), daarna de vaste selectie voor uitgelicht
+        val raw = Playlists.rawLibrary
+        val pid = Playlists.source?.id
+        newOnBingr = screensSafe { NewOnBingr.build(lib, raw, pid) } ?: newOnBingr
+        updateHeroPool()
 
         // 2. daarna pas het netwerk (gedeeld door alle tabbladen)
         val (m, s) = coroutineScope {
@@ -207,20 +232,31 @@ private class HomeModel(val filter: Filter) {
             a.await() to b.await()
         }
         applyTrending(lib, matcher, m, s)
-        forYou = buildForYou(lib, true, matcher)
+        setForYou(buildForYou(lib, true, matcher))
+        updateHeroPool()
         prune(Playlists.library)
     }
 
-    /** Billboard zonder te wachten: iets uit de Top 10, anders willekeurig met poster. */
-    private fun quickHero(lib: Library): DetailTarget? =
-        if (Screenshots.isActive) ScreenshotDemo.hero(filter, lib) else when (filter) {
-        Filter.SERIES -> (trendingSeries.firstOrNull() ?: lib.series.filter { it.poster != null }.randomOrNull())
-            ?.let { DetailTarget.SeriesT(it) }
-        Filter.MOVIES -> (trendingMovies.firstOrNull() ?: lib.movies.filter { it.poster != null }.randomOrNull())
-            ?.let { DetailTarget.MovieT(it) }
-        Filter.ALL -> {
-            val m = trendingMovies.randomOrNull() ?: lib.movies.filter { it.poster != null }.randomOrNull()
-            if (m != null) DetailTarget.MovieT(m) else lib.series.randomOrNull()?.let { DetailTarget.SeriesT(it) }
+    private fun setForYou(r: Pair<List<DetailTarget>, Boolean>) {
+        forYou = r.first
+        forYouPopular = r.second
+    }
+
+    /**
+     * Billboard zonder te wachten (zolang de vaste selectie er nog niet is): iets uit de Top 10, anders een titel met
+     * poster. Build 140: niet meer willekeurig per opening, maar per dag een vaste keuze.
+     */
+    private fun quickHero(lib: Library): DetailTarget? {
+        if (Screenshots.isActive) return ScreenshotDemo.hero(filter, lib)
+        val day = Build140Logic.Picks.dayNumber(System.currentTimeMillis(), java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()))
+        fun <T> List<T>.pick(): T? = if (isEmpty()) null else this[Build140Logic.Picks.heroStart(day, size)]
+        return when (filter) {
+            Filter.SERIES -> (trendingSeries.firstOrNull() ?: lib.series.filter { it.poster != null }.pick())?.let { DetailTarget.SeriesT(it) }
+            Filter.MOVIES -> (trendingMovies.firstOrNull() ?: lib.movies.filter { it.poster != null }.pick())?.let { DetailTarget.MovieT(it) }
+            Filter.ALL -> {
+                val m = trendingMovies.take(5).pick() ?: lib.movies.filter { it.poster != null }.pick()
+                if (m != null) DetailTarget.MovieT(m) else lib.series.pick()?.let { DetailTarget.SeriesT(it) }
+            }
         }
     }
 
@@ -260,106 +296,130 @@ private class HomeModel(val filter: Filter) {
         return pool.take(10)
     }
 
-    private data class Seed(val imdb: String, val show: Boolean)
-
     /**
-     * "Voor jou": vergelijkbaar met wat je keek, Trakt-aanbevelingen die in je lijst staan,
-     * onbekeken titels uit de groepen waar je het meest kijkt, en trending.
+     * Build 140: "Voor jou" van HET actieve profiel (docs/ACCOUNT.md → "Build 140"): de laatst/meest bekeken titels van dit
+     * profiel (Verder kijken en kijkgeschiedenis) als basis; met TMDB hun "recommendations", daarna titels met dezelfde
+     * genres (meest overlap eerst) en uit dezelfde categorieën. Alleen wat in de (gefilterde: kinder- en leeftijdsfilter)
+     * bibliotheek staat, nooit iets dat dit profiel al bekeken heeft of aan het kijken is. Zonder geschiedenis: populaire
+     * titels met de kop "Populair" (second = true). Geen willekeur: dezelfde geschiedenis geeft dezelfde rij.
+     * Tot build 139 kwamen er ook Trakt-titels van het hoofdaccount en willekeurige titels in (shuffled).
      */
-    private suspend fun buildForYou(lib: Library, useNetwork: Boolean, matcher: TitleMatcher?): List<DetailTarget> {
+    private suspend fun buildForYou(lib: Library, useNetwork: Boolean, matcher: TitleMatcher?): Pair<List<DetailTarget>, Boolean> {
         // Compose-state op de main thread lezen, daarna op de achtergrond rekenen
-        val progress = Store.progress
+        val progress = Store.progress.filter { Store.belongsToActive(it.value.profileID) }
+        val history = Store.historyAll()
         val localWatched = Store.localWatched
-        val myList = Store.myList
         val pid = Playlists.source?.id
+        val useTrakt = Store.isMainActive
         val tm = trendingMovies
         val ts = trendingSeries
         return withContext(Dispatchers.Default) {
+            val movieByID = HashMap<String, Movie>(lib.movies.size * 2).apply { lib.movies.forEach { putIfAbsent(it.id, it) } }
+            val seriesByID = HashMap<String, Series>(lib.series.size * 2).apply { lib.series.forEach { putIfAbsent(it.id, it) } }
+            val seriesByTitle = HashMap<String, Series>().apply {
+                lib.series.forEach { putIfAbsent(it.title, it); putIfAbsent(AllServersLogic.normTitle(it.title), it) }
+            }
+            fun series(title: String) = seriesByTitle[title] ?: seriesByTitle[AllServersLogic.normTitle(title)]
+            fun onThisServer(p: String?) = p == null || pid == null || p.equals(pid, ignoreCase = true)
+            fun keyOf(t: DetailTarget) = (if (t.isSeries) "s:" else "m:") + t.id
+
+            // 1. basis: wat dit profiel het laatst keek (voortgang en geschiedenis), nieuwste eerst
+            val seedTimes = LinkedHashMap<String, Pair<DetailTarget, Long>>()
+            fun seed(t: DetailTarget?, at: Long) {
+                t ?: return
+                val k = keyOf(t)
+                val c = seedTimes[k]
+                if (c == null || at > c.second) seedTimes[k] = t to at
+            }
+            for ((k, e) in progress) {
+                if (!onThisServer(e.playlistID)) continue
+                seed(movieByID[k]?.let { DetailTarget.MovieT(it) } ?: series(e.title)?.let { DetailTarget.SeriesT(it) }, e.updated)
+            }
+            for (h in history) {
+                if (!onThisServer(h.playlistID)) continue
+                when (h.type) {
+                    MediaType.MOVIE -> seed(movieByID[h.itemID]?.let { DetailTarget.MovieT(it) }, h.date)
+                    MediaType.SERIES, MediaType.EPISODE ->
+                        seed((seriesByID[h.itemID] ?: series(h.title))?.let { DetailTarget.SeriesT(it) }, h.date)
+                    else -> {}
+                }
+            }
+            val seeds = seedTimes.values.sortedByDescending { it.second }.map { it.first }
+                .filter { t -> when (filter) { Filter.MOVIES -> !t.isSeries; Filter.SERIES -> t.isSeries; Filter.ALL -> true } }
+                .take(6)
+
             val out = ArrayList<DetailTarget>()
-            val seen = HashSet<String>()
+            val seen = HashSet<String>(seeds.map { keyOf(it) })
+            fun watched(t: DetailTarget): Boolean = when (t) {
+                is DetailTarget.MovieT -> progress[t.id] != null || t.movie.id in localWatched ||
+                    (useTrakt && Trakt.isWatched(Trakt.imdb(t.movie)))
+                is DetailTarget.SeriesT -> Store.localWatchedCount(t.series.id) > 0 ||
+                    (useTrakt && Playables.watchedEpisodeCount(t.series) > 0)
+            }
             fun add(t: DetailTarget) {
-                if (t.id in seen || progress[t.id] != null) return
                 if (filter == Filter.MOVIES && t.isSeries) return
                 if (filter == Filter.SERIES && !t.isSeries) return
-                when (t) {
-                    is DetailTarget.MovieT -> if (Trakt.isWatched(Trakt.imdb(t.movie)) || t.movie.id in localWatched) return
-                    is DetailTarget.SeriesT -> if (Playables.watchedEpisodeCount(t.series) > 0) return
-                }
-                seen.add(t.id); out.add(t)
+                if (!seen.add(keyOf(t)) || watched(t)) return
+                out.add(t)
             }
-            val movieByID = HashMap<String, Movie>(lib.movies.size * 2).apply { lib.movies.forEach { putIfAbsent(it.id, it) } }
-            val seriesByTitle = HashMap<String, Series>().apply { lib.series.forEach { putIfAbsent(it.title, it) } }
 
-            // 1. vergelijkbaar met wat je (half) gekeken hebt
-            if (matcher != null) {
-                val seeds = ArrayList<Seed>()
-                for (k in progress.entries.sortedByDescending { it.value.updated }.map { it.key }) {
-                    val m = movieByID[k]
-                    if (m != null) {
-                        Trakt.imdb(m)?.let { seeds.add(Seed(it, false)) }
-                    } else {
-                        progress[k]?.title?.let { seriesByTitle[it] }?.let { Trakt.imdb(it) }?.let { seeds.add(Seed(it, true)) }
-                    }
-                    if (seeds.size >= 4) break
+            if (seeds.isEmpty()) {
+                // zonder geschiedenis: "Populair" (Top 10 van vandaag uit je bibliotheek, daarna best beoordeeld)
+                tm.take(10).zip(ts.take(10)).forEach { (a, b) -> add(DetailTarget.MovieT(a)); add(DetailTarget.SeriesT(b)) }
+                tm.forEach { add(DetailTarget.MovieT(it)) }
+                ts.forEach { add(DetailTarget.SeriesT(it)) }
+                if (out.size < 10) {
+                    lib.movies.filter { it.poster != null && (it.rating ?: 0.0) > 0 }.sortedByDescending { it.rating ?: 0.0 }.take(10)
+                        .forEach { add(DetailTarget.MovieT(it)) }
+                    lib.series.filter { it.poster != null && (it.rating ?: 0.0) > 0 }.sortedByDescending { it.rating ?: 0.0 }.take(10)
+                        .forEach { add(DetailTarget.SeriesT(it)) }
                 }
-                Trakt.watchedEpisodes.keys.shuffled().take(2).forEach { seeds.add(Seed(it, true)) }
-                Trakt.watchedMovies.shuffled().take(2).forEach { seeds.add(Seed(it, false)) }
-                if (filter == Filter.MOVIES) seeds.removeAll { it.show }
-                if (filter == Filter.SERIES) seeds.removeAll { !it.show }
-                if (useNetwork) {
-                    for (seed in seeds.distinctBy { it.imdb }) {
-                        val rel = screensSafe { Trakt.related(seed.imdb, seed.show) } ?: emptyList()
-                        if (rel.isEmpty()) continue
-                        if (seed.show) matcher.series(rel, 6).forEach { add(DetailTarget.SeriesT(it)) }
-                        else matcher.movies(rel, 6).forEach { add(DetailTarget.MovieT(it)) }
-                    }
-                }
+                return@withContext out.take(30) to true
+            }
 
-                // 2. persoonlijke Trakt-aanbevelingen
-                if (useNetwork && Trakt.isLoggedIn) {
-                    val rm = screensSafe { Trakt.recommendations(false) } ?: emptyList()
-                    val rs = screensSafe { Trakt.recommendations(true) } ?: emptyList()
-                    val recMovies = if (rm.isEmpty()) emptyList() else matcher.movies(rm, 40)
-                    val recSeries = if (rs.isEmpty()) emptyList() else matcher.series(rs, 40)
-                    recMovies.take(15).zip(recSeries.take(15)).forEach { (a, b) -> add(DetailTarget.MovieT(a)); add(DetailTarget.SeriesT(b)) }
-                    recMovies.drop(15).take(5).forEach { add(DetailTarget.MovieT(it)) }
-                    recSeries.drop(15).take(5).forEach { add(DetailTarget.SeriesT(it)) }
+            // 2. TMDB-aanbevelingen van de laatste drie titels (gekoppeld aan je bibliotheek)
+            if (useNetwork && matcher != null) {
+                for (t in seeds.take(3)) {
+                    val imdb = when (t) { is DetailTarget.MovieT -> t.movie.imdbID; is DetailTarget.SeriesT -> t.series.imdbID }
+                    val r = screensSafe { TMDB.details(imdb, null, t.title, t.year, t.isSeries) } ?: continue
+                    val ext = r.recommendations.map { ExternalTitle(listOf(it.title), it.year) }
+                    if (ext.isEmpty()) continue
+                    if (t.isSeries) matcher.series(ext, 8).forEach { add(DetailTarget.SeriesT(it)) }
+                    else matcher.movies(ext, 8).forEach { add(DetailTarget.MovieT(it)) }
                 }
             }
 
-            // 3. groepen waar je in kijkt (voortgang, Mijn lijst, bekeken) — via sleutels, niet de hele lijst
-            val groupScore = HashMap<String, Int>()
-            for (k in progress.keys + localWatched) {
-                movieByID[k]?.let { groupScore[it.group] = (groupScore[it.group] ?: 0) + 1 }
+            // 3. dezelfde genres (bekende metadata), meest overlap eerst, recente titels zwaarder
+            val P = Build140Logic.Picks
+            fun genresOf(t: DetailTarget) = P.genres(when (t) { is DetailTarget.MovieT -> Metadata.cached(t.movie); is DetailTarget.SeriesT -> Metadata.cached(t.series) }?.genre)
+            val weights = P.genreWeights(seeds.map { genresOf(it) })
+            if (weights.isNotEmpty()) {
+                val byKey = HashMap<String, DetailTarget>()
+                val cands = ArrayList<Build140Logic.Picks.Cand>()
+                if (filter != Filter.SERIES) for (m in lib.movies) {
+                    val g = P.genres(Metadata.cached(m)?.genre).takeIf { it.isNotEmpty() } ?: continue
+                    val t = DetailTarget.MovieT(m); byKey[keyOf(t)] = t
+                    cands += Build140Logic.Picks.Cand(keyOf(t), g, m.rating, m.addedAt)
+                }
+                if (filter != Filter.MOVIES) for (x in lib.series) {
+                    val g = P.genres(Metadata.cached(x)?.genre).takeIf { it.isNotEmpty() } ?: continue
+                    val t = DetailTarget.SeriesT(x); byKey[keyOf(t)] = t
+                    cands += Build140Logic.Picks.Cand(keyOf(t), g, x.rating, x.addedAt)
+                }
+                P.byGenres(cands, weights, seen, 40).forEach { k -> byKey[k]?.let { add(it) } }
             }
-            if (pid != null) {
-                val seriesByID = HashMap<String, Series>().apply { lib.series.forEach { putIfAbsent(it.id, it) } }
-                val prefix = "$pid|"
-                for (k in myList) {
-                    if (!k.startsWith(prefix, ignoreCase = true)) continue
-                    val id = k.substring(prefix.length)
-                    movieByID[id]?.let { groupScore[it.group] = (groupScore[it.group] ?: 0) + 1 }
-                    seriesByID[id]?.let { groupScore[it.group] = (groupScore[it.group] ?: 0) + 2 }
+
+            // 4. dezelfde categorieën van je server (best beoordeeld, dan nieuwste)
+            if (out.size < 20) {
+                val groups = seeds.map { it.group }.filter { it.isNotBlank() }.distinct().take(4)
+                for (g in groups) {
+                    lib.movies.filter { it.group == g }.sortedWith(compareByDescending<Movie> { it.rating ?: 0.0 }.thenByDescending { it.addedAt ?: 0L })
+                        .take(6).forEach { add(DetailTarget.MovieT(it)) }
+                    lib.series.filter { it.group == g }.sortedWith(compareByDescending<Series> { it.rating ?: 0.0 }.thenByDescending { it.addedAt ?: 0L })
+                        .take(6).forEach { add(DetailTarget.SeriesT(it)) }
                 }
             }
-            val topGroups = groupScore.entries.sortedByDescending { it.value }.take(4).map { it.key }.toSet()
-            if (topGroups.isNotEmpty()) {
-                val gm = lib.movies.filter { it.group in topGroups }.groupBy { it.group }
-                val gs = lib.series.filter { it.group in topGroups }.groupBy { it.group }
-                for (g in topGroups) {
-                    gm[g].orEmpty().shuffled().take(5).forEach { add(DetailTarget.MovieT(it)) }
-                    gs[g].orEmpty().shuffled().take(5).forEach { add(DetailTarget.SeriesT(it)) }
-                }
-            }
-            // 4. aanvullen met trending
-            tm.take(8).zip(ts.take(8)).forEach { (a, b) -> add(DetailTarget.MovieT(a)); add(DetailTarget.SeriesT(b)) }
-            if (filter == Filter.MOVIES) tm.take(8).forEach { add(DetailTarget.MovieT(it)) }
-            if (filter == Filter.SERIES) ts.take(8).forEach { add(DetailTarget.SeriesT(it)) }
-            if (out.size < 8) {
-                lib.movies.filter { it.poster != null }.shuffled().take(6).forEach { add(DetailTarget.MovieT(it)) }
-                lib.series.filter { it.poster != null }.shuffled().take(6).forEach { add(DetailTarget.SeriesT(it)) }
-            }
-            out.take(30)
+            out.take(30) to false
         }
     }
 }
@@ -387,6 +447,8 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
         if (e.playlistID != null && !e.playlistID.equals(pid, ignoreCase = true)) {
             val full = "${e.playlistID}|$key"
             val item = AllServers.item(full)
+            // build 140: kinderprofiel: alleen wat in de gefilterde bibliotheek van zijn server staat
+            if (item == null && Store.activeProfile?.kids == true) continue
             val kind = CatalogMeta.kind(full)
             val isMovie = item is Movie || (item == null && kind == "movie")
             if (filter == Filter.MOVIES && !isMovie) continue
@@ -595,7 +657,8 @@ fun HomeScreen(filter: Filter) {
     // build 111: Binnenkort op Bingr / Nieuw op Bingr (TMDB): alleen de rijen die in de indeling aan staan; eerst wat
     // bewaard is, daarna het netwerk (12 uur bewaard), koppelen aan je bibliotheek op de achtergrond
     val discoverKinds = remember(layoutRows, filter) {
-        if (filter != Filter.ALL) emptyList() else DiscoverKind.entries.filter { k -> layoutRows.any { it.key == k.key && it.visible } }
+        // build 140: Nieuw op Bingr ("streaming") komt uit je eigen bibliotheek (NewOnBingr), niet meer uit TMDB
+        if (filter != Filter.ALL) emptyList() else DiscoverKind.entries.filter { k -> k != DiscoverKind.STREAMING && layoutRows.any { it.key == k.key && it.visible } }
     }
     var discover by remember(filter) { mutableStateOf(mapOf<DiscoverKind, List<DiscoverEntry>>()) }
     LaunchedEffect(System.identityHashCode(lib), discoverKinds, Store.activeProfileID, Localizer.language) {
@@ -629,7 +692,22 @@ fun HomeScreen(filter: Filter) {
             modifier = Modifier.fillMaxSize()
         ) {
             item(key = "hero") {
-                val h = model.hero
+                // build 140: vaste roulerende selectie (om en om Voor jou en Nieuw op Bingr, max. 8): om de 8 s de volgende;
+                // waar hij begint schuift elke dag één plek op. Geen willekeur per opening.
+                val pool = model.heroPool
+                var heroAt by remember(pool) {
+                    val now = System.currentTimeMillis()
+                    mutableIntStateOf(Build140Logic.Picks.heroStart(
+                        Build140Logic.Picks.dayNumber(now, java.util.TimeZone.getDefault().getOffset(now)), pool.size))
+                }
+                LaunchedEffect(pool) {
+                    if (pool.size < 2) return@LaunchedEffect
+                    while (true) {
+                        delay(Build140Logic.Picks.HERO_INTERVAL)
+                        heroAt = (heroAt + 1) % pool.size
+                    }
+                }
+                val h = pool.getOrNull(heroAt) ?: model.hero
                 if (h != null) {
                     HeroBanner(target = h, onPlay = { homePlay(h) }, onInfo = { openDetail(h) })
                 } else {
@@ -685,14 +763,20 @@ fun HomeScreen(filter: Filter) {
                         if (all.isNotEmpty()) MovieRow(L("Recently added"), all.take(30), all, pid)
                     }.also { shown(index.recent.isNotEmpty()) }
                     // build 111: Binnenkort op Bingr / Nieuw op Bingr (TMDB)
-                    "upcoming", "streaming" -> if (filter == Filter.ALL) {
+                    // build 140: Nieuw op Bingr = laatst toegevoegd aan je bibliotheek (alle servers), nieuwste eerst
+                    "streaming" -> if (filter == Filter.ALL) {
+                        val list = model.newOnBingr
+                        if (list.isNotEmpty()) item(key = "d|streaming") { TargetRow(L("New on Bingr"), list, pid) }
+                        shown(list.isNotEmpty())
+                    }
+                    "upcoming" -> if (filter == Filter.ALL) {
                         val kind = DiscoverKind.of(key)
                         val list = kind?.let { discover[it] }.orEmpty()
                         if (kind != null && list.isNotEmpty()) item(key = "d|$key") { DiscoverRow(kind, list, pid) }
                         shown(list.isNotEmpty())
                     }
                     // Voor jou
-                    "foryou" -> { item(key = "foryou") { ForYouRow(filter, model.forYou) }; shown(model.forYou.isNotEmpty()) }
+                    "foryou" -> { item(key = "foryou") { ForYouRow(filter, model.forYou, model.forYouPopular) }; shown(model.forYou.isNotEmpty()) }
                     // Top 10 (Home: eerst series, dan films)
                     "top10" -> {
                         if (filter != Filter.MOVIES) item(key = "top10s") {
@@ -930,9 +1014,11 @@ private fun MoviePoster(m: Movie, pid: String?) {
                 AppScope.launch { screensSafe { Trakt.setWatched(Playables.movie(m, imdb), !watched) } }
             })
             if (pid != null) {
-                val inList = Store.inMyList(pid, m.id)
+                // build 140: met de server van de titel (een titel van een andere server kwam anders niet in Mijn lijst)
+                val t = DetailTarget.MovieT(m)
+                val inList = AllServers.inMyList(t, pid)
                 add(S2Action(if (inList) L("Remove from My List") else L("Add to My List"),
-                    PlusCheck.icon(inList)) { Store.setMyList(pid, m.id, !inList) })
+                    PlusCheck.icon(inList)) { AllServers.setMyList(t, !inList, pid) })
             }
             add(S2Action(L("Add to collection…"), Icons.AutoMirrored.Filled.PlaylistAdd) { collect = true })
         }
@@ -942,7 +1028,7 @@ private fun MoviePoster(m: Movie, pid: String?) {
 }
 
 @Composable
-private fun ForYouRow(filter: Filter, all: List<DetailTarget>) {
+private fun ForYouRow(filter: Filter, all: List<DetailTarget>, popular: Boolean = false) {
     // build 74: altijd alfabetisch op titel (zonder taallabels; hoofdletters en accenten tellen niet), films en series door elkaar
     val items = remember(all, filter) {
         val collator = java.text.Collator.getInstance(Localizer.locale).apply { strength = java.text.Collator.PRIMARY }
@@ -958,7 +1044,9 @@ private fun ForYouRow(filter: Filter, all: List<DetailTarget>) {
     }
     if (items.isEmpty()) return
     val keys = rememberKeys(items) { (if (it.isSeries) "s:" else "m:") + it.id }
-    MediaRow(L("For you"), onSeeAll = { openCategory(L("For you"), items) }) {
+    // build 140: zonder kijkgeschiedenis in dit profiel heet de rij "Populair"
+    val title = if (popular) L("Popular") else L("For you")
+    MediaRow(title, onSeeAll = { openCategory(title, items) }) {
         keyedItems(items, keys) { t ->
             // build 75: bekeken-label onder het SERIE/FILM-label, vinkje rechtsboven voor bekeken films
             PosterCard(

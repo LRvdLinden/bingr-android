@@ -256,6 +256,8 @@
   };
 
   function pickProfile(p) {
+    // build 140: weer in een kinderprofiel → bij het verlaten opnieuw de rekensom
+    if (p && p.kids && B.kidsGate) B.kidsGate.kidsOpened();
     app.profile = p;
     B.store.set('lastProfile', p.id);
     app.applyAccent();
@@ -272,6 +274,8 @@
     D.syncState().then(function () { if (app.profile === p) { Lib.applyFilters(); B.trakt.refresh(false); } });
     B.reminders.start();
     startRefreshTimer();
+    // build 140: na het openen ook de andere servers die volgens "Afspeellijsten bijwerken" aan de beurt zijn
+    setTimeout(checkRefresh, 60000);
   }
 
   /** TMDB-leeftijden bijwerken als dit profiel een leeftijdsgrens heeft (kindergroepen eerst). */

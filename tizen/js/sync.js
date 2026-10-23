@@ -52,6 +52,9 @@
     B.store.keys('pstate.').forEach(function (k) { B.store.del(k); });
     B.store.keys('lastChannel.').forEach(function (k) { B.store.del(k); });
     B.store.del('lastProfile'); B.store.del('activeSource'); B.store.del('accentMigrated'); B.store.del('cats.migrated128');
+    // build 140: categorieën per account
+    B.store.del('accountCats'); B.store.del('cats.migrated140');
+    ACC = { marks: {}, base: null, dirty: false }; accIdx = null;
     B.idb.clear();
     // Trakt, OpenSubtitles en herinneringen van het vorige account
     B.emit('wipe');
@@ -612,6 +615,9 @@
       B.emit('settings');
       // connections (Trakt/OpenSubtitles) en herinneringen voegen zelf samen
       B.emit('state', all);
+      // build 140: categorieën per account (section `account`); eenmalig de per-profiel-sets erin
+      migrateAccount(all);
+      mergeAccount(all.account).catch(B.noop);
       if (!Q.id) return true;
       // build 128: eerst catalogmeta (remap-regels), dan het actieve profiel, daarna de andere profielen en de collecties
       var AS = B.allservers;
@@ -756,26 +762,118 @@
     else { clearTimeout(timer); setTimeout(function () { D.syncState(); }, 500); }
   };
 
-  /** Build 128: verborgen categorienamen van server sid voor het actieve profiel ({naam: true}). */
-  D.hiddenCategoryNames = function (sid) {
-    var out = {}, m = P.st && P.st.sets.hiddenCategories;
-    if (!m) return out;
-    var pre = lower(sid) + '|';
-    Object.keys(m).forEach(function (k) { if (m[k].on && lower(k).indexOf(pre) === 0) out[k.slice(pre.length)] = true; });
-    return out;
-  };
-  /** Build 128: categorieën ("<server-id>|<naam>") aan/uit voor het actieve profiel. */
+  // MARK: build 140: categorieën per account (section `account`, docs/ACCOUNT.md → "Build 140")
+
+  var X140 = B.b140;
+  /** {marks: {"<server-id kleine letters>|<naam>": {at, on}}, base: laatst gelezen serverobject, dirty} */
+  var ACC = B.store.get('accountCats', null) || { marks: {}, base: null, dirty: false };
+  if (!ACC.marks || typeof ACC.marks !== 'object') ACC.marks = {};
+  var accIdx = null, accTimer = null, accBusy = null;
+  function persistAcc() { B.store.set('accountCats', ACC); accIdx = null; }
+  function accIndex() { if (!accIdx) accIdx = X140.marks.index(X140.marks.alive(ACC.marks)); return accIdx; }
+  function activeKids() { var p = B.app && B.app.profile; return !!(p && p.kids); }
+
+  /** Verborgen categorienamen van server sid in de account-set ({naam: true}), ook als er een kinderprofiel actief is. */
+  D.accountHiddenNames = function (sid) { return B.assign({}, accIndex()[lower(sid)] || {}); };
+  /** Zelfde, als index (kleine letters server-id → {naam: true}); niet wijzigen. */
+  D.accountHiddenIndex = function () { return accIndex(); };
+  /** Voor het filteren: de account-set; een kinderprofiel: geen (daar bepaalt het kinderfilter alles). */
+  D.hiddenCategoryNames = function (sid) { return activeKids() ? {} : D.accountHiddenNames(sid); };
+  /** Categorieën ("<server-id>|<naam>") aan/uit voor het hele account. */
   D.setCategoriesHidden = function (keys, hidden) {
-    if (!P.st) return;
-    var m = P.st.sets.hiddenCategories = P.st.sets.hiddenCategories || {};
-    var now = Date.now(), any = false;
-    keys.forEach(function (k) {
-      var vs = variants(m, k).concat([k]);
-      if (hidden) { if (!vs.some(function (x) { return m[x] && m[x].on; })) { m[k] = { at: now, on: true }; any = true; } }
-      else vs.forEach(function (x) { if (m[x] && m[x].on) { m[x] = { at: now, on: false }; any = true; } });
-    });
-    if (any) { changed(false); B.lib.applyFilters(); }
+    var n = X140.marks.set(ACC.marks, keys, hidden, Date.now());
+    if (X140.marks.equal(n, ACC.marks)) return;
+    ACC.marks = n; ACC.dirty = true; persistAcc();
+    B.emit('accountCats');
+    clearTimeout(accTimer);
+    accTimer = setTimeout(function () { uploadAccount(); }, 3000);
   };
+  D.accountMarks = function () { return ACC.marks; };
+  function uploadAccount() {
+    if (!A.isSignedIn()) return Promise.resolve(false);
+    if (accBusy) return accBusy.then(function () { return ACC.dirty ? uploadAccount() : true; });
+    accBusy = A.getState(['account']).then(function (all) { return all ? mergeAccount(all.account) : false; })
+      .catch(function () { return false; }).then(function (r) { accBusy = null; return r; });
+    return accBusy;
+  }
+  /** Categoriekeuzes van verwijderde servers (tombstone) als verwijdering. */
+  function dropGoneServers(m) {
+    var out = m, now = Date.now();
+    Object.keys(m).forEach(function (k) {
+      if (m[k].on && goneServer(k)) { if (out === m) out = B.assign({}, m); out[k] = { at: X140.stampAfter(now, m[k].at), on: false }; }
+    });
+    return out;
+  }
+  /**
+   * Samenvoegen zoals myList (per sleutel wint de nieuwste `at`), lokaal toepassen en uploaden als het resultaat afwijkt.
+   * Onbekende velden van de server blijven staan.
+   */
+  function mergeAccount(sec) {
+    var data = sec && sec.data && typeof sec.data === 'object' && !Array.isArray(sec.data) ? sec.data : null;
+    var removed = data && data.removed && typeof data.removed === 'object' ? data.removed.hiddenCategories : null;
+    var srv = data ? X140.marks.normalizeAll(parseSetField(data.hiddenCategories, removed)) : {};
+    var now = Date.now();
+    var merged = dropGoneServers(X140.marks.prune(X140.marks.merge(ACC.marks, srv), now));
+    var changed = !X140.marks.equal(merged, ACC.marks);
+    ACC.marks = merged; ACC.dirty = false;
+    if (data) ACC.base = data;
+    persistAcc();
+    if (changed) B.emit('accountCats');
+    if (!data && !Object.keys(merged).length) return Promise.resolve(true);
+    if (data && X140.marks.equal(merged, X140.marks.prune(srv, now))) return Promise.resolve(true);
+    var json = accountJSON(data || ACC.base, merged);
+    return A.putState('account', json).then(function (at) {
+      if (at == null) { ACC.dirty = true; persistAcc(); return false; }
+      ACC.base = json; persistAcc();
+      return true;
+    }, function () { ACC.dirty = true; persistAcc(); return false; });
+  }
+  function accountJSON(base, m) {
+    var out = B.copy(base || {});
+    out.hiddenCategories = Object.keys(m).filter(function (k) { return m[k].on; })
+      .sort(function (x, y) { return (m[y].at - m[x].at) || (x < y ? -1 : x > y ? 1 : 0); })
+      .map(function (k) { return { id: k, at: B.iso(m[k].at) }; });
+    var rem = (base && base.removed && typeof base.removed === 'object') ? B.copy(base.removed) : {};
+    rem.hiddenCategories = {};
+    Object.keys(m).filter(function (k) { return !m[k].on; }).sort().forEach(function (k) { rem.hiddenCategories[k] = B.iso(m[k].at); });
+    out.removed = rem;
+    out.updatedAt = B.iso();
+    return out;
+  }
+  /**
+   * Migratie (eenmalig per apparaat): unie van `hiddenCategories` uit profile.<id> van alle niet-kinderprofielen (plus de
+   * oude keuzes per server van vóór build 128) met at = 0, zodat een keuze in `account` altijd wint. Per-profiel-data blijft.
+   */
+  function migrateAccount(all) {
+    if (B.store.get('cats.migrated140', false) || !D.profiles.length) return;
+    var keys = [];
+    Object.keys(all || {}).forEach(function (name) {
+      if (lower(name).indexOf('profile.') !== 0) return;
+      var prof = D.profileById(name.slice(8));
+      if (!prof || prof.kids) return;
+      var d = all[name] && all[name].data;
+      if (!d || typeof d !== 'object') return;
+      var hc = parseSetField(d.hiddenCategories, d.removed && d.removed.hiddenCategories);
+      Object.keys(hc).forEach(function (k) { if (hc[k].on) keys.push(k); });
+    });
+    var mine = P.st && P.st.sets.hiddenCategories, me = P.id && D.profileById(P.id);
+    if (mine && me && !me.kids) Object.keys(mine).forEach(function (k) { if (mine[k].on) keys.push(k); });
+    if (!B.store.get('cats.migrated128', false) && D.sources.length) keys = keys.concat(legacyCategories());
+    var n = X140.marks.migrate(ACC.marks, keys);
+    if (!X140.marks.equal(n, ACC.marks)) { ACC.marks = n; persistAcc(); B.emit('accountCats'); }
+    B.store.set('cats.migrated140', true);
+  }
+  D._mergeAccount = mergeAccount; D._migrateAccount = migrateAccount; D._accountJSON = accountJSON;
+  // server verwijderd (tombstone): zijn categorieën meteen weg uit de account-set (als verwijdering, dus gesynct)
+  B.on('sources', function () {
+    var n = dropGoneServers(ACC.marks);
+    if (n === ACC.marks) return;
+    ACC.marks = n; ACC.dirty = true; persistAcc();
+    B.emit('accountCats');
+    clearTimeout(accTimer);
+    accTimer = setTimeout(function () { uploadAccount(); }, 3000);
+  });
+
   function hasAny(st) {
     var any = Object.keys(st.progress).length || Object.keys(st.history).length;
     SET_FIELDS.forEach(function (f) { if (Object.keys(st.sets[f]).length) any = true; });
@@ -875,9 +973,13 @@
     if (on == null) on = !cur;
     if (on === cur) return;
     var now = Date.now(), m = P.st.sets[field];
-    if (on) m[k] = { at: now, on: true };
+    // build 140: altijd na de laatst bekende tijd van die sleutel (ook een verwijdering van een ander apparaat met een
+    // voorlopende klok); anders won die verwijdering bij het samenvoegen en verdween een net toegevoegd item weer
+    var prev = null;
+    variants(m, k).concat([k]).forEach(function (x) { if (m[x] && (prev == null || m[x].at > prev)) prev = m[x].at; });
+    if (on) m[k] = { at: B.b140.stampAfter(now, prev), on: true };
     // uit: alle schrijfwijzen (anders komt het via de andere terug)
-    else variants(m, k).concat([k]).forEach(function (x) { if (x === k || (m[x] && m[x].on)) m[x] = { at: now, on: false }; });
+    else variants(m, k).concat([k]).forEach(function (x) { if (x === k || (m[x] && m[x].on)) m[x] = { at: B.b140.stampAfter(now, m[x] ? m[x].at : null), on: false }; });
     changed(false);
   };
   D.pushRecentChannel = function (playlist, channelID) {

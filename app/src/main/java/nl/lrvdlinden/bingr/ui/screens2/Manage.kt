@@ -71,17 +71,26 @@ private fun s2RawGroups(kind: S2Kind): List<String> {
  * Build 128: categorieën van alle servers (actieve eerst, dan de overige uit de cache op dit apparaat): naam → server-id's
  * waarop hij voorkomt.
  */
+/** Build 140: categorienamen per server en onderdeel, zolang de cache van die server niet verandert (niet bij elke wissel opnieuw van schijf). */
+private val s2GroupCache = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
+
 private suspend fun s2AllServerGroups(kind: S2Kind, servers: List<PlaylistSource>, active: String?, activeRaw: Library): LinkedHashMap<String, List<String>> {
     val out = LinkedHashMap<String, MutableList<String>>()
     for (p in servers.sortedBy { if (it.id == active) 0 else 1 }) {
-        val lib = if (p.id == active) activeRaw else Playlists.catalogOf(p, allowNetwork = false) ?: continue
-        val groups = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            when (kind) {
-                S2Kind.LIVE -> lib.channels.map { it.group }
-                S2Kind.MOVIES -> lib.movies.map { it.group }
-                S2Kind.SERIES -> lib.series.map { it.group }
-            }.distinct()
-        }
+        val isActive = p.id == active
+        val stamp = if (isActive) System.identityHashCode(activeRaw).toLong()
+            else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Playlists.cacheStamp(p) }
+        val ck = "${p.id}|${kind.name}|$stamp"
+        val groups = s2GroupCache[ck] ?: run {
+            val lib = if (isActive) activeRaw else Playlists.catalogOf(p, allowNetwork = false) ?: return@run null
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                when (kind) {
+                    S2Kind.LIVE -> lib.channels.map { it.group }
+                    S2Kind.MOVIES -> lib.movies.map { it.group }
+                    S2Kind.SERIES -> lib.series.map { it.group }
+                }.distinct()
+            }.also { if (stamp != 0L) { s2GroupCache.keys.removeAll { it.startsWith("${p.id}|${kind.name}|") }; s2GroupCache[ck] = it } }
+        } ?: continue
         for (g in groups) out.getOrPut(g) { ArrayList() }.add(p.id)
     }
     @Suppress("UNCHECKED_CAST")
@@ -113,15 +122,23 @@ fun ManageCategoriesScreen(onClose: () -> Unit) {
     val byName by androidx.compose.runtime.produceState(initialValue = linkedMapOf<String, List<String>>(), kind, raw, servers) {
         value = s2AllServerGroups(kind, servers, pid, raw)
     }
-    val all = byName.keys.toList()
-    val groups = if (filter.isBlank()) all else all.filter { it.contains(filter.trim(), ignoreCase = true) }
+    // build 140: snel, ook met duizenden categorieën: zoeken en voorvoegsels één keer per invoer (niet bij elke tik
+    // opnieuw), aan/uit via een index per server (geen lineair zoeken per regel), en het filteren van de catalogus
+    // gebeurt pas na het tikken op de achtergrond (Playlists, debounce)
+    val all = remember(byName) { byName.keys.toList() }
+    val groups = remember(all, filter) { if (filter.isBlank()) all else all.filter { it.contains(filter.trim(), ignoreCase = true) } }
     val prefixes = remember(groups) {
         groups.mapNotNull { g -> s2GroupPrefix(g)?.let { it to g } }.groupBy({ it.first }, { it.second })
             .entries.sortedWith(compareByDescending<Map.Entry<String, List<String>>> { it.value.size }.thenBy { it.key })
             .map { it.key to it.value }
     }
+    val hiddenNow = Store.accountHidden
+    val offSet = remember(hiddenNow, byName) {
+        val idx = Build140Logic.CatMarks.index(hiddenNow)
+        byName.entries.filter { (g, ids) -> ids.any { idx[it.lowercase()]?.contains(g) == true } }.mapTo(HashSet()) { it.key }
+    }
     fun keysOf(g: String) = (byName[g] ?: emptyList()).map { Store.key(it, g) }
-    fun isOn(g: String) = (byName[g] ?: emptyList()).none { Store.isCategoryHidden(it, g) }
+    fun isOn(g: String) = g !in offSet
     fun set(list: List<String>, on: Boolean) = Store.setCategoriesHidden(list.flatMap { keysOf(it) }, hidden = !on)
     fun from(g: String): String? = if (servers.size < 2) null
         else (byName[g] ?: emptyList()).mapNotNull { id -> servers.firstOrNull { it.id == id }?.name }.joinToString(", ")
@@ -160,7 +177,7 @@ fun ManageCategoriesScreen(onClose: () -> Unit) {
                 S2Toggle(c.renamed[Customization.groupKey(g)] ?: g, isOn(g), subtitle = from(g)) { set(listOf(g), it) }
             }
         }
-        item { S2Footer(L("Categories that are off don't appear anywhere in the app. Saved per profile, for all your servers.")) }
+        item { S2Footer(L("Categories that are off don't appear anywhere in the app. Saved for your whole account (all profiles except kids profiles), for all your servers.")) }
     }
 }
 
@@ -251,8 +268,8 @@ fun ManageScreen(onClose: () -> Unit) {
         item { S2Segments(s2KindOptions, kind) { kind = it } }
         item { S2Header(L("Groups")) }
         itemsIndexed(groups) { i, g ->
-            // build 128: verbergen is per profiel (hiddenCategories)
-            val hidden = pid != null && Store.isCategoryHidden(pid, g)
+            // build 140: verbergen geldt voor het hele account (hiddenCategories in section `account`)
+            val hidden = pid != null && Store.isAccountCategoryHidden(pid, g)
             val locked = pid != null && "$pid|$g" in Store.parental.lockedGroups
             Column(Modifier.s2Cell(i, groups.size)) {
                 S2Row(
@@ -294,7 +311,7 @@ fun ManageScreen(onClose: () -> Unit) {
 
     menuFor?.let { g ->
         val key = Customization.groupKey(g)
-        val hidden = pid != null && Store.isCategoryHidden(pid, g)
+        val hidden = pid != null && Store.isAccountCategoryHidden(pid, g)
         val locked = pid != null && "$pid|$g" in Store.parental.lockedGroups
         val actions = buildList {
             if (kind == S2Kind.LIVE) add(S2Action(L("Channels"), Icons.AutoMirrored.Filled.List) { channelsOf = g })

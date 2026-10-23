@@ -67,6 +67,8 @@ object StateSync {
     private const val COLLECTIONS = "collections"
     /** Build 128: meta van titels en zenders over alle servers + remap-regels (zie [CatalogMeta]). */
     private const val CATALOGMETA = "catalogmeta"
+    /** Build 140: instellingen voor het hele account; nu alleen de verborgen categorieën (docs/ACCOUNT.md → "Build 140"). */
+    private const val ACCOUNT = "account"
     private const val PROFILE = "profile."
     private const val UPLOAD_DELAY = 3_000L
     private const val PROGRESS_INTERVAL = 30_000L
@@ -97,6 +99,8 @@ object StateSync {
     @Volatile private var serverSettings: JsonObject? = null
     @Volatile private var serverConnections: JsonObject? = null
     @Volatile private var serverReminders: JsonObject? = null
+    /** Build 140: laatst gelezen section `account` (onbekende velden blijven staan). */
+    @Volatile private var serverAccount: JsonObject? = null
     /** Collecties zoals de server ze kent (build 54: profiel → id → object, kleine letters), voor velden die deze app niet kent. */
     @Volatile private var serverCollectionItems = mapOf<String, Map<String, JsonObject>>()
     /**
@@ -383,6 +387,12 @@ object StateSync {
         markDirty(COLLECTIONS)
     }
 
+    /** Build 140: de account-brede verborgen categorieën zijn hier gewijzigd. */
+    fun accountChanged() {
+        if (applying > 0) return
+        markDirty(ACCOUNT)
+    }
+
     /** Build 128: meta of remap-regels gewijzigd (toevoegen, afspelen, migratie, verhuisd item). */
     fun catalogMetaChanged() {
         if (applying > 0) return
@@ -477,7 +487,7 @@ object StateSync {
         syncJob?.cancel(); syncJob = null
         refreshJob?.cancel(); refreshJob = null
         synced = false
-        serverSettings = null; serverConnections = null; serverReminders = null
+        serverSettings = null; serverConnections = null; serverReminders = null; serverAccount = null
         serverCollectionItems = emptyMap()
         sectionNames.clear()
     }
@@ -547,6 +557,9 @@ object StateSync {
             mergeCatalogMeta(all[CATALOGMETA])
             mergeCollections(all[COLLECTIONS], all.containsKey(COLLECTIONS))
             mergeProfiles(all)
+            // build 140: categorieën per account; eenmalig de per-profiel-sets (nu met de gegevens van de server) erin
+            withContext(Dispatchers.Main) { applyingChanges { Store.migrateCategoriesToAccount(allowFlag = true) } }
+            mergeAccount(all[ACCOUNT])
             synced = true
         }
         migrateAccent()
@@ -578,6 +591,7 @@ object StateSync {
                             k.startsWith("profile:") -> uploadProfile(k.removePrefix("profile:"))
                             k == COLLECTIONS -> uploadCollections()
                             k == CATALOGMETA -> uploadCatalogMeta()
+                            k == ACCOUNT -> uploadAccount()
                             else -> uploadSimple(k)
                         }
                     } catch (e: CancellationException) { dirty += keys; throw e } catch (_: Exception) { false }
@@ -622,6 +636,52 @@ object StateSync {
         if (stamp != null) setAckAt(section, stamp)
         time(JsonPrimitive(upd))?.let { setSrvAt(section, it) }
         return true
+    }
+
+    // MARK: build 140: section `account` (verborgen categorieën voor het hele account)
+
+    private suspend fun uploadAccount(): Boolean {
+        val got = Account.getState(listOf(ACCOUNT)) ?: return false
+        return mergeAccount(got[ACCOUNT])
+    }
+
+    /**
+     * Samenvoegen zoals myList: per sleutel wint de nieuwste `at` tussen `hiddenCategories` en `removed.hiddenCategories`
+     * (server-id hoofdletterongevoelig, opgeslagen in kleine letters). Lokaal toepassen als er intussen hier niets
+     * veranderde (anders start die wijziging zelf een nieuwe ronde); uploaden als het resultaat afwijkt. true = gelukt.
+     */
+    private suspend fun mergeAccount(sec: Account.StateSection?): Boolean {
+        val data = sec?.data as? JsonObject
+        val snapshot = withContext(Dispatchers.Main) { Store.accountCategoryMarks() }
+        val removedObj = (data?.get("removed") as? JsonObject)?.get("hiddenCategories") as? JsonObject
+        val srv = if (data == null) emptyMap() else Build140Logic.CatMarks.normalizeAll(
+            parseSetField(data["hiddenCategories"], removedObj).mapValues { Build140Logic.Mark(it.value.at, it.value.value != null) })
+        val now = System.currentTimeMillis()
+        val merged = Build140Logic.CatMarks.prune(Build140Logic.CatMarks.merge(snapshot, srv), now)
+        val applied = withContext(Dispatchers.Main) {
+            if (Store.accountCategoryMarks() != snapshot) return@withContext false
+            applyingChanges { Store.applySyncedAccountCategories(merged) }
+            true
+        }
+        if (!applied) return false
+        if (data == null && merged.isEmpty()) return true
+        if (data != null && merged == Build140Logic.CatMarks.prune(srv, now)) { serverAccount = data; return true }
+        val json = accountJson(data ?: serverAccount, merged)
+        val ok = Account.putState(ACCOUNT, json) != null
+        if (ok) serverAccount = json
+        return ok
+    }
+
+    private fun accountJson(base: JsonObject?, m: Map<String, Build140Logic.Mark>): JsonObject {
+        val out = (base ?: JsonObject(emptyMap())).toMutableMap()
+        out["hiddenCategories"] = JsonArray(m.filter { it.value.on }.entries
+            .sortedWith(compareByDescending<Map.Entry<String, Build140Logic.Mark>> { it.value.at }.thenBy { it.key })
+            .map { JsonObject(mapOf("id" to JsonPrimitive(it.key), "at" to JsonPrimitive(iso(it.value.at)))) })
+        val removed = ((base?.get("removed") as? JsonObject) ?: JsonObject(emptyMap())).toMutableMap()
+        removed["hiddenCategories"] = JsonObject(m.filter { !it.value.on }.toSortedMap().mapValues { JsonPrimitive(iso(it.value.at)) })
+        out["removed"] = JsonObject(removed)
+        out["updatedAt"] = JsonPrimitive(iso(System.currentTimeMillis()))
+        return JsonObject(out)
     }
 
     /** Profiel uploaden: eerst de serverversie lezen en samenvoegen (zodat wijzigingen van elders niet verloren gaan). */
@@ -1350,7 +1410,13 @@ object StateSync {
             val r = (removed[field] ?: emptyMap()).toMutableMap()
             for ((k, at) in current) {
                 val known = p[k]
-                if (known == null || (at != null && at > known)) { p[k] = at ?: now; r.remove(k) }
+                if (known == null || (at != null && at > known)) {
+                    // build 140: (opnieuw) toegevoegd = altijd na de laatst bekende verwijdering van die sleutel (ook van een
+                    // ander apparaat met een voorlopende klok); anders won die verwijdering bij het samenvoegen en verdween
+                    // een net toegevoegd item weer uit Mijn lijst
+                    p[k] = if (inferRemovals) Build140Logic.Stamp.after(at ?: now, r[k]) else at ?: now
+                    r.remove(k)
+                }
             }
             for (k in p.keys.toList()) if (k !in current) { p.remove(k); if (inferRemovals) r[k] = now }
             present[field] = p; removed[field] = r

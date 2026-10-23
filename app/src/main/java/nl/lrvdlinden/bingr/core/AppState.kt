@@ -101,6 +101,8 @@ object AppState {
      * (Pincode van het profiel moet al gecontroleerd zijn, zie ParentalControl.verify(pin, profile).)
      */
     fun open(profile: ViewerProfile) {
+        // build 140: weer in een kinderprofiel → bij het verlaten opnieuw de rekensom
+        if (profile.kids) KidsGate.kidsOpened()
         Store.selectProfile(profile)
         pendingLastChannel = PlayerSettings.resumeLastChannel
         val main = Store.isMain(profile)

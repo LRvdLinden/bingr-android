@@ -72,6 +72,8 @@ class MainActivity : ComponentActivity() {
         // build 75: terug in de app → Trakt-vinkjes bijwerken (wat je intussen elders keek), zoals iOS bij "active".
         // Zonder force: eerst /sync/last_activities, dus goedkoop als er niets veranderd is.
         if (AppState.stage == AppState.Stage.MAIN && Trakt.isLoggedIn) AppScope.launch { runCatching { Trakt.refresh() } }
+        // build 140: "Afspeellijsten bijwerken" (dagelijks/wekelijks …) ook na terugkeer uit de achtergrond, voor alle servers
+        if (AppState.stage == AppState.Stage.MAIN) AppScope.launch { runCatching { Playlists.refreshDue() } }
     }
 
     override fun onDestroy() {

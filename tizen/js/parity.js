@@ -416,19 +416,21 @@
     }, function () { return false; });
   };
 
-  function shuffle(a) {
-    a = a.slice();
-    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
-    return a;
-  }
-  var forYou = { key: null, list: [] };
+  var forYou = { key: null, list: [], popular: false };
   function fyKey() { return (profileId() || '') + '|' + src() + '|' + Lib.version; }
   /** "Voor jou" uit de cache van dit profiel en deze bibliotheek ([{type, item}]), alfabetisch zoals op tvOS. */
   P.forYou = function () { return forYou.key === fyKey() ? forYou.list : []; };
+  /** Build 140: geen kijkgeschiedenis in dit profiel → de rij heet "Populair". */
+  P.forYouPopular = function () { return forYou.key === fyKey() && !!forYou.popular; };
+  /** Build 140: dezelfde lijst in volgorde van relevantie (voor uitgelicht). */
+  P.forYouRanked = function () { return forYou.key === fyKey() ? (forYou.ranked || []) : []; };
   /**
-   * "Voor jou" opbouwen (= buildForYou op tvOS): lijkt op wat je (half) keek (Trakt related), persoonlijke Trakt-
-   * aanbevelingen, onbekeken titels uit de groepen waar je het meest kijkt, aangevuld met trending. Zonder titels met
-   * voortgang of die al bekeken zijn. Promise → true als de lijst veranderd is.
+   * Build 140: "Voor jou" van HET actieve profiel (docs/ACCOUNT.md → "Build 140"): de laatst/meest bekeken titels van dit
+   * profiel (Verder kijken en kijkgeschiedenis) als basis; met TMDB hun "recommendations", daarna titels met dezelfde genres
+   * (meeste overlap eerst) en uit dezelfde categorieën. Alleen wat in de (gefilterde) bibliotheek staat, nooit wat dit
+   * profiel al bekeken heeft of aan het kijken is. Zonder geschiedenis: populaire titels met de kop "Populair".
+   * Geen willekeur meer (tot build 139: Trakt-titels van het hoofdaccount en willekeurige titels). Promise → true als de
+   * lijst veranderd is.
    */
   var fyBusy = null;
   P.loadForYou = function () {
@@ -436,78 +438,111 @@
     var key = fyKey();
     var lib = Lib.lib;
     if (!lib.movies.length && !lib.series.length) return Promise.resolve(false);
+    var X = B.b140.picks, AR = B.ageRatings;
     var out = [], seen = {};
+    function tk(type, x) { return type + ':' + x.id; }
+    function watched(type, x) {
+      if (D.progress(x.id)) return true;
+      if (type === 'movie') return P.movieWatched(x);
+      return !!(S.watchedEpisodeCount && S.watchedEpisodeCount(x) > 0);
+    }
     function add(type, x) {
-      if (!x || seen[type + x.id]) return;
-      if (D.progress(x.id)) return;
-      if (type === 'movie' && P.movieWatched(x)) return;
-      if (type === 'series' && S.watchedEpisodeCount && S.watchedEpisodeCount(x) > 0) return;
-      seen[type + x.id] = true;
+      if (!x || seen[tk(type, x)] || watched(type, x)) return;
+      seen[tk(type, x)] = true;
       out.push({ type: type, item: x });
     }
     var byTitle = {};
-    lib.series.forEach(function (s) { if (!byTitle[s.title]) byTitle[s.title] = s; });
-    fyBusy = B.details.indexReady().catch(B.noop).then(function () {
-      // 1. vergelijkbaar met wat je (half) keek
-      var seeds = [];
-      D.progressList().slice(0, 12).forEach(function (pe) {
-        if (seeds.length >= 4) return;
-        var hit = lib.byId[pe.key];
-        if (hit && hit.type === 'movie') seeds.push({ x: hit.item, show: false });
-        else if (!hit && byTitle[pe.e.title]) seeds.push({ x: byTitle[pe.e.title], show: true });
+    lib.series.forEach(function (s) {
+      if (!byTitle[s.title]) byTitle[s.title] = s;
+      var n = B.allservers ? B.allservers.normTitle(s.rawTitle || s.title) : null;
+      if (n && !byTitle['~' + n]) byTitle['~' + n] = s;
+    });
+    function seriesOf(title) {
+      if (!title) return null;
+      return byTitle[title] || (B.allservers ? byTitle['~' + B.allservers.normTitle(title)] : null) || null;
+    }
+    function here(pid) { return !pid || String(pid).toLowerCase() === String(src()).toLowerCase(); }
+    // 1. basis: wat dit profiel het laatst keek
+    var seedMap = {};
+    function seed(type, x, at) {
+      if (!x) return;
+      var k = tk(type, x);
+      if (!seedMap[k] || at > seedMap[k].at) seedMap[k] = { type: type, x: x, at: at || 0 };
+    }
+    D.progressList().forEach(function (pe) {
+      if (!here(pe.e.playlistID)) return;
+      var hit = lib.byId[pe.key];
+      if (hit && hit.type === 'movie') seed('movie', hit.item, pe.e.updated);
+      else seed('series', seriesOf(pe.e.title), pe.e.updated);
+    });
+    D.history().forEach(function (h) {
+      if (!here(h.playlistID)) return;
+      var hit = lib.byId[h.itemID];
+      if (h.type === 'movie') { if (hit && hit.type === 'movie') seed('movie', hit.item, h.date); }
+      else if (h.type === 'series' || h.type === 'episode') seed('series', hit && hit.type === 'series' ? hit.item : seriesOf(h.title), h.date);
+    });
+    var seeds = Object.keys(seedMap).map(function (k) { return seedMap[k]; }).sort(function (a, b) { return b.at - a.at; }).slice(0, 6);
+    seeds.forEach(function (sd) { seen[tk(sd.type, sd.x)] = true; });
+    function tokens(type, x) {
+      var t = X.genres(x.genre);
+      var info = AR && AR.cached ? AR.cached(x.rawTitle || x.title, x.year, type === 'series') : null;
+      ((info && info.genres) || []).forEach(function (g) { t.push('tmdb:' + g); });
+      return t;
+    }
+    function finish(popular) {
+      var c = coll();
+      var ranked = out.slice(0, 30);
+      var list2 = ranked.slice().sort(function (a, b) {
+        var ta = B.fold(a.item.title), tb = B.fold(b.item.title);
+        return c ? c.compare(ta, tb) : (ta < tb ? -1 : ta > tb ? 1 : 0);
       });
-      var w = T.watchedSeeds();
-      var imdbSeeds = shuffle(w.shows).slice(0, 2).map(function (i) { return { imdb: i, show: true }; })
-        .concat(shuffle(w.movies).slice(0, 2).map(function (i) { return { imdb: i, show: false }; }));
-      return Promise.all(seeds.map(function (s) {
-        return T.imdbOf(s.x, s.show).then(function (i) { return i ? { imdb: i, show: s.show } : null; }, function () { return null; });
-      })).then(function (r) {
-        var all = r.filter(Boolean).concat(imdbSeeds), uniq = {}, list = [];
-        all.forEach(function (s) { if (!uniq[s.imdb]) { uniq[s.imdb] = true; list.push(s); } });
-        return Promise.all(list.slice(0, 6).map(function (s) {
-          return T.related(s.imdb, s.show).then(function (rel) { return { show: s.show, rel: rel }; }, function () { return { show: s.show, rel: [] }; });
-        }));
-      }).then(function (rels) {
-        rels.forEach(function (r) { matchAll(r.rel, r.show, 6).forEach(function (x) { add(r.show ? 'series' : 'movie', x); }); });
-        // 2. persoonlijke Trakt-aanbevelingen
-        return Promise.all([T.recommendations(false), T.recommendations(true)]);
-      }).then(function (rec) {
-        var rm = matchAll(rec[0] || [], false, 40), rs = matchAll(rec[1] || [], true, 40);
-        for (var i = 0; i < 15; i++) { if (rm[i]) add('movie', rm[i]); if (rs[i]) add('series', rs[i]); }
-        rm.slice(15, 20).forEach(function (x) { add('movie', x); });
-        rs.slice(15, 20).forEach(function (x) { add('series', x); });
-        // 3. groepen waar je in kijkt (voortgang, bekeken, Mijn lijst)
-        var score = {};
-        D.progressList().forEach(function (pe) { var hit = lib.byId[pe.key]; if (hit && hit.type === 'movie') score[hit.item.group] = (score[hit.item.group] || 0) + 1; });
-        D.setList('watched').forEach(function (k) { var hit = lib.byId[k]; if (hit && hit.type === 'movie') score[hit.item.group] = (score[hit.item.group] || 0) + 1; });
-        D.setList('myList').forEach(function (k) {
-          var p2 = k.split('|');
-          if (p2[0] !== src()) return;
-          var hit = lib.byId[p2.slice(1).join('|')];
-          if (hit && hit.type !== 'channel') score[hit.item.group] = (score[hit.item.group] || 0) + (hit.type === 'series' ? 2 : 1);
-        });
-        var groups = Object.keys(score).sort(function (a, b) { return score[b] - score[a]; }).slice(0, 4);
-        var mg = Lib.byGroup('movie'), sg = Lib.byGroup('series');
-        groups.forEach(function (g) {
-          shuffle(mg[g] || []).slice(0, 5).forEach(function (x) { add('movie', x); });
-          shuffle(sg[g] || []).slice(0, 5).forEach(function (x) { add('series', x); });
-        });
-        // 4. trending
-        var tm = P.top10('movie'), ts = P.top10('series');
-        for (var j = 0; j < 8; j++) { if (tm[j]) add('movie', tm[j]); if (ts[j]) add('series', ts[j]); }
-        if (out.length < 8) {
-          shuffle(lib.movies.filter(function (m) { return m.poster; })).slice(0, 6).forEach(function (x) { add('movie', x); });
-          shuffle(lib.series.filter(function (s) { return s.poster; })).slice(0, 6).forEach(function (x) { add('series', x); });
+      if (key !== fyKey()) return false;
+      var changed = JSON.stringify(list2.map(function (e) { return e.type + e.item.id; })) !== JSON.stringify(forYou.list.map(function (e) { return e.type + e.item.id; })) ||
+        forYou.key !== key || !!forYou.popular !== !!popular;
+      forYou = { key: key, list: list2, ranked: ranked, popular: !!popular };
+      return changed;
+    }
+    fyBusy = B.details.indexReady().catch(B.noop).then(function () {
+      if (!seeds.length) {
+        // zonder geschiedenis: "Populair" (Top 10 van vandaag uit je bibliotheek)
+        var tm = P.top10('movie', true), ts = P.top10('series', true);
+        for (var j = 0; j < 20; j++) { if (tm[j]) add('movie', tm[j]); if (ts[j]) add('series', ts[j]); }
+        return finish(true);
+      }
+      // 2. TMDB-aanbevelingen van de laatste drie titels
+      return Promise.all(seeds.slice(0, 3).map(function (sd) {
+        return B.details.load(sd.x, sd.type === 'series', null).then(function (d) { return { sd: sd, recs: (d && d.recommendations) || [] }; },
+          function () { return { sd: sd, recs: [] }; });
+      })).then(function (rs) {
+        rs.forEach(function (r) { matchAll(r.recs, r.sd.type === 'series', 8).forEach(function (x) { add(r.sd.type, x); }); });
+        // 3. dezelfde genres, meeste overlap eerst (recente titels zwaarder)
+        var weights = X.genreWeights(seeds.map(function (sd) { return tokens(sd.type, sd.x); }));
+        if (Object.keys(weights).length) {
+          var byKey = {}, cands = [];
+          [['movie', lib.movies], ['series', lib.series]].forEach(function (pair) {
+            pair[1].forEach(function (x) {
+              var t = tokens(pair[0], x);
+              if (!t.length) return;
+              var k = tk(pair[0], x);
+              byKey[k] = { type: pair[0], x: x };
+              cands.push({ key: k, genres: t, rating: x.rating || 0, addedAt: x.addedAt || 0 });
+            });
+          });
+          X.byGenres(cands, weights, seen, 40).forEach(function (k) { var e = byKey[k]; if (e) add(e.type, e.x); });
         }
-        var c = coll();
-        var list2 = out.slice(0, 30).sort(function (a, b) {
-          var ta = B.fold(a.item.title), tb = B.fold(b.item.title);
-          return c ? c.compare(ta, tb) : (ta < tb ? -1 : ta > tb ? 1 : 0);
-        });
-        if (key !== fyKey()) return false;
-        var changed = JSON.stringify(list2.map(function (e) { return e.type + e.item.id; })) !== JSON.stringify(forYou.list.map(function (e) { return e.type + e.item.id; })) || forYou.key !== key;
-        forYou = { key: key, list: list2 };
-        return changed;
+        // 4. dezelfde categorieën van je server (best beoordeeld, dan nieuwste)
+        if (out.length < 20) {
+          var mg = Lib.byGroup('movie'), sg = Lib.byGroup('series'), groups = [];
+          seeds.forEach(function (sd) { if (sd.x.group && groups.indexOf(sd.x.group) < 0) groups.push(sd.x.group); });
+          var best = function (list) {
+            return (list || []).slice().sort(function (a, b) { return ((b.rating || 0) - (a.rating || 0)) || ((b.addedAt || 0) - (a.addedAt || 0)); }).slice(0, 6);
+          };
+          groups.slice(0, 4).forEach(function (g) {
+            best(mg[g]).forEach(function (x) { add('movie', x); });
+            best(sg[g]).forEach(function (x) { add('series', x); });
+          });
+        }
+        return finish(false);
       });
     }).catch(function (e) { B.log('voor jou', e && e.message); return false; }).then(function (r) { fyBusy = null; return r; });
     return fyBusy;

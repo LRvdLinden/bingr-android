@@ -131,17 +131,19 @@ fun ProfileMenu(expanded: Boolean, onDismiss: () -> Unit) {
             val locked = ParentalControl.hasPIN(p)
             ProfileMenuItem(p.name, focus = firstOnce(), leading = { ProfileAvatar(p, tvs(30)) }, locked = locked) {
                 onDismiss()
-                if (ParentalControl.hasPIN(p)) pinFor = p else switchTo(p)
+                // build 140: een kinderprofiel verlaten = eerst de rekensom (ouderpoort)
+                KidsGate.guard { if (ParentalControl.hasPIN(p)) pinFor = p else switchTo(p) }
             }
         }
         if (others.isNotEmpty()) ProfileMenuDivider()
         ProfileMenuItem(L("Switch profile"), Icons.Default.People, focus = firstOnce()) {
-            onDismiss(); AppState.switchPlaylist()
+            onDismiss(); KidsGate.guard { AppState.switchPlaylist() }
         }
         // profielen beheren: alleen het hoofdprofiel (zelfde regel als in Mijn Bingr)
         if (Store.canManage) {
             ProfileMenuItem(L("Manage profiles"), Icons.Default.Edit) { onDismiss(); MyBingrNav.go(MyBingrPage.PROFILES) }
         }
+        // build 140: Mijn Bingr, Instellingen en Account vanuit een kinderprofiel: de rekensom zit in MainScreen (tabRequest 5)
         ProfileMenuItem(L("My Bingr"), Icons.Default.Person) { onDismiss(); MyBingrNav.go(MyBingrPage.ROOT) }
         ProfileMenuItem(L("Settings"), Icons.Default.Settings) { onDismiss(); MyBingrNav.go(MyBingrPage.SETTINGS) }
         if (Account.isSignedIn) {
@@ -151,7 +153,7 @@ fun ProfileMenu(expanded: Boolean, onDismiss: () -> Unit) {
         ProfileMenuItem(L("Support"), Icons.Default.SupportAgent) { onDismiss(); Support.open(ctx) }
         if (Account.isSignedIn) {
             ProfileMenuDivider()
-            ProfileMenuItem(L("Sign out"), Icons.AutoMirrored.Filled.Logout) { onDismiss(); confirmSignOut = true }
+            ProfileMenuItem(L("Sign out"), Icons.AutoMirrored.Filled.Logout) { onDismiss(); KidsGate.guard { confirmSignOut = true } }
         }
         LaunchedEffect(Unit) { if (tv) runCatching { first.requestFocus() } }
     }

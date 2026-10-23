@@ -619,9 +619,10 @@ private fun CategoryPoster(t: DetailTarget) {
                 })
             }
             if (pid != null) {
-                val inList = Store.inMyList(pid, t.id)
+                // build 140: met de server van de titel (een titel van een andere server kwam anders niet in Mijn lijst)
+                val inList = AllServers.inMyList(t, pid)
                 add(S2Action(if (inList) L("Remove from My List") else L("Add to My List"),
-                    PlusCheck.icon(inList)) { Store.setMyList(pid, t.id, !inList) })
+                    PlusCheck.icon(inList)) { AllServers.setMyList(t, !inList, pid) })
             }
             add(S2Action(L("Add to collection…"), Icons.AutoMirrored.Filled.PlaylistAdd) { collect = true })
         }

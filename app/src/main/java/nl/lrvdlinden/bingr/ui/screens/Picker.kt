@@ -135,10 +135,15 @@ fun PlaylistPickerScreen() {
     if ((noServer || !canManage) && managing) managing = false
     BackHandler(enabled = managing && !overlay) { managing = false }
 
-    fun startManaging() {
+    fun startManagingNow() {
         val main = Store.mainProfile
         if (!managing && main != null && ParentalControl.hasPIN(main) && !ParentalControl.isUnlocked) askManagePIN = true
         else managing = !managing
+    }
+    fun startManaging() {
+        // build 140: was het laatst actieve profiel een kinderprofiel, dan eerst de rekensom (ouderpoort)
+        if (!managing && KidsGate.active) { KidsGate.guardPicker(null) { startManagingNow() }; return }
+        startManagingNow()
     }
 
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
@@ -217,8 +222,10 @@ fun PlaylistPickerScreen() {
                                             when {
                                                 p == null -> addingProfile = true
                                                 managing -> editing = p
-                                                ParentalControl.hasPIN(p) -> pinFor = p
-                                                else -> AppState.open(p)
+                                                // build 140: vanuit een kinderprofiel naar een ander (geen kinder)profiel: eerst de som
+                                                else -> KidsGate.guardPicker(p) {
+                                                    if (ParentalControl.hasPIN(p)) pinFor = p else AppState.open(p)
+                                                }
                                             }
                                         }
                                     )
@@ -259,6 +266,7 @@ fun PlaylistPickerScreen() {
             } else false
         }
     }
+    KidsGateHost()
     if (askManagePIN) {
         PinPad(L("Enter PIN"), onDismiss = { askManagePIN = false }) { pin ->
             val main = Store.mainProfile

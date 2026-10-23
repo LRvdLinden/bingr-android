@@ -27,7 +27,8 @@ Downloaden: [bingr.online](https://bingr.online/#download). Installeren en bijwe
 - **Multiview**: 2 tot 4 zenders tegelijk (Live TV → Multiview). Een Samsung-tv heeft maar één AVPlay-speler: de tegel met geluid gebruikt AVPlay (alle formaten), de andere tegels spelen gedempt via HTML5-video (HLS/MP4, hoeveel tegelijk hangt af van de tv). OK geeft een tegel het geluid, geel haalt hem weg, Afspelen opent hem volledig. Telt als één stream.
 - **Intro en aftiteling markeren** in de speler (rode knop of de knop *Intro en aftiteling*): intro begin/eind en begin aftiteling zetten, ±5 s bijstellen, gedeeld met je andere apparaten voor alle afleveringen van de serie
 - **Eén lijst over alle servers** (build 128): Verder kijken, Mijn lijst, favorieten, recente zenders en collecties tonen alles van al je servers; een titel of zender van een andere server speelt via die server (ook terugkijken in de gids), zonder te wisselen. Is een server verwijderd, dan zoekt Bingr de titel of zender op je andere servers en verhuist hij mee; vindt hij hem nergens, dan blijft hij staan met bij aanklikken Verwijderen / Zoeken / Annuleren
-- **Categorieën aan/uit per profiel** (Instellingen → Profiel), voor de categorieën van al je servers
+- **Categorieën aan/uit voor het hele account** (build 140, Instellingen → Profiel), voor de categorieën van al je servers; geldt voor alle profielen behalve kinderprofielen
+- **Kinderprofielen** (build 140): alleen inhoud uit kindercategorieën (overal: Home, Live TV, zoeken, lijsten); profiel verlaten kan pas na een rekensom (*Vraag een volwassene*)
 - **Gezipte tv-gidsen** (`.xml.gz`) worden gewoon gelezen
 - **Leeftijdsclassificaties uit TMDB** (Kijkwijzer eerst, dan VS, VK, …), op de achtergrond bijgewerkt: het kinderfilter werkt daardoor hetzelfde als op Android
 - **Tegelijk kijken** (max. 6, met de lijst van wie er kijkt), kijkgeschiedenis, apparaten beheren, wie kijkt er nu (met profielavatars)

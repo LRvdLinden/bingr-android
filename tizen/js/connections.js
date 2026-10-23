@@ -500,7 +500,7 @@
     return resolveImdb(item).then(function (imdb) {
       if (!imdb) { Trakt.lastScrobble = L('Not found on Trakt: %@', item.title); return 'notfound'; }
       var isEp = item.type === 'episode' && item.season != null && item.episode != null;
-      var body = { progress: B.clamp(progress * 100, 0, 100), app_version: '1.0.0' };
+      var v = B.config && B.config.version, body = { progress: B.clamp(progress * 100, 0, 100), app_version: v && String(v).indexOf('__') !== 0 ? v : '1.0.1' };
       if (isEp) { body.show = { ids: { imdb: imdb } }; body.episode = { season: item.season, number: item.episode }; }
       else body.movie = { ids: { imdb: imdb } };
       var watched = action === 'stop' && progress >= 0.8;

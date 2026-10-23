@@ -87,8 +87,12 @@ object Playlists {
     init {
         // aanpassingen of kinderslot gewijzigd → opnieuw toepassen
         AppScope.launch {
-            // build 128: ook de verborgen categorieën van het profiel
-            snapshotFlow { Triple(Store.customizations, Store.parental, Store.hiddenCategories) }.drop(1).collect { applyCustomizations() }
+            snapshotFlow { Store.customizations to Store.parental }.drop(1).collect { applyCustomizations() }
+        }
+        // build 140: categorieën aan/uit (account-set): niet bij elke tik de hele catalogus opnieuw filteren, maar even
+        // wachten tot er niet meer getikt wordt, en dan op de achtergrond (ook bij kleine lijsten)
+        AppScope.launch {
+            snapshotFlow { Store.hiddenCategories }.drop(1).debounce(450).collect { applyCustomizations(background = true) }
         }
         AppScope.launch {
             snapshotFlow { ParentalControl.unlockedUntil }.drop(1).collect { applyCustomizations() }
@@ -103,7 +107,7 @@ object Playlists {
         }
         // ander kijkprofiel gekozen of leeftijdsgrens/kinderprofiel gewijzigd → opnieuw filteren
         AppScope.launch {
-            snapshotFlow { Store.activeProfile?.let { "${it.effectiveAgeLimit ?: 0}-${it.strictAgeFilter}" } ?: "" }
+            snapshotFlow { Store.activeProfile?.let { "${it.effectiveAgeLimit ?: 0}-${it.strictAgeFilter}-${it.kids}" } ?: "" }
                 .drop(1).collect { applyCustomizations() }
         }
         AppScope.launch { runCatching { AgeRatings.preload() } }
@@ -143,12 +147,17 @@ object Playlists {
             if (source?.id != p.id) return
             if (cached != null) {
                 setRaw(cached)
+                // build 140: daarna alle servers die aan de beurt zijn (deze eerst), ook terwijl de app open blijft
+                startAutoRefresh()
                 if (!RefreshPolicy.current.isDue(cacheAge(p))) return
+                refreshedThisLaunch += p.id.lowercase(java.util.Locale.ROOT)
                 AppScope.launch { refresh(p, showSpinner = false) }
                 return
             }
         }
         setRaw(Library())
+        refreshedThisLaunch += p.id.lowercase(java.util.Locale.ROOT)
+        startAutoRefresh()
         refresh(p, showSpinner = true)
     }
 
@@ -276,12 +285,57 @@ object Playlists {
         return loadStremioAddons(src).also { otherAddons[src.id] = it }
     }
 
-    /** Bij terugkeren in de app: verversen als het volgens de instelling tijd is. */
-    suspend fun refreshIfDue() {
-        val s = source ?: return
+    /** Bij terugkeren in de app: verversen als het volgens de instelling tijd is (build 140: alle servers, zie [refreshDue]). */
+    suspend fun refreshIfDue() = refreshDue()
+
+    // MARK: build 140: automatisch vernieuwen volgens "Afspeellijsten bijwerken", voor ALLE servers van het account
+
+    /** Servers (kleine letters id) die in deze sessie al ververst zijn (voor "Elke keer dat de app opent"). */
+    private val refreshedThisLaunch = java.util.Collections.synchronizedSet(HashSet<String>())
+    private var autoJob: Job? = null
+    private var autoBusy = false
+
+    /**
+     * Build 140: de planning echt uitvoeren. Tot build 139 keek alleen [select] (bij het openen van een server) naar de
+     * leeftijd van de cache, en dan alleen van de actieve server; [refreshIfDue] werd nergens aangeroepen. Bleef de app open
+     * (tv) of kwam hij terug uit de achtergrond, dan gebeurde er niets, en de andere servers werden nooit automatisch
+     * ververst. Nu: na het openen, bij terugkeer naar de voorgrond en elke 15 minuten zolang de app draait.
+     */
+    fun startAutoRefresh() {
+        if (autoJob?.isActive == true || Screenshots.isActive) return
+        autoJob = AppScope.launch {
+            kotlinx.coroutines.delay(20_000)
+            while (true) {
+                try { refreshDue() } catch (e: CancellationException) { throw e } catch (_: Exception) { }
+                kotlinx.coroutines.delay(Build140Logic.AutoRefresh.CHECK_EVERY)
+            }
+        }
+    }
+
+    /** Alle servers die volgens de instelling aan de beurt zijn verversen: de actieve stil ("Bijwerken…"), de andere daarna. */
+    suspend fun refreshDue() {
         val policy = RefreshPolicy.current
-        if (isLoading || policy == RefreshPolicy.MANUAL || !policy.isDue(cacheAge(s))) return
-        refresh(s, showSpinner = false)
+        if (policy == RefreshPolicy.MANUAL || refreshingAll || autoBusy || Screenshots.isActive) return
+        val all = Store.playlists.toList()
+        val active = source
+        val ages = withContext(Dispatchers.IO) { all.associate { it.id to cacheAge(it) } }
+        val due = Build140Logic.AutoRefresh.dueServers(all.map { it.id }, active?.id, policy.raw, { ages[it] },
+            synchronized(refreshedThisLaunch) { refreshedThisLaunch.toSet() })
+        if (due.isEmpty()) return
+        autoBusy = true
+        var any = false
+        try {
+            for (id in due) {
+                val p = all.firstOrNull { it.id == id } ?: continue
+                // niet tijdens het afspelen of terwijl de actieve server laadt
+                while (AppState.playing != null || isLoading || refreshingAll) kotlinx.coroutines.delay(5_000)
+                val ok = if (p.id == source?.id) withTimeoutOrNull(180_000) { refresh(p, showSpinner = false) } ?: false
+                    else refreshOther(p)
+                refreshedThisLaunch += p.id.lowercase(java.util.Locale.ROOT)
+                if (ok) any = true
+            }
+        } finally { autoBusy = false }
+        if (any) AllServers.catalogsRefreshed()
     }
 
     /**
@@ -357,6 +411,8 @@ object Playlists {
         val unlocked: Boolean,
         /** build 128: verborgen categorieën (naam zoals de server hem levert) van het actieve profiel voor deze server */
         val hiddenCategories: Set<String> = emptySet(),
+        /** build 140: kinderprofiel: alleen inhoud uit kindercategorieën (docs/ACCOUNT.md → "Build 140") */
+        val kids: Boolean = false,
     )
 
     /** Filtercontext voor deze bron en het actieve profiel (op de main thread aanroepen: leest Compose-state). */
@@ -369,6 +425,7 @@ object Playlists {
             parentalEnabled = pc.enabled, lockedGroups = pc.lockedGroups, autoLockAdult = pc.autoLockAdult,
             unlocked = ParentalControl.isUnlocked,
             hiddenCategories = Store.hiddenCategoryNames(p.id),
+            kids = prof?.kids == true,
         )
     }
 
@@ -377,7 +434,7 @@ object Playlists {
      * Grote lijsten worden op Dispatchers.Default gefilterd; bij een profiel met leeftijdsgrens is [library]
      * intussen leeg en [isFiltering] true.
      */
-    fun applyCustomizations(quiet: Boolean = false) {
+    fun applyCustomizations(quiet: Boolean = false, background: Boolean = false) {
         val s = source
         if (s == null) { filterJob?.cancel(); isFiltering = false; library = rawLibrary; return }
         val ctx = context(s)
@@ -399,14 +456,15 @@ object Playlists {
             }
             return
         }
-        // kleine lijsten: meteen; grote lijsten: op de achtergrond
-        if (raw.channels.size + raw.movies.size + raw.series.size < 3000) {
+        // kleine lijsten: meteen; grote lijsten (en build 140: categorieën aan/uit) op de achtergrond
+        if (!background && raw.channels.size + raw.movies.size + raw.series.size < 3000) {
             library = apply(raw, ctx)
             isFiltering = false
             return
         }
-        // kinderprofiel/leeftijdsgrens: niets ongefilterds laten zien terwijl er gefilterd wordt
-        if (ctx.ageLimit != null) library = Library()
+        // kinderprofiel/leeftijdsgrens: niets ongefilterds laten zien terwijl er gefilterd wordt (build 140: bij categorieën
+        // aan/uit blijft de vorige, al gefilterde lijst staan; die is nooit minder streng)
+        if (ctx.ageLimit != null && !background) library = Library()
         isFiltering = true
         filterJob = AppScope.launch {
             val lib = withContext(Dispatchers.Default) { apply(raw, ctx) }
@@ -433,7 +491,7 @@ object Playlists {
     fun apply(raw: Library, c: Customization, playlist: String, ageLimit: Int? = null, strict: Boolean = false): Library {
         val pc = Store.parental
         return apply(raw, FilterContext(c, playlist, ageLimit, strict, pc.enabled, pc.lockedGroups, pc.autoLockAdult,
-            ParentalControl.isUnlocked, Store.hiddenCategoryNames(playlist)))
+            ParentalControl.isUnlocked, Store.hiddenCategoryNames(playlist), kids = Store.activeProfile?.kids == true))
     }
 
     /** Pure filterfunctie (veilig op de achtergrond; leest alleen de thread-veilige Metadata-cache). */
@@ -454,24 +512,33 @@ object Playlists {
         }
         // per groep één keer uitrekenen (tienduizenden titels delen maar een paar honderd groepen)
         val groupOK = HashMap<String, Boolean>()
+        val kids = ctx.kids && !ctx.unlocked
         fun visible(id: String, g: String): Boolean {
             if (id in c.hidden) return false
             groupOK[g]?.let { return it }
             val m = c.merged[g] ?: g
-            // build 128: categorieën aan/uit per profiel (hiddenCategories), niet meer "group:" uit de aanpassingen van de server
-            val ok = g !in ctx.hiddenCategories && m !in ctx.hiddenCategories &&
+            // build 128: categorieën aan/uit (build 140: voor het hele account, niet bij een kinderprofiel)
+            // build 140: kinderprofiel: alleen kindercategorieën (naam zoals de server hem levert)
+            val ok = (!kids || Build140Logic.Kids.isKidsCategory(g)) &&
+                g !in ctx.hiddenCategories && m !in ctx.hiddenCategories &&
                 !isLocked(g) && !isLocked(m)
             groupOK[g] = ok
             return ok
         }
-        // leeftijd: TMDB (Kijkwijzer eerst, AgeRatings) en anders OMDb (Metadata); beide caches zijn thread-veilig
-        fun ageOK(md: TitleMetadata?, info: AgeRating?, g: String): Boolean =
-            ageLimit == null || allowed(md?.rated, g, md?.genre, info)
+        // leeftijd: TMDB (Kijkwijzer eerst, AgeRatings) en anders OMDb (Metadata); beide caches zijn thread-veilig.
+        // build 140: kinderprofiel: een bekende classificatie boven de grens niet, zonder bekende classificatie wel
+        // (het item komt uit een kindercategorie)
+        fun ageOK(md: TitleMetadata?, info: AgeRating?, g: String): Boolean = when {
+            ageLimit == null -> true
+            kids -> Build140Logic.Kids.ageAllowed(info?.age ?: ParentalControl.minimumAge(md?.rated), ageLimit)
+            else -> allowed(md?.rated, g, md?.genre, info)
+        }
 
         var channels = raw.channels.filter { visible(it.id, it.group) }
             .map { ch -> ch.copy(group = group(ch.group), name = c.renamed[ch.id] ?: ch.name) }
-        // kinderprofiel / leeftijdsgrens: geen volwassenen-zenders (streng: alleen kinderzenders)
-        if (ageLimit != null && !ctx.unlocked) channels = channels.filter { ParentalControl.channelAllowedFor(it.name, it.group, ageLimit, ctx.strict) }
+        // leeftijdsgrens: geen volwassenen-zenders (streng: alleen kinderzenders). Build 140: een kinderprofiel volgt alleen
+        // de categorie (de zendernaam telt niet mee)
+        if (ageLimit != null && !ctx.unlocked && !kids) channels = channels.filter { ParentalControl.channelAllowedFor(it.name, it.group, ageLimit, ctx.strict) }
         val movies = raw.movies.filter {
             visible(it.id, it.group) && (ageLimit == null || ageOK(Metadata.cached(it), AgeRatings.cached(it), it.group))
         }.map { m -> m.copy(group = group(m.group), title = c.renamed[m.id] ?: m.title) }

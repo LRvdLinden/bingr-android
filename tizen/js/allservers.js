@@ -471,9 +471,13 @@
     var a = activeId();
     return D.sources.slice().sort(function (x, y) { return (AS.sameServer(x.id, a) ? 0 : 1) - (AS.sameServer(y.id, a) ? 0 : 1); });
   }
+  function kidsActive() { return !!(B.app && B.app.profile && B.app.profile.kids); }
   AS.isOrphan = function (key) {
     var sid = AS.serverOf(key);
     if (!sid || AS.isActive(sid)) return false;
+    // build 140: een kinderprofiel ziet een item alleen als het in de gefilterde bibliotheek van zijn server staat; geen
+    // "Onbekende titel"-tegels en niet zoeken/verhuizen (wat het kinderfilter verbergt is niet "weg")
+    if (kidsActive()) return false;
     return !server(sid) || !!absent[AS.metaKey(key)];
   };
   AS.item = function (key) { return found[AS.metaKey(key)] || null; };
@@ -536,6 +540,8 @@
       } else {
         var full = pid + '|' + pe.key;
         hit = AS.item(full);
+        // build 140: kinderprofiel: alleen wat in de gefilterde bibliotheek van zijn server staat
+        if (!hit && kidsActive()) return;
         if (!hit) {
           var m = AS.meta(full);
           var t = m && m.k === 'movie' ? 'movie' : 'series';
@@ -794,7 +800,7 @@
         if (seen[mk] || now - (tried[mk] || 0) < RETRY) return false;
         seen[mk] = true; return true;
       });
-      if (!todo.length || !D.sources.length) return;
+      if (!todo.length || !D.sources.length || kidsActive()) return;
       return idle().then(function () { return match(todo, 'bg'); }).then(function (moved) {
         todo.forEach(function (r) { tried[AS.metaKey(r.key)] = now; });
         if (Object.keys(moved).length) D.remapNow();

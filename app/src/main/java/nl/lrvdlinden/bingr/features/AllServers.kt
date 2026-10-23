@@ -444,6 +444,9 @@ object AllServers {
             if (changed) version++
             if (migrating && complete) Prefs.put(MIGRATED, true)
         }
+        // build 140: kinderprofiel: wat het kinderfilter verbergt staat niet in de gefilterde catalogus, maar is niet weg;
+        // dus niet op andere servers zoeken en geen remap-regels maken (die gelden voor het hele account)
+        if (withContext(Dispatchers.Main) { Store.activeProfile?.kids == true }) return@withLock
         // alleen voor het actieve profiel zoeken (de regels gelden daarna voor alle profielen)
         val active = withContext(Dispatchers.Main) { activeRefs().map { X.metaKey(it.key) }.toSet() }
         val now = System.currentTimeMillis()
@@ -521,6 +524,9 @@ object AllServers {
     fun isOrphan(key: String): Boolean {
         val sid = X.serverOf(key) ?: return false
         if (isActive(sid)) return false
+        // build 140: een kinderprofiel ziet een item alleen als het in de (gefilterde) bibliotheek van zijn server staat;
+        // geen "Onbekende titel"-tegels en niet zoeken/verhuizen (wat het filter verbergt is niet "weg")
+        if (Store.activeProfile?.kids == true) return false
         return server(sid) == null || X.metaKey(key) in absent
     }
 
@@ -580,6 +586,28 @@ object AllServers {
         }
         for (k in sorted) picked[k]?.let { out += it }
         return out
+    }
+
+    /**
+     * Build 140: Mijn lijst aan/uit voor een titel, altijd met de server van die titel (niet de actieve). Een titel van een
+     * andere server komt meteen in [found], zodat hij direct in de rij Mijn lijst staat (niet pas na de volgende ronde).
+     * Tot build 139 zetten de lang-indrukken-menu's op Home en Categorieën de actieve server in de sleutel; een titel van
+     * een andere server werd dan nergens gevonden en verscheen niet in Mijn lijst.
+     */
+    fun setMyList(t: DetailTarget, on: Boolean, fallbackSid: String?) {
+        val sid = t.sourceID ?: fallbackSid ?: return
+        if (on && !isActive(sid)) {
+            val item: Any = when (t) { is DetailTarget.MovieT -> t.movie.copy(sourceID = sid); is DetailTarget.SeriesT -> t.series.copy(sourceID = sid) }
+            val k = "$sid|${t.id}"
+            found = found + (X.metaKey(k) to item)
+            recordMeta(k, sid, server(sid)?.name ?: "", item, null)
+            version++
+        }
+        Store.setMyList(sid, t.id, on)
+    }
+    fun inMyList(t: DetailTarget, fallbackSid: String?): Boolean {
+        val sid = t.sourceID ?: fallbackSid ?: return false
+        return Store.inMyList(sid, t.id)
     }
 
     /** Zenders (favorieten of recent) over alle servers; dezelfde zender op twee servers = één (actieve eerst). */

@@ -178,7 +178,7 @@ private fun PinDots(filled: Int, size: Dp, spacing: Dp, shake: Float) {
 }
 
 @Composable
-private fun PinKey(k: String, size: Dp, fr: FocusRequester?, onClick: () -> Unit) {
+internal fun PinKey(k: String, size: Dp, fr: FocusRequester?, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val tv = AppState.isTV
     Box(

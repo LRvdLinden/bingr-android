@@ -344,7 +344,8 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
     fun toggleMyList() {
         val p = pid ?: return
         val on = !Store.inMyList(p, target.id)
-        Store.setMyList(p, target.id, on)
+        // build 140: titel van een andere server meteen in de rij Mijn lijst (niet pas na de volgende ronde)
+        AllServers.setMyList(target, on, p)
         // de Trakt-watchlist volgt alleen voor het hoofdaccount
         if (imdb != null && Store.isMainActive && Trakt.isLoggedIn && (imdb in Trakt.watchlist) != on) {
             AppScope.launch { screensSafe { Trakt.toggleWatchlist(imdb, target.isSeries) } }

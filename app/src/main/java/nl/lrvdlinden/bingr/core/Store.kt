@@ -51,8 +51,19 @@ object Store {
     var reminders by mutableStateOf(listOf<ProgramReminder>()); private set
     /** Kijkgeschiedenis van het actieve profiel */
     var history by mutableStateOf(listOf<HistoryEntry>()); private set
-    /** Build 128: verborgen categorieën van het actieve profiel, "<server-id>|<categorienaam>" (alle servers) */
-    var hiddenCategories by mutableStateOf(setOf<String>()); private set
+    /**
+     * Build 140: verborgen categorieën voor het hele account ("<server-id kleine letters>|<categorienaam>", alle servers),
+     * voor alle profielen die geen kinderprofiel zijn. Een kinderprofiel: leeg (daar bepaalt het kinderfilter alles).
+     */
+    val hiddenCategories: Set<String> get() = if (activeProfile?.kids == true) emptySet() else accountHidden
+    /** Build 140: de account-set zelf (zonder de kinderregel), voor het categorieënscherm en de sync. */
+    var accountHidden by mutableStateOf(setOf<String>()); private set
+    /** Build 140: per sleutel wanneer hij aan/uit is gezet (section `account`, zie [StateSync]). */
+    private var accountMarks: Map<String, Build140Logic.Mark> = emptyMap()
+    /** Build 140: snel opzoeken per server (kleine letters id → namen). */
+    private var hiddenIndex: Map<String, Set<String>> = emptyMap()
+    /** Build 128: de oude per-profiel-set van het actieve profiel (wordt nog gesynct voor oudere apps, niet meer gebruikt). */
+    private var profileHiddenCats = setOf<String>()
     /** Startscherm (build 51) van het actieve profiel */
     var activeHomeLayout by mutableStateOf(HomeLayout()); private set
     var nasServers by mutableStateOf(listOf<NASServer>()); private set
@@ -88,6 +99,10 @@ object Store {
     val canManage: Boolean get() = isMainActive || activeProfileID == null || profiles.isEmpty()
     /** De server van het hoofdaccount (of de eerste) */
     val mainSource: PlaylistSource? get() = playlists.firstOrNull { it.id == mainSourceID } ?: playlists.firstOrNull()
+
+    /** Build 140: opslag van de account-brede categorieën (sleutel → tijd), aan en verwijderd. */
+    @Serializable
+    private data class AccountCats(val on: Map<String, Long> = emptyMap(), val off: Map<String, Long> = emptyMap())
 
     @Serializable
     private data class ProfileMeta(val mainSourceID: String? = null, val mainProfileID: String? = null)
@@ -172,6 +187,9 @@ object Store {
         parental = read("parental", ParentalSettings())
         reminders = read<List<ProgramReminder>>("reminders", emptyList()).filter { it.start > System.currentTimeMillis() - 3_600_000 }
         nasServers = read("nas", emptyList())
+        read("accountcats", AccountCats()).let { a ->
+            setAccountMarks(a.on.mapValues { Build140Logic.Mark(it.value, true) } + a.off.mapValues { Build140Logic.Mark(it.value, false) }, save = false)
+        }
 
         profiles = read("profiles", emptyList())
         val meta = read("profilemeta", ProfileMeta())
@@ -195,7 +213,7 @@ object Store {
         localWatched = readIn(d, "watched", emptySet())
         recentChannels = readIn(d, "recent", emptyList())
         history = readIn(d, "history", emptyList())
-        hiddenCategories = readIn(d, "hiddencats", emptySet())
+        profileHiddenCats = readIn(d, "hiddencats", emptySet())
         activeHomeLayout = readIn(d, "homelayout", HomeLayout())
     }
 
@@ -289,7 +307,8 @@ object Store {
         localWatched = d.watched
         recentChannels = d.recent
         history = emptyList()
-        hiddenCategories = d.hiddenCategories
+        accountHidden = d.hiddenCategories.map { Build140Logic.CatMarks.norm(it) }.toSet()
+        hiddenIndex = Build140Logic.CatMarks.index(accountHidden)
         activeHomeLayout = d.homeLayout
         customizations = emptyMap()
         parental = ParentalSettings()
@@ -669,6 +688,8 @@ object Store {
         customizations = emptyMap(); write("custom", customizations)
         parental = ParentalSettings(); write("parental", parental)
         reminders = emptyList(); write("reminders", reminders)
+        setAccountMarks(emptyMap())
+        runCatching { Prefs.remove("cats.migrated140") }
         mainSourceID = null; mainProfileIDStored = null; saveMeta()
         activeProfileID = null; Prefs.put("activeProfileID", null)
         activePlaylistID = null
@@ -949,7 +970,7 @@ object Store {
     }
 
     private fun readProfileData(id: String): ProfileData {
-        if (id == activeProfileID) return ProfileData(favorites, myList, progress, localWatched, recentChannels, history, hiddenCategories)
+        if (id == activeProfileID) return ProfileData(favorites, myList, progress, localWatched, recentChannels, history, profileHiddenCats)
         val d = profileDir(id)
         return ProfileData(
             readIn(d, "favorites", emptySet()), readIn(d, "mylist", emptySet()), readIn(d, "progress", emptyMap()),
@@ -958,37 +979,77 @@ object Store {
         )
     }
 
-    // MARK: build 128: categorieën per profiel (docs/ACCOUNT.md → "Categorieën per profiel")
+    // MARK: build 140: categorieën per account (docs/ACCOUNT.md → "Build 140")
 
-    /** Is categorie [group] (naam zoals de server hem levert) van server [sid] uit voor het actieve profiel? */
-    fun isCategoryHidden(sid: String, group: String): Boolean =
-        key(sid, group) in hiddenCategories || hiddenCategories.any { sameKey(it, sid, group) }
-
-    /** Verborgen categorienamen van server [sid] voor het actieve profiel (voor het filteren). */
-    fun hiddenCategoryNames(sid: String): Set<String> =
-        hiddenCategories.mapNotNullTo(HashSet()) { k -> val bar = k.indexOf('|'); if (bar > 0 && k.regionMatches(0, sid, 0, bar, ignoreCase = true) && bar == sid.length) k.substring(bar + 1) else null }
-
-    /** Categorieën (sleutels "<server-id>|<naam>") aan of uit zetten voor het actieve profiel. */
-    fun setCategoriesHidden(keys: Collection<String>, hidden: Boolean) {
-        val cur = hiddenCategories
-        val n = if (hidden) cur + keys else cur.filterNot { k -> keys.any { w -> sameKey(k, w.substringBefore('|'), w.substringAfter('|')) } }.toSet()
-        if (n == cur) return
-        hiddenCategories = n
-        pwrite("hiddencats", n)
-        StateSync.profileDataChanged(activeProfileID)
+    private fun setAccountMarks(m: Map<String, Build140Logic.Mark>, save: Boolean = true) {
+        accountMarks = m
+        val alive = Build140Logic.CatMarks.alive(m)
+        if (alive != accountHidden) {
+            accountHidden = alive
+            hiddenIndex = Build140Logic.CatMarks.index(alive)
+        }
+        if (save) write("accountcats", AccountCats(
+            on = m.filter { it.value.on }.mapValues { it.value.at },
+            off = m.filter { !it.value.on }.mapValues { it.value.at },
+        ))
     }
 
-    /** Server verwijderd: zijn categoriekeuzes uit alle profielen (als verwijdering, dus gesynct). */
+    /** Build 140: de account-set met tijden (voor de sync). */
+    fun accountCategoryMarks(): Map<String, Build140Logic.Mark> = accountMarks
+
+    /** Build 140: account-set uit de sync; roept geen sync-hooks aan. */
+    fun applySyncedAccountCategories(m: Map<String, Build140Logic.Mark>) {
+        if (m == accountMarks) return
+        setAccountMarks(m)
+    }
+
+    /** Is categorie [group] (naam zoals de server hem levert) van server [sid] uit (account-set, niet-kinderprofiel)? */
+    fun isCategoryHidden(sid: String, group: String): Boolean {
+        if (activeProfile?.kids == true) return false
+        return hiddenIndex[sid.lowercase()]?.contains(group) == true
+    }
+
+    /** Uit in de account-set (ook voor het scherm als er een kinderprofiel actief is). */
+    fun isAccountCategoryHidden(sid: String, group: String): Boolean = hiddenIndex[sid.lowercase()]?.contains(group) == true
+
+    /** Verborgen categorienamen van server [sid] voor het actieve profiel (voor het filteren; kinderprofiel: geen). */
+    fun hiddenCategoryNames(sid: String): Set<String> =
+        if (activeProfile?.kids == true) emptySet() else hiddenIndex[sid.lowercase()] ?: emptySet()
+
+    /** Categorieën (sleutels "<server-id>|<naam>") aan of uit zetten voor het hele account. */
+    fun setCategoriesHidden(keys: Collection<String>, hidden: Boolean) {
+        val n = Build140Logic.CatMarks.set(accountMarks, keys, hidden, System.currentTimeMillis())
+        if (n == accountMarks) return
+        setAccountMarks(n)
+        StateSync.accountChanged()
+    }
+
+    /** Server verwijderd: zijn categoriekeuzes uit de account-set (als verwijdering, dus gesynct) en uit de oude per-profiel-sets. */
     fun removeServerCategories(sid: String) {
+        val n = Build140Logic.CatMarks.removeServer(accountMarks, sid, System.currentTimeMillis())
+        if (n != accountMarks) { setAccountMarks(n); StateSync.accountChanged() }
         val prefix = "${sid.lowercase()}|"
         for (p in profiles) {
             val d = readProfileData(p.id)
-            val n = d.hiddenCategories.filterNot { it.lowercase().startsWith(prefix) }.toSet()
-            if (n == d.hiddenCategories) continue
-            if (p.id == activeProfileID) { hiddenCategories = n; pwrite("hiddencats", n) }
-            else writeIn(profileDir(p.id), "hiddencats", n)
+            val k = d.hiddenCategories.filterNot { it.lowercase().startsWith(prefix) }.toSet()
+            if (k == d.hiddenCategories) continue
+            if (p.id == activeProfileID) { profileHiddenCats = k; pwrite("hiddencats", k) }
+            else writeIn(profileDir(p.id), "hiddencats", k)
             StateSync.profileDataChanged(p.id)
         }
+    }
+
+    /**
+     * Build 140: eenmalig per apparaat de per-profiel-sets van alle niet-kinderprofielen (unie) naar de account-set, met
+     * `at` = 0, zodat een keuze die een ander apparaat al in `account` maakte voorgaat. De per-profiel-data blijft staan.
+     */
+    fun migrateCategoriesToAccount(allowFlag: Boolean) {
+        if (profiles.isEmpty() || Prefs.bool("cats.migrated140", false)) return
+        val union = profiles.filter { !it.kids }.flatMap { readProfileData(it.id).hiddenCategories }
+        val n = Build140Logic.CatMarks.migrate(accountMarks, union)
+        if (n != accountMarks) { setAccountMarks(n); StateSync.accountChanged() }
+        // ingelogd: pas vastleggen na de eerste sync (dan zijn de per-profiel-sets van de server er ook); mag vaker lopen
+        if (allowFlag) Prefs.put("cats.migrated140", true)
     }
 
     /**
@@ -1006,7 +1067,7 @@ object Store {
             val d = readProfileData(p.id)
             val n = d.hiddenCategories + keys
             if (n == d.hiddenCategories) continue
-            if (p.id == activeProfileID) { hiddenCategories = n; pwrite("hiddencats", n) }
+            if (p.id == activeProfileID) { profileHiddenCats = n; pwrite("hiddencats", n) }
             else writeIn(profileDir(p.id), "hiddencats", n)
             StateSync.profileDataChanged(p.id)
         }

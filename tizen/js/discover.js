@@ -205,7 +205,8 @@
   /** Ophalen (alleen de rijen die aan staan) en de titelindex; true als er iets nieuws is. */
   X.loadAll = function () {
     var kids = kidsProfile();
-    var kinds = X.enabledKinds();
+    // build 140: Nieuw op Bingr ("streaming") komt uit je eigen bibliotheek (js/newonbingr.js), niet meer uit TMDB
+    var kinds = X.enabledKinds().filter(function (k) { return k !== 'streaming'; });
     if (!kinds.length) return Promise.resolve(false);
     var before = kinds.map(function (k) { var c = saved(k, kids); return c ? c.at : 0; }).join() + idxReady();
     var idx = B.details && B.details.indexReady ? B.details.indexReady().catch(B.noop) : Promise.resolve();

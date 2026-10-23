@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
@@ -72,8 +73,9 @@ private data class MainTab(val id: Int, val title: String, val icon: ImageVector
 
 /**
  * Hoofdscherm (= MainTabView.swift). Telefoon: onderbalk; TV: bovenbalk met tabbladen zoals Netflix op TV.
- * Tabbladen: 0 Home, 1 Live TV, 2 Films, 3 Series, 4 Zoeken, 5 Mijn Bingr, 6 Downloads (build 52, niet op TV),
- * Categorieën (build 86): via Mijn Bingr → Categorieën en de rij "Categorieën" op Home (eerder tabblad 7 op TV en een chip).
+ * Tabbladen: 0 Home, 1 Live TV, 2 Films, 3 Series, 4 Zoeken, 7 Categorieën (build 140, in plaats van Mijn Bingr),
+ * 6 Downloads (build 52, niet op TV). 5 = Mijn Bingr: geen tabblad meer, maar bereikbaar via het profiel/de avatar bovenin
+ * (profielmenu → Mijn Bingr, Instellingen, …).
  */
 @Composable
 fun MainScreen() {
@@ -92,16 +94,17 @@ fun MainScreen() {
         if (hasLive && showLive) add(MainTab(1, L("Live TV"), Icons.Default.LiveTv))
         if (showMovies) add(MainTab(2, L("Movies"), Icons.Default.Movie))
         if (showSeries) add(MainTab(3, L("Series"), Icons.Default.VideoLibrary))
+        // build 140: "Categorieën" naast Series, in plaats van "Mijn Bingr" (dat zit in het profielmenu achter de avatar)
+        add(MainTab(7, L("Categories"), Icons.Default.Category))
         if (!isPhone) add(MainTab(4, L("Search"), Icons.Default.Search))
         if (Downloads.supported) add(MainTab(6, L("Downloads"), Icons.Default.Download))
-        // build 72: het profiel zelf zit nu als avatar met menu rechtsboven (zoals op bingr.online)
-        add(MainTab(5, L("My Bingr"), Icons.Default.Person))
     }
     var tab by rememberSaveable {
         val start = Prefs.int("ui.startTab", 0)
         mutableIntStateOf(if (start in 0..3 && tabs.any { it.id == start }) start else 0)
     }
-    val current = if (tabs.any { it.id == tab }) tab else 0
+    // 5 (Mijn Bingr) is geen tabblad meer maar kan wel open staan (via het profielmenu)
+    val current = if (tab == 5 || tabs.any { it.id == tab }) tab else 0
     /** Tabblad kiezen; Mijn Bingr opent dan altijd op het overzicht. */
     fun select(id: Int) {
         if (id == 5) MyBingrNav.page = MyBingrPage.ROOT
@@ -111,16 +114,22 @@ fun MainScreen() {
     // build 128: één lijst over alle servers (achtergrond: andere servers, meta, verhuizen)
     LaunchedEffect(Unit) { if (!Screenshots.isActive) AllServers.start() }
     // build 128: categorieën aan/uit per profiel (eenmalige migratie van de keuzes per server)
-    LaunchedEffect(Store.profiles.size) { Store.migrateCategoriesToProfiles() }
+    // build 140: daarna naar de account-set (ingelogd: vastgelegd na de eerste sync, zie StateSync)
+    LaunchedEffect(Store.profiles.size) {
+        Store.migrateCategoriesToProfiles()
+        Store.migrateCategoriesToAccount(allowFlag = !Account.isSignedIn)
+    }
     LaunchedEffect(MyBingrNav.tabRequest) {
         val t = MyBingrNav.tabRequest ?: return@LaunchedEffect
         MyBingrNav.tabRequest = null
-        tab = t
+        // build 140: Mijn Bingr/Instellingen vanuit een kinderprofiel: eerst de rekensom (ouderpoort)
+        if (t == 5) KidsGate.guard { tab = t } else tab = t
     }
 
     // terug: eerst naar Home, dan naar de profielkeuze (lagen erboven hebben hun eigen terug-afhandeling)
     BackHandler(enabled = ScreensNav.stack.isEmpty()) {
-        if (current != 0) tab = 0 else AppState.switchPlaylist()
+        // build 140: naar "Wie kijkt er?" vanuit een kinderprofiel: eerst de rekensom
+        if (current != 0) tab = 0 else KidsGate.guard { AppState.switchPlaylist() }
     }
 
     // item uit een andere afspeellijst (globaal zoeken / herinnering) openen zodra de lijst geladen is
@@ -185,6 +194,9 @@ fun MainScreen() {
                         3 -> HomeScreen(Filter.SERIES)
                         4 -> SearchScreen(modal = false, onClose = {})
                         6 -> Box(Modifier.fillMaxSize().statusBarsPadding()) { DownloadsScreen() }
+                        // build 140: het bestaande overzicht Categorieën als tabblad (kinderprofiel: alleen kindercategorieën,
+                        // want het overzicht komt uit de gefilterde bibliotheek)
+                        7 -> CategoriesScreen(Filter.ALL, asTab = true)
                         else -> Box(Modifier.fillMaxSize().then(if (tv) Modifier else Modifier.statusBarsPadding())) { SettingsScreen() }
                     }
                 }
@@ -232,6 +244,7 @@ fun MainScreen() {
         ScreensStackHost()
     }
     SupportDialogHost()
+    KidsGateHost()
 
     val err = Playlists.error
     if (err != null) {
