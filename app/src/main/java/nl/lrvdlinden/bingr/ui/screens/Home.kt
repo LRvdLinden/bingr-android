@@ -457,7 +457,7 @@ private fun continueCover(title: String, year: Int?, isShow: Boolean, library: S
     val C = Build144Logic.ContinueCover
     val need = C.needsLookup(library, meta, stored)
     val tmdb = if (need && title.isNotBlank()) ContinueCovers.cover(title, year, isShow) else null
-    return C.pick(library, meta, tmdb, stored) to if (need && title.isNotBlank()) C.Want(title, year, isShow) else null
+    return C.pick(library, meta, tmdb, stored) to if (need && title.isNotBlank()) Build144Logic.ContinueCover.Want(title, year, isShow) else null
 }
 
 /**
