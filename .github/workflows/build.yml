@@ -184,7 +184,8 @@ jobs:
       - name: Belastingtest (grote nepcatalogus, oud tegen nieuw)
         if: success()
         run: |
-          set -uo pipefail
+          # geen -e: "oud" mag (en zal) mislukken; het resultaat van "nieuw" bepaalt de stap
+          set +e -uo pipefail
           # vaste compiler (Kotlin 2.1.0, gelijk aan de app; sha256 gecontroleerd) en kotlinx-serialization 1.7.3 uit de Gradle-cache
           curl -fsSL -o "$RUNNER_TEMP/kotlinc.zip" https://github.com/JetBrains/kotlin/releases/download/v2.1.0/kotlin-compiler-2.1.0.zip
           echo "b6698d5728ad8f9edcdd01617d638073191d8a03139cc538a391b4e3759ad297  $RUNNER_TEMP/kotlinc.zip" | sha256sum -c - >/dev/null \
