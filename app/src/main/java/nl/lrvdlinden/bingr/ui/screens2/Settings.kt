@@ -194,7 +194,8 @@ fun SettingsScreen() {
         if (Store.canManage) { block(); StateSync.rememberLocalViewing() } else StateSync.withoutSettingsChange { block() }
     }
     var engine by remember { mutableStateOf(Prefs.string("player.engine") ?: "auto") }
-    var refreshPolicy by remember { mutableStateOf(RefreshPolicy.current) }
+    // build 145: "Servers laden bij openen" (per apparaat, niet gesynct); vervangt de vernieuwtermijn
+    var loadMode by remember { mutableStateOf(Playlists.loadOnOpen) }
     var zapDelay by remember { mutableIntStateOf(PlayerSettings.zapDelay) }
     var channelPreview by remember { mutableStateOf(PlayerSettings.channelPreview) }
     var matchFrameRate by remember { mutableStateOf(PlayerSettings.matchFrameRate) }
@@ -477,11 +478,14 @@ fun SettingsScreen() {
       }
 
       if (page == MyBingrPage.SETTINGS) {
-            // MARK: afspeellijsten bijwerken (build 130: vernieuwen voor elk profiel, het interval alleen in het hoofdprofiel)
+            // MARK: afspeellijsten bijwerken (build 130: vernieuwen voor elk profiel)
+            // build 145: geen vernieuwtermijn meer; "Servers laden bij openen" (Vragen / Altijd / Nooit, alleen handmatig),
+            // per apparaat, voor elk profiel behalve een kinderprofiel
             item {
-                S2Section(L("Update playlists"), L("Channels, movies, series and the TV guide are refreshed in the background at this interval.")) {
-                    if (isMain) S2Dropdown(L("Update playlists"), RefreshPolicy.entries.map { it to it.title }, refreshPolicy) {
-                        refreshPolicy = it; RefreshPolicy.current = it
+                S2Section(L("Update playlists"), L("Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.")) {
+                    if (Store.activeProfile?.kids != true) S2Dropdown(L("Load servers on open"),
+                        Build145Logic.LoadOnOpen.Mode.entries.map { it to loadOnOpenTitle(it) }, loadMode) {
+                        loadMode = it; Playlists.loadOnOpen = it
                     }
                     val busy = Playlists.refreshingAll
                     S2Row(L("Refresh all playlists now"), icon = Icons.Default.Refresh, enabled = !busy, subtitle = refreshSubtitle(),
@@ -1171,4 +1175,11 @@ private fun S2DeleteAccountDialog(onDismiss: () -> Unit, onDelete: (String) -> U
 
 /** Build 130: voortgang van "alles vernieuwen", of welke servers de laatste keer niet lukten. */
 private fun refreshSubtitle(): String? = Playlists.refreshStatus
+
+/** Build 145: de keuzes van "Servers laden bij openen" (zelfde teksten als de Apple-apps, Samsung TV en de webspeler). */
+fun loadOnOpenTitle(m: Build145Logic.LoadOnOpen.Mode): String = when (m) {
+    Build145Logic.LoadOnOpen.Mode.ASK -> L("Ask")
+    Build145Logic.LoadOnOpen.Mode.ALWAYS -> L("Always")
+    Build145Logic.LoadOnOpen.Mode.NEVER -> L("Never, manually only")
+}
     ?: Playlists.refreshFailed.takeIf { it.isNotEmpty() }?.let { L("Couldn't refresh: %@", it.joinToString(", ")) }

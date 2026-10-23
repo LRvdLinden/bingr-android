@@ -924,7 +924,15 @@
   "Allow access": "السماح بالوصول",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "تابع فقط إذا كان هذا الجهاز أمامك وأدخلت الرمز من شاشته بنفسك. لا تُدخل أبدًا رمزًا أرسله إليك شخص ما: سيحصل على وصول كامل إلى حسابك، بما في ذلك كلمات مرور خوادمك.",
   "Password must be at least 8 characters.": "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.",
-  "Too many attempts. Try again in %d minutes.": "محاولات كثيرة جدًا. حاول مرة أخرى بعد %d دقائق."
+  "Too many attempts. Try again in %d minutes.": "محاولات كثيرة جدًا. حاول مرة أخرى بعد %d دقائق.",
+  "Update servers?": "تحديث الخوادم؟",
+  "Your saved list is ready. Do you want to update your servers now?": "قائمتك المحفوظة جاهزة. هل تريد تحديث خوادمك الآن؟",
+  "Update now": "التحديث الآن",
+  "Later": "لاحقًا",
+  "Load servers on open": "تحميل الخوادم عند الفتح",
+  "Ask": "السؤال",
+  "Never, manually only": "أبدًا، يدويًا فقط",
+  "Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.": "يفتح Bingr بقائمتك المحفوظة. اختر ما إذا كان يسألك عن تحديث خوادمك، أو يحدّثها فورًا، أو فقط عندما تحدّث بنفسك."
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -1851,7 +1859,15 @@
   "Allow access": "Zugriff erlauben",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Fahre nur fort, wenn das Gerät vor dir steht und du den Code selbst vom Bildschirm abgelesen hast. Gib nie einen Code ein, den dir jemand schickt: Diese Person bekäme vollen Zugriff auf dein Konto, auch auf die Passwörter deiner Server.",
   "Password must be at least 8 characters.": "Das Passwort muss mindestens 8 Zeichen lang sein.",
-  "Too many attempts. Try again in %d minutes.": "Zu viele Versuche. Versuche es in %d Minuten erneut."
+  "Too many attempts. Try again in %d minutes.": "Zu viele Versuche. Versuche es in %d Minuten erneut.",
+  "Update servers?": "Server aktualisieren?",
+  "Your saved list is ready. Do you want to update your servers now?": "Deine gespeicherte Liste ist bereit. Möchtest du deine Server jetzt aktualisieren?",
+  "Update now": "Jetzt aktualisieren",
+  "Later": "Später",
+  "Load servers on open": "Server beim Öffnen laden",
+  "Ask": "Fragen",
+  "Never, manually only": "Nie, nur manuell",
+  "Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.": "Bingr öffnet mit deiner gespeicherten Liste. Wähle, ob Bingr fragt, ob deine Server aktualisiert werden sollen, sie sofort aktualisiert oder nur, wenn du selbst aktualisierst."
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -2778,7 +2794,15 @@
   "Allow access": "Permitir acceso",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Continúa solo si este dispositivo está delante de ti y has introducido tú mismo el código de su pantalla. Nunca introduzcas un código que alguien te haya enviado: tendría acceso completo a tu cuenta, incluidas las contraseñas de tus servidores.",
   "Password must be at least 8 characters.": "La contraseña debe tener al menos 8 caracteres.",
-  "Too many attempts. Try again in %d minutes.": "Demasiados intentos. Inténtalo de nuevo en %d minutos."
+  "Too many attempts. Try again in %d minutes.": "Demasiados intentos. Inténtalo de nuevo en %d minutos.",
+  "Update servers?": "¿Actualizar servidores?",
+  "Your saved list is ready. Do you want to update your servers now?": "Tu lista guardada está lista. ¿Quieres actualizar tus servidores ahora?",
+  "Update now": "Actualizar ahora",
+  "Later": "Más tarde",
+  "Load servers on open": "Cargar servidores al abrir",
+  "Ask": "Preguntar",
+  "Never, manually only": "Nunca, solo manualmente",
+  "Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.": "Bingr se abre con tu lista guardada. Elige si te pregunta antes de actualizar tus servidores, los actualiza enseguida o solo cuando tú actualices."
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -3705,7 +3729,15 @@
   "Allow access": "Autoriser l'accès",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Ne continuez que si cet appareil est devant vous et que vous avez saisi vous-même le code affiché à l'écran. Ne saisissez jamais un code que quelqu'un vous a envoyé : cette personne aurait un accès complet à votre compte, y compris aux mots de passe de vos serveurs.",
   "Password must be at least 8 characters.": "Le mot de passe doit contenir au moins 8 caractères.",
-  "Too many attempts. Try again in %d minutes.": "Trop de tentatives. Réessayez dans %d minutes."
+  "Too many attempts. Try again in %d minutes.": "Trop de tentatives. Réessayez dans %d minutes.",
+  "Update servers?": "Mettre à jour les serveurs ?",
+  "Your saved list is ready. Do you want to update your servers now?": "Votre liste enregistrée est prête. Voulez-vous mettre à jour vos serveurs maintenant ?",
+  "Update now": "Mettre à jour",
+  "Later": "Plus tard",
+  "Load servers on open": "Charger les serveurs à l’ouverture",
+  "Ask": "Demander",
+  "Never, manually only": "Jamais, manuellement uniquement",
+  "Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.": "Bingr s’ouvre avec votre liste enregistrée. Choisissez s’il vous demande de mettre à jour vos serveurs, s’il les met à jour tout de suite ou seulement quand vous actualisez."
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -4632,7 +4664,15 @@
   "Allow access": "Consenti accesso",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Continua solo se questo dispositivo è davanti a te e hai inserito tu il codice mostrato sullo schermo. Non inserire mai un codice che qualcuno ti ha inviato: avrebbe accesso completo al tuo account, comprese le password dei tuoi server.",
   "Password must be at least 8 characters.": "La password deve contenere almeno 8 caratteri.",
-  "Too many attempts. Try again in %d minutes.": "Troppi tentativi. Riprova tra %d minuti."
+  "Too many attempts. Try again in %d minutes.": "Troppi tentativi. Riprova tra %d minuti.",
+  "Update servers?": "Aggiornare i server?",
+  "Your saved list is ready. Do you want to update your servers now?": "Il tuo elenco salvato è pronto. Vuoi aggiornare i tuoi server adesso?",
+  "Update now": "Aggiorna ora",
+  "Later": "Più tardi",
+  "Load servers on open": "Carica i server all’apertura",
+  "Ask": "Chiedi",
+  "Never, manually only": "Mai, solo manualmente",
+  "Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.": "Bingr si apre con il tuo elenco salvato. Scegli se chiedere di aggiornare i server, aggiornarli subito o solo quando aggiorni tu."
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -5573,7 +5613,15 @@
   "Allow access": "Toegang geven",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Ga alleen verder als dit apparaat voor je staat en je de code zelf van het scherm hebt overgenomen. Vul nooit een code in die iemand je stuurt: die krijgt dan volledige toegang tot je account, ook tot de wachtwoorden van je servers.",
   "Password must be at least 8 characters.": "Wachtwoord moet minimaal 8 tekens hebben.",
-  "Too many attempts. Try again in %d minutes.": "Te veel pogingen. Probeer het over %d minuten opnieuw."
+  "Too many attempts. Try again in %d minutes.": "Te veel pogingen. Probeer het over %d minuten opnieuw.",
+  "Update servers?": "Servers bijwerken?",
+  "Your saved list is ready. Do you want to update your servers now?": "Je bewaarde lijst staat klaar. Wil je je servers nu bijwerken?",
+  "Update now": "Nu bijwerken",
+  "Later": "Later",
+  "Load servers on open": "Servers laden bij openen",
+  "Ask": "Vragen",
+  "Never, manually only": "Nooit, alleen handmatig",
+  "Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.": "Bingr opent met je bewaarde lijst. Kies of Bingr vraagt om je servers bij te werken, ze meteen bijwerkt of alleen als je zelf vernieuwt."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -6500,7 +6548,15 @@
   "Allow access": "Zezwól na dostęp",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Kontynuuj tylko wtedy, gdy to urządzenie stoi przed Tobą, a kod przepisałeś sam z jego ekranu. Nigdy nie wpisuj kodu, który ktoś Ci wysłał: ta osoba uzyskałaby pełny dostęp do konta, także do haseł Twoich serwerów.",
   "Password must be at least 8 characters.": "Hasło musi mieć co najmniej 8 znaków.",
-  "Too many attempts. Try again in %d minutes.": "Zbyt wiele prób. Spróbuj ponownie za %d min."
+  "Too many attempts. Try again in %d minutes.": "Zbyt wiele prób. Spróbuj ponownie za %d min.",
+  "Update servers?": "Zaktualizować serwery?",
+  "Your saved list is ready. Do you want to update your servers now?": "Twoja zapisana lista jest gotowa. Czy chcesz teraz zaktualizować serwery?",
+  "Update now": "Aktualizuj teraz",
+  "Later": "Później",
+  "Load servers on open": "Ładuj serwery przy otwarciu",
+  "Ask": "Pytaj",
+  "Never, manually only": "Nigdy, tylko ręcznie",
+  "Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.": "Bingr otwiera się z zapisaną listą. Wybierz, czy ma pytać o aktualizację serwerów, aktualizować je od razu, czy tylko wtedy, gdy sam odświeżysz."
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -7427,7 +7483,15 @@
   "Allow access": "Permitir acesso",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Continue apenas se este dispositivo estiver à sua frente e tiver introduzido o código do ecrã. Nunca introduza um código que alguém lhe enviou: essa pessoa teria acesso total à sua conta, incluindo às palavras-passe dos seus servidores.",
   "Password must be at least 8 characters.": "A palavra-passe deve ter pelo menos 8 caracteres.",
-  "Too many attempts. Try again in %d minutes.": "Demasiadas tentativas. Tente novamente dentro de %d minutos."
+  "Too many attempts. Try again in %d minutes.": "Demasiadas tentativas. Tente novamente dentro de %d minutos.",
+  "Update servers?": "Atualizar servidores?",
+  "Your saved list is ready. Do you want to update your servers now?": "A sua lista guardada está pronta. Quer atualizar os seus servidores agora?",
+  "Update now": "Atualizar agora",
+  "Later": "Mais tarde",
+  "Load servers on open": "Carregar servidores ao abrir",
+  "Ask": "Perguntar",
+  "Never, manually only": "Nunca, só manualmente",
+  "Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.": "O Bingr abre com a sua lista guardada. Escolha se pergunta antes de atualizar os seus servidores, se os atualiza logo ou só quando atualizar."
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -8354,7 +8418,15 @@
   "Allow access": "Erişime izin ver",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Yalnızca bu cihaz önünüzdeyse ve kodu ekranından kendiniz girdiyseniz devam edin. Birinin size gönderdiği bir kodu asla girmeyin: o kişi sunucu şifreleriniz dahil hesabınıza tam erişim elde eder.",
   "Password must be at least 8 characters.": "Şifre en az 8 karakter olmalı.",
-  "Too many attempts. Try again in %d minutes.": "Çok fazla deneme. %d dakika sonra tekrar deneyin."
+  "Too many attempts. Try again in %d minutes.": "Çok fazla deneme. %d dakika sonra tekrar deneyin.",
+  "Update servers?": "Sunucular güncellensin mi?",
+  "Your saved list is ready. Do you want to update your servers now?": "Kayıtlı listen hazır. Sunucularını şimdi güncellemek ister misin?",
+  "Update now": "Şimdi güncelle",
+  "Later": "Daha sonra",
+  "Load servers on open": "Açılışta sunucuları yükle",
+  "Ask": "Sor",
+  "Never, manually only": "Asla, yalnızca elle",
+  "Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.": "Bingr kayıtlı listenle açılır. Sunucularını güncellemek için sorsun mu, hemen mi güncellesin yoksa yalnızca sen yenilediğinde mi, seç."
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -9281,6 +9353,14 @@
   "Allow access": "允许访问",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "只有当此设备就在你面前、且代码是你自己从其屏幕上输入时才继续。切勿输入别人发给你的代码：对方将完全访问你的账户，包括你的服务器密码。",
   "Password must be at least 8 characters.": "密码至少需要 8 个字符。",
-  "Too many attempts. Try again in %d minutes.": "尝试次数过多。请在 %d 分钟后重试。"
+  "Too many attempts. Try again in %d minutes.": "尝试次数过多。请在 %d 分钟后重试。",
+  "Update servers?": "更新服务器？",
+  "Your saved list is ready. Do you want to update your servers now?": "已保存的列表已就绪。要立即更新服务器吗？",
+  "Update now": "立即更新",
+  "Later": "稍后",
+  "Load servers on open": "打开时加载服务器",
+  "Ask": "询问",
+  "Never, manually only": "从不，仅手动",
+  "Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.": "Bingr 会用已保存的列表打开。选择是否询问更新服务器、立即更新，或仅在你手动刷新时更新。"
  }
 }

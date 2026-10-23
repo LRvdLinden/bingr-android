@@ -24,7 +24,7 @@
 
     <application
         android:name=".BingrApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:banner="@drawable/tv_banner"

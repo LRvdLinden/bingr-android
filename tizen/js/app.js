@@ -80,22 +80,33 @@
     } catch (e) { B.log('intro', e && e.message); }
   }
 
-  // MARK: playlists verversen tijdens het gebruik (build 102, settings.shared.refreshInterval)
+  // MARK: build 145: servers laden bij openen (geen vernieuwtermijn meer; B.b145.load, Lib.updateAll)
 
-  var refreshTimer = null;
-  function startRefreshTimer() {
-    clearInterval(refreshTimer);
-    refreshTimer = setInterval(checkRefresh, 10 * 60000);
+  /**
+   * De vraag "Servers bijwerken?" (Lib.askUpdate, na het kiezen van een profiel met een bewaarde lijst en de stand
+   * Vragen). Niet tijdens het afspelen: dan wacht hij tot de speler dicht is. De focus staat eerst op Later; Terug = Later.
+   */
+  var askTimer = null;
+  function showAskUpdate() {
+    clearTimeout(askTimer);
+    if (!Lib.askUpdate || !app.profile) return;
+    if (document.hidden || B.player.current || (B.multiview && B.multiview.current)) { askTimer = setTimeout(showAskUpdate, 2000); return; }
+    var asked = app.profile;
+    U.modal({
+      title: L('Update servers?'),
+      text: L('Your saved list is ready. Do you want to update your servers now?'),
+      buttons: [
+        { label: L('Update now'), fn: function () { if (app.profile === asked) Lib.answerUpdate(true); } },
+        { label: L('Later'), fn: function () { Lib.answerUpdate(false); } }
+      ],
+      focus: 1,
+      onCancel: function () { Lib.answerUpdate(false); }
+    });
   }
-  function checkRefresh() {
-    // niet tijdens het kijken (parsen van een grote lijst kost op een oude tv beeld); later opnieuw
-    if (!app.profile || document.hidden || B.player.current || (B.multiview && B.multiview.current)) return;
-    B.whenQuiet(function () { if (app.profile && !B.player.current) Lib.refreshIfDue(); }, 3000);
-  }
+  B.on('askUpdate', function () { setTimeout(showAskUpdate, 300); });
 
   // MARK: instellingen (build 102): rijen voor het instellingenscherm, gedeeld via settings.shared
 
-  var POLICY_LABELS = { manual: 'Manually', launch: 'Every time the app opens', sixHours: 'Every 6 hours', daily: 'Daily', weekly: 'Weekly' };
   /** Ondertitelgrootte (settings.shared.subtitleSize), in de sectie Audio en ondertitels. */
   app.subtitleSettingRows = function (row, render) {
     var cur = B.player.subtitleSize();
@@ -126,14 +137,17 @@
         app.rebuild(L(t[1]));
       });
     });
-    var pol = Lib.refreshPolicy();
-    row(L('Update playlists'), L(POLICY_LABELS[pol]), function () {
-      U.choose(L('Update playlists'), Lib.REFRESH.map(function (k) { return { value: k, label: L(POLICY_LABELS[k]) }; }), pol, function (v) {
-        D.setShared('refreshInterval', v);
-        Lib.refreshIfDue();
-        render();
+    // build 145: "Servers laden bij openen" (per tv, niet gesynct) in plaats van de vernieuwtermijn (refreshInterval)
+    if (!(app.profile && app.profile.kids)) {
+      var P = B.b145.load, mode = P.mode();
+      var modeLabels = { ask: L('Ask'), always: L('Always'), never: L('Never, manually only') };
+      row(L('Load servers on open'), modeLabels[mode], function () {
+        U.choose(L('Load servers on open'), P.MODES.map(function (k) { return { value: k, label: modeLabels[k] }; }), mode, function (v) {
+          P.setMode(v);
+          render();
+        });
       });
-    });
+    }
   };
 
   // profielfoto's: één keer per pad+versie ophalen (per pad alleen de nieuwste versie)
@@ -174,6 +188,8 @@
     document.addEventListener('keyup', U.onKeyUp, true);
     document.addEventListener('visibilitychange', onVisibility);
     U.push(S.splash());
+    // build 145: eenmalig de oude vernieuwtermijn omzetten naar "Servers laden bij openen: Vragen"
+    B.b145.load.migrateNow();
     // build 141: eerst de kluis laden (sessie, servers, pincodes); daarna pas verder
     var vault = B.vault ? B.vault.ready : Promise.resolve();
     vault.then(afterVault, afterVault);
@@ -272,19 +288,17 @@
     var src = D.activeSource();
     var main = S.main();
     U.reset(main);
-    // build 144: automatisch verversen (en de zenders van de andere servers) pas ±45 s na het kiezen van het profiel
+    // build 144: de zenders van de andere servers (reservebron) pas ±45 s na het kiezen van het profiel
     B.b144.auto.profileOpened();
+    // build 145: na het laden van de open server de keuze van "Servers laden bij openen" (vraag, Altijd of niets)
+    Lib.profileOpened();
     Lib.select(src).then(function () {
       maybeResumeChannel();
-      // achtergrondwerk pas als de app rustig is: leeftijdsclassificaties. Build 144: de reservebronnen (zenders van de
-      // andere servers, van het netwerk) niet meer na 2,5 s maar na het automatisch verversen (Lib.select → scheduleAuto)
+      // achtergrondwerk pas als de app rustig is: leeftijdsclassificaties
       B.whenQuiet(function () { warmAges(); }, 2500);
     });
     D.syncState().then(function () { if (app.profile === p) { Lib.applyFilters(); B.trakt.refresh(false); } });
     B.reminders.start();
-    startRefreshTimer();
-    // build 140: na het openen ook de andere servers die volgens "Afspeellijsten bijwerken" aan de beurt zijn
-    setTimeout(checkRefresh, 60000);
   }
 
   /** TMDB-leeftijden bijwerken als dit profiel een leeftijdsgrens heeft (kindergroepen eerst). */
@@ -384,8 +398,7 @@
       A.fetchEntitlements(false);
       // build 75: terug op de tv → Trakt-vinkjes bijwerken (alleen als Trakt iets nieuws meldt), zoals iOS/Android
       if (app.profile) B.trakt.refresh(false);
-      // build 102: playlists verversen als ze intussen oud zijn geworden
-      setTimeout(checkRefresh, 5000);
+      // build 145: geen automatisch verversen meer bij terugkeer (de vernieuwtermijn is weg)
       if (B.player.current) B.player.current.resumeFromBackground();
       if (B.multiview.current) B.multiview.current.resumeFromBackground();
     }

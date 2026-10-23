@@ -411,7 +411,11 @@
     }).catch(B.noop);
   }
 
-  /** Server kiezen en laden: eerst de cache (meteen zichtbaar), daarna verversen als hij oud is. */
+  /**
+   * Server kiezen en laden: eerst de cache (meteen zichtbaar). Build 145: met een bewaarde lijst wordt niets vanzelf
+   * opgehaald (geen vernieuwtermijn meer, ook niet na 45 s); na het kiezen van een profiel volgt de keuze van "Servers
+   * laden bij openen" (afterOpen). Zonder bewaarde lijst: meteen laden.
+   */
   Lib.select = function (src, force) {
     var my = ++gen;
     Lib.source = src;
@@ -429,96 +433,96 @@
         Lib.loading = false;
         Lib.applyFilters();
         loadEpg(src, Lib.raw, false);
-        // build 102: verversen volgens settings.shared.refreshInterval (= RefreshPolicy op iOS en Android)
-        // build 144 (= Apple build 143): bij het openen met een bewaarde lijst niets ophalen; pas na ±45 s, met een gekozen
-        // profiel en als er niets speelt: deze server (alleen als hij aan de beurt is), daarna de andere één voor één
-        // (Lib.refreshIfDue). Een andere server of een ander profiel (nieuwe Lib.select) stopt het.
-        scheduleAuto(my);
+        afterOpen(my, true);
         return;
       }
       refreshedThisLaunch[lower(src.id)] = true;
-      scheduleAuto(my);
-      return Lib.refresh(src, my);
+      return Lib.refresh(src, my).then(function (ok) {
+        // geen bewaarde lijst: geen vraag; bij "Altijd" daarna de andere servers
+        if (my === gen) afterOpen(my, false);
+        return ok;
+      });
     });
   };
-  /** Build 144: automatisch verversen na het openen, als het mag (B.b144.auto); daarna de zenders van de andere servers. */
-  function scheduleAuto(my) {
+
+  // MARK: build 145: servers laden bij openen (Vragen / Altijd / Nooit, alleen handmatig; B.b145.load)
+
+  var refreshedThisLaunch = {}, decisionPending = false, askedThisLaunch = false, updating = null, updGen = 0;
+  /** Profiel gekozen (na de pincode): de keuze volgt zodra de open server er is (Lib.select → afterOpen). */
+  Lib.profileOpened = function () {
+    decisionPending = true;
+    Lib.askUpdate = false;
+  };
+  /** Build 145: de vraag "Servers bijwerken?" staat open (app.js toont hem, niet tijdens het afspelen). */
+  Lib.askUpdate = false;
+  function afterOpen(my, savedList) {
+    // zenders van de andere servers (reservebron) die nog niet op de tv staan: pas na de wachttijd van build 144
     var A = B.b144 && B.b144.auto;
-    if (!A) return;
-    A.whenAllowed(function () {
-      Lib.refreshIfDue(my).then(function () {
-        if (my === gen) A.whenAllowed(function () { Lib.warmOthers(); }, function () { return my !== gen; });
-      });
-    }, function () { return my !== gen; });
+    if (A) A.whenAllowed(function () { Lib.warmOthers(); }, function () { return my !== gen; });
+    if (!decisionPending) return;
+    decisionPending = false;
+    var P = B.b145.load;
+    var kids = !!(B.app && B.app.profile && B.app.profile.kids);
+    var act = P.decide(P.mode(), savedList, kids, askedThisLaunch);
+    if (act === 'ask') { askedThisLaunch = true; Lib.askUpdate = true; B.emit('askUpdate'); }
+    else if (act === 'updateAll') Lib.updateAll(true);
   }
-  /**
-   * build 102: verversbeleid van de playlists (settings.shared.refreshInterval, raw value gelijk op iOS en Android):
-   * manual | launch | sixHours | daily | weekly; zonder instelling daily. ageMs = leeftijd van de cache.
-   */
-  Lib.REFRESH = ['manual', 'launch', 'sixHours', 'daily', 'weekly'];
-  Lib.refreshPolicy = function () {
-    var v = String(D.shared('refreshInterval', 'daily') || 'daily');
-    return Lib.REFRESH.indexOf(v) >= 0 ? v : 'daily';
+  /** Antwoord op de vraag: true = Nu bijwerken, false = Later (niets ophalen). */
+  Lib.answerUpdate = function (now) {
+    Lib.askUpdate = false;
+    if (now) Lib.updateAll(false);
   };
-  Lib.refreshDue = function (ageMs) {
-    if (ageMs == null) return true;
-    switch (Lib.refreshPolicy()) {
-      case 'manual': return false;
-      case 'launch': return ageMs > 60000;
-      case 'sixHours': return ageMs > 6 * 3600000;
-      case 'weekly': return ageMs > 7 * 86400000;
-      default: return ageMs > 86400000;
+  function playingNow() { return !!((B.player && B.player.current) || (B.multiview && B.multiview.current)); }
+  function onMain() { return !!(B.app && B.app.profile); }
+  /**
+   * Build 145: alle servers van het account bijwerken, één voor één, de open server eerst, op de achtergrond (de bewaarde
+   * lijst blijft staan; melding "Bijwerken…" / "%@ vernieuwen (1 van 3)…"). Nooit tijdens het afspelen of in "Wie kijkt
+   * er?"/het pincodescherm (dan wachten), elk met een time-out. Een andere server of een ander profiel (nieuwe
+   * Lib.select) stopt het. onlyNew: servers die bij deze keer openen al bijgewerkt zijn overslaan ("Altijd" na een
+   * profielwissel).
+   */
+  Lib.updateAll = function (onlyNew) {
+    if (updating || Lib.refreshingAll || !D.sources.length) return updating || Promise.resolve(false);
+    var my = gen, mine = ++updGen, P = B.b145.load, AS = B.allservers, any = false;
+    function stale() { return !P.stillCurrent(my, gen) || mine !== updGen; }
+    function idle(first) {
+      return new Promise(function (resolve) {
+        (function wait() {
+          if (stale()) { resolve(false); return; }
+          if (Lib.loading || Lib.refreshingAll || !P.mayRun(onMain(), playingNow())) { setTimeout(wait, first ? 1000 : 2000); return; }
+          resolve(true);
+        })();
+      });
     }
-  };
-  /**
-   * Build 140: tijdens het gebruik (elke 10 minuten, na terugkeer op de tv en na het openen van een profiel): ALLE servers
-   * van het account die volgens het beleid aan de beurt zijn verversen (zoals de knop sinds build 130), de actieve eerst.
-   * Tot build 139 keek dit alleen naar de actieve server, en bij "Elke keer dat de app opent" helemaal niet: de andere
-   * servers werden dus nooit automatisch ververst. Niet tijdens het kijken; elk met een time-out.
-   */
-  var refreshedThisLaunch = {}, autoBusy = false;
-  Lib.refreshIfDue = function (my) {
-    if (autoBusy || Lib.refreshingAll || !D.sources.length) return Promise.resolve(false);
-    // build 144: niet in de eerste ±45 s na het openen, niet zonder gekozen profiel en niet tijdens het afspelen
-    if (B.b144 && !B.b144.auto.allowed()) return Promise.resolve(false);
-    var pol = Lib.refreshPolicy();
-    if (pol === 'manual') return Promise.resolve(false);
-    autoBusy = true;
-    var now = Date.now(), ages = {}, any = false, AS = B.allservers;
-    return Promise.all(D.sources.map(function (s) {
-      return B.idb.get('lib:' + s.id).then(function (c) { ages[s.id] = c && c.at ? now - c.at : null; }, function () { ages[s.id] = null; });
-    })).then(function () {
-      var active = Lib.source;
-      var due = B.b140.refresh.dueServers(D.sources.map(function (s) { return s.id; }), active ? active.id : null, pol,
-        function (id) { return ages[id]; }, refreshedThisLaunch);
-      var chain = Promise.resolve();
-      due.forEach(function (id) {
-        chain = chain.then(function () {
+    var state = updating = idle(true).then(function (go) {
+      if (!go) return false;
+      var order = P.order(D.sources.map(function (s) { return s.id; }), Lib.source ? Lib.source.id : null, onlyNew ? refreshedThisLaunch : {});
+      var n = order.length, chain = Promise.resolve();
+      if (n && B.ui) B.ui.toast(L('Updating…'));
+      order.forEach(function (id, i) {
+        chain = chain.then(function () { return idle(false); }).then(function (go2) {
           var src = D.sourceById(id);
-          // build 144: andere server of ander profiel gekozen: dit verversen hoort bij de vorige, stoppen
-          if (my != null && my !== gen) return;
-          // niet tijdens het kijken (parsen kost op een oude tv beeld): de volgende ronde; build 144: ook niet in
-          // "Wie kijkt er?" of het pincodescherm
-          if (!src || (B.player && B.player.current) || (B.multiview && B.multiview.current) || !(B.app && B.app.profile)) return;
+          if (!go2 || !src) return;
+          if (n > 1 && B.ui) B.ui.toast(L('Refreshing %@ (%d of %d)…', src.name, i + 1, n), 4000);
+          refreshedThisLaunch[lower(src.id)] = true;
           if (Lib.source && src.id === Lib.source.id) {
-            if (Lib.loading) return;
-            B.log('playlist verversen (' + pol + ')');
-            refreshedThisLaunch[lower(src.id)] = true;
+            B.log('servers bijwerken: open server');
             return Lib.refresh(src).then(function (ok) { if (ok) any = true; });
           }
           if (AS && AS.markFetched) AS.markFetched(src.id);
-          refreshedThisLaunch[lower(src.id)] = true;
           var job = Lib.fetchOther(src);
           return (AS && AS.withTimeout ? AS.withTimeout(job, 90000) : job).then(function (lib) { if (lib) any = true; }, B.noop);
         });
       });
       return chain;
     }).catch(B.noop).then(function () {
-      autoBusy = false;
+      if (updating === state) updating = null;
       if (any && AS && AS.refreshed) AS.refreshed();
       return any;
     });
+    return state;
   };
+  Lib.isUpdating = function () { return !!updating; };
   Lib.refresh = function (src, my) {
     my = my || gen;
     Lib.loading = true;
@@ -569,7 +573,9 @@
       });
     }
     function timeout(p, ms) { return AS && AS.withTimeout ? AS.withTimeout(p, ms) : p; }
-    var chain = Promise.resolve();
+    // build 145: Nu vernieuwen neemt een lopend bijwerken over (dat stopt na de server waar het mee bezig is)
+    updGen++;
+    var chain = updating ? updating.then(B.noop, B.noop) : Promise.resolve();
     order.forEach(function (src, i) {
       chain = chain.then(function () {
         if (n > 1) status(L('Refreshing %@ (%d of %d)…', src.name, i + 1, n));
@@ -686,12 +692,10 @@
   };
 
   // build 97: zenderlijst voor de reservebron met een vervaldatum ({at, list}); oude caches waren een kale lijst
-  var CHAN_TTL = 6 * 3600000;
   function saveChannels(src, channels) {
     return B.idb.set('chan:' + src.id, { at: Date.now(), list: channels.map(function (c) { return { name: c.name, epgID: c.epgID, streamURL: c.streamURL, stalkerCmd: c.stalkerCmd || null }; }) });
   }
   function chanList(c) { return !c ? null : Array.isArray(c) ? c : (Array.isArray(c.list) ? c.list : null); }
-  function chanFresh(c) { return !!(c && !Array.isArray(c) && c.at && Date.now() - c.at < CHAN_TTL && Array.isArray(c.list)); }
   /** build 97: alleen de live-zenders van een IPTV-server (geen films of series), voor de reservebron. */
   function fetchChannels(src) {
     if (src.kind === 'M3U / M3U8') {
@@ -746,10 +750,15 @@
       var at = Date.now();
       B.idb.set('lib:' + src.id, { at: at, lib: lib });
       Lib.stamps[src.id] = at;
+      // build 145: ook de zenders apart (reservebron), zodat warmOthers ze niet meer van het netwerk haalt
+      if (IPTV.indexOf(src.kind) >= 0 && lib.channels && lib.channels.length) saveChannels(src, lib.channels);
       return lib;
     });
   };
-  /** Andere servers op de achtergrond laden (voor de reservebron), één tegelijk; build 97: alleen hun zenders, en opnieuw na 6 uur. */
+  /**
+   * Andere servers op de achtergrond laden (voor de reservebron), één tegelijk; build 97: alleen hun zenders. Build 145:
+   * alleen als ze nog niet op de tv staan (niet meer opnieuw na 6 uur: bijwerken doet de gebruiker, zie Lib.updateAll).
+   */
   Lib.warmOthers = function () {
     var cur = Lib.source ? Lib.source.id : null;
     var list = D.sources.filter(function (s) { return s.id !== cur && IPTV.indexOf(s.kind) >= 0; });
@@ -757,7 +766,7 @@
     list.forEach(function (src) {
       chain = chain.then(function () {
         return B.idb.get('chan:' + src.id).then(function (c) {
-          if (chanFresh(c)) return;
+          if (chanList(c)) return;
           return fetchChannels(src).then(function (chs) {
             if (chs && chs.length) return saveChannels(src, chs);
           }, B.noop);

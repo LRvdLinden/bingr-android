@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     build 97: Google-back-up tot en met Android 11 (android:fullBackupContent).
-    Nooit meenemen naar een ander apparaat: de sessie van het Bingr-account (refresh_token), de vaste device_id,
-    de wachtwoorden en tokens van servers, Trakt, OpenSubtitles en pincodes (bingr.secrets) en de app-sleutels van
-    de server. Al het andere (instellingen, profielen, lijsten) mag wel mee.
+    Build 145: geen Google-back-up meer (android:allowBackup="false"); alles wat bij de gebruiker hoort (servers,
+    profielen, pincodes, Mijn lijst, kijkvoortgang, categorieën en instellingen) komt alleen via het Bingr-account terug
+    (docs/ACCOUNT.md). Wat alleen op dit apparaat hoort (sessie, device_id, geheimen, caches en de keuze "Servers laden bij
+    openen") gaat nergens heen. Voor de zekerheid sluiten deze regels ook alles uit.
 -->
 <full-backup-content>
-    <exclude domain="sharedpref" path="bingr.account.xml" />
-    <exclude domain="sharedpref" path="bingr.device.xml" />
-    <exclude domain="sharedpref" path="bingr.secrets.xml" />
-    <exclude domain="sharedpref" path="bingr.serverkeys.xml" />
-    <!-- build 141: bibliotheekcache per server (stream-adressen met inloggegevens); wordt opnieuw opgebouwd -->
-    <exclude domain="file" path="servercache" />
+    <exclude domain="root" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
 </full-backup-content>

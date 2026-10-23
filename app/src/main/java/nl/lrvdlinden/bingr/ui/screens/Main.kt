@@ -245,6 +245,8 @@ fun MainScreen() {
     }
     SupportDialogHost()
     KidsGateHost()
+    // build 145: "Servers bijwerken?" na het kiezen van een profiel (instelling "Servers laden bij openen": Vragen)
+    UpdateAskHost()
 
     val err = Playlists.error
     if (err != null) {

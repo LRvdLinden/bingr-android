@@ -105,7 +105,8 @@ object AppState {
         if (profile.kids) KidsGate.kidsOpened()
         // build 141: het werk aan de andere servers wacht weer tot het nieuwe profiel (actieve server, Home) klaar is
         AllServers.profileOpened()
-        // build 144: automatisch verversen pas ±45 s na het kiezen van het profiel (lopend verversen van het vorige stopt)
+        // build 145: lopend bijwerken van het vorige profiel stopt; zodra de server er is volgt de vraag "Servers bijwerken?"
+        // (of meteen bijwerken bij "Altijd"), zie Playlists.afterProfileOpen
         Playlists.profileOpened()
         StressMode.profileOpened(profile)
         Store.selectProfile(profile)
@@ -118,6 +119,8 @@ object AppState {
             pendingItemID = null
             stage = Stage.MAIN
             Playlists.applyCustomizations()
+            // build 145: de lijst staat er al (bewaard of eerder geladen): de keuze van "Servers laden bij openen"
+            Playlists.afterProfileOpen(savedList = true)
             return
         }
         open(src)

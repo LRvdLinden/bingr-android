@@ -107,7 +107,12 @@ jobs:
               tools/test/Build144LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b144-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b144-test.jar" | tee "$RUNNER_TEMP/b144-test.txt"; rc6=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 144::$(tail -1 "$RUNNER_TEMP/b144-test.txt")"
-            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ]
+            # build 145: servers laden bij openen (Vragen / Altijd / Nooit), de vraag en de volgorde van het bijwerken
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build145Logic.kt \
+              tools/test/Build145LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b145-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b145-test.jar" | tee "$RUNNER_TEMP/b145-test.txt"; rc7=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 145::$(tail -1 "$RUNNER_TEMP/b145-test.txt")"
+            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi
@@ -513,6 +518,9 @@ jobs:
           # build 144: Verder kijken (postervolgorde, TMDB-posters bewaard op de tv) en verversen pas na het openen
           node tizen/test/build144_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b144.log"
           echo "::notice title=Logica-tests build 144 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b144.log")"
+          # build 145: servers laden bij openen (Vragen / Altijd / Nooit) en de vraag "Servers bijwerken?"
+          node tizen/test/build145_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b145.log"
+          echo "::notice title=Logica-tests build 145 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b145.log")"
 
       - name: Tizen Studio CLI uit de cache
         id: cache

@@ -228,7 +228,8 @@ object StressMode {
         servers.forEach { Store.upsert(it) }
         Store.setMainSource(servers.first().id)
         // "Elke keer dat de app opent": alle servers worden verversd (zwaarste geval)
-        RefreshPolicy.current = RefreshPolicy.LAUNCH
+        // build 145: "Servers laden bij openen" = Altijd (alle servers meteen bijwerken, zonder vraag)
+        Playlists.loadOnOpen = Build145Logic.LoadOnOpen.Mode.ALWAYS
         // catalogi (één tegelijk in het geheugen); server 3 in het oude formaat
         for ((i, p) in servers.withIndex()) {
             withContext(Dispatchers.Default) {

@@ -47,7 +47,7 @@ object StateSync {
     val settingKeys = setOf(
         "app.language", "player.engine", "subtitle.size", "player.audioLanguage", "player.subtitleLanguage",
         "autoSubtitles", TrackPreferences.autoSubtitlesKey, "os.language", "os.languages", "ui.startTab", "ui.showLive", "ui.showMovies", "ui.showSeries",
-        "playlist.refresh", "category.sort", "trakt.scrobble", "trakt.askRating",
+        "category.sort", "trakt.scrobble", "trakt.askRating",
         // build 51
         "player.zapDelay", "player.channelPreview", "player.matchFrameRate", "player.externalDisplay",
         // build 52 (zelfde sleutels als iOS, in `shared`); accentColor is sinds build 54 per profiel (zie [Accent])
@@ -882,7 +882,8 @@ object StateSync {
             "openSubtitlesLanguages" to JsonArray(OpenSubtitles.preferredLanguages.map { JsonPrimitive(it) }),
             "startScreen" to JsonPrimitive(tabNames.getOrElse(Prefs.int("ui.startTab", 0)) { "home" }),
             "hiddenTabs" to JsonArray(hidden.map { JsonPrimitive(it) }),
-            "refreshInterval" to JsonPrimitive(RefreshPolicy.current.raw),
+            // build 145: refreshInterval (vernieuwtermijn) vervalt; niet meer schrijven, de serverwaarde blijft staan voor
+            // oudere apps. "Servers laden bij openen" is per apparaat en gaat niet mee.
             "categorySort" to JsonPrimitive(Prefs.string("category.sort") ?: "standard"),
             "traktScrobble" to JsonPrimitive(Prefs.bool("trakt.scrobble", true)),
             "traktAskRating" to JsonPrimitive(Prefs.bool("trakt.askRating", true)),
@@ -972,7 +973,7 @@ object StateSync {
                 values["ui.showMovies"] = "movies" !in hidden
                 values["ui.showSeries"] = "series" !in hidden
             }
-            str("refreshInterval")?.let { v -> if (RefreshPolicy.entries.any { it.raw == v }) values["playlist.refresh"] = v }
+            // build 145: refreshInterval wordt niet meer gelezen (zie sharedSettings)
             str("categorySort")?.let { values["category.sort"] = it }
             bool("traktScrobble")?.let { values["trakt.scrobble"] = it }
             bool("traktAskRating")?.let { values["trakt.askRating"] = it }

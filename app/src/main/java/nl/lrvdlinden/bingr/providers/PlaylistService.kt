@@ -131,13 +131,14 @@ object Playlists {
     suspend fun select(p: PlaylistSource, forceRefresh: Boolean = false) {
         source = p
         Store.activePlaylistID = p.id
+        // build 145: een andere server (of opnieuw laden) stopt een lopend bijwerken van de vorige keuze
+        autoGen++
         // screenshotmodus (alleen de screenshot-build): de demobibliotheek, zonder cache of netwerk
         if (Screenshots.isActive) { error = null; setRaw(ScreenshotDemo.library); return }
         stalker = if (p.kind == PlaylistKind.STALKER) StalkerClient(p) else null
         stremioAddons = emptyList()
         episodeCache = emptyMap()
         error = null
-
         if (!forceRefresh) {
             // grote lijsten (tienduizenden titels) op de achtergrond inlezen
             isLoading = true
@@ -146,61 +147,121 @@ object Playlists {
             if (cached != null) {
                 setRaw(cached)
                 // build 141: eerst het scherm (de lijst uit de cache, gefilterd en met de rijen), pas daarna het netwerk.
-                // Build 144 (= Apple build 143): bij het openen met een bewaarde catalogus wordt NIETS opgehaald. Het
-                // automatisch verversen begint pas na ±45 s, op het hoofdscherm en niet tijdens het afspelen: eerst deze
-                // server (alleen als hij volgens de instelling te oud is), daarna de andere één voor één ([scheduleAutoRefresh]).
-                // Tot build 143 begon het verversen van de open server al na 6 s (en na 30 s wachten ook tijdens het afspelen).
-                scheduleAutoRefresh()
+                // Build 145: met een bewaarde lijst wordt bij het openen NIETS vanzelf opgehaald (ook niet na 45 s zoals in
+                // build 144, en geen vernieuwtermijn meer). Na het kiezen van een profiel: de vraag "Servers bijwerken?",
+                // of meteen bijwerken bij "Altijd" ([afterProfileOpen], instelling "Servers laden bij openen").
+                afterProfileOpen(savedList = true)
                 return
             }
         }
         setRaw(Library())
         refreshedThisLaunch += p.id.lowercase(java.util.Locale.ROOT)
-        // build 144: geen bewaarde catalogus: deze server nu ophalen (er is niets te tonen); de andere pas later
-        scheduleAutoRefresh()
+        // geen bewaarde lijst (eerste keer, nieuwe server zonder cache): deze server nu laden, met de laadmelding.
+        // Build 145: geen vraag; bij "Altijd" daarna (als deze klaar is) de andere servers ([afterProfileOpen])
         refresh(p, showSpinner = true)
+        if (source?.id == p.id) afterProfileOpen(savedList = false)
     }
 
-    // MARK: build 144: automatisch verversen pas na het openen (= PlaylistService.scheduleAutoRefresh op Apple)
+    // MARK: build 145: servers laden bij openen (Vragen / Altijd / Nooit, alleen handmatig)
 
-    /** Moment (SystemClock.uptimeMillis) van de start van de app of van het laatst gekozen profiel. */
-    @Volatile private var openedAt: Long = android.os.Process.getStartUptimeMillis()
-    /** Verhoogt bij elke nieuwe server of elk nieuw profiel: een lopend automatisch verversen stopt dan. */
+    /** Verhoogt bij elke nieuwe server of elk nieuw profiel: een lopend bijwerken stopt dan (bij de volgende server). */
     @Volatile private var autoGen = 0
-    private var autoTask: Job? = null
+    private var updateTask: Job? = null
+    /** Na het kiezen van een profiel: de keuze (vraag of bijwerken) nog maken zodra de open server er is. */
+    private var decisionPending = false
+    /** De vraag kwam al bij deze keer openen (proces). */
+    private var askedThisLaunch = false
+    /** Build 145: de vraag "Servers bijwerken?" staat open (Main toont hem, niet tijdens het afspelen). */
+    var askUpdate by mutableStateOf(false); private set
+    /** Build 145: bezig met bijwerken na de vraag of bij "Altijd". */
+    var updatingAll by mutableStateOf(false); private set
 
     /** Milliseconden sinds de start van de app (proces). */
     fun uptimeMs(): Long = android.os.SystemClock.uptimeMillis() - android.os.Process.getStartUptimeMillis()
-    /** Milliseconden sinds de start van de app of het kiezen van een profiel (de laatste van de twee). */
-    fun sinceOpenMs(): Long = android.os.SystemClock.uptimeMillis() - openedAt
 
-    /** Build 144: profiel gekozen ("Wie kijkt er?" of het pincodescherm is klaar): wachttijd opnieuw, lopend verversen stopt. */
+    /** "Servers laden bij openen" op dit apparaat (SharedPreferences, nooit gesynct). */
+    var loadOnOpen: Build145Logic.LoadOnOpen.Mode
+        get() = Build145Logic.LoadOnOpen.current(Prefs.string(Build145Logic.LoadOnOpen.PREF))
+        set(v) = Prefs.put(Build145Logic.LoadOnOpen.PREF, v.raw)
+
+    /** Build 145: profiel gekozen ("Wie kijkt er?" of het pincodescherm is klaar): lopend bijwerken stopt, keuze volgt. */
     fun profileOpened() {
-        openedAt = android.os.SystemClock.uptimeMillis()
-        scheduleAutoRefresh()
+        autoGen++
+        askUpdate = false
+        decisionPending = !Screenshots.isActive
     }
 
-    /** Mag het automatisch verversen nu (na ±45 s, hoofdscherm, niets speelt, niet bezig met filteren)? */
-    private fun autoAllowed(): Boolean =
-        Build144Logic.AutoRefresh.mayStart(sinceOpenMs(), AppState.stage == AppState.Stage.MAIN, AppState.playing != null) && !isFiltering
+    /**
+     * Build 145: de open server staat er ([savedList] = uit de bewaarde lijst). Alleen direct na het kiezen van een profiel:
+     * vragen, meteen bijwerken ("Altijd") of niets (zie [Build145Logic.LoadOnOpen.decide]).
+     */
+    fun afterProfileOpen(savedList: Boolean) {
+        if (!decisionPending) return
+        decisionPending = false
+        val kids = Store.activeProfile?.kids == true
+        when (Build145Logic.LoadOnOpen.decide(loadOnOpen, savedList, kids, askedThisLaunch)) {
+            Build145Logic.LoadOnOpen.Action.ASK -> { askedThisLaunch = true; askUpdate = true }
+            Build145Logic.LoadOnOpen.Action.UPDATE_ALL -> updateAll(onlyNotYetThisLaunch = true)
+            Build145Logic.LoadOnOpen.Action.NOTHING -> {}
+        }
+    }
+
+    /** Build 145: antwoord op de vraag. true = "Nu bijwerken", false = "Later" (niets ophalen). */
+    fun answerUpdate(now: Boolean) {
+        askUpdate = false
+        if (now) updateAll(onlyNotYetThisLaunch = false)
+    }
 
     /**
-     * Build 144: het automatisch verversen na het openen plannen. Pas als [autoAllowed]: dan [refreshDue] (de open server
-     * eerst en alleen als hij aan de beurt is, daarna de andere één voor één). Een nieuwe server of een nieuw profiel
-     * (opnieuw [scheduleAutoRefresh]) annuleert het.
+     * Build 145: alle servers van het account bijwerken, één voor één, de open server eerst, op de achtergrond (de
+     * bewaarde lijst blijft staan; label "Bijwerken…" / "%@ vernieuwen (1 van 3)…"). Pas als Home klaar is, nooit tijdens
+     * het afspelen of buiten het hoofdscherm (dan wachten), andere servers via [AllServers.heavy] (één catalogus tegelijk
+     * in het geheugen). Een andere server of een ander profiel stopt het. [onlyNotYetThisLaunch]: servers die bij deze keer
+     * openen al bijgewerkt zijn overslaan ("Altijd" na een profielwissel).
      */
-    private fun scheduleAutoRefresh() {
+    fun updateAll(onlyNotYetThisLaunch: Boolean) {
         if (Screenshots.isActive) return
-        autoTask?.cancel()
-        val gen = ++autoGen
-        autoTask = AppScope.launch {
-            while (!autoAllowed()) kotlinx.coroutines.delay(Build144Logic.AutoRefresh.waitMs(sinceOpenMs()))
-            // een vorige ronde (ander profiel of andere server) stopt bij de volgende server; daarop wachten
-            while (autoBusy) kotlinx.coroutines.delay(1_000)
-            if (gen != autoGen) return@launch
-            try { refreshDue(gen) } catch (e: CancellationException) { throw e } catch (_: Exception) { }
+        val gen = autoGen
+        updateTask?.cancel()
+        updateTask = AppScope.launch {
+            val L145 = Build145Logic.LoadOnOpen
+            fun current() = L145.stillCurrent(gen, autoGen)
+            kotlinx.coroutines.delay(1_000)
+            // eerst het scherm: de open server klaar (laden en filteren), dan pas het netwerk
+            while (isLoading || isFiltering || refreshingAll ||
+                !L145.mayRun(AppState.stage == AppState.Stage.MAIN, AppState.playing != null)) {
+                if (!current()) return@launch
+                kotlinx.coroutines.delay(1_000)
+            }
+            if (!current()) return@launch
+            val all = Store.playlists.toList()
+            val skip = if (onlyNotYetThisLaunch) synchronized(refreshedThisLaunch) { refreshedThisLaunch.toSet() } else emptySet()
+            val order = L145.order(all.map { it.id }, source?.id, skip)
+            if (order.isEmpty()) return@launch
+            updatingAll = true
+            var any = false
+            try {
+                servers@ for ((i, id) in order.withIndex()) {
+                    val p = all.firstOrNull { it.id == id } ?: continue
+                    // niet tijdens het afspelen, buiten het hoofdscherm of terwijl de open server laadt: wachten
+                    while (isLoading || refreshingAll ||
+                        !L145.mayRun(AppState.stage == AppState.Stage.MAIN, AppState.playing != null)) {
+                        if (!current()) break@servers
+                        kotlinx.coroutines.delay(2_000)
+                    }
+                    if (!current()) break@servers
+                    if (order.size > 1) refreshStatus = L("Refreshing %@ (%d of %d)…", p.name, i + 1, order.size)
+                    val ok = if (p.id == source?.id) withTimeoutOrNull(180_000) { refresh(p, showSpinner = false) } ?: false
+                        else AllServers.heavy { refreshOther(p) }
+                    refreshedThisLaunch += p.id.lowercase(java.util.Locale.ROOT)
+                    if (ok) any = true
+                }
+            } finally {
+                updatingAll = false
+                if (!refreshingAll) refreshStatus = null
+            }
+            if (any) AllServers.catalogsRefreshed()
         }
-        startAutoRefresh()
     }
 
     /** true = gelukt. */
@@ -342,71 +403,8 @@ object Playlists {
         return loadStremioAddons(src).also { otherAddons[src.id] = it }
     }
 
-    /** Bij terugkeren in de app: verversen als het volgens de instelling tijd is (build 140: alle servers, zie [refreshDue]). */
-    suspend fun refreshIfDue() = refreshDue()
-
-    // MARK: build 140: automatisch vernieuwen volgens "Afspeellijsten bijwerken", voor ALLE servers van het account
-
-    /** Servers (kleine letters id) die in deze sessie al ververst zijn (voor "Elke keer dat de app opent"). */
+    /** Servers (kleine letters id) die bij deze keer openen al ververst zijn (build 145: "Altijd" na een profielwissel). */
     private val refreshedThisLaunch = java.util.Collections.synchronizedSet(HashSet<String>())
-    private var autoJob: Job? = null
-    private var autoBusy = false
-
-    /**
-     * Build 140: de planning echt uitvoeren. Tot build 139 keek alleen [select] (bij het openen van een server) naar de
-     * leeftijd van de cache, en dan alleen van de actieve server; [refreshIfDue] werd nergens aangeroepen. Bleef de app open
-     * (tv) of kwam hij terug uit de achtergrond, dan gebeurde er niets, en de andere servers werden nooit automatisch
-     * ververst. Nu: na het openen, bij terugkeer naar de voorgrond en elke 15 minuten zolang de app draait.
-     */
-    fun startAutoRefresh() {
-        if (autoJob?.isActive == true || Screenshots.isActive) return
-        // build 144: de eerste ronde na het openen doet [scheduleAutoRefresh] (na ±45 s); deze lus daarna elke 15 minuten
-        autoJob = AppScope.launch {
-            while (true) {
-                kotlinx.coroutines.delay(Build140Logic.AutoRefresh.CHECK_EVERY)
-                if (!autoAllowed()) continue
-                try { refreshDue() } catch (e: CancellationException) { throw e } catch (_: Exception) { }
-            }
-        }
-    }
-
-    /**
-     * Alle servers die volgens de instelling aan de beurt zijn verversen: de actieve stil ("Bijwerken…"), de andere daarna.
-     * Build 144: [gen] = het geplande verversen na het openen; een andere server of een ander profiel stopt het.
-     */
-    suspend fun refreshDue(gen: Int? = null) {
-        val policy = RefreshPolicy.current
-        if (policy == RefreshPolicy.MANUAL || refreshingAll || autoBusy || Screenshots.isActive) return
-        // build 144: nooit in de eerste ±45 s na het openen (ook niet bij terugkeer naar de app), niet buiten het hoofdscherm
-        if (!autoAllowed()) return
-        val all = Store.playlists.toList()
-        val active = source
-        val ages = withContext(Dispatchers.IO) { all.associate { it.id to cacheAge(it) } }
-        val due = Build140Logic.AutoRefresh.dueServers(all.map { it.id }, active?.id, policy.raw, { ages[it] },
-            synchronized(refreshedThisLaunch) { refreshedThisLaunch.toSet() })
-        if (due.isEmpty()) return
-        autoBusy = true
-        var any = false
-        try {
-            servers@ for (id in due) {
-                val p = all.firstOrNull { it.id == id } ?: continue
-                // niet tijdens het afspelen of terwijl de actieve server laadt; build 144: ook niet buiten het hoofdscherm
-                // ("Wie kijkt er?", pincodescherm), en stoppen bij een andere server of een ander profiel
-                while (AppState.playing != null || isLoading || refreshingAll || AppState.stage != AppState.Stage.MAIN) {
-                    if (gen != null && !Build144Logic.AutoRefresh.stillCurrent(gen, autoGen)) break@servers
-                    kotlinx.coroutines.delay(5_000)
-                }
-                if (gen != null && !Build144Logic.AutoRefresh.stillCurrent(gen, autoGen)) break@servers
-                // build 141: een andere server alleen als de achtergrond rustig is, en niet tegelijk met ander zwaar werk aan
-                // de andere servers (één catalogus tegelijk in het geheugen, zie AllServers.heavy)
-                val ok = if (p.id == source?.id) withTimeoutOrNull(180_000) { refresh(p, showSpinner = false) } ?: false
-                    else AllServers.heavy { refreshOther(p) }
-                refreshedThisLaunch += p.id.lowercase(java.util.Locale.ROOT)
-                if (ok) any = true
-            }
-        } finally { autoBusy = false }
-        if (any) AllServers.catalogsRefreshed()
-    }
 
     /**
      * Build 130: alle servers vernieuwen ("Vernieuwen" bij de server en "Alle afspeellijsten nu vernieuwen"): eerst de
@@ -418,6 +416,8 @@ object Playlists {
     suspend fun refreshAll(spinner: Boolean = false) {
         if (refreshingAll) return
         refreshingAll = true
+        // build 145: Vernieuwen neemt een lopend bijwerken (na de vraag of bij "Altijd") over
+        updateTask?.cancel(); autoGen++
         refreshFailed = emptyList()
         val failed = ArrayList<String>()
         try {
@@ -945,8 +945,8 @@ object Playlists {
     fun unload() {
         filterJob?.cancel(); filterJob = null
         filterGeneration++
-        // build 144: gepland verversen hoort bij de vorige server
-        autoTask?.cancel(); autoGen++
+        // build 144/145: bijwerken hoort bij de vorige server
+        autoGen++
         source = null
         Store.activePlaylistID = null
         stalker = null
@@ -1100,38 +1100,6 @@ object Playlists {
         val list = urls.take(40)
         if (list.isEmpty()) return
         Prefs.put(splashKey, Http.json.encodeToString(list))
-    }
-}
-
-/** Hoe vaak afspeellijsten (incl. gids) automatisch ververst worden. Prefs "playlist.refresh". */
-enum class RefreshPolicy(val raw: String) {
-    MANUAL("manual"), LAUNCH("launch"), SIX_HOURS("sixHours"), DAILY("daily"), WEEKLY("weekly");
-
-    val title: String
-        get() = when (this) {
-            MANUAL -> L("Manually")
-            LAUNCH -> L("Every time the app opens")
-            SIX_HOURS -> L("Every 6 hours")
-            DAILY -> L("Daily")
-            WEEKLY -> L("Weekly")
-        }
-
-    /** [ageMs] = leeftijd van de cache in ms (null = geen cache). */
-    fun isDue(ageMs: Long?): Boolean {
-        val age = ageMs ?: return true
-        return when (this) {
-            MANUAL -> false
-            LAUNCH -> age > 60_000
-            SIX_HOURS -> age > 6 * 3_600_000L
-            DAILY -> age > 24 * 3_600_000L
-            WEEKLY -> age > 7 * 24 * 3_600_000L
-        }
-    }
-
-    companion object {
-        var current: RefreshPolicy
-            get() = entries.firstOrNull { it.raw == Prefs.string("playlist.refresh") } ?: DAILY
-            set(v) = Prefs.put("playlist.refresh", v.raw)
     }
 }
 

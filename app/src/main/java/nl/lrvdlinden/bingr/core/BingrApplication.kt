@@ -30,6 +30,10 @@ class BingrApplication : Application(), ImageLoaderFactory {
         super.onCreate()
         AppState.appContext = applicationContext
         Prefs.init(this)
+        // build 145: eenmalige omzetting: de vernieuwtermijn ("Afspeellijsten bijwerken": handmatig, elke start, 6 uur,
+        // dagelijks, wekelijks) vervalt; "Servers laden bij openen" wordt "Vragen" (per apparaat, niet gesynct)
+        Build145Logic.LoadOnOpen.migrate(Prefs.string(Build145Logic.LoadOnOpen.PREF))?.let { Prefs.put(Build145Logic.LoadOnOpen.PREF, it.raw) }
+        if (Prefs.has("playlist.refresh")) Prefs.remove("playlist.refresh")
         Secrets.init(this)
         // build 141: belastingmodus (alleen de rooktest-build, BuildConfig.STRESS): geen account, main-thread-wachter
         StressMode.initApp()

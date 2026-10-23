@@ -545,7 +545,7 @@
     setTimeout(function () { t.classList.remove('show'); setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 400); }, ms || 3000);
   };
 
-  /** Modal: {title, text, buttons:[{label, fn, primary, play, icon}], content} — Terug sluit. */
+  /** Modal: {title, text, buttons:[{label, fn, primary, play, icon}], content, focus} — Terug sluit. focus = index van de knop met de focus (standaard 0; build 145). */
   U.modal = function (o) {
     var box = U.h('div.modal-box', [
       o.title ? U.h('h2', o.title) : null,
@@ -558,7 +558,7 @@
       btns.appendChild(U.button(b.label, function () {
         if (b.keep) { if (b.fn) b.fn(); return; }
         U.pop(); if (b.fn) b.fn();
-      }, { primary: b.primary || i === 0, play: b.play, icon: b.icon || (b.play ? 'play' : null), autofocus: i === 0 }));
+      }, { primary: b.primary || i === 0, play: b.play, icon: b.icon || (b.play ? 'play' : null), autofocus: o.focus != null ? i === o.focus : i === 0 }));
     });
     box.appendChild(btns);
     s.onBack = function () { U.pop(); if (o.onCancel) o.onCancel(); };

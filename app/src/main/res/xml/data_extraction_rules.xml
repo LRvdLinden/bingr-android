@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     build 97: back-up en overzetten naar een nieuw apparaat vanaf Android 12 (android:dataExtractionRules).
-    Zelfde uitsluitingen als backup_rules.xml: sessie, device_id, geheimen en app-sleutels blijven op dit apparaat.
+    Build 145: niets meer naar de Google-back-up en niets meer mee bij het overzetten naar een nieuw apparaat (dat negeert
+    android:allowBackup="false"): alles komt alleen via het Bingr-account terug (docs/ACCOUNT.md); wat alleen op dit
+    apparaat hoort (sessie, device_id, geheimen, caches en de keuze "Servers laden bij openen") blijft hier.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <exclude domain="sharedpref" path="bingr.account.xml" />
-        <exclude domain="sharedpref" path="bingr.device.xml" />
-        <exclude domain="sharedpref" path="bingr.secrets.xml" />
-        <exclude domain="sharedpref" path="bingr.serverkeys.xml" />
-        <!-- build 141: bibliotheekcache per server (stream-adressen met inloggegevens); wordt opnieuw opgebouwd -->
-        <exclude domain="file" path="servercache" />
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
     </cloud-backup>
     <device-transfer>
-        <exclude domain="sharedpref" path="bingr.account.xml" />
-        <exclude domain="sharedpref" path="bingr.device.xml" />
-        <exclude domain="sharedpref" path="bingr.secrets.xml" />
-        <exclude domain="sharedpref" path="bingr.serverkeys.xml" />
-        <!-- build 141: bibliotheekcache per server (stream-adressen met inloggegevens); wordt opnieuw opgebouwd -->
-        <exclude domain="file" path="servercache" />
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
     </device-transfer>
 </data-extraction-rules>
