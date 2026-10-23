@@ -46,7 +46,9 @@ done
 adb logcat -d -s BingrStress:I > "$OUT/prepare.txt" 2>/dev/null || true
 cat "$OUT/prepare.txt" | grep BINGR_STRESS || true
 [ $ready -eq 1 ] || { err "nepgegevens niet klaargezet binnen 10 min"; exit 1; }
-adb shell run-as "$PKG" du -sh files/servercache 2>/dev/null | tr -d '\r' | sed 's/^/cache: /' || true
+CACHE=$(adb shell run-as "$PKG" du -sh files/servercache 2>/dev/null | tr -d '\r' | awk '{print $1}')
+PREP=$(grep -o "prepare done ms=[0-9]*" "$OUT/prepare.txt" | head -1)
+echo "::notice title=Rooktest $SET::$(adb shell getprop ro.product.model | tr -d '\r'), API $(adb shell getprop ro.build.version.sdk | tr -d '\r'), heap $(adb shell getprop dalvik.vm.heapsize | tr -d '\r'); nepcache ${CACHE:-?} (3 servers); $PREP"
 sleep 3
 adb shell am force-stop "$PKG"
 
@@ -94,6 +96,11 @@ round() {
   local block
   block=$(grep "BINGR_STRESS mem" "$log" | sed -E 's/.*main_max_total_ms=([0-9]+).*/\1/' | sort -n | tail -1)
   [ -n "$block" ] && [ "$block" -gt "$MAIN_BLOCK_MAX_MS" ] && err "ronde $name: main thread zat $block ms vast (max $MAIN_BLOCK_MAX_MS)"
+  # samenvatting als annotatie (te zien bij de run, ook zonder de logbestanden)
+  local hr mem
+  hr=$(grep "BINGR_STRESS home_ready" "$log" | sed -E 's/.*profile=([^ ]+) ms=([0-9]+|TIMEOUT).*/\1 \2 ms/' | tr '\n' ',' | sed 's/,$//')
+  mem=$(grep "BINGR_STRESS mem" "$log" | tail -1 | sed -E 's/.*used_mb=([0-9]+) max_mb=([0-9]+) pss_mb=(-?[0-9]+) main_max_ms=[0-9]+ main_max_total_ms=([0-9]+).*/heap \1 van \2 MB, PSS \3 MB, main thread max \4 ms/')
+  echo "::notice title=Rooktest $SET $name::Home bruikbaar: ${hr:-?}; $mem; proces leeft, geen ANR/crash: $([ $fail -eq 0 ] && echo ja || echo NEE)"
   {
     echo "### $SET · ronde $name"
     echo '```'
