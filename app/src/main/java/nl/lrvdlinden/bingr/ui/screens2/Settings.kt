@@ -1175,6 +1175,7 @@ private fun S2DeleteAccountDialog(onDismiss: () -> Unit, onDelete: (String) -> U
 
 /** Build 130: voortgang van "alles vernieuwen", of welke servers de laatste keer niet lukten. */
 private fun refreshSubtitle(): String? = Playlists.refreshStatus
+    ?: Playlists.refreshFailed.takeIf { it.isNotEmpty() }?.let { L("Couldn't refresh: %@", it.joinToString(", ")) }
 
 /** Build 145: de keuzes van "Servers laden bij openen" (zelfde teksten als de Apple-apps, Samsung TV en de webspeler). */
 fun loadOnOpenTitle(m: Build145Logic.LoadOnOpen.Mode): String = when (m) {
@@ -1182,4 +1183,3 @@ fun loadOnOpenTitle(m: Build145Logic.LoadOnOpen.Mode): String = when (m) {
     Build145Logic.LoadOnOpen.Mode.ALWAYS -> L("Always")
     Build145Logic.LoadOnOpen.Mode.NEVER -> L("Never, manually only")
 }
-    ?: Playlists.refreshFailed.takeIf { it.isNotEmpty() }?.let { L("Couldn't refresh: %@", it.joinToString(", ")) }
