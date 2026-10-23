@@ -4,6 +4,77 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.1 · Build 142
+_23 oktober 2026_
+
+### Alle apps en de website
+
+**Verbeterd**
+
+- Nieuw op Bingr staat op de plek van Nieuw toegevoegd, met Film of Serie op elke tegel
+- Verder kijken toont de cover van de film of serie
+
+**Opgelost**
+
+- Titels die je na zoeken aan Mijn lijst toevoegt (ook van een andere server of een aanbeveling) staan er meteen in, ook op je andere apparaten
+
+### Alle apps, de website en de server
+
+**Verbeterd**
+
+- Inloggen is beter beschermd tegen raden, met een duidelijke melding bij te veel pogingen
+- Een nieuw wachtwoord moet minstens 8 tekens hebben
+
+### iOS, iPadOS, macOS en Android
+
+**Verbeterd**
+
+- Tv koppelen toont eerst welk apparaat het is en vraagt om bevestiging
+
+### iOS, iPadOS, tvOS, macOS, Android en Android TV
+
+**Verbeterd**
+
+- Bij het openen ververst eerst alleen de open server; je andere servers volgen later op de achtergrond
+- Casten naar een Chromecast is beter afgeschermd: alleen wat je cast is bereikbaar, met een nieuwe sleutel per sessie
+
+### iOS, iPadOS, tvOS, macOS, Android, Android TV en Samsung TV (Tizen)
+
+**Verbeterd**
+
+- Kinderslot uitzetten, de pincode wijzigen en een vergrendelde groep ontgrendelen vragen nu de huidige pincode
+- Na 5 foute pincodes geldt een oplopende wachttijd
+- Inloggegevens van je servers en je accountsessie worden versleuteld bewaard (sleutelhanger op Apple)
+- Verbindingen met Bingr en de eigen diensten gaan altijd via HTTPS
+
+### Android
+
+**Verbeterd**
+
+- Downloads op Android 14 en nieuwer lopen als door jou gestarte overdracht, zonder vaste melding op de achtergrond
+
+### Android en Android TV
+
+**Verbeterd**
+
+- Een export van je instellingen vraagt eerst je pincode en het tijdelijke bestand wordt na het delen verwijderd
+
+**Opgelost**
+
+- Een profiel kiezen gaat snel en zonder vastlopen, ook met grote servers op een Android TV
+
+### Website en Server
+
+**Verbeterd**
+
+- Een supportticket koppel je aan je account en is alleen voor jou zichtbaar
+
+### Server
+
+**Verbeterd**
+
+- De webproxy werkt alleen nog voor je eigen servers, met limieten per account
+
 ## Versie 1.0.1 · Build 140
 _23 oktober 2026_
 
