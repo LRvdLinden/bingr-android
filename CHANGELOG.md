@@ -4,6 +4,26 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.1 · Build 144
+_23 oktober 2026_
+
+### Android en Android TV
+
+**Verbeterd**
+
+- Profiel kiezen en het pincodescherm laden niets meer op de achtergrond
+
+### Android, Android TV en Samsung TV (Tizen)
+
+**Verbeterd**
+
+- Openen gaat sneller: met een bewaarde lijst wordt bij het openen niets opgehaald, verversen gebeurt pas later en één server tegelijk
+- Verversen gebeurt nooit tijdens het kijken, in de profielkeuze of op het pincodescherm
+
+**Opgelost**
+
+- Verder kijken toont de echte poster van de film of serie, ook bij eerder bekeken titels en titels van je andere apparaten
+
 ## Versie 1.0.1 · Build 142
 _23 oktober 2026_
 
