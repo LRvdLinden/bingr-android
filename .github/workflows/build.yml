@@ -17,7 +17,10 @@ concurrency:
 jobs:
   apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 80
+    env:
+      # openbare SHA-256-vingerafdruk van de Bingr-releasesleutel (staat in elke APK)
+      BINGR_CERT_SHA256: "9E:D5:B7:30:C7:A4:B4:57:B8:0E:F9:91:A4:C6:FA:46:9C:9B:29:28:5B:9B:39:08:A8:93:6D:57:D0:C5:53:6B"
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (v5.1.0)
 
@@ -178,6 +181,84 @@ jobs:
           perms=$(grep -oE '"android.permission.(FOREGROUND_SERVICE[A-Z_]*|RUN_USER_INITIATED_JOBS)"' "$RUNNER_TEMP/manifest.txt" | sort -u | tr '\n' ' ')
           echo "::notice title=Voorgronddiensten::geen dataSync; permissies: $perms"
 
+      # build 142: rooktest van de ECHTE release-APK (R8, release-sleutel), vóór het aanleveren. Eerst zonder apparaat:
+      # geldige handtekening met de Bingr-releasesleutel, versionCode = BINGR_BUILD. Dan in de emulator (telefoon API 34 en
+      # Android TV API 33): als update over de openbare testversie (dl.php?app=android, zelfde sleutel) en vers installeren,
+      # starten, en de app moet na 30 s nog draaien zonder crash. Mislukt dit, dan wordt er niets aangeleverd. De APK gaat
+      # nergens naartoe (geen artefact); alleen logboeken en de gedeobfusceerde stacktrace (mapping.txt) komen op ci-logs.
+      - name: Release-APK controleren (handtekening, versie)
+        if: success()
+        run: |
+          set -uo pipefail
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          bash tools/smoke/apk_info.sh release "$APK" "$BINGR_CERT_SHA256" || exit 1
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
+          B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
+          VC=$("$BT/aapt2" dump badging "$APK" | grep -m1 '^package:' | grep -oE "versionCode='[0-9]+'" | grep -oE '[0-9]+')
+          [ "$VC" = "$B" ] || { echo "::error::versionCode $VC is niet BINGR_BUILD $B"; exit 1; }
+          echo "RELEASE_APK=$APK" >> "$GITHUB_ENV"
+
+      - name: Vorige APK ophalen (openbare testversie, voor de update-test)
+        if: success()
+        run: |
+          set +e
+          curl -fsS --max-time 300 -o "$RUNNER_TEMP/prev.apk" "https://beheer.bingr.online/dl.php?app=android"
+          if bash tools/smoke/apk_info.sh openbaar "$RUNNER_TEMP/prev.apk" "$BINGR_CERT_SHA256"; then
+            echo "PREV_APK=$RUNNER_TEMP/prev.apk" >> "$GITHUB_ENV"
+          else
+            rm -f "$RUNNER_TEMP/prev.apk"; echo "::warning::Geen bruikbare openbare APK: alleen de verse installatie wordt getest."
+          fi
+          exit 0
+
+      - name: KVM aan (emulator)
+        if: success()
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Rooktest release-APK (telefoon, API 34)
+        if: success()
+        timeout-minutes: 20
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 3072M
+          disk-size: 6000M
+          force-avd-creation: true
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: bash tools/smoke/release.sh phone smoke-release/phone "$RELEASE_APK" app/build/outputs/mapping/release/mapping.txt "${PREV_APK:-}"
+
+      - name: Rooktest release-APK (Android TV, API 33)
+        if: success()
+        timeout-minutes: 20
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        with:
+          api-level: 33
+          target: android-tv
+          arch: x86
+          profile: tv_1080p
+          ram-size: 2048M
+          disk-size: 6000M
+          force-avd-creation: true
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: bash tools/smoke/release.sh tv smoke-release/tv "$RELEASE_APK" app/build/outputs/mapping/release/mapping.txt "${PREV_APK:-}"
+
+      - name: Rooktest release-APK samenvatten
+        if: always()
+        run: |
+          set +e
+          for f in smoke-release/*/_log.txt; do [ -f "$f" ] || continue; echo "== $f"; cat "$f"; done
+          for f in smoke-release/*/trace-*.txt; do [ -s "$f" ] || continue; { echo "### Crash ($f)"; echo '```'; head -60 "$f"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"; done
+          exit 0
+
       # build 141: belastingtest zonder emulator: profiel openen met 3 servers × (30.000 films, 20.000 series, 5.000 zenders
       # met gids), oud tegen nieuw (cacheformaat, gedeelde filterlijsten, Nieuw op Bingr), met tijd en geheugen; de JVM krijgt
       # een heap zoals een tv (zie tools/test/ProfileOpenStressTest.kt). Na het bouwen: kotlinx-serialization uit de Gradle-cache.
@@ -230,10 +311,9 @@ jobs:
       # beheer.bingr.online. Nodig: secret BINGR_INBOX_TOKEN (fine-grained, alleen Contents: Read and write op bingr-inbox).
       # H3: géén token voor bingr-beheer meer; die openbare repo wordt anoniem gekloond, het token gaat nooit in een URL.
       - name: APK versleuteld aanleveren voor beheer.bingr.online
-        if: success() && github.event_name != 'pull_request'
+        if: success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           TOKEN: ${{ secrets.BINGR_INBOX_TOKEN }}
-          BINGR_SIGN_KEY: ${{ secrets.BINGR_BUILD_SIGN_KEY }}   # security M4: handtekening (zie README van bingr-beheer)
           BINGR_INBOX_REPO: LRvdLinden/bingr-inbox
         run: |
           set -euo pipefail
@@ -344,11 +424,10 @@ jobs:
       # zoals de APK: versleuteld naar de privé inbox-repo (branch inbox-android-aab); nooit als artefact of release
       - name: App Bundle versleuteld aanleveren voor beheer.bingr.online
         id: aabdeliver
-        if: steps.aabcheck.outcome == 'success' && github.event_name != 'pull_request'
+        if: steps.aabcheck.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         continue-on-error: true
         env:
           TOKEN: ${{ secrets.BINGR_INBOX_TOKEN }}
-          BINGR_SIGN_KEY: ${{ secrets.BINGR_BUILD_SIGN_KEY }}   # security M4: handtekening (zie README van bingr-beheer)
           BINGR_INBOX_REPO: LRvdLinden/bingr-inbox
         run: |
           set -euo pipefail
@@ -379,6 +458,7 @@ jobs:
         run: |
           set +e
           mkdir -p /tmp/logs; cp build.log /tmp/logs/ 2>/dev/null; cp aab.log /tmp/logs/ 2>/dev/null; cp errors.txt /tmp/logs/ 2>/dev/null
+          [ -d smoke-release ] && { mkdir -p /tmp/logs/smoke; for d in smoke-release/*/; do n=$(basename "$d"); mkdir -p /tmp/logs/smoke/$n; cp "$d"_log.txt "$d"trace-*.txt "$d"install-*.txt "$d"screen-vers.png /tmp/logs/smoke/$n/ 2>/dev/null; done; }
           echo "${{ job.status }} $(git rev-parse --short HEAD)" > /tmp/logs/status.txt
           cd /tmp/logs && git init -q -b ci-logs && git add -A
           git -c user.name=github-actions -c user.email=actions@github.com commit -qm "CI-log $(cat status.txt)"
@@ -534,10 +614,9 @@ jobs:
 
       # zoals de APK: naar de privé repo bingr-inbox met BINGR_INBOX_TOKEN (H3)
       - name: Samsung TV-pakket versleuteld aanleveren voor beheer.bingr.online
-        if: success() && github.event_name != 'pull_request'
+        if: success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           TOKEN: ${{ secrets.BINGR_INBOX_TOKEN }}
-          BINGR_SIGN_KEY: ${{ secrets.BINGR_BUILD_SIGN_KEY }}   # security M4: handtekening (zie README van bingr-beheer)
           BINGR_INBOX_REPO: LRvdLinden/bingr-inbox
         run: |
           set -euo pipefail
