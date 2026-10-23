@@ -56,6 +56,9 @@ B.player = { current: null };
 B.account = { isSignedIn: function () { return false; } };
 B.ui = { h: function () { return el(); }, toast: noop, modal: noop };
 B.screens = {};
+// build 144: Verder kijken (cover) en de wachttijd voor het netwerk; deze "start" ligt al een paar minuten achter ons
+load('build144.js');
+B.b144.t0 = Date.now() - 300000;
 load('allservers.js');
 var AS = B.allservers;
 AS.START_GRACE = 0;   // in de test meteen (op de tv: eerst 10 s de actieve server)

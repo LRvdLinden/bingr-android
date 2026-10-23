@@ -303,7 +303,8 @@
   function posterCard(x, type, opts) {
     opts = opts || {};
     var title = type === 'series' || type === 'movie' ? x.title : x.name;
-    var card = h('div.card.poster.f', [U.img(x.poster || x.logo, 'poster-img', title)]);
+    // build 144: Verder kijken geeft zijn eigen cover mee (bibliotheek/catalogmeta, anders TMDB, anders het bewaarde beeld)
+    var card = h('div.card.poster.f', [U.img(opts.poster || x.poster || x.logo, 'poster-img', title)]);
     var p = opts.progress;
     // build 141: Verder kijken: afspeelknop over de poster (de voortgang staat er al over)
     if (opts.play) card.appendChild(h('div.card-play', [U.icon('play')]));
@@ -611,6 +612,7 @@
     }
     offs.push(B.on('profileData', onProfileData));
     offs.push(B.on('allservers', onProfileData));   // build 128: items van andere servers gevonden/verhuisd
+    offs.push(B.on('covers', onProfileData));       // build 144: TMDB-posters voor Verder kijken binnen
     offs.push(B.on('epg', function () { var pg = pages[current]; if (pg && pg.onEpg) B.whenQuiet(function () { if (el.parentNode) pg.onEpg(); }, 400); }));
     // scherm weg (profiel wisselen, uitloggen, taal): luisteraars en pagina's opruimen, anders blijft alles in het geheugen
     screen.destroy = function () {
@@ -738,12 +740,16 @@
     function entries(list, type) { return list.map(function (x) { return { type: type, item: x }; }); }
     function continueRow() {
       // build 128: Verder kijken over alle servers (js/allservers.js); van een andere server: daar verder
-      var cards = B.allservers.continueList().map(function (c) {
+      var list = B.allservers.continueList(), wants = [];
+      var cards = list.map(function (c) {
         // build 141: de poster (cover) van de film/serie met afspeelknop en voortgang erover, niet een still van de scène
-        var card = posterCard(c.item, c.type, { progress: c.e.fraction, progressKey: c.key, play: true });
+        // build 144: zonder poster in de bibliotheek de TMDB-poster (bewaard op de tv), pas daarna het bewaarde beeld
+        var card = posterCard(c.item, c.type, { progress: c.e.fraction, progressKey: c.key, play: true, poster: c.cover });
         if (c.src) card.onEnter = function () { B.allservers.resume(c); };
+        if (c.lookup) wants.push(c.lookup);
         return card;
       });
+      if (wants.length) setTimeout(function () { B.b144.covers.resolve(wants).catch(B.noop); }, 0);
       return rowBlock(L('Continue watching'), cards);
     }
     function myListRow() {

@@ -105,6 +105,8 @@ object AppState {
         if (profile.kids) KidsGate.kidsOpened()
         // build 141: het werk aan de andere servers wacht weer tot het nieuwe profiel (actieve server, Home) klaar is
         AllServers.profileOpened()
+        // build 144: automatisch verversen pas ±45 s na het kiezen van het profiel (lopend verversen van het vorige stopt)
+        Playlists.profileOpened()
         StressMode.profileOpened(profile)
         Store.selectProfile(profile)
         pendingLastChannel = PlayerSettings.resumeLastChannel

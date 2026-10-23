@@ -443,7 +443,22 @@ class ContinueItem(
     val position: Double? = null, val traktPlaybackID: Long? = null,
     /** Build 128: server van dit item als die niet de actieve is (Verder kijken over alle servers) */
     val sourceID: String? = null,
+    /** Build 144: geen poster in de bibliotheek of de catalogmeta: deze titel bij TMDB opzoeken (zie [ContinueCovers]) */
+    val coverLookup: Build144Logic.ContinueCover.Want? = null,
 )
+
+/**
+ * Build 144: afbeelding van een tegel in Verder kijken: de poster uit de bibliotheek of de catalogmeta, anders de
+ * TMDB-poster (bewaard op het apparaat), pas daarna het bewaarde beeld (vaak de scène). Ook voor oude voortgang en voortgang
+ * van andere apparaten. Geeft de afbeelding en (als die ontbreekt) de titel om op te zoeken.
+ */
+private fun continueCover(title: String, year: Int?, isShow: Boolean, library: String?, meta: String?,
+                          stored: String?): Pair<String?, Build144Logic.ContinueCover.Want?> {
+    val C = Build144Logic.ContinueCover
+    val need = C.needsLookup(library, meta, stored)
+    val tmdb = if (need && title.isNotBlank()) ContinueCovers.cover(title, year, isShow) else null
+    return C.pick(library, meta, tmdb, stored) to if (need && title.isNotBlank()) C.Want(title, year, isShow) else null
+}
 
 /**
  * Verder kijken van het actieve profiel op deze server (nieuwste eerst). Afleveringen alleen als de serie (nog)
@@ -466,13 +481,18 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
             if (filter == Filter.SERIES && isMovie) continue
             val left = max(0.0, e.position / max(e.fraction, 0.01) - e.position)
             // build 141: de poster van de film/serie, niet de still van de aflevering die de voortgang bewaarde
+            // build 144: zonder poster op die server de TMDB-poster (ook voor voortgang van andere apparaten)
             val seriesKey = CatalogMeta.episode(full)?.series
-            val art = Build141Feedback.ContinueArt.pick(
+            val title = e.title.ifBlank { CatalogMeta.title(full) ?: "" }
+            val (art, lookup) = continueCover(
+                (item as? Movie)?.title ?: (item as? Series)?.title ?: title,
+                (item as? Movie)?.year ?: (item as? Series)?.year, !isMovie,
                 (item as? Movie)?.poster ?: (item as? Series)?.poster,
                 if (seriesKey != null) CatalogMeta.image(seriesKey) else if (kind != "episode") CatalogMeta.image(full) else null,
                 e.artwork)
-            out.add(ContinueItem(key, e.title.ifBlank { CatalogMeta.title(full) ?: L("Unknown title") }, L("%d min left", (left / 60).toInt()),
-                art, e.fraction, e.updated, isMovie, position = if (e.position > 0) e.position else null, sourceID = e.playlistID))
+            out.add(ContinueItem(key, title.ifBlank { L("Unknown title") }, L("%d min left", (left / 60).toInt()),
+                art, e.fraction, e.updated, isMovie, position = if (e.position > 0) e.position else null, sourceID = e.playlistID,
+                coverLookup = lookup))
             continue
         }
         val isMovie = key in index.movieByID
@@ -481,10 +501,13 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
         if (filter == Filter.SERIES && isMovie) continue
         val left = max(0.0, e.position / max(e.fraction, 0.01) - e.position)
         // build 141: de poster van de film/serie gaat voor (bij een aflevering bewaarde de voortgang vaak een still)
-        val art = Build141Feedback.ContinueArt.pick(
-            if (isMovie) index.movieByID[key]?.poster else index.seriesByTitle[e.title]?.poster, null, e.artwork)
+        // build 144: zonder poster in de bibliotheek de TMDB-poster, pas daarna het bewaarde beeld
+        val movie = if (isMovie) index.movieByID[key] else null
+        val series = if (isMovie) null else index.seriesByTitle[e.title]
+        val (art, lookup) = continueCover(movie?.title ?: series?.title ?: e.title, movie?.year ?: series?.year, !isMovie,
+            movie?.poster ?: series?.poster, null, e.artwork)
         out.add(ContinueItem(key, e.title, L("%d min left", (left / 60).toInt()), art, e.fraction, e.updated, isMovie,
-            position = if (e.position > 0) e.position else null))
+            position = if (e.position > 0) e.position else null, coverLookup = lookup))
     }
     if (filter != Filter.SERIES && trakt.isNotEmpty()) {
         val known = out.mapTo(HashSet()) { it.id }
@@ -569,6 +592,13 @@ fun ContinueCard(title: String, poster: String?, fraction: Double, caption: Stri
     }
 }
 
+/** Build 144: ontbrekende posters van Verder kijken op de achtergrond opzoeken (TMDB, bewaard op het apparaat). */
+@Composable
+fun ResolveContinueCovers(items: List<ContinueItem>) {
+    val wants = remember(items) { items.mapNotNull { it.coverLookup }.distinct() }
+    LaunchedEffect(wants) { if (wants.isNotEmpty()) screensSafe { ContinueCovers.resolve(wants) } }
+}
+
 /** "Hervatten vanaf … / Vanaf het begin kijken / Meer info" voor een titel uit Verder kijken. */
 @Composable
 fun ResumeDialog(choice: ResumeChoice, onDismiss: () -> Unit) {
@@ -642,9 +672,11 @@ fun HomeScreen(filter: Filter) {
     val progress = Store.progress
     val traktContinue = rememberTraktContinue(index)
     val allV = AllServers.version + CatalogMeta.version
-    val continueList = remember(progress, index, pid, filter, traktContinue, Store.activeProfileID, allV) {
+    // build 144: ContinueCovers.version = TMDB-posters binnen
+    val continueList = remember(progress, index, pid, filter, traktContinue, Store.activeProfileID, allV, ContinueCovers.version) {
         continueItems(filter, index, pid, progress, traktContinue)
     }
+    ResolveContinueCovers(continueList)
     val myList = Store.myList
     // build 111: plus TMDB-titels (Binnenkort op Bingr / Nieuw op Bingr) die niet in je bibliotheek staan; alleen
     // zonder leeftijdsgrens (die profielen zien alleen hun eigen, gefilterde bibliotheek)

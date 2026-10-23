@@ -919,7 +919,9 @@ private fun S2MyBingrHeader() {
     // build 128: Verder kijken, Mijn lijst en favorieten over alle servers (zelfde als Home)
     val allV = AllServers.version + CatalogMeta.version
     val traktNone = remember { emptyList<ContinueItem>() }
-    val cont = remember(progress, index, pid, Store.activeProfileID, allV) { continueItems(Filter.ALL, index, pid, progress, traktNone) }
+    // build 144: met de TMDB-posters van Verder kijken (ContinueCovers.version)
+    val cont = remember(progress, index, pid, Store.activeProfileID, allV, ContinueCovers.version) { continueItems(Filter.ALL, index, pid, progress, traktNone) }
+    ResolveContinueCovers(cont)
     val myList = Store.myList
     val mine = remember(myList, index, pid, allV) {
         if (pid == null) emptyList<DetailTarget>()

@@ -364,7 +364,9 @@ object AllServers {
      */
     private suspend fun waitForIdle() {
         while (true) {
+            // build 144: alleen op het hoofdscherm, niet in "Wie kijkt er?" of het pincodescherm (na een profielwissel)
             val ok = withContext(Dispatchers.Main) {
+                AppState.stage == AppState.Stage.MAIN &&
                 X.idle(AppState.playing != null, Playlists.isLoading, Playlists.updating, Playlists.isFiltering,
                     System.currentTimeMillis() - startedAt)
             }

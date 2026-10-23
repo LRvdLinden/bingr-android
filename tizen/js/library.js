@@ -430,14 +430,27 @@
         Lib.applyFilters();
         loadEpg(src, Lib.raw, false);
         // build 102: verversen volgens settings.shared.refreshInterval (= RefreshPolicy op iOS en Android)
-        refreshedThisLaunch[lower(src.id)] = true;
-        if (Lib.refreshDue(Date.now() - cached.at)) Lib.refresh(src, my);
+        // build 144 (= Apple build 143): bij het openen met een bewaarde lijst niets ophalen; pas na ±45 s, met een gekozen
+        // profiel en als er niets speelt: deze server (alleen als hij aan de beurt is), daarna de andere één voor één
+        // (Lib.refreshIfDue). Een andere server of een ander profiel (nieuwe Lib.select) stopt het.
+        scheduleAuto(my);
         return;
       }
       refreshedThisLaunch[lower(src.id)] = true;
+      scheduleAuto(my);
       return Lib.refresh(src, my);
     });
   };
+  /** Build 144: automatisch verversen na het openen, als het mag (B.b144.auto); daarna de zenders van de andere servers. */
+  function scheduleAuto(my) {
+    var A = B.b144 && B.b144.auto;
+    if (!A) return;
+    A.whenAllowed(function () {
+      Lib.refreshIfDue(my).then(function () {
+        if (my === gen) A.whenAllowed(function () { Lib.warmOthers(); }, function () { return my !== gen; });
+      });
+    }, function () { return my !== gen; });
+  }
   /**
    * build 102: verversbeleid van de playlists (settings.shared.refreshInterval, raw value gelijk op iOS en Android):
    * manual | launch | sixHours | daily | weekly; zonder instelling daily. ageMs = leeftijd van de cache.
@@ -464,8 +477,10 @@
    * servers werden dus nooit automatisch ververst. Niet tijdens het kijken; elk met een time-out.
    */
   var refreshedThisLaunch = {}, autoBusy = false;
-  Lib.refreshIfDue = function () {
+  Lib.refreshIfDue = function (my) {
     if (autoBusy || Lib.refreshingAll || !D.sources.length) return Promise.resolve(false);
+    // build 144: niet in de eerste ±45 s na het openen, niet zonder gekozen profiel en niet tijdens het afspelen
+    if (B.b144 && !B.b144.auto.allowed()) return Promise.resolve(false);
     var pol = Lib.refreshPolicy();
     if (pol === 'manual') return Promise.resolve(false);
     autoBusy = true;
@@ -480,8 +495,11 @@
       due.forEach(function (id) {
         chain = chain.then(function () {
           var src = D.sourceById(id);
-          // niet tijdens het kijken (parsen kost op een oude tv beeld): de volgende ronde
-          if (!src || (B.player && B.player.current) || (B.multiview && B.multiview.current)) return;
+          // build 144: andere server of ander profiel gekozen: dit verversen hoort bij de vorige, stoppen
+          if (my != null && my !== gen) return;
+          // niet tijdens het kijken (parsen kost op een oude tv beeld): de volgende ronde; build 144: ook niet in
+          // "Wie kijkt er?" of het pincodescherm
+          if (!src || (B.player && B.player.current) || (B.multiview && B.multiview.current) || !(B.app && B.app.profile)) return;
           if (Lib.source && src.id === Lib.source.id) {
             if (Lib.loading) return;
             B.log('playlist verversen (' + pol + ')');

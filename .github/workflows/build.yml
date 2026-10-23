@@ -102,7 +102,12 @@ jobs:
               tools/test/Build141FeedbackTest.kt -include-runtime -d "$RUNNER_TEMP/b141f-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b141f-test.jar" | tee "$RUNNER_TEMP/b141f-test.txt"; rc5=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 141 feedback::$(tail -1 "$RUNNER_TEMP/b141f-test.txt")"
-            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ]
+            # build 144: Verder kijken (postervolgorde: bibliotheek/catalogmeta, TMDB, bewaard beeld) en verversen na het openen
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/meta/TitleCleaner.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build144Logic.kt \
+              tools/test/Build144LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b144-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b144-test.jar" | tee "$RUNNER_TEMP/b144-test.txt"; rc6=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 144::$(tail -1 "$RUNNER_TEMP/b144-test.txt")"
+            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi
@@ -505,6 +510,9 @@ jobs:
           # build 141: beveiliging (pincode-limiet, vaste hosts, kluis voor gevoelige waarden)
           node tizen/test/build141_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b141.log"
           echo "::notice title=Logica-tests build 141 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b141.log")"
+          # build 144: Verder kijken (postervolgorde, TMDB-posters bewaard op de tv) en verversen pas na het openen
+          node tizen/test/build144_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b144.log"
+          echo "::notice title=Logica-tests build 144 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b144.log")"
 
       - name: Tizen Studio CLI uit de cache
         id: cache

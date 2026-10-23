@@ -315,16 +315,18 @@ object SourceSync {
             val now = Store.playlists.firstOrNull { it.id == before.id }
             val passwordChanged = oldPasswords[before.id] != Store.secret("playlist.${before.id}.password")
             if (now != null && (connectionChanged(before, now) || passwordChanged)) {
-                AppScope.launch { quietly { Playlists.select(now, forceRefresh = true) } }
+                // build 144: in "Wie kijkt er?" of het pincodescherm niets ophalen: de bewaarde lijst hoort niet meer bij de
+                // server, dus weg; het kiezen van een profiel laadt hem dan opnieuw (AppState.open → Playlists.select)
+                if (AppState.stage == AppState.Stage.MAIN) AppScope.launch { quietly { Playlists.select(now, forceRefresh = true) } }
+                else { Playlists.unload(); Playlists.clearCache(now) }
             }
         }
         // geïmporteerd (herinstallatie, nieuw apparaat): de bibliotheek van de hoofdserver laden
+        // build 144: alleen in het hoofdscherm; in "Wie kijkt er?" of het pincodescherm niets laden of ophalen (Apple build 143),
+        // dat doet het kiezen van een profiel (AppState.open → Playlists.select)
         if (Playlists.source == null && incoming.isNotEmpty()) {
             val main = Store.mainSource
-            if (main != null) {
-                if (AppState.stage == AppState.Stage.MAIN) AppState.open(main)
-                else AppScope.launch { quietly { Playlists.select(main) } }
-            }
+            if (main != null && AppState.stage == AppState.Stage.MAIN) AppState.open(main)
         }
         return needUpload
     }

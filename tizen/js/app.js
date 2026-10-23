@@ -272,10 +272,13 @@
     var src = D.activeSource();
     var main = S.main();
     U.reset(main);
+    // build 144: automatisch verversen (en de zenders van de andere servers) pas ±45 s na het kiezen van het profiel
+    B.b144.auto.profileOpened();
     Lib.select(src).then(function () {
       maybeResumeChannel();
-      // achtergrondwerk pas als de app rustig is: reservebronnen en leeftijdsclassificaties
-      B.whenQuiet(function () { Lib.warmOthers(); warmAges(); }, 2500);
+      // achtergrondwerk pas als de app rustig is: leeftijdsclassificaties. Build 144: de reservebronnen (zenders van de
+      // andere servers, van het netwerk) niet meer na 2,5 s maar na het automatisch verversen (Lib.select → scheduleAuto)
+      B.whenQuiet(function () { warmAges(); }, 2500);
     });
     D.syncState().then(function () { if (app.profile === p) { Lib.applyFilters(); B.trakt.refresh(false); } });
     B.reminders.start();

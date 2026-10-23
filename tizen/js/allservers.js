@@ -557,7 +557,7 @@
     D.progressList().forEach(function (pe) {
       var pid = pe.e.playlistID;
       var other = pid && !AS.sameServer(pid, a);
-      var hit = null;
+      var hit = null, orphanMeta = null;
       if (!other) {
         hit = lib.byId[pe.key];
         if (!hit || hit.type !== 'movie') { var s = byTitle[pe.e.title]; hit = s ? { type: 'series', item: s } : null; }
@@ -571,6 +571,7 @@
           var t = m && m.k === 'movie' ? 'movie' : 'series';
           // build 141: de poster van de film/serie (meta van de serie) gaat voor de still die de voortgang bewaarde
           var sm = m && m.ep && m.ep.series ? AS.meta(m.ep.series) : null;
+          orphanMeta = { meta: sm ? sm.img : (t === 'movie' && m ? m.img : null), stored: pe.e.artwork || (m && m.img) || null };
           hit = { type: t, item: { id: t === 'movie' ? pe.key : (m && m.ep && m.ep.series ? AS.itemOf(m.ep.series) : pe.key), title: pe.e.title || (m && m.t) || L('Unknown title'),
             poster: B.b141.continueArt(null, sm ? sm.img : (t === 'movie' && m ? m.img : null), pe.e.artwork || (m && m.img)), group: '', _src: pid, _orphan: AS.isOrphan(full) } };
         }
@@ -580,7 +581,14 @@
       if (B.has(seen, d) && !AS.sameServer(seen[d], pid || a)) return;
       if (hit.type === 'series' && out.some(function (x) { return x.type === 'series' && x.item.id === hit.item.id && AS.sameServer(x.item._src || a, hit.item._src || a); })) return;
       seen[d] = pid || a;
-      out.push({ key: pe.key, e: pe.e, type: hit.type, item: hit.item, src: other ? pid : null });
+      // build 144: cover = poster uit de bibliotheek of catalogmeta, anders TMDB (bewaard op de tv), pas dan het bewaarde beeld
+      var C = B.b144.cover, lib0 = null, meta0 = null, stored0 = pe.e.artwork || null;
+      if (orphanMeta) { meta0 = orphanMeta.meta; stored0 = orphanMeta.stored; } else lib0 = hit.item.poster || null;
+      var show = hit.type === 'series', ct = hit.item.title || pe.e.title || '', cy = hit.item.year || null;
+      var need = C.needsLookup(lib0, meta0, stored0) && !!String(ct).trim();
+      var cover = C.pick(lib0, meta0, need ? B.b144.covers.cover(ct, cy, show) : null, stored0);
+      out.push({ key: pe.key, e: pe.e, type: hit.type, item: hit.item, src: other ? pid : null, cover: cover,
+        lookup: need ? { title: ct, year: cy, isShow: show } : null });
     });
     return out.slice(0, 20);
   };
@@ -633,8 +641,11 @@
       // build 130: op de achtergrond (network === 'bg') hooguit eens per 6 uur per server (ook na een herstart); altijd
       // met een time-out. Aangeklikt door de gebruiker = meteen proberen.
       if (network === 'bg' && !AS.mayFetch(B.store.get(fetchKey(src.id), 0), Date.now())) return null;
-      B.store.set(fetchKey(src.id), Date.now());
-      return AS.withTimeout(Lib.fetchOther(src), AS.FETCH_TIMEOUT);
+      // build 144 (= Apple build 143): op de achtergrond niet van het netwerk in de eerste minuut na de start
+      return (network === 'bg' ? B.b144.auto.othersNetworkGrace() : Promise.resolve()).then(function () {
+        B.store.set(fetchKey(src.id), Date.now());
+        return AS.withTimeout(Lib.fetchOther(src), AS.FETCH_TIMEOUT);
+      });
     });
   }
   AS.markFetched = function (id) { B.store.set(fetchKey(id), Date.now()); };
@@ -647,7 +658,8 @@
     return new Promise(function (resolve) {
       (function wait() {
         var playing = B.player.current || (B.multiview && B.multiview.current);
-        if (!AS.idleOK(!!playing, !!(Lib.loading || Lib.refreshingAll && Lib.refreshingAll.active), Date.now() - startedAt)) setTimeout(wait, 3000);
+        // build 144: niet in "Wie kijkt er?" of het pincodescherm (geen profiel gekozen)
+        if (!(B.app && B.app.profile) || !AS.idleOK(!!playing, !!(Lib.loading || Lib.refreshingAll && Lib.refreshingAll.active), Date.now() - startedAt)) setTimeout(wait, 3000);
         else resolve();
       })();
     });

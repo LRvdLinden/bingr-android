@@ -77,7 +77,10 @@ class MainActivity : ComponentActivity() {
         // Zonder force: eerst /sync/last_activities, dus goedkoop als er niets veranderd is.
         if (AppState.stage == AppState.Stage.MAIN && Trakt.isLoggedIn) AppScope.launch { runCatching { Trakt.refresh() } }
         // build 140: "Afspeellijsten bijwerken" (dagelijks/wekelijks …) ook na terugkeer uit de achtergrond, voor alle servers
-        if (AppState.stage == AppState.Stage.MAIN) AppScope.launch { runCatching { Playlists.refreshDue() } }
+        // build 144: niet in de eerste ±45 s na het openen (dan plant Playlists.select het verversen zelf), zie refreshDue
+        if (AppState.stage == AppState.Stage.MAIN && Playlists.sinceOpenMs() >= Build144Logic.AutoRefresh.SETTLE_MS) {
+            AppScope.launch { runCatching { Playlists.refreshDue() } }
+        }
     }
 
     override fun onDestroy() {
