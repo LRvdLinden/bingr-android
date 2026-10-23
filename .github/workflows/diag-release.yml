@@ -1,0 +1,98 @@
+name: Diagnose release-APK (tijdelijk)
+on:
+  push:
+    branches: ['smoke/apkfix']
+permissions:
+  contents: read
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      BINGR_KEYSTORE_PASSWORD: ${{ secrets.BINGR_KEYSTORE_PASSWORD }}
+      BINGR_KEY_ALIAS: bingr
+      TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+      TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+      TMDB_ACCESS_TOKEN: ${{ secrets.TMDB_ACCESS_TOKEN }}
+      OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
+      OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      FP: "9E:D5:B7:30:C7:A4:B4:57:B8:0E:F9:91:A4:C6:FA:46:9C:9B:29:28:5B:9B:39:08:A8:93:6D:57:D0:C5:53:6B"
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (v5.1.0)
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+        with: { gradle-version: '8.10.2' }
+      - name: Sleutel en Firebase
+        env:
+          KS: ${{ secrets.BINGR_KEYSTORE_BASE64 }}
+          GSJ: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          echo "$KS" | base64 -d > "$RUNNER_TEMP/bingr-release.jks"
+          echo "BINGR_KEYSTORE=$RUNNER_TEMP/bingr-release.jks" >> "$GITHUB_ENV"
+          printf '%s' "$GSJ" > app/google-services.json
+      - name: Release 141 bouwen
+        run: gradle --no-daemon -q assembleRelease 2>&1 | tail -30; ls -la app/build/outputs/apk/release/
+      - name: Release 140 bouwen (11b8f7c, zelfde sleutel)
+        run: |
+          git worktree add -q "$RUNNER_TEMP/b140" 11b8f7c
+          cp app/google-services.json "$RUNNER_TEMP/b140/app/"
+          (cd "$RUNNER_TEMP/b140" && gradle --no-daemon -q assembleRelease 2>&1 | tail -30)
+          cp "$RUNNER_TEMP"/b140/app/build/outputs/apk/release/*.apk "$RUNNER_TEMP/old140.apk"
+      - name: APK's controleren (ook de openbare download)
+        run: |
+          bash tools/smoke/apk_info.sh 141-ci app/build/outputs/apk/release/app-release.apk "$FP" || true
+          bash tools/smoke/apk_info.sh 140-ci "$RUNNER_TEMP/old140.apk" "$FP" || true
+          curl -sS -D "$RUNNER_TEMP/h.txt" -o "$RUNNER_TEMP/public.apk" "https://beheer.bingr.online/dl.php?app=android" || true
+          echo "::notice title=Openbare download::$(grep -iE '^(HTTP/|content-type|content-length|content-disposition)' "$RUNNER_TEMP/h.txt" | tr -d '\r' | tr '\n' ' ')"
+          bash tools/smoke/apk_info.sh openbaar "$RUNNER_TEMP/public.apk" "$FP" || true
+          cmp -s "$RUNNER_TEMP/public.apk" app/build/outputs/apk/release/app-release.apk && echo "::notice::openbaar == CI-141 (byte-gelijk)" || echo "::notice::openbaar != CI-141 (R8 niet byte-reproduceerbaar is normaal)"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
+          "$BT/apksigner" verify -v "$RUNNER_TEMP/public.apk" 2>&1 | head -20
+          "$BT/zipalign" -c -P 16 -v 4 "$RUNNER_TEMP/public.apk" 2>&1 | tail -3
+          "$BT/zipalign" -c -P 16 -v 4 app/build/outputs/apk/release/app-release.apk 2>&1 | tail -3
+          "$BT/aapt2" dump badging "$RUNNER_TEMP/public.apk" 2>&1 | head -8
+      - name: KVM aan
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Telefoon API 34 (release 141, update over 140 en openbaar)
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 3072M
+          disk-size: 6000M
+          force-avd-creation: true
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: |
+            bash tools/smoke/release.sh phone-140 diag/phone-140 app/build/outputs/apk/release/app-release.apk app/build/outputs/mapping/release/mapping.txt "$RUNNER_TEMP/old140.apk" || true
+            bash tools/smoke/release.sh phone-openbaar diag/phone-pub "$RUNNER_TEMP/public.apk" "" "$RUNNER_TEMP/old140.apk" || true
+      - name: Android TV API 33
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+        with:
+          api-level: 33
+          target: android-tv
+          arch: x86
+          profile: tv_1080p
+          ram-size: 2048M
+          disk-size: 6000M
+          force-avd-creation: true
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: bash tools/smoke/release.sh tv-140 diag/tv-140 app/build/outputs/apk/release/app-release.apk app/build/outputs/mapping/release/mapping.txt "$RUNNER_TEMP/old140.apk" || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: diag
+          path: diag
+          retention-days: 3
