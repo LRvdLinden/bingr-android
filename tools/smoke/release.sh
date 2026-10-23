@@ -44,7 +44,8 @@ install_apk() {   # <label> <apk> [-r]; zet INSTALL_CODE
 }
 
 start_app() {     # <label>: starten, WAIT s volgen, crash/ANR melden
-  local label=$1 log="$OUT/logcat-$label.txt" crash="$OUT/crash-$label.txt" died=0 t=0
+  local label=$1
+  local log="$OUT/logcat-$label.txt" crash="$OUT/crash-$label.txt" died=0 t=0
   adb shell am force-stop "$PKG" >/dev/null 2>&1 || true
   adb logcat -c >/dev/null 2>&1 || true
   adb logcat -b crash -c >/dev/null 2>&1 || true
