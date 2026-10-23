@@ -1,0 +1,7 @@
+Starting: Intent { cmp=nl.lrvdlinden.bingr/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: nl.lrvdlinden.bingr/.MainActivity
+TotalTime: 735
+WaitTime: 737
+Complete

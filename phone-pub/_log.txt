@@ -1,0 +1,9 @@
+start 16:13:54
+apparaat: sdk_gphone64_x86_64, API 34, ABI's x86_64,arm64-v8a
+::notice title=Rooktest release (phone-openbaar)::update over de oude APK geïnstalleerd (adb install -r: Success)
+::warning title=Rooktest release (phone-openbaar)::update: geen 'Displayed nl.lrvdlinden.bingr/…' in logcat (proces leeft wel)
+::notice title=Rooktest release (phone-openbaar)::update: geïnstalleerd en gestart, na 30 s actief, geen crash (Displayed ?)
+::notice title=Rooktest release (phone-openbaar)::verse installatie: Success
+::warning title=Rooktest release (phone-openbaar)::vers: geen 'Displayed nl.lrvdlinden.bingr/…' in logcat (proces leeft wel)
+::notice title=Rooktest release (phone-openbaar)::vers: geïnstalleerd en gestart, na 30 s actief, geen crash (Displayed ?)
+einde 16:16:00, fouten: 0
