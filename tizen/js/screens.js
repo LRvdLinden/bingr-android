@@ -133,7 +133,11 @@
       if (!pw) { err.textContent = L('Incorrect email or password.'); return; }
       busy = true; err.textContent = '';
       var req = signup ? auth('/auth/v1/signup', { email: email.trim(), password: pw, data: { lang: B.lang, first_name: firstName, last_name: lastName } })
-        : auth('/auth/v1/token?grant_type=password', { email: email.trim(), password: pw });
+        // build 141: inloggen via de functie login (blokkade per account); bestaat die niet (404), dan de directe route
+        : auth('/functions/v1/login', { email: email.trim(), password: pw, device_id: A.deviceId(), platform: B.config.platform }).then(function (r) {
+          if (r.status !== 404) return r;
+          return auth('/auth/v1/token?grant_type=password', { email: email.trim(), password: pw });
+        });
       req.then(function (r) {
         busy = false;
         var j = r.json || {};
@@ -152,7 +156,9 @@
           signup = false; pw = ''; draw();
           return;
         }
-        if (r.status === 429 || codeErr === 'over_request_rate_limit') err.textContent = L('Too many attempts. Wait a few minutes and try again.');
+        var retry = B.int(j.retry_after);
+        if ((r.status === 429 || codeErr === 'too_many_attempts' || codeErr === 'over_request_rate_limit') && retry > 0) err.textContent = L('Too many attempts. Try again in %d minutes.', Math.max(1, Math.ceil(retry / 60)));
+        else if (r.status === 429 || codeErr === 'too_many_attempts' || codeErr === 'over_request_rate_limit') err.textContent = L('Too many attempts. Wait a few minutes and try again.');
         else if (codeErr === 'weak_password') err.textContent = L('Password must be at least 8 characters.');
         else if (codeErr === 'user_already_exists' || codeErr === 'email_exists') err.textContent = L('An account with this email already exists.');
         else if (codeErr === 'email_not_confirmed') err.textContent = L('Confirm your email address first. Check your inbox.');

@@ -923,7 +923,8 @@
   "Give this device access to your Bingr account?": "هل تريد منح هذا الجهاز حق الوصول إلى حسابك في Bingr؟",
   "Allow access": "السماح بالوصول",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "تابع فقط إذا كان هذا الجهاز أمامك وأدخلت الرمز من شاشته بنفسك. لا تُدخل أبدًا رمزًا أرسله إليك شخص ما: سيحصل على وصول كامل إلى حسابك، بما في ذلك كلمات مرور خوادمك.",
-  "Password must be at least 8 characters.": "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل."
+  "Password must be at least 8 characters.": "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.",
+  "Too many attempts. Try again in %d minutes.": "محاولات كثيرة جدًا. حاول مرة أخرى بعد %d دقائق."
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -1849,7 +1850,8 @@
   "Give this device access to your Bingr account?": "Diesem Gerät Zugriff auf dein Bingr-Konto geben?",
   "Allow access": "Zugriff erlauben",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Fahre nur fort, wenn das Gerät vor dir steht und du den Code selbst vom Bildschirm abgelesen hast. Gib nie einen Code ein, den dir jemand schickt: Diese Person bekäme vollen Zugriff auf dein Konto, auch auf die Passwörter deiner Server.",
-  "Password must be at least 8 characters.": "Das Passwort muss mindestens 8 Zeichen lang sein."
+  "Password must be at least 8 characters.": "Das Passwort muss mindestens 8 Zeichen lang sein.",
+  "Too many attempts. Try again in %d minutes.": "Zu viele Versuche. Versuche es in %d Minuten erneut."
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -2775,7 +2777,8 @@
   "Give this device access to your Bingr account?": "¿Dar a este dispositivo acceso a tu cuenta de Bingr?",
   "Allow access": "Permitir acceso",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Continúa solo si este dispositivo está delante de ti y has introducido tú mismo el código de su pantalla. Nunca introduzcas un código que alguien te haya enviado: tendría acceso completo a tu cuenta, incluidas las contraseñas de tus servidores.",
-  "Password must be at least 8 characters.": "La contraseña debe tener al menos 8 caracteres."
+  "Password must be at least 8 characters.": "La contraseña debe tener al menos 8 caracteres.",
+  "Too many attempts. Try again in %d minutes.": "Demasiados intentos. Inténtalo de nuevo en %d minutos."
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -3701,7 +3704,8 @@
   "Give this device access to your Bingr account?": "Donner à cet appareil l'accès à votre compte Bingr ?",
   "Allow access": "Autoriser l'accès",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Ne continuez que si cet appareil est devant vous et que vous avez saisi vous-même le code affiché à l'écran. Ne saisissez jamais un code que quelqu'un vous a envoyé : cette personne aurait un accès complet à votre compte, y compris aux mots de passe de vos serveurs.",
-  "Password must be at least 8 characters.": "Le mot de passe doit contenir au moins 8 caractères."
+  "Password must be at least 8 characters.": "Le mot de passe doit contenir au moins 8 caractères.",
+  "Too many attempts. Try again in %d minutes.": "Trop de tentatives. Réessayez dans %d minutes."
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -4627,7 +4631,8 @@
   "Give this device access to your Bingr account?": "Dare a questo dispositivo l'accesso al tuo account Bingr?",
   "Allow access": "Consenti accesso",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Continua solo se questo dispositivo è davanti a te e hai inserito tu il codice mostrato sullo schermo. Non inserire mai un codice che qualcuno ti ha inviato: avrebbe accesso completo al tuo account, comprese le password dei tuoi server.",
-  "Password must be at least 8 characters.": "La password deve contenere almeno 8 caratteri."
+  "Password must be at least 8 characters.": "La password deve contenere almeno 8 caratteri.",
+  "Too many attempts. Try again in %d minutes.": "Troppi tentativi. Riprova tra %d minuti."
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -5567,7 +5572,8 @@
   "Give this device access to your Bingr account?": "Dit apparaat toegang geven tot je Bingr-account?",
   "Allow access": "Toegang geven",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Ga alleen verder als dit apparaat voor je staat en je de code zelf van het scherm hebt overgenomen. Vul nooit een code in die iemand je stuurt: die krijgt dan volledige toegang tot je account, ook tot de wachtwoorden van je servers.",
-  "Password must be at least 8 characters.": "Wachtwoord moet minimaal 8 tekens hebben."
+  "Password must be at least 8 characters.": "Wachtwoord moet minimaal 8 tekens hebben.",
+  "Too many attempts. Try again in %d minutes.": "Te veel pogingen. Probeer het over %d minuten opnieuw."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -6493,7 +6499,8 @@
   "Give this device access to your Bingr account?": "Dać temu urządzeniu dostęp do konta Bingr?",
   "Allow access": "Zezwól na dostęp",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Kontynuuj tylko wtedy, gdy to urządzenie stoi przed Tobą, a kod przepisałeś sam z jego ekranu. Nigdy nie wpisuj kodu, który ktoś Ci wysłał: ta osoba uzyskałaby pełny dostęp do konta, także do haseł Twoich serwerów.",
-  "Password must be at least 8 characters.": "Hasło musi mieć co najmniej 8 znaków."
+  "Password must be at least 8 characters.": "Hasło musi mieć co najmniej 8 znaków.",
+  "Too many attempts. Try again in %d minutes.": "Zbyt wiele prób. Spróbuj ponownie za %d min."
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -7419,7 +7426,8 @@
   "Give this device access to your Bingr account?": "Dar a este dispositivo acesso à sua conta Bingr?",
   "Allow access": "Permitir acesso",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Continue apenas se este dispositivo estiver à sua frente e tiver introduzido o código do ecrã. Nunca introduza um código que alguém lhe enviou: essa pessoa teria acesso total à sua conta, incluindo às palavras-passe dos seus servidores.",
-  "Password must be at least 8 characters.": "A palavra-passe deve ter pelo menos 8 caracteres."
+  "Password must be at least 8 characters.": "A palavra-passe deve ter pelo menos 8 caracteres.",
+  "Too many attempts. Try again in %d minutes.": "Demasiadas tentativas. Tente novamente dentro de %d minutos."
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -8345,7 +8353,8 @@
   "Give this device access to your Bingr account?": "Bu cihaza Bingr hesabınıza erişim verilsin mi?",
   "Allow access": "Erişime izin ver",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "Yalnızca bu cihaz önünüzdeyse ve kodu ekranından kendiniz girdiyseniz devam edin. Birinin size gönderdiği bir kodu asla girmeyin: o kişi sunucu şifreleriniz dahil hesabınıza tam erişim elde eder.",
-  "Password must be at least 8 characters.": "Şifre en az 8 karakter olmalı."
+  "Password must be at least 8 characters.": "Şifre en az 8 karakter olmalı.",
+  "Too many attempts. Try again in %d minutes.": "Çok fazla deneme. %d dakika sonra tekrar deneyin."
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -9271,6 +9280,7 @@
   "Give this device access to your Bingr account?": "允许此设备访问你的 Bingr 账户？",
   "Allow access": "允许访问",
   "Only continue if this device is in front of you and you entered the code from its screen yourself. Never enter a code that someone sent you: they would get full access to your account, including your server passwords.": "只有当此设备就在你面前、且代码是你自己从其屏幕上输入时才继续。切勿输入别人发给你的代码：对方将完全访问你的账户，包括你的服务器密码。",
-  "Password must be at least 8 characters.": "密码至少需要 8 个字符。"
+  "Password must be at least 8 characters.": "密码至少需要 8 个字符。",
+  "Too many attempts. Try again in %d minutes.": "尝试次数过多。请在 %d 分钟后重试。"
  }
 }

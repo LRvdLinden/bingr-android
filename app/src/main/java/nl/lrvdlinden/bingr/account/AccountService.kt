@@ -297,13 +297,27 @@ object Account {
         }
     }
 
+    /**
+     * Build 141: inloggen met e-mail en wachtwoord via de functie `login` (blokkade per account na te veel pogingen,
+     * docs/ACCOUNT.md "Inloggen via de functie login"). 200 = dezelfde sessie als /auth/v1/token?grant_type=password.
+     * Bestaat de functie (nog) niet (404), dan de directe route. Vernieuwen blijft via /auth/v1/token.
+     */
     suspend fun signIn(email: String, password: String) = working {
         validate(email, password)
-        val r = post("/auth/v1/token?grant_type=password", creds(email, password))
+        var r = post("/functions/v1/login", buildJsonObject {
+            put("email", email.trim()); put("password", password)
+            put("device_id", deviceId); put("platform", devicePlatform)
+        })
+        if (r.code == 404 && r.errorCode != "invalid_credentials") r = post("/auth/v1/token?grant_type=password", creds(email, password))
         if (r.ok) { if (!store(r.json ?: throw generic(), email.trim())) throw generic(); return@working }
         if (isBanned(r)) throw banned()
-        // build 141: te vaak geprobeerd (rate limit van /auth/v1/token)
-        if (r.code == 429 || r.errorCode == "over_request_rate_limit") throw tooMany()
+        // build 141: te vaak geprobeerd (functie login: too_many_attempts + retry_after; directe route: rate limit)
+        if (r.code == 429 || r.errorCode == "too_many_attempts" || r.errorCode == "over_request_rate_limit") {
+            val secs = r.json.jL("retry_after")
+            if (secs != null && secs > 0) throw AccountException(L("Too many attempts. Try again in %d minutes.", ((secs + 59) / 60).toInt().coerceAtLeast(1)))
+            throw tooMany()
+        }
+        if (r.code == 503 || r.errorCode == "login_unavailable") throw generic()
         throw when {
             r.errorCode == "weak_password" -> AccountException(L("Password must be at least 8 characters."))
             r.errorCode == "email_not_confirmed" -> AccountException(L("Confirm your email address first. Check your inbox."))
