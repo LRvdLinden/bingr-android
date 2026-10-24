@@ -57,10 +57,19 @@ def run(page_setup, mode, steps):
                 if u.path.endswith('/functions/v1/device-auth'):
                     data = json.loads(req.post_data or '{}')
                     if data.get('action') in ('put_state', 'stream_start', 'stream_stop', 'register_device', 'put_sources', 'rename_device', 'remove_device', 'heartbeat', 'announcements',
-                                              'watch_stats', 'delete_watch_stats'):
+                                              'watch_stats', 'delete_watch_stats', 'put_profiles'):
                         with open(os.path.join(OUT, 'requests.jsonl'), 'a') as f:
                             f.write(json.dumps(data, ensure_ascii=False) + '\n')
                     code, body = fb.device_auth(data, mode)
+                    return route.fulfill(status=code, headers=hdr, body=json.dumps(body))
+                # build 146: support vanuit de app (app_*), alleen met een Bearer-token
+                if u.path.endswith('/functions/v1/support'):
+                    data = json.loads(req.post_data or '{}')
+                    if not (req.headers.get('authorization') or '').startswith('Bearer '):
+                        return route.fulfill(status=401, headers=hdr, body='{"error":"not_signed_in"}')
+                    with open(os.path.join(OUT, 'requests.jsonl'), 'a') as f:
+                        f.write(json.dumps({'support': data.get('action')}) + '\n')
+                    code, body = fb.support(data, mode)
                     return route.fulfill(status=code, headers=hdr, body=json.dumps(body))
                 if u.path.startswith('/auth/v1/token') and 'grant_type=password' in u.query:
                     data = json.loads(req.post_data or '{}')
@@ -1297,6 +1306,56 @@ if __name__ == '__main__':
         okCats = bool(main) and any(x.get('id') == fb.SRC + '|Sport' for x in (main[0]['data'].get('hiddenCategories') or [])) and (DEAD + '|Oud') in ((main[-1]['data'].get('removed') or {}).get('hiddenCategories') or {})
         RESULTS.append(('hiddenCategories: migratie en opruimen gesynct', okCats, str([(m['data'].get('hiddenCategories'), (m['data'].get('removed') or {}).get('hiddenCategories')) for m in main][-1:])))
         fb.MODE['allservers'] = False
+
+    if which in ('all', 'b146'):
+        # build 146: Instellingen in tabs, Support (lijst, badge, ticket, reageren, nieuw ticket), Diagnose, Servers vernieuwen
+        # in het profielmenu, profielen via get_profiles en pincode als hash (oude pin wordt gehasht en geüpload)
+        TAB = 'var t = Array.prototype.filter.call(document.querySelectorAll(".st-tab"), function (x) { return x._tab === "%s"; })[0]; if (t) { B.ui.focus(t, true); } !!t'
+        HASROW = 'Array.prototype.some.call(document.querySelectorAll(".page.settings .st-row"), function (r) { return r.firstChild && r.firstChild.textContent.indexOf(B.L(%s)) === 0; })'
+        run(SIGNED_IN, 'normal', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 4000),
+            ('eval', 'B.ui.top().show("settings", true) || 1'), ('wait', 800), ('shot', 'b146-01-settings-general'),
+            ('expect', 'document.querySelectorAll(".page.settings .st-tab").length === 10', 'Instellingen: 10 tabs (ingelogd)'),
+            ('expect', 'B.ui.focused && B.ui.focused.classList.contains("st-tab")', 'focus op de tabs'),
+            ('walk', 'ArrowRight ArrowRight ArrowLeft ArrowDown ArrowDown ArrowUp ArrowUp', 'tabs: rondlopen'),
+            ('eval', TAB % 'servers'), ('key', 'Enter', 600), ('shot', 'b146-02-settings-servers'),
+            ('expect', HASROW % '"Load servers on open"', 'Servers: Servers laden bij openen'),
+            ('expect', HASROW % '"TV guide"', 'Servers: tv-gids'),
+            ('eval', TAB % 'profiles'), ('key', 'Enter', 600), ('expect', HASROW % '"Parental lock"', 'Profielen en kinderslot: kinderslot'),
+            ('eval', TAB % 'account'), ('key', 'Enter', 600), ('expect', HASROW % '"Devices"', 'Account: apparaten'),
+            ('eval', TAB % 'support'), ('key', 'Enter', 1500), ('shot', 'b146-03-support'),
+            ('expect', 'B.support.unread() === 1', 'support: 1 ongelezen antwoord (counts.unread)'),
+            ('expect', '!!document.querySelector(".st-tab.on .badge") && document.querySelector(".st-tab.on .badge").textContent === "1"', 'badge op de tab Support'),
+            ('expect', '!!document.querySelector(".nav-profile .nav-badge") && document.querySelector(".nav-profile .nav-badge").textContent === "1"', 'badge op de avatar in het menu'),
+            ('expect', HASROW % '"New ticket"', 'support: Nieuw ticket'),
+            ('expect', 'document.querySelector(".page.settings").textContent.indexOf("Zenders laden niet") >= 0', 'support: ticket in de lijst'),
+            ('eval', 'B.screens.supportTicket(1042) && 1'), ('wait', 1500), ('shot', 'b146-04-ticket'),
+            ('expect', 'B.ui.top().el.textContent.indexOf("Kun je de diagnose meesturen") >= 0', 'ticket: antwoord van support'),
+            ('walk', 'ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowDown ArrowUp', 'ticket: rondlopen'),
+            ('expect', 'B.support.unread() === 0', 'ticket geopend: gelezen'),
+            ('walk', '10009', 'ticket: terug'),
+            ('eval', 'B.screens.supportNew() && 1'), ('wait', 600), ('shot', 'b146-05-new-ticket'),
+            ('walk', 'ArrowDown ArrowDown ArrowDown ArrowUp', 'nieuw ticket: rondlopen'),
+            ('walk', '10009', 'nieuw ticket: terug'),
+            ('eval', TAB % 'diagnose'), ('key', 'Enter', 600),
+            ('eval', 'var r = Array.prototype.filter.call(document.querySelectorAll(".page.settings .st-row.f"), function (x) { return x.firstChild.textContent === B.L("Run diagnostics"); })[0]; B.ui.focus(r, true); !!r'),
+            ('key', 'Enter', 3000), ('shot', 'b146-06-diagnose'),
+            ('expect', HASROW % '"Bingr server"', 'diagnose: netwerkcheck'),
+            ('expect', '(function () { var t = document.querySelector(".page.settings").textContent; return t.indexOf("QE55Q80B") >= 0 && t.indexOf("xtream.test") < 0 && t.indexOf("leon@") < 0; })()', 'diagnose: model, geen adres of e-mail'),
+            ('eval', 'B.diag.app().then(function (d) { return JSON.stringify({k: d.kind, p: d.app.platform, t: d.device.type, m: d.device.model, ms: d.milestones.map(function (m) { return m.name; })}); })', 'app-diagnose'),
+            ('expect', 'B.diag.marks().some(function (m) { return m.name === "ready"; })', 'startdiagnose: mijlpaal klaar'),
+            ('eval', 'B.screens.profileMenu(function () {}) && 1'), ('wait', 500), ('shot', 'b146-07-profile-menu'),
+            ('expect', '(function () { var l = Array.prototype.map.call(document.querySelectorAll(".pm-item .pm-label"), function (x) { return x.textContent; }); var i = l.indexOf(B.L("Refresh servers")); return i >= 0 && l[i + 1] === B.L("Switch profile"); })()', 'profielmenu: Servers vernieuwen direct boven Wissel profiel'),
+            ('walk', '10009', 'profielmenu: terug'),
+            ('eval', 'B.b146.pin.check("1234", {alg: "pbkdf2-sha256", iter: 100000, salt: "AAECAwQFBgcICQoLDA0ODw==", hash: "hp5sg1DFvrCsw5n7qsO2DSIEM4lrJqZHc00NjxWG4fo="}).then(function (v) { return String(v); })', 'pincode-hash in de browser'),
+        ])
+        reqs = [json.loads(l) for l in open(os.path.join(OUT, 'requests.jsonl')).read().splitlines() if l.strip()] if os.path.exists(os.path.join(OUT, 'requests.jsonl')) else []
+        RESULTS.append(('support: app_list en app_get', any(r.get('support') == 'app_list' for r in reqs) and any(r.get('support') == 'app_get' for r in reqs), str([r for r in reqs if 'support' in r][:6])))
+        RESULTS.append(('profielen niet meer via account_data', not any('account_data' in json.dumps(r) for r in reqs), ''))
+        sam = [r for r in reqs if r.get('action') == 'put_state' and (r.get('section') or '').lower() == 'profile.' + fb.SAM.lower() and 'pinHash' in (r.get('data') or {})]
+        okPin = bool(sam) and sam[0]['data']['pin'] is None and (sam[0]['data']['pinHash'] or {}).get('alg') == 'pbkdf2-sha256' and \
+            (sam[0]['data']['pinHash'] or {}).get('iter') == 100000 and bool(sam[0]['data'].get('pinUpdatedAt'))
+        RESULTS.append(('oude pincode (Sam) gehasht en geüpload, pinUpdatedAt gelijk', okPin, str([r.get('data') for r in sam][:1])))
 
     if RESULTS or PAGEERRORS:
         print('\n== Samenvatting ==')

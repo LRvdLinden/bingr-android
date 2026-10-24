@@ -22,7 +22,16 @@ DYNAMIC = ['Search', 'Home', 'Live TV', 'Movies', 'Series', 'My List', 'Settings
            'Mystery', 'Romance', 'Animation', 'Family', 'Kids', 'Documentary', 'History', 'War', 'Western', 'Music',
            'Reality', 'Soap',
            # build 102: sorteren (js/parity.js, via een variabele)
-           'Default', 'Z–A', 'Highest rated']
+           'Default', 'Z–A', 'Highest rated',
+           # build 146: tabs van Instellingen, support (status, groep, categorie, fouten) en Servers laden bij openen
+           'General', 'Playback', 'Language and subtitles', 'Servers', 'Profiles and parental lock', 'Account', 'Connections',
+           'Support', 'Diagnostics', 'About', 'Open', 'In progress', 'Closed', 'New', 'Awaiting your reply', 'Resolved',
+           'Account and sign-in', 'Playback and streams', 'Apps and installing', 'Website and web player', 'Other',
+           'Enter a subject (at least 3 characters).', 'The subject is too long (max. 120 characters).',
+           'Describe your question in at least 10 characters.', 'Your message is too long (max. 5000 characters).',
+           'Your message contains too many links (max. 6).', 'Too many requests. Wait a moment and try again.',
+           'This ticket is closed. Create a new ticket.', "This ticket wasn't found.", 'The diagnostics are too large to send.',
+           'Something went wrong. Please try again.', 'Ask', 'Always', 'Never, manually only']
 
 PAT = [re.compile(r'\bL\(\s*"((?:[^"\\]|\\.)*)"'), re.compile(r"\bL\(\s*'((?:[^'\\]|\\.)*)'")]
 

@@ -117,7 +117,7 @@
     });
   };
   /** Startscherm, tabbladen tonen/verbergen en playlists verversen (sectie Weergave). */
-  app.interfaceSettingRows = function (row, onOff, render) {
+  app.interfaceSettingRows = function (row, onOff, render, opts) {
     var tabs = [['home', 'Home'], ['live', 'Live TV'], ['movies', 'Movies'], ['series', 'Series']];
     var start = app.startPage();
     var startLabel = '';
@@ -137,7 +137,11 @@
         app.rebuild(L(t[1]));
       });
     });
-    // build 145: "Servers laden bij openen" (per tv, niet gesynct) in plaats van de vernieuwtermijn (refreshInterval)
+    // build 146: "Servers laden bij openen" staat in de tab Servers (app.loadOnOpenRow)
+    if (!(opts && opts.noLoad)) app.loadOnOpenRow(row, render);
+  };
+  /** Build 145: "Servers laden bij openen" (per tv, niet gesynct) in plaats van de vernieuwtermijn (refreshInterval). */
+  app.loadOnOpenRow = function (row, render) {
     if (!(app.profile && app.profile.kids)) {
       var P = B.b145.load, mode = P.mode();
       var modeLabels = { ask: L('Ask'), always: L('Always'), never: L('Never, manually only') };
@@ -188,6 +192,7 @@
     document.addEventListener('keyup', U.onKeyUp, true);
     document.addEventListener('visibilitychange', onVisibility);
     U.push(S.splash());
+    B.diag.mark('splash');
     // build 145: eenmalig de oude vernieuwtermijn omzetten naar "Servers laden bij openen: Vragen"
     B.b145.load.migrateNow();
     // build 141: eerst de kluis laden (sessie, servers, pincodes); daarna pas verder
@@ -216,6 +221,7 @@
     if (B.multiview.current) B.multiview.current.close();
     B.preview.stop();
     app.profile = null;
+    B.diag.mark('auth');
     U.reset(S.login(function () { onLogin = false; afterLogin(true); }));
   }
 
@@ -249,6 +255,7 @@
   function showProfiles() {
     app.profile = null;
     // één profiel zonder pincode: meteen door (zoals de andere apps na het eerste gebruik)
+    B.diag.mark('profiles');
     U.reset(S.profiles(pickProfile));
     app.applyAccent(B.store.get('lastAccent', 'red'));
   }
@@ -288,11 +295,16 @@
     var src = D.activeSource();
     var main = S.main();
     U.reset(main);
+    B.diag.mark('home');
+    // build 146: "klaar" zodra het hoofdscherm even in beeld is; support-badge bijwerken
+    setTimeout(function () { B.diag.mark('ready'); B.support.refresh(false); }, 1500);
     // build 144: de zenders van de andere servers (reservebron) pas ±45 s na het kiezen van het profiel
     B.b144.auto.profileOpened();
     // build 145: na het laden van de open server de keuze van "Servers laden bij openen" (vraag, Altijd of niets)
     Lib.profileOpened();
     Lib.select(src).then(function () {
+      B.diag.mark('servers_loaded');
+      checkEpg();
       maybeResumeChannel();
       // achtergrondwerk pas als de app rustig is: leeftijdsclassificaties
       B.whenQuiet(function () { warmAges(); }, 2500);
@@ -300,6 +312,35 @@
     D.syncState().then(function () { if (app.profile === p) { Lib.applyFilters(); B.trakt.refresh(false); } });
     B.reminders.start();
   }
+
+  /**
+   * Build 146: de tv-gids volgt "Servers laden bij openen" (geen eigen verversen op tijd). Loopt hij leeg (geen
+   * programma's meer voor nu of de komende 3 uur), dan een kleine melding die niets blokkeert, met Bijwerken (niet bij
+   * een kinderprofiel). Opnieuw bij een nieuwe bibliotheek en elk half uur.
+   */
+  var epgShownFor = null;
+  function epgSample() {
+    var lib = Lib.lib || {}, out = [], withGuide = 0, chans = lib.channels || [];
+    for (var i = 0; i < chans.length && i < 2000 && withGuide < 30; i++) {
+      var progs = Lib.epgFor(chans[i]);
+      if (!progs || !progs.length) continue;
+      withGuide++;
+      progs.forEach(function (p) { out.push([p.start, p.end]); });
+    }
+    return out;
+  }
+  function checkEpg() {
+    try {
+      if (!app.profile || app.profile.kids || Lib.refreshingAll) return;
+      if (!B.b146.epg.expired(Date.now(), epgSample())) { epgShownFor = null; if (S.epgNotice) S.epgNotice(false); return; }
+      var key = Lib.source ? Lib.source.id : '';
+      if (epgShownFor === key) return;
+      epgShownFor = key;
+      if (S.epgNotice) S.epgNotice(true);
+    } catch (e) { B.log('epg', e && e.message); }
+  }
+  setInterval(function () { if (!document.hidden) checkEpg(); }, 30 * 60000);
+  B.on('library', function () { setTimeout(checkEpg, 3000); });
 
   /** TMDB-leeftijden bijwerken als dit profiel een leeftijdsgrens heeft (kindergroepen eerst). */
   function warmAges() {
@@ -364,6 +405,8 @@
     var p = A.isRegistered() ? A.heartbeat() : A.registerDevice().then(function () { return true; });
     p.then(function (alive) {
       if (alive === false) { A.revokedSignOut(); return; }
+      // build 146: ongelezen supportantwoorden (badge; de tv heeft geen push)
+      B.support.refresh(false);
       return Promise.all([D.syncProfiles(), D.syncSources(), D.syncState()]).then(function () {
         // actief profiel verwijderd op een ander apparaat → terug naar "Wie kijkt er?"
         if (app.profile && !D.profileById(app.profile.id)) { showProfiles(); return; }
@@ -396,6 +439,8 @@
       startHeartbeat();
       // build 88: abonnement bijwerken (na een upgrade op bingr.online gaan de sloten open)
       A.fetchEntitlements(false);
+      // build 146: terug op de tv: ongelezen supportantwoorden (badge)
+      if (app.profile) B.support.refresh(false);
       // build 75: terug op de tv → Trakt-vinkjes bijwerken (alleen als Trakt iets nieuws meldt), zoals iOS/Android
       if (app.profile) B.trakt.refresh(false);
       // build 145: geen automatisch verversen meer bij terugkeer (de vernieuwtermijn is weg)

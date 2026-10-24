@@ -527,6 +527,9 @@ jobs:
           # build 145: servers laden bij openen (Vragen / Altijd / Nooit) en de vraag "Servers bijwerken?"
           node tizen/test/build145_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b145.log"
           echo "::notice title=Logica-tests build 145 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b145.log")"
+          # build 146: pincode als hash (WebCrypto en pure JS, testvectoren), keuzelogica, profielen samenvoegen, support en diagnose
+          node tizen/test/build146_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b146.log"
+          echo "::notice title=Logica-tests build 146 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b146.log")"
 
       - name: Tizen Studio CLI uit de cache
         id: cache

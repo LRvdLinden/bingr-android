@@ -889,3 +889,28 @@ html.mv-hole .layer.multiview { background: transparent; }
 @keyframes kg-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-12px); } 75% { transform: translateX(12px); } }
 .kg-buttons { display: flex; justify-content: center; margin-top: 22px; }
 .kg-buttons > * { margin: 0 10px; }
+
+/* build 146: Instellingen in tabs (rij bovenaan, links/rechts met de afstandsbediening) */
+.st-tabs { display: flex; flex-wrap: wrap; margin: 0 0 18px 8px; }
+.st-tab { display: inline-flex; align-items: center; height: 58px; padding: 0 26px; margin: 0 12px 12px 0; border-radius: 29px; background: #1d1d1d; color: #ddd; font-size: 24px; white-space: nowrap; }
+.st-tab.on { background: #3a3a3a; color: #fff; font-weight: 700; }
+.st-tab.focused { background: #fff; color: #000; transform: scale(1.05); }
+.st-tab .badge { margin-left: 10px; }
+/* badge met ongelezen supportantwoorden op de avatar en op Instellingen in het menu */
+.nav-badge { margin-left: 10px; font-size: 16px; padding: 2px 8px; border-radius: 12px; }
+.pm-item .badge { margin-left: 14px; }
+/* support: gesprek */
+.st-row.msg-support { background: #1a1a1a; }
+.st-row.msg-you .st-label > div:first-child { color: #ccc; }
+.st-row.info-ev .st-label { color: var(--secondary); font-size: 24px; }
+.st-row.focused.msg-you .st-label > div:first-child { color: #000; }
+/* diagnose: wat er meegaat */
+.diag-scroll { position: relative; width: 1100px; height: 560px; overflow: hidden; }
+.diag-json { white-space: pre-wrap; font-family: monospace; font-size: 18px; line-height: 1.35; color: #bbb; }
+/* build 146: de tv-gids is verlopen (kleine melding, blokkeert niets) */
+.epg-notice { position: absolute; top: 26px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; z-index: 30;
+  padding: 10px 14px 10px 22px; border-radius: 14px; background: rgba(0, 0, 0, .88); border: 1px solid rgba(255, 255, 255, .18); font-size: 24px; }
+.epg-notice .ic { width: 32px; height: 32px; margin-right: 14px; color: var(--accent); }
+.epg-notice .epg-text { margin-right: 20px; }
+.epg-notice .epg-btn { height: 52px; padding: 0 24px; margin-left: 10px; font-size: 22px; }
+.epg-notice .epg-btn.focused { background: #fff; color: #000; }

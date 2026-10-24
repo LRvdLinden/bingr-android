@@ -332,6 +332,15 @@ def device_auth(body, mode):
     if a == 'config':
         return 200, {'tmdbAPIKey': 'tmdb-test', 'omdbAPIKey': 'omdb-test' if MODE.get('parity') else '', 'traktClientID': 'trakt-id', 'traktClientSecret': 'trakt-secret',
                      'openSubtitlesAPIKey': 'os-key'}
+    # build 146: profielen via device-auth (versleuteld op de server); de server voegt samen en geeft de lijst terug
+    if a == 'get_profiles':
+        return 200, {'profiles': SAVED.get('profiles') or profiles(), 'updatedAt': iso(datetime.now(timezone.utc))}
+    if a == 'put_profiles':
+        lst = [dict((k, v) for k, v in p.items() if k not in ('pin', 'pinHash', 'pinCode')) for p in (body.get('profiles') or []) if isinstance(p, dict)]
+        SAVED['profiles'] = lst
+        return 200, {'ok': True, 'profiles': lst, 'updatedAt': iso(datetime.now(timezone.utc))}
+    if a == 'ping':
+        return 200, {'ok': True}
     if a == 'get_sources':
         return 200, SAVED['sources'] if SAVED.get('sources') else sources()
     if a == 'put_sources':
@@ -748,3 +757,41 @@ def other(url, method, body, img_dir):
         srt = '1\n00:00:00,500 --> 00:00:30,000\nDit is een <i>ondertitel</i> van OpenSubtitles.\nTweede regel.\n\n2\n00:00:30,500 --> 00:01:00,000\nNog een.\n'
         return 200, {'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/x-subrip'}, srt.encode('cp1252')
     return None
+
+
+def support(body, mode):
+    """Build 146: functie `support` (acties app_*), met twee tickets van het account (één met een ongelezen antwoord)."""
+    a = body.get('action')
+    now = datetime.now(timezone.utc)
+    t1 = {'number': 1042, 'subject': 'Zenders laden niet', 'status': 'pending', 'group': 'in_progress', 'category': 'afspelen', 'platform': 'tizen',
+          'created_at': iso(now - timedelta(days=1)), 'last_reply_at': iso(now - timedelta(hours=2)), 'closed_at': None, 'can_reply': True,
+          'unread_count': 1, 'unread': not SAVED.get('read_1042')}
+    t2 = {'number': 1001, 'subject': 'Vraag over Lifetime', 'status': 'closed', 'group': 'closed', 'category': 'account', 'platform': 'tizen',
+          'created_at': iso(now - timedelta(days=9)), 'last_reply_at': iso(now - timedelta(days=8)), 'closed_at': iso(now - timedelta(days=8)),
+          'can_reply': False, 'unread_count': 0, 'unread': False}
+    items = SAVED.get('tickets', []) + [t1, t2]
+    if a == 'app_list':
+        unread = sum(1 for t in items if t.get('unread'))
+        return 200, {'items': items, 'counts': {'open': sum(1 for t in items if t['group'] == 'open'), 'in_progress': 1, 'closed': 1, 'unread': unread}}
+    if a == 'app_get':
+        n = int(body.get('number') or 0)
+        t = next((t for t in items if t['number'] == n), None)
+        if not t:
+            return 404, {'error': 'not_found'}
+        if n == 1042:
+            SAVED['read_1042'] = True
+        return 200, {'ticket': t, 'messages': [
+            {'author': 'customer', 'body': 'Na het bijwerken laden mijn zenders niet meer.', 'created_at': iso(now - timedelta(days=1))},
+            {'author': 'event', 'body': 'open', 'created_at': iso(now - timedelta(hours=20))},
+            {'author': 'support', 'body': 'Kun je de diagnose meesturen via Instellingen → Diagnose?', 'created_at': iso(now - timedelta(hours=2))}]}
+    if a in ('app_mark_read', 'app_close'):
+        return 200, {'ok': True, 'status': 'closed', 'group': 'closed'}
+    if a == 'app_reply':
+        return 200, {'ok': True, 'status': 'open', 'group': 'in_progress', 'diagnostics': 'accepted' if body.get('diagnostics') else None}
+    if a == 'app_create':
+        n = 1100 + len(SAVED.get('tickets', []))
+        SAVED.setdefault('tickets', []).insert(0, {'number': n, 'subject': body.get('subject'), 'status': 'new', 'group': 'open', 'category': body.get('category'),
+                                                    'platform': 'tizen', 'created_at': iso(now), 'last_reply_at': iso(now), 'closed_at': None,
+                                                    'can_reply': True, 'unread_count': 0, 'unread': False})
+        return 200, {'ok': True, 'number': n, 'status': 'new', 'group': 'open', 'email_sent': True, 'diagnostics': 'accepted' if body.get('diagnostics') else None}
+    return 400, {'error': 'unknown_action'}

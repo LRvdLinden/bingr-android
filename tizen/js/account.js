@@ -132,11 +132,11 @@
   };
 
   /** device-auth met een geldige sessie; bij 401 één keer vernieuwen. null = netwerkfout of geen sessie. */
-  function authed(body) {
+  function authed(body, fn) {
     if (!A.isSignedIn()) return Promise.resolve(null);
     var attempt = 0;
     function go(token) {
-      return post('/functions/v1/device-auth', body, token).then(function (r) {
+      return post('/functions/v1/' + (fn || 'device-auth'), body, token).then(function (r) {
         if (r.status !== 401 || attempt > 0) return r;
         attempt++;
         return A.refresh().then(function (res) {
@@ -318,10 +318,16 @@
     var l = String(p || '').toLowerCase();
     if (l === 'tizen') return L('Samsung TV');
     if (l === 'browser') return L('Browser'); // webspeler op bingr.online (build 62)
+    if (l === 'windows') return 'Windows'; // build 146: de Windows-app
     return String(p || '');
   };
   /** Apparaatnaam in Nu aan het kijken en de kijkgeschiedenis: bij de webspeler "Chrome op Mac · Browser". */
   A.deviceNameWithLabel = function (name, p) {
+    // build 146: de Windows-app: "Windows" (of de naam met "· Windows" als die het nog niet zegt)
+    if (String(p || '').toLowerCase() === 'windows') {
+      var w = String(name || '');
+      return !w || w.toLowerCase() === 'windows' ? 'Windows' : (/windows/i.test(w) ? w : w + '  ·  Windows');
+    }
     if (String(p || '').toLowerCase() !== 'browser') return name;
     var label = L('Browser');
     var n = String(name || '');
@@ -356,8 +362,11 @@
   };
   A.serverKey = function (name) { var k = B.store.get('serverKeys', {}) || {}; return k[name] || ''; };
 
-  // MARK: profielen (PostgREST account_data)
+  // MARK: profielen (build 146: device-auth get_profiles / put_profiles, versleuteld op de server)
 
+  // alleen bij een terugrol van de functie (400 unknown_action): de oude route via PostgREST account_data
+  var profilesRest = false;
+  function unknownAction(r) { return !!r && (r.status === 404 || (r.json && (r.json.error === 'unknown_action' || r.json.error_code === 'unknown_action'))); }
   function rest(method, path, body, extra) {
     return A.validAccessToken().then(function (token) {
       var h = { 'apikey': B.config.supabaseKey, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Accept': 'application/json' };
@@ -365,22 +374,60 @@
       return B.http(B.config.supabaseUrl + path, { method: method, headers: h, body: body, timeout: 20000 });
     });
   }
-  /** account_data.profiles (ook tombstones); null = mislukt. */
-  A.readProfiles = function () {
+  function readProfilesRest() {
     return rest('GET', '/rest/v1/account_data?select=profiles,updated_at').then(function (r) {
       if (r.status === 401) return A.refresh().then(function () { return null; });
       if (r.status < 200 || r.status >= 300 || !Array.isArray(r.json)) return null;
       var row = r.json[0];
       return row && Array.isArray(row.profiles) ? row.profiles : [];
     }, function () { return null; });
-  };
-  A.writeProfiles = function (profiles) {
+  }
+  function writeProfilesRest(profiles) {
     var uid = A.userId();
-    if (!uid) return Promise.resolve(false);
+    if (!uid) return Promise.resolve(null);
     return rest('POST', '/rest/v1/account_data', { user_id: uid, profiles: profiles, updated_at: B.iso() },
       { 'Prefer': 'resolution=merge-duplicates,return=minimal' }).then(function (r) {
-      return r.status >= 200 && r.status < 300;
-    }, function () { return false; });
+      return r.status >= 200 && r.status < 300 ? profiles : null;
+    }, function () { return null; });
+  }
+  function profilesOf(r) {
+    if (!r || !r.ok || !r.json) return null;
+    var list = r.json.profiles;
+    if (list != null && !Array.isArray(list)) return null;
+    return (list || []).filter(function (p) { return p && p.id; });
+  }
+  /** Profielen van het account (ook tombstones); null = mislukt. */
+  A.readProfiles = function () {
+    if (profilesRest) return readProfilesRest();
+    return authed({ action: 'get_profiles' }).then(function (r) {
+      if (r && !r.ok && unknownAction(r)) { profilesRest = true; return readProfilesRest(); }
+      return profilesOf(r);
+    }, function () { return null; });
+  };
+  /**
+   * De hele lijst (met tombstones) opslaan. Geeft de samengevoegde lijst van de server (die meteen toepassen), of null.
+   * 503 try_again (gelijktijdige schrijfactie): één keer na 1,5 s opnieuw.
+   */
+  A.writeProfiles = function (profiles) {
+    if (profilesRest) return writeProfilesRest(profiles);
+    function once() { return authed({ action: 'put_profiles', profiles: profiles }); }
+    return once().then(function (r) {
+      if (r && !r.ok && unknownAction(r)) { profilesRest = true; return writeProfilesRest(profiles); }
+      if (r && r.status === 503) return new Promise(function (res) { setTimeout(res, 1500); }).then(once).then(profilesOf);
+      return profilesOf(r);
+    }, function () { return null; });
+  };
+
+  // MARK: build 146: support vanuit de app (functie `support`, acties app_*), altijd met de sessie
+
+  /** {status, ok, json} of null (geen sessie of geen netwerk). */
+  A.support = function (body) {
+    return authed(body, 'support').then(function (r) { return r || null; }, function () { return null; });
+  };
+  /** Netwerkcheck voor de diagnose: device-auth `ping` (zonder inloggen); tijd in ms of null. */
+  A.ping = function () {
+    var t0 = Date.now();
+    return post('/functions/v1/device-auth', { action: 'ping' }).then(function (r) { return r.ok ? Date.now() - t0 : null; }, function () { return null; });
   };
 
   /**

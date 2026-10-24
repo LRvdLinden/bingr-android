@@ -279,7 +279,7 @@
         tile.onEnter = function () {
           var go = function () {
             var pin = D.pinFor(p);
-            if (pin) U.askPIN(L('Enter PIN'), function (x) { return x === pin; }, function () { onPick(p); });
+            if (pin) U.askPIN(L('Enter PIN'), function (x) { return B.b146.pin.check(x, pin); }, function () { onPick(p); });
             else onPick(p);
           };
           // build 140: was het laatst actieve profiel op deze tv een kinderprofiel, dan eerst de rekensom (ouderpoort)
@@ -466,11 +466,19 @@
       return false;
     };
     nav.appendChild(profileTile);
+    // build 146: badge met ongelezen supportantwoorden op de avatar en op Instellingen
+    var navBadges = [];
+    function badgeEl() { var b = h('span.badge.nav-badge'); navBadges.push(b); return b; }
+    profileTile.appendChild(badgeEl());
+    function updateBadges() {
+      var t = B.b146.support.badge(B.support.unread());
+      navBadges.forEach(function (b) { b.textContent = t || ''; b.style.display = t ? '' : 'none'; });
+    }
     var items = {};
     NAV.forEach(function (n) {
       // build 102: tabbladen die verborgen zijn (settings.shared.hiddenTabs) niet in het menu
       if (B.app.tabHidden(n[0])) return;
-      var it = h('div.nav-item.f', [U.icon(n[1]), h('span.nav-label', L(n[2]))]);
+      var it = h('div.nav-item.f', [U.icon(n[1]), h('span.nav-label', L(n[2])), n[0] === 'settings' ? badgeEl() : null]);
       // build 140: Instellingen vanuit een kinderprofiel: eerst de rekensom (ouderpoort)
       it.onEnter = function () {
         if (n[0] === 'settings' && B.kidsGate) B.kidsGate.guard(function () { show(n[0], true); });
@@ -486,6 +494,7 @@
       nav.appendChild(it);
     });
     var el = layer('main', [content, nav]);
+    updateBadges();
     var wantContent = false;
     function focusContent() {
       var pg = pages[current];
@@ -557,9 +566,23 @@
     };
     // build 86: pagina's (Categorieën) openen vanuit de inhoud, zoals de rij op Home
     S.goPage = function (key) { if (el.parentNode) show(key, true); };
+    // build 146: de tv-gids is verlopen: kleine melding bovenaan de inhoud (blokkeert niets; omhoog bereikbaar), met Bijwerken
+    var epgBar = null;
+    S.epgNotice = function (on) {
+      if (!el.parentNode) return;
+      if (!on) { if (epgBar && epgBar.parentNode) epgBar.parentNode.removeChild(epgBar); epgBar = null; return; }
+      if (epgBar) return;
+      var upd = h('div.btn.f.epg-btn', L('Update'));
+      var close = h('div.btn.f.epg-btn.epg-close', '\u2715');
+      epgBar = h('div.epg-notice', [U.icon('guide'), h('span.epg-text', L('The TV guide has expired. Update your servers.')), upd, close]);
+      upd.onEnter = function () { S.epgNotice(false); S.refreshServers(); focusContent(); };
+      close.onEnter = function () { S.epgNotice(false); focusContent(); };
+      el.appendChild(epgBar);
+    };
     // nieuwe bibliotheek: pas tekenen als de afstandsbediening even stil is (scrollen gaat voor)
     var libPending = false;
     var offs = [];
+    offs.push(B.on('support', function () { if (el.parentNode) updateBadges(); }));
     offs.push(B.on('library', function () {
       if (!el.parentNode || libPending) return;
       libPending = true;
@@ -1561,27 +1584,34 @@
       var el = item(S.avatar(p, 'mini'), p.name, function () {
         gate(function () {
           var pin = D.pinFor(p);
-          if (pin) U.askPIN(L('PIN for %@', p.name), function (x) { return x === pin; }, function () { B.app.openProfile(p); });
+          if (pin) U.askPIN(L('PIN for %@', p.name), function (x) { return B.b146.pin.check(x, pin); }, function () { B.app.openProfile(p); });
           else B.app.openProfile(p);
         });
       });
       if (D.pinFor(p)) el.appendChild(U.icon('lock', 'pm-lock'));
     });
     if (others.length) sep();
+    // build 146: alle servers vernieuwen (één voor één, met de bijwerk-indicator), direct boven "Wissel profiel"; niet bij
+    // een kinderprofiel
+    if (!(cur && cur.kids) && D.sources.length) item(U.icon('replay'), L('Refresh servers'), function () { S.refreshServers(); });
     item(U.icon('people'), L('Switch profile'), function () { gate(function () { B.app.switchProfile(); }); });
     item(U.icon('list'), L('My List'), function () { go('mylist'); });
     // build 86: Categorieën (eerst een menu-item links)
     var lib = Lib.lib;
     if (lib.movies.length || lib.series.length) item(U.icon('grid'), L('Categories'), function () { go('categories'); });
-    item(U.icon('gear'), L('Settings'), function () { gate(function () { go('settings'); }); });
+    // build 146: Instellingen in tabs; de badge = ongelezen antwoorden van support (de tv heeft geen push)
+    var unread = B.b146.support.badge(B.support.unread());
+    var st = item(U.icon('gear'), L('Settings'), function () { gate(function () { S.settingsTab = 'general'; go('settings'); B.emit('settingsTab'); }); });
+    if (unread) st.appendChild(h('span.badge', unread));
     if (A.isSignedIn()) {
-      item(U.icon('person'), L('Account & devices'), function () { gate(function () { U.push(S.devices()); }); });
+      item(U.icon('person'), L('Account & devices'), function () { gate(function () { S.settingsTab = 'account'; go('settings'); B.emit('settingsTab'); }); });
       // build 88: abonnement (Gratis / Lifetime)
       var ent = A.entitlements();
       if (ent) item(U.icon('lifetime'), L('Subscription') + ': ' + (ent.free ? L('Free') : L('Lifetime')), function () { gate(function () { S.upgrade(null); }); });
     }
-    // build 75: support.bingr.online als QR-code
-    item(U.icon('help'), L('Support'), function () { S.support(); });
+    // build 146: Support als tab in Instellingen (tickets, reageren, nieuw ticket, diagnose)
+    var sp = item(U.icon('help'), L('Support'), function () { gate(function () { S.settingsTab = 'support'; go('settings'); B.emit('settingsTab'); }); });
+    if (unread) sp.appendChild(h('span.badge', unread));
     if (A.isSignedIn()) {
       sep();
       item(U.icon('signout'), L('Sign out'), function () {
@@ -2144,6 +2174,37 @@
 
   // MARK: Instellingen
 
+  /**
+   * Build 146: Instellingen in tabs (op alle apps gelijk): Algemeen, Afspelen, Taal en ondertitels, Servers, Profielen en
+   * kinderslot, Account, Koppelingen, Support, Diagnose, Over. Bovenaan een rij tabs (links/rechts, OK kiest; omlaag naar de
+   * instellingen). Niets is verdwenen: elke instelling staat in de meest logische tab, met dezelfde regels als voorheen.
+   */
+  S.SETTINGS_TABS = [['general', 'General'], ['playback', 'Playback'], ['language', 'Language and subtitles'], ['servers', 'Servers'],
+    ['profiles', 'Profiles and parental lock'], ['account', 'Account'], ['connections', 'Connections'], ['support', 'Support'],
+    ['diagnose', 'Diagnostics'], ['about', 'About']];
+  S.settingsTab = 'general';
+  S.PRIVACY_URL = 'https://bingr.online/privacy.html';
+  S.TERMS_URL = 'https://bingr.online/voorwaarden/';
+  /** Pagina van bingr.online als QR-code (de tv opent geen browser). */
+  S.qrLink = function (title, url) {
+    var qr = h('div.qr-box.small');
+    var box = h('div.support-cols', [qr, h('div', [
+      h('p.modal-text', L("Scan the QR code with your phone's camera to open this page.")),
+      h('div.support-url', url.replace(/^https?:\/\//, ''))
+    ])]);
+    var s = U.modal({ title: title, content: box, buttons: [{ label: L('Close') }] });
+    S.drawQR(qr, url, 240);
+    return s;
+  };
+  /** Instellingen openen op een tab (profielmenu, badge, melding). */
+  S.openSettings = function (tab) {
+    S.settingsTab = tab || 'general';
+    var top = U.top();
+    if (S.goPage && top && top.show) S.goPage('settings');
+    else B.emit('openSettings', tab);
+    B.emit('settingsTab');
+  };
+
   S.pages.settings = function () {
     var list = vScroller('.st-list.fm', { 'data-pad': '120' });
     var el = h('div.page.settings', [h('div.ct-head', [h('h1', L('Settings'))]), list]);
@@ -2156,39 +2217,61 @@
       list.track.appendChild(r);
       return r;
     }
+    function note(text) {
+      var n = h('div.st-note.f', text);
+      n.onEnter = B.noop;
+      list.track.appendChild(n);
+      return n;
+    }
     function onOff(v) { return v ? L('On') : L('Off'); }
-    function render() {
+    function tabs() {
+      var signedIn = A.isSignedIn();
+      return S.SETTINGS_TABS.filter(function (t) { return t[0] !== 'account' || signedIn; });
+    }
+    var tabRow = null;
+    function drawTabs(cur) {
+      tabRow = h('div.st-tabs');
+      tabs().forEach(function (t) {
+        var badge = t[0] === 'support' ? X146.support.badge(B.support.unread()) : null;
+        var tb = h('div.st-tab.f' + (t[0] === cur ? '.on' : ''), [h('span', L(t[1])), badge ? h('span.badge', badge) : null]);
+        tb._tab = t[0];
+        tb.onEnter = function () { if (S.settingsTab !== t[0]) { S.settingsTab = t[0]; render(true); } };
+        tabRow.appendChild(tb);
+      });
+      list.track.appendChild(tabRow);
+    }
+    var X146 = B.b146;
+    function render(tabChanged) {
       var f = U.focused, fLabel = f && list.contains(f) && f.firstChild ? f.firstChild.textContent : null;
+      var onTab = !!(f && f._tab);
       U.clear(list.track);
       var prof = B.app.profile;
       var main = D.isMain(prof);
-      section(L('Account'));
-      row(L('Signed in as %@', A.email() || ''), null, null);
-      row(L('Devices'), null, function () { U.push(S.devices()); });
-      // build 88: abonnement (Gratis / Lifetime); statistieken, Nu aan het kijken en de geschiedenis horen bij Lifetime
-      var ent = A.entitlements();
-      if (ent) row(L('Subscription'), ent.free ? L('Free') : L('Lifetime'), function () { S.upgrade(null); });
-      function lock(f) { return A.allowed(f) ? null : S.lifetimeBadge(); }
-      // kijkstatistieken (build 68): hoofdprofiel alle profielen, andere profielen alleen hun eigen
-      row(L('Statistics'), lock('stats'), function () { S.gate('stats', function () { U.push(S.stats()); }); });
-      if (main) {
-        row(L('Watching now'), lock('now_watching'), function () { S.gate('now_watching', function () { U.push(S.streams()); }); });
-        row(L('Watch history (7 days)'), lock('now_watching'), function () { S.gate('now_watching', function () { U.push(S.watchLog()); }); });
-      }
-      row(L('Sign out'), null, function () {
-        U.modal({ title: L('Sign out'), text: L('Sign out of Bingr on this device?'), buttons: [
-          { label: L('Sign out'), fn: function () { B.app.signOut(); } }, { label: L('Cancel') }] });
-      }, { danger: true });
-      // build 75: hulp nodig? → support.bingr.online (QR-code)
-      row(L('Support'), S.SUPPORT_URL.replace(/^https?:\/\//, ''), function () { S.support(); });
-
-      section(L('Profile'));
-      row(L('Switch profile'), prof.name, function () { B.app.switchProfile(); });
-      // build 129: kijkgeschiedenis van dit profiel over alle servers (lokaal, = Android)
-      row(L('Watch history'), String(D.history().length), function () { U.push(S.historyList()); });
-      // build 128: categorieën aan/uit per profiel, van al je servers
-      // build 140: voor het hele account; kinderprofielen zien dit scherm niet
-      if (!(B.app.profile && B.app.profile.kids)) row(L('Categories on/off (NL, BE, DE…)'), null, function () { U.push(S.categoryChoices()); });
+      var cur = S.settingsTab;
+      if (!tabs().some(function (t) { return t[0] === cur; })) cur = S.settingsTab = 'general';
+      drawTabs(cur);
+      (TABS[cur] || TABS.general)(prof, main);
+      if (tabChanged || onTab) {
+        var tb = tabRow.querySelector('.st-tab.on');
+        if (tb) U.focus(tb, true);
+      } else if (fLabel) focusLabel(fLabel);
+    }
+    var TABS = {};
+    TABS.general = function (prof) {
+      section(L('Language'));
+      var lang = D.shared('appLanguage', '') || '';
+      var langLabel = '';
+      B.languages.forEach(function (l) { if (l[0] === lang) langLabel = l[0] ? l[1] : L('Automatic'); });
+      row(L('App language'), langLabel, function () {
+        U.choose(L('Language'), B.languages.map(function (l) { return { value: l[0], label: l[0] ? l[1] : L('Automatic') }; }), lang, function (v) {
+          D.setShared('appLanguage', v);
+          B.setLanguage(v);
+          B.app.rebuild();
+        });
+      });
+      section(L('Interface'));
+      B.app.interfaceSettingRows(row, onOff, render, { noLoad: true }); // build 102: startscherm en tabbladen
+      section(L('Appearance'));
       var accent = D.accentKey(prof);
       // build 88: accentkleuren horen bij Lifetime
       if (!A.allowed('themes')) row(L('Accent color'), h('span', [L('Red'), S.lifetimeBadge()]), function () { S.upgrade('themes'); });
@@ -2198,29 +2281,28 @@
           B.app.applyAccent(v); render();
         });
       });
-
-      section(L('Server'));
-      var src = Lib.source;
-      row(L('Active server'), src ? src.name : L('None'), function () {
-        var opts = D.sources.map(function (s) { return { value: s.id, label: s.name + '  ·  ' + s.kind }; });
-        if (!opts.length) { U.toast(L('No servers yet')); return; }
-        U.choose(L('Active server'), opts, src ? src.id : null, function (id) {
-          var s2 = D.sourceById(id);
-          if (!s2) return;
-          D.setActiveSource(id); Lib.select(s2); render();
-        });
+      section(L('Reminders'));
+      var rem = B.reminders.list();
+      row(L('Reminders'), String(rem.length), function () { U.push(S.remindersList()); });
+    };
+    TABS.playback = function () {
+      section(L('Player'));
+      var resume = B.bool(D.shared('resumeLastChannel', false)) === true;
+      row(L('Resume last channel'), onOff(resume), function () { D.setShared('resumeLastChannel', !resume); render(); });
+      var lpv = D.local('livePreview', true) !== false;
+      row(L('Live preview'), onOff(lpv), function () { D.setLocal('livePreview', !lpv); if (lpv) B.preview.stop(); render(); });
+      var zd = D.local('zapDelay', 600);
+      row(L('Zap delay'), (zd / 1000) + ' s', function () {
+        U.choose(L('Zap delay'), [0, 300, 600, 1000, 1500].map(function (v) { return { value: v, label: (v / 1000) + ' s' }; }), zd, function (v) { D.setLocal('zapDelay', v); render(); });
       });
-      row(L('Your servers'), String(D.sources.length), function () { U.push(S.servers()); });
-      // build 130: alle servers (eerst de actieve, dan de andere één voor één op de achtergrond)
-      row(L('Refresh now'), null, function () {
-        if (!D.sources.length) return;
-        if (Lib.refreshingAll) { U.toast(L('Updating…')); return; }
-        U.toast(L('Updating…'));
-        Lib.refreshAll(function (text, done) { if (text) U.toast(text, done ? 5000 : 3000); });
-      });
-
+      // build 82: trailer zonder geluid in de kop van film- en seriepagina's (alleen op deze tv)
+      section(L('Trailers'));
+      var autoTr = D.local('autoplayTrailers', true) !== false;
+      row(L('Play trailers automatically'), onOff(autoTr), function () { D.setLocal('autoplayTrailers', !autoTr); render(); });
+    };
+    TABS.language = function (prof) {
       // audio en ondertitels (settings.shared: audioLanguage, autoSubtitles, subtitleLanguage; gelijk met iOS en Android)
-      section(L('Audio & subtitles'));
+      section(L('Audio and subtitles'));
       var CLg = B.clang;
       var langOpts = ['nl', 'en', 'de', 'fr', 'es', 'it', 'pt', 'pl', 'tr', 'ar', 'hi'];
       // kijkvoorkeuren: de keuze geldt voor dit profiel (prefs); build 91: alleen het hoofdprofiel (of een account zonder
@@ -2238,13 +2320,6 @@
         U.choose(L('Default audio language'), [{ value: '', label: audLabel('') }, { value: 'stream', label: L('As in the stream') }]
           .concat(langOpts.map(function (c) { return { value: c, label: CLg.name(c) }; })), aud, function (v) { setViewing('audioLanguage', 'audioLanguage', v); });
       });
-      var autoS = CLg.autoSubtitles();
-      var autoLabels = { off: L('Off'), whenNeeded: L('When needed'), always: L('Always') };
-      row(L('Automatic subtitles'), autoLabels[autoS], function () {
-        U.choose(L('Automatic subtitles'), ['whenNeeded', 'always', 'off'].map(function (v) { return { value: v, label: autoLabels[v] }; }), autoS, function (v) {
-          setViewing('autoSubtitles', 'autoSubtitles', v);
-        });
-      });
       var subRaw = pv('streamSubtitleLanguage', 'subtitleLanguage');
       var subCur = subRaw === 'off' ? '' : CLg.norm(subRaw);
       var subAuto = L('Same as app') + ' (' + CLg.name(CLg.appLanguage()) + ')';
@@ -2255,13 +2330,15 @@
         });
       });
       B.app.subtitleSettingRows(row, render); // build 102: ondertitelgrootte
-
-      section('Trakt & OpenSubtitles');
-      var T = B.trakt, OS = B.opensubtitles;
-      if (T.allowed()) {
-        row('Trakt', T.isLoggedIn() ? (T.username() || L('On')) : (A.allowed('trakt') ? L('Off') : S.lifetimeBadge()), function () { S.traktMenu(render); });
-      } else row('Trakt', L('The server, Trakt and OpenSubtitles belong to the main account and are used by all profiles.'), null);
-      row('OpenSubtitles', OS.isLoggedIn() ? OS.username() : L('Off'), function () { S.openSubtitlesMenu(render); });
+      var autoS = CLg.autoSubtitles();
+      var autoLabels = { off: L('Off'), whenNeeded: L('When needed'), always: L('Always') };
+      row(L('Automatic subtitles'), autoLabels[autoS], function () {
+        U.choose(L('Automatic subtitles'), ['whenNeeded', 'always', 'off'].map(function (v) { return { value: v, label: autoLabels[v] }; }), autoS, function (v) {
+          setViewing('autoSubtitles', 'autoSubtitles', v);
+        });
+      });
+      section('OpenSubtitles');
+      var OS = B.opensubtitles;
       // build 91: eigen naam (niet te verwarren met de ondertiteltaal in de stream); ISO 639-1, ook een taal die hier niet in de lijst staat
       var osl = OS.normLanguage(OS.defaultLanguage());
       var oslabel = '';
@@ -2272,76 +2349,131 @@
           setViewing('openSubtitlesLanguage', 'subtitleLanguage', v);
         });
       });
-
-      section(L('Reminders'));
-      var rem = B.reminders.list();
-      row(L('Reminders'), String(rem.length), function () { U.push(S.remindersList()); });
-
-      // build 82: trailer zonder geluid in de kop van film- en seriepagina's (alleen op deze tv)
-      section(L('Interface'));
-      var autoTr = D.local('autoplayTrailers', true) !== false;
-      row(L('Play trailers automatically'), onOff(autoTr), function () { D.setLocal('autoplayTrailers', !autoTr); render(); });
-      B.app.interfaceSettingRows(row, onOff, render); // build 102: startscherm, tabbladen, verversen
-
-      section(L('App'));
-      var lang = D.shared('appLanguage', '') || '';
-      var langLabel = '';
-      B.languages.forEach(function (l) { if (l[0] === lang) langLabel = l[0] ? l[1] : L('Automatic'); });
-      row(L('Language'), langLabel, function () {
-        U.choose(L('Language'), B.languages.map(function (l) { return { value: l[0], label: l[0] ? l[1] : L('Automatic') }; }), lang, function (v) {
-          D.setShared('appLanguage', v);
-          B.setLanguage(v);
-          B.app.rebuild();
+      row('OpenSubtitles', OS.isLoggedIn() ? OS.username() : L('Off'), function () { S.settingsTab = 'connections'; render(true); });
+    };
+    TABS.servers = function () {
+      section(L('Your servers'));
+      var src = Lib.source;
+      row(L('Active server'), src ? src.name : L('None'), function () {
+        var opts = D.sources.map(function (s) { return { value: s.id, label: s.name + '  ·  ' + s.kind }; });
+        if (!opts.length) { U.toast(L('No servers yet')); return; }
+        U.choose(L('Active server'), opts, src ? src.id : null, function (id) {
+          var s2 = D.sourceById(id);
+          if (!s2) return;
+          D.setActiveSource(id); Lib.select(s2); render();
         });
       });
-      var resume = B.bool(D.shared('resumeLastChannel', false)) === true;
-      row(L('Resume last channel'), onOff(resume), function () { D.setShared('resumeLastChannel', !resume); render(); });
-      var pv = D.local('livePreview', true) !== false;
-      row(L('Live preview'), onOff(pv), function () { D.setLocal('livePreview', !pv); if (pv) B.preview.stop(); render(); });
-      var zd = D.local('zapDelay', 600);
-      row(L('Zap delay'), (zd / 1000) + ' s', function () {
-        U.choose(L('Zap delay'), [0, 300, 600, 1000, 1500].map(function (v) { return { value: v, label: (v / 1000) + ' s' }; }), zd, function (v) { D.setLocal('zapDelay', v); render(); });
-      });
-
+      row(L('Your servers'), String(D.sources.length), function () { U.push(S.servers()); });
+      // build 130: alle servers (eerst de actieve, dan de andere één voor één op de achtergrond)
+      row(L('Refresh now'), null, function () { S.refreshServers(); });
+      section(L('Update playlists'));
+      // build 145: "Servers laden bij openen" (per tv); build 146: de tv-gids volgt dezelfde keuze
+      B.app.loadOnOpenRow(row, render);
+      var at = src && Lib.stamps ? Lib.stamps[src.id] : 0;
+      row(L('TV guide'), at ? L('Updated %@', new Date(at).toLocaleString(B.lang || undefined)) : L('Never updated'), null);
+      note(L('Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.') + ' ' +
+        L('The TV guide is updated together with your servers.'));
+      // build 128: categorieën aan/uit; build 140: voor het hele account; kinderprofielen zien dit niet
+      if (!(B.app.profile && B.app.profile.kids)) {
+        section(L('Categories and channels'));
+        row(L('Categories on/off (NL, BE, DE…)'), null, function () { U.push(S.categoryChoices()); });
+      }
+    };
+    TABS.profiles = function (prof, main) {
+      section(L('Profile'));
+      row(L('Switch profile'), prof.name, function () { B.app.switchProfile(); });
+      // build 129: kijkgeschiedenis van dit profiel over alle servers (lokaal, = Android)
+      row(L('Watch history'), String(D.history().length), function () { U.push(S.historyList()); });
+      if (D.pinFor(prof)) {
+        row(L('This profile is protected with a PIN'), null, null);
+        // build 146: oude apps (≤ 145) kennen de hash niet
+        note(L("Also update Bingr on your other devices, otherwise the PIN won't work there."));
+      }
       section(L('Parental lock'));
       var pcOn = B.bool(D.shared('parentalControl', false)) === true;
       var mainPin = D.pinFor(D.mainProfile());
       if (main) {
         row(L('Parental lock'), onOff(pcOn), function () {
           var go = function () { D.setShared('parentalControl', !pcOn); setTimeout(function () { Lib.applyFilters(); render(); }, 50); };
-          if (mainPin && pcOn) U.askPIN(L('Enter PIN'), function (x) { return x === mainPin; }, go); else go();
+          if (mainPin && pcOn) U.askPIN(L('Enter PIN'), function (x) { return B.b146.pin.check(x, mainPin); }, go); else go();
         });
       } else row(L('Parental lock'), onOff(pcOn), null);
       if (mainPin) {
         row(PC.isUnlocked() ? L('Lock now') : L('Unlock with PIN'), null, function () {
           if (PC.isUnlocked()) { PC.lock(); render(); return; }
-          U.askPIN(L('Enter PIN'), function (x) { return x === mainPin; }, function () { PC.unlock(); render(); });
+          U.askPIN(L('Enter PIN'), function (x) { return B.b146.pin.check(x, mainPin); }, function () { PC.unlock(); render(); });
         });
       }
+    };
+    TABS.account = function (prof, main) {
+      section(L('Account'));
+      row(L('Signed in as %@', A.email() || ''), null, null);
+      // build 88: abonnement (Gratis / Lifetime); statistieken, Nu aan het kijken en de geschiedenis horen bij Lifetime
+      var ent = A.entitlements();
+      if (ent) row(L('Subscription'), ent.free ? L('Free') : L('Lifetime'), function () { S.upgrade(null); });
+      row(L('Devices'), null, function () { U.push(S.devices()); });
+      function lock(f) { return A.allowed(f) ? null : S.lifetimeBadge(); }
+      // kijkstatistieken (build 68): hoofdprofiel alle profielen, andere profielen alleen hun eigen
+      row(L('Statistics'), lock('stats'), function () { S.gate('stats', function () { U.push(S.stats()); }); });
+      if (main) {
+        row(L('Watching now'), lock('now_watching'), function () { S.gate('now_watching', function () { U.push(S.streams()); }); });
+        row(L('Watch history (7 days)'), lock('now_watching'), function () { S.gate('now_watching', function () { U.push(S.watchLog()); }); });
+      }
+      row(L('Sign out'), null, function () {
+        U.modal({ title: L('Sign out'), text: L('Sign out of Bingr on this device?'), buttons: [
+          { label: L('Sign out'), fn: function () { B.app.signOut(); } }, { label: L('Cancel') }] });
+      }, { danger: true });
+    };
+    TABS.connections = function () {
+      section(L('Connections'));
+      var T = B.trakt, OS = B.opensubtitles;
+      if (T.allowed()) {
+        row('Trakt', T.isLoggedIn() ? (T.username() || L('On')) : (A.allowed('trakt') ? L('Off') : S.lifetimeBadge()), function () { S.traktMenu(render); });
+      } else row('Trakt', L('The server, Trakt and OpenSubtitles belong to the main account and are used by all profiles.'), null);
+      row('OpenSubtitles', OS.isLoggedIn() ? OS.username() : L('Off'), function () { S.openSubtitlesMenu(render); });
+    };
+    TABS.support = function () { S.supportRows(list.track, row, section, note, render); };
+    TABS.diagnose = function () { S.diagnoseRows(list.track, row, section, note, render); };
+    TABS.about = function () {
       section(L('About'));
       row('Bingr ' + B.config.version + ' (build ' + B.config.build + ')', 'Samsung TV · Tizen', null);
-      // build 112: verplichte bronvermelding van TMDB en JustWatch (stond eerder onder de Home-rijen); focusbaar, zodat de
-      // afstandsbediening tot onderaan (Over) kan scrollen
-      if (B.discover) {
-        var note = h('div.st-note.f', B.discover.attribution());
-        note.onEnter = B.noop;
-        list.track.appendChild(note);
-      }
-      if (fLabel) focusLabel(fLabel);
-    }
+      row(L('Privacy'), 'bingr.online/privacy', function () { S.qrLink(L('Privacy'), S.PRIVACY_URL); });
+      row(L('Terms of use'), 'bingr.online/voorwaarden', function () { S.qrLink(L('Terms of use'), S.TERMS_URL); });
+      // build 75: hulp nodig? → support.bingr.online (QR-code)
+      row(L('Support'), S.SUPPORT_URL.replace(/^https?:\/\//, ''), function () { S.support(); });
+      // build 112: verplichte bronvermelding van TMDB en JustWatch; focusbaar, zodat de afstandsbediening tot onderaan kan
+      if (B.discover) note(B.discover.attribution());
+    };
     function focusLabel(t) {
       var rows = list.track.querySelectorAll('.st-row.f');
       for (var i = 0; i < rows.length; i++) if (rows[i].firstChild.textContent === t) { U.focus(rows[i], true); return; }
     }
     pg.refresh = render;
-    pg.onShow = function () { render(); };
+    pg.onShow = function () { render(false); if (S.settingsTab === 'support') B.support.refresh(true); };
+    pg.focusIn = function () {
+      var tb = tabRow && tabRow.querySelector('.st-tab.on');
+      if (tb) { U.focus(tb); return true; }
+      return false;
+    };
     function visibleRender() { if (el.parentNode && el.style.display !== 'none' && U.top() && U.top().el.contains(el)) render(); }
     var offConn = B.on('connections', visibleRender);
     // build 88: abonnement gewijzigd → sloten bijwerken
     var offEnt = B.on('entitlements', visibleRender);
-    pg.destroy = function () { offConn(); offEnt(); };
+    // build 146: supporttickets en badge, diagnose, tab van buitenaf gekozen
+    var offSup = B.on('support', visibleRender);
+    var offDiag = B.on('diag', visibleRender);
+    var offTab = B.on('settingsTab', function () { if (el.parentNode && el.style.display !== 'none') render(true); });
+    pg.destroy = function () { offConn(); offEnt(); offSup(); offDiag(); offTab(); };
     render();
     return pg;
+  };
+
+  /** Build 146: alle servers vernieuwen (profielmenu en Instellingen → Servers), met de bijwerk-indicator. */
+  S.refreshServers = function () {
+    if (!D.sources.length) return;
+    if (Lib.refreshingAll) { U.toast(L('Updating…')); return; }
+    U.toast(L('Updating…'));
+    Lib.refreshAll(function (text, done) { if (text) U.toast(text, done ? 5000 : 3000); });
   };
 
   /** Lijstscherm met laden (apparaten, nu kijken, geschiedenis, herinneringen, servers). */

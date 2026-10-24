@@ -345,7 +345,8 @@
 
   // MARK: laden en cachen
 
-  var EPG_TTL = 4 * 3600000; // build 102: de lijst zelf volgt Lib.refreshDue
+  // build 146: geen eigen verversen van de gids op tijd meer (was 4 uur): de gids volgt "Servers laden bij openen"
+  // (Nu bijwerken, Altijd, of handmatig met Servers vernieuwen). Bij het openen met een bewaarde lijst geldt de bewaarde gids.
   /** Gewenste gidskanalen met per kanaal de ondergrens: zenders met terugkijken tot 3 dagen terug, de rest 3 uur. */
   function wantedEpg(lib) {
     var w = {}, now = Date.now();
@@ -401,7 +402,7 @@
     if (!lib.epgURL) return Promise.resolve();
     if (B.media.isMediaServer(src.kind)) return Promise.resolve();
     return B.idb.get('epg:' + src.id).then(function (c) {
-      if (c && !force && Date.now() - c.at < EPG_TTL) return c.epg;
+      if (c && !force) return c.epg;
       return P.loadXMLTV(lib.epgURL, wantedEpg(lib)).then(function (epg) {
         if (Object.keys(epg).length) B.idb.set('epg:' + src.id, { at: Date.now(), epg: epg });
         return Object.keys(epg).length ? epg : (c ? c.epg : {});

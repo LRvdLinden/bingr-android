@@ -57,6 +57,7 @@
   U.platformIcon = function (p) {
     p = String(p || '');
     if (/^browser$/i.test(p)) return 'globe'; // webspeler op bingr.online (build 62)
+    if (/^windows$/i.test(p)) return 'desktop'; // build 146: de Windows-app
     if (/^(apple ?tv|tvos)$/i.test(p)) return 'appletv'; // build 74
     if (/TV|tizen/i.test(p)) return 'tv';
     if (/Mac/.test(p)) return 'laptop';
@@ -101,6 +102,7 @@
     space: '<path d="M4 10v4h16v-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
     tv: '<rect x="2.5" y="4.5" width="19" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 20.5h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     phone: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+    desktop: '<rect x="2.5" y="3.5" width="19" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 20.5h6M12 16.5v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     laptop: '<rect x="4.5" y="5" width="15" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2 18.5h20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     grid: '<rect x="3" y="3" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13" y="3" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="13" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13" y="13" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/>',
     bell: '<path d="M12 3a6 6 0 0 0-6 6v4.2L4 17h16l-2-3.8V9a6 6 0 0 0-6-6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 19.5a2.5 2.5 0 0 0 5 0" fill="none" stroke="currentColor" stroke-width="2"/>',
@@ -706,18 +708,27 @@
       if (err.setAttribute) err.setAttribute('data-wait', '1');
       timer = setTimeout(showWait, 1000);
     }
-    var s;
+    var s, busy = false;
     function typed(v) {
+      if (busy) { kb.setValue(pin); return; }
       if (waitLeft() > 0) { pin = ''; kb.setValue(''); draw(); showWait(); return; }
       pin = v; draw(); err.textContent = '';
       if (pin.length === 4) {
-        var good = check(pin);
-        if (X) { if (good) X.pinSucceeded(); else X.pinFailed(); }
-        if (good) { if (timer) clearTimeout(timer); U.pop(); onOK(pin); }
-        else {
-          err.textContent = L('Incorrect PIN'); pin = ''; kb.setValue(''); setTimeout(draw, 300);
-          if (waitLeft() > 0) showWait();
-        }
+        // build 146: de pincode is een hash; afleiden kan zonder WebCrypto een paar seconden duren ("Controleren…")
+        var res = check(pin);
+        if (res && typeof res.then === 'function') {
+          busy = true;
+          err.textContent = L('Checking…');
+          res.then(function (g) { busy = false; err.textContent = ''; finish(!!g); }, function () { busy = false; err.textContent = ''; finish(false); });
+        } else finish(!!res);
+      }
+    }
+    function finish(good) {
+      if (X) { if (good) X.pinSucceeded(); else X.pinFailed(); }
+      if (good) { if (timer) clearTimeout(timer); U.pop(); onOK(pin); }
+      else {
+        err.textContent = L('Incorrect PIN'); pin = ''; kb.setValue(''); setTimeout(draw, 300);
+        if (waitLeft() > 0) showWait();
       }
     }
     var kb = U.keyboard({ layout: 'pin', max: 4, onChange: typed, onDone: function () { typed(pin); } });
@@ -726,7 +737,7 @@
       if (name.charAt(0) === 'd' && name.length === 2) { kb.press(name.charAt(1)); return true; }
       return false;
     };
-    s.onBack = function () { if (timer) clearTimeout(timer); U.pop(); };
+    s.onBack = function () { if (busy) return; if (timer) clearTimeout(timer); U.pop(); };
     draw();
     U.push(s);
     showWait();

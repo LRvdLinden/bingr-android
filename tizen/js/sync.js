@@ -24,7 +24,9 @@
   D.mainSourceID = B.store.get('mainSourceID', null);
   D.settings = B.store.get('settings', null);            // {data, updatedAt} zoals de server het gaf
   D.collections = B.store.get('collections', null);      // ruwe section-data
-  D.pins = B.store.get('pins', {}) || {};                // kleine letters profiel-id → pincode
+  // build 146: kleine letters profiel-id → pinHash-object ({alg, iter, salt, hash}); een oude leesbare pincode (tekst)
+  // alleen tot hij gehasht is (B.b146.pin, migratePins)
+  D.pins = B.store.get('pins', {}) || {};
   // instellingen die op deze tv gewijzigd zijn maar nog niet geüpload (offline): {shared: {sleutel: waarde}, intro: {sleutel: markering}}
   var pendingSettings = B.store.get('settingsPending', null);
   // build 141: servers (met wachtwoorden) en pincodes staan in de kluis; na het laden opnieuw lezen
@@ -200,7 +202,11 @@
     B.emit('profiles');
   }
 
-  /** Profielen lezen; leeg account → één hoofdprofiel aanmaken en uploaden (zoals de andere apps doen). */
+  /**
+   * Profielen lezen (build 146: device-auth get_profiles); leeg account → één hoofdprofiel aanmaken en uploaden (zoals de
+   * andere apps doen). Een wijziging op deze tv die nog niet op de server staat (bijv. een accentkleur, offline gekozen) en
+   * nieuwer is dan de server, blijft staan en gaat mee met put_profiles (B.b146.profiles.plan, = Android).
+   */
   D.syncProfiles = function () {
     return A.readProfiles().then(function (list) {
       if (list == null) return false;
@@ -212,12 +218,39 @@
         var main = { id: B.uuid().toUpperCase(), name: name, avatar: { symbol: 'tv', colorIndex: 0, emoji: '📺' }, kids: false,
           ageLimit: null, isMain: true, order: 0, photo: null, updatedAt: B.iso() };
         list = list.concat([main]);
-        A.writeProfiles(list);
+        return A.writeProfiles(list).then(function (merged) { applyProfiles(merged || list); return true; });
+      }
+      var merged = mergeLocalProfiles(list);
+      if (merged.upload) {
+        return A.writeProfiles(merged.list).then(function (back) { applyProfiles(back || merged.list); return true; });
       }
       applyProfiles(list);
       return true;
     }, function () { return false; });
   };
+  /** Lokale profielen die nieuwer zijn dan de server houden (alleen velden die deze tv wijzigt); de server is verder de bron. */
+  function mergeLocalProfiles(list) {
+    var X = B.b146 && B.b146.profiles;
+    if (!X || !D.profiles.length) return { list: list, upload: false };
+    var mainP = D.mainProfile();
+    var plan = X.plan(D.profiles.map(function (p) { return { key: lower(p.id), updatedAt: p.updatedAt || null }; }),
+      list.map(function (o) { return { key: lower(o.id), updatedAt: o.updatedAt || null, deleted: o.deleted === true, isMain: o.isMain === true, order: B.int(o.order) }; }),
+      {}, mainP ? lower(mainP.id) : null);
+    var upload = false;
+    var out = list.map(function (o) {
+      var e = null;
+      plan.entries.forEach(function (x) { if (x.kind === 'keep' && x.row === lower(o.id)) e = x; });
+      if (!e) return o;
+      var p = D.profiles[e.local];
+      if (!X.newer(p.updatedAt || X.EPOCH, o.updatedAt || X.EPOCH)) return o;
+      // alleen de accentkleur wordt op de tv gewijzigd
+      upload = true;
+      var c = B.copy(o);
+      c.accentColor = p.accentColor; c.updatedAt = p.updatedAt;
+      return c;
+    });
+    return { list: out, upload: upload };
+  }
 
   /** Accentkleur van een profiel wijzigen (build 54: per profiel in account_data, met updatedAt = nu). */
   D.setAccent = function (profileId, key) {
@@ -230,7 +263,7 @@
       list.forEach(function (o) {
         if (o && lower(o.id) === lower(profileId) && o.deleted !== true) { o.accentColor = key; o.updatedAt = B.iso(); changed = true; }
       });
-      if (changed) return A.writeProfiles(list).then(function () { applyProfiles(list); });
+      if (changed) return A.writeProfiles(list).then(function (back) { if (back) applyProfiles(back); });
     }).catch(B.noop);
   };
 
@@ -249,7 +282,7 @@
         if (o && o.id && o.deleted !== true && !ACCENTS[lower(o.accentColor)]) { o.accentColor = old; o.updatedAt = now; changed = true; }
       });
       if (!changed) { B.store.set('accentMigrated', true); return; }
-      return A.writeProfiles(list).then(function (ok) { if (ok) { B.store.set('accentMigrated', true); applyProfiles(list); } });
+      return A.writeProfiles(list).then(function (back) { if (back) { B.store.set('accentMigrated', true); applyProfiles(back); } });
     }).catch(B.noop);
   };
 
@@ -576,23 +609,71 @@
   /** build 97: id van het profiel waarvan de kijkstatus nu geladen is (de speler schrijft alleen naar zijn eigen profiel). */
   D.activeProfileId = function () { return P.id; };
 
-  /** Pincodes van alle profielen uit de state (pin staat in profile.<id>). */
-  function readPins(sections) {
+  /**
+   * Pincodes van alle profielen uit de state (profile.<id>). Build 146: `pinHash` gaat voor; een leesbare `pin` zonder
+   * hash is van een oude app: die wordt meteen gehasht en geüpload ([migratePins], pinUpdatedAt blijft gelijk). Lokaal
+   * staat daarna alleen de hash.
+   */
+  function readPins(sections, prev) {
+    var C = B.b146 && B.b146.pinChoice;
+    if (!C) return { pins: {}, legacy: [] };
     var pins = {};
     Object.keys(sections).forEach(function (name) {
       if (lower(name).indexOf('profile.') !== 0) return;
       var d = sections[name] && sections[name].data;
-      if (!d || !B.has(d, 'pin')) return;
-      var v = d.pin;
-      if (v && typeof v === 'object') v = v.pin || v.value || v.code;
+      if (!d || typeof d !== 'object') return;
+      var r = C.read(d);
+      if (r.kind === 'absent') return;
       var id = lower(name.slice(8));
       var at = time(d.pinUpdatedAt) || 0;
+      var v = r.kind === 'hashed' ? r.hash : r.kind === 'legacy' ? r.pin : null;
       var cur = pins[id];
-      if (!cur || at >= cur.at) pins[id] = { at: at, pin: v ? String(v) : null };
+      if (!cur || at > cur.at || (at === cur.at && C.pick(cur.at, cur.v, at, v) === 'server')) pins[id] = { at: at, v: v, legacy: r.kind === 'legacy', name: name, data: d };
     });
-    var out = {};
-    Object.keys(pins).forEach(function (k) { if (pins[k].pin) out[k] = pins[k].pin; });
-    return out;
+    var out = {}, legacy = [];
+    Object.keys(pins).forEach(function (k) {
+      var e = pins[k];
+      if (e.v == null) return;
+      if (e.legacy) {
+        // al gehasht op deze tv: die hash houden tot migratePins hem gecontroleerd heeft (dan geen nieuwe salt nodig)
+        var known = prev && prev[k];
+        out[k] = known && typeof known === 'object' ? known : e.v;
+        legacy.push({ id: k, name: e.name, data: e.data, pin: e.v, known: known && typeof known === 'object' ? known : null });
+      } else out[k] = e.v;
+    });
+    return { pins: out, legacy: legacy };
+  }
+
+  /**
+   * Build 146: oude leesbare pincodes van de server hashen (één voor één, op de achtergrond: zonder WebCrypto kan dat op de
+   * tv een paar seconden duren) en uploaden met pinHash, pin: null en dezelfde pinUpdatedAt.
+   */
+  var migrating = false;
+  function migratePins(legacy) {
+    if (migrating || !legacy.length || !B.b146) return;
+    migrating = true;
+    var X = B.b146.pin;
+    var chain = Promise.resolve();
+    legacy.forEach(function (e) {
+      chain = chain.then(function () {
+        var known = e.known;
+        var reuse = known ? X.verify(e.pin, known).then(function (okv) { return okv ? known : null; }) : Promise.resolve(null);
+        return reuse.then(function (h) { return h || X.make(e.pin); }).then(function (h) {
+          D.pins[e.id] = h;
+          save();
+          var data = B.copy(e.data);
+          data.pinHash = h; data.pin = null;
+          return A.putState(e.name, data);
+        });
+      }).catch(function (err) { B.log('pincode hashen', err && err.message); });
+    });
+    chain.then(function () { migrating = false; B.emit('pins'); }, function () { migrating = false; });
+  }
+  /** Zorgt dat een upload van een profielsectie nooit een leesbare pincode bevat als deze tv de hash kent. */
+  function fixPin(json, id) {
+    var h = D.pins[lower(id)];
+    if (json && typeof json.pin === 'string' && h && typeof h === 'object' && !B.has(json, 'pinHash')) { json.pinHash = h; json.pin = null; }
+    return json;
   }
 
   var syncing = null, lastProgressUpload = 0, timer = null;
@@ -608,6 +689,8 @@
   /** build 97: sync voor een vast profielobject Q (zie P hierboven). */
   function startSync(Q) {
     syncing = A.getState().then(function (all) {
+      // build 146 (diagnose): laatste poging om met het account te synchroniseren en of die lukte
+      D.lastSyncAt = Date.now(); D.lastSyncOk = !!all;
       if (!all) return false;
       // instellingen: het geheel van de server; wijzigingen van deze tv die nog niet geüpload zijn gaan erover en worden verstuurd
       if (all.settings) {
@@ -615,8 +698,10 @@
         if (pendingSettings) { D.settings.data = applyPending(B.copy(D.settings.data), pendingSettings); uploadSettings(all.settings); }
       } else if (pendingSettings) uploadSettings(null);
       if (all.collections) D.collections = all.collections.data || null;
-      D.pins = readPins(all);
+      var rp = readPins(all, D.pins);
+      D.pins = rp.pins;
       save();
+      migratePins(rp.legacy);
       B.emit('settings');
       // connections (Trakt/OpenSubtitles) en herinneringen voegen zelf samen
       B.emit('state', all);
@@ -677,7 +762,7 @@
     persistP(P);
     if (changed && P === activeP()) B.emit('profileData');
     if (!needUpload) return true;
-    var json = toJSON(P.base, merged);
+    var json = fixPin(toJSON(P.base, merged), P.id);
     var targets = P.names.length ? P.names : ['profile.' + P.id];
     return Promise.all(targets.map(function (n) { return A.putState(n, json); })).then(function (res) {
       if (res.some(function (x) { return x == null; })) { P.dirty = true; persistP(P); return false; }
@@ -747,7 +832,7 @@
       if (stateKey(fixed) === stateKey(st)) return;
       if (seen[id]) return;
       seen[id] = true;
-      jobs.push(A.putState(name, toJSON(d, fixed)));
+      jobs.push(A.putState(name, fixPin(toJSON(d, fixed), id)));
     });
     var AS = B.allservers;
     if (AS && D.collections && AS.applyRemapCollections(D.collections)) {
