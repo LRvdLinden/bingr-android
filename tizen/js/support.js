@@ -34,7 +34,7 @@
     try { if (window.performance && performance.memory) return Math.round(performance.memory.usedJSHeapSize / 1048576); } catch (e) { /* stil */ }
     return null;
   }
-  function osLabel() { return A && A.osVersion ? A.osVersion() : 'Tizen'; }
+  function osLabel() { return A && A.osVersion ? A.osVersion() : B.platform.os; }
   function buildNo() { var b = parseInt(B.config.build, 10); return isFinite(b) ? b : 0; }
   function save() { try { B.store.set(KEY_CUR, record); } catch (e) { /* stil */ } }
 
@@ -138,7 +138,7 @@
   } catch (e) { /* buiten de tv */ }
   /** Samsung-modelcode ("QE55Q80C"): productinfo, anders tizen.systeminfo BUILD.model. */
   DG.model = function () { return String((A.model && A.model()) || sysModel || '').slice(0, 80); };
-  DG.osVersion = function () { return osLabel().replace(/^Tizen\s*/, '') || ''; };
+  DG.osVersion = function () { return B.platform.osVersion() || ''; };
   DG.language = function () {
     var lang = B.lang || 'en';
     var m = /^[A-Za-z]{2,3}[-_]([A-Za-z]{2})\b/.exec(String((navigator && navigator.language) || ''));
@@ -174,9 +174,9 @@
     });
   }
   function engine() { return window.webapis && webapis.avplay ? 'avplay' : 'html5'; }
-  function appJson(build) { return { platform: 'tizen', version: String(B.config.version || '').slice(0, 20), build: build || buildNo(), engine: engine() }; }
+  function appJson(build) { return { platform: B.platform.id, version: String(B.config.version || '').slice(0, 20), build: build || buildNo(), engine: engine() }; }
   function deviceJson() {
-    var d = { type: 'tv', manufacturer: 'Samsung', os: 'Tizen', osVersion: DG.osVersion(), language: DG.language() };
+    var d = { type: 'tv', manufacturer: B.platform.maker, os: B.platform.os, osVersion: DG.osVersion(), language: DG.language() };
     var m = DG.model();
     if (m) d.model = m;
     var sc = DG.screen();
@@ -429,7 +429,7 @@
     var c = SP.checkNew(subject, message);
     if (c) return Promise.resolve({ error: L(SP.errorKey(c)) });
     var body = { action: 'app_create', subject: String(subject).trim(), message: String(message).trim(), category: category,
-      device_id: A.deviceId(), platform: 'tizen', app_version: A.appVersion(), lang: B.lang === 'nl' ? 'nl' : 'en' };
+      device_id: A.deviceId(), platform: B.platform.id, app_version: A.appVersion(), lang: B.lang === 'nl' ? 'nl' : 'en' };
     if (diagnostics) body.diagnostics = diagnostics;
     return A.support(body).then(function (r) {
       if (!r || !r.ok || !r.json) return { error: SC.errorText(r) };

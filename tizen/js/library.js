@@ -412,7 +412,7 @@
         }
       }).then(function (lib) { lib.epgURL = P.urlValue(src.epgURL); return lib; });
     }
-    return Promise.reject(new Error(L('This kind of server is not supported on Samsung TV yet.')));
+    return Promise.reject(new Error(L(B.platform.texts.unsupportedServer)));
   }
   function loadEpg(src, lib, force) {
     if (!lib.epgURL) return Promise.resolve();

@@ -40,6 +40,13 @@ load('build146.js');
 load('build147.js');
 var X = B.b147, S = X.start;
 
+// MARK: platformlaag (een andere tv-app overschrijft alleen B.platform)
+eq('platform: Samsung', [B.platform.id, B.platform.name, B.platform.maker, B.platform.os], ['tizen', 'Samsung TV', 'Samsung', 'Tizen']);
+eq('platform: config volgt', B.config.platform, 'tizen');
+ok('platform: teksten', B.platform.texts.unsupportedServer.indexOf('Samsung TV') >= 0 && !!B.platform.texts.multiviewOnePlayer);
+eq('platform: model buiten de tv', B.platform.model(), '');
+ok('platform: exit is een functie', typeof B.platform.exit === 'function');
+
 // MARK: eerlijke starttijden (de mijlpalen van ticket #1.030)
 function marks(list) { return list.map(function (m) { return { name: m[0], ms: m[1] }; }); }
 var t = S.timing(marks([['start', 0], ['account', 200], ['first_frame', 300], ['splash', 4100], ['profiles', 4100],

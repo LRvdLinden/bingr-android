@@ -227,16 +227,13 @@
     if (!id) { id = B.uuid(); B.store.set('deviceId', id); }
     return id;
   };
-  A.model = function () {
-    try { if (window.webapis && webapis.productinfo) return webapis.productinfo.getRealModel() || webapis.productinfo.getModel() || ''; } catch (e) { /* stil */ }
-    return '';
-  };
-  /** Naam op het koppelscherm van de telefoon. */
-  A.deviceName = function () { return 'Samsung TV'; };
+  A.model = function () { return B.platform.model() || ''; };
+  /** Naam op het koppelscherm van de telefoon (build 147: uit B.platform). */
+  A.deviceName = function () { return B.platform.name; };
   /** Naam in de apparatenlijst: "Samsung TV (QE55Q80B)". */
   A.deviceDisplayName = function () {
     var m = A.model();
-    return m ? 'Samsung TV (' + m + ')' : 'Samsung TV';
+    return m ? B.platform.name + ' (' + m + ')' : B.platform.name;
   };
   A.isRegistered = function () { return !!B.store.get('deviceRegistered', false); };
 
@@ -270,21 +267,14 @@
   };
   /** "Tizen 6.5": platformversie van de tv, anders uit de user agent. */
   A.osVersion = function () {
-    var v = null;
-    try {
-      if (window.tizen && tizen.systeminfo && tizen.systeminfo.getCapability) v = tizen.systeminfo.getCapability('http://tizen.org/feature/platform.version');
-    } catch (e) { v = null; }
-    if (!v) {
-      var m = /Tizen[ \/](\d+(?:\.\d+)?)/i.exec(navigator.userAgent || '');
-      if (m) v = m[1];
-    }
-    return v ? 'Tizen ' + String(v).split('.').slice(0, 2).join('.') : 'Tizen';
+    var v = B.platform.osVersion();
+    return v ? B.platform.os + ' ' + v : B.platform.os;
   };
   function versionFields() { return { app_version: A.appVersion(), os_version: A.osVersion() }; }
 
   /** register_device → 'ok' | {limit, devices} (te veel apparaten) | 'failed'. */
   A.registerDevice = function () {
-    return deviceCall('register_device', A.deviceId(), B.assign({ name: A.deviceDisplayName(), platform: B.config.platform }, versionFields())).then(function (r) {
+    return deviceCall('register_device', A.deviceId(), B.assign({ name: A.deviceDisplayName(), platform: B.platform.id }, versionFields())).then(function (r) {
       if (!r) return 'failed';
       var j = r.json || {};
       if (r.status === 403 && (r.errorCode === 'device_limit' || j.devices)) return { limit: j.limit || 15, devices: parseDevices(j.devices), plan: j.plan || null };
@@ -313,10 +303,11 @@
     if (!name) return Promise.reject(generic());
     return deviceCall('rename_device', id, { name: name }).then(function (r) { if (!r || !r.ok) throw generic(); });
   };
-  /** Platformnaam voor mensen: "tizen" heet "Samsung TV" (ACCOUNT.md, build 45/55). */
+  /** Platformnaam voor mensen: "tizen" heet "Samsung TV" (ACCOUNT.md, build 45/55), "webos" "LG TV" (build 147). */
   A.platformLabel = function (p) {
     var l = String(p || '').toLowerCase();
     if (l === 'tizen') return L('Samsung TV');
+    if (l === 'webos') return L('LG TV'); // build 147: de LG-tv-app
     if (l === 'browser') return L('Browser'); // webspeler op bingr.online (build 62)
     if (l === 'windows') return 'Windows'; // build 146: de Windows-app
     return String(p || '');
@@ -565,7 +556,7 @@
     if (!A.isSignedIn()) return Promise.resolve(false);
     if (entBusy) return entBusy;
     if (!force && Date.now() - entAt < 60000) return Promise.resolve(false);
-    entBusy = authed({ action: 'entitlements', platform: B.config.platform || 'tizen' }).then(function (r) {
+    entBusy = authed({ action: 'entitlements', platform: B.platform.id }).then(function (r) {
       if (!r || !r.ok || !r.json || unknownAction(r)) return false;
       return A.applyEntitlements(r.json);
     }, function () { return false; }).then(function (ok) { entBusy = null; return ok; });

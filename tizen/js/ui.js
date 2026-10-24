@@ -59,7 +59,7 @@
     if (/^browser$/i.test(p)) return 'globe'; // webspeler op bingr.online (build 62)
     if (/^windows$/i.test(p)) return 'desktop'; // build 146: de Windows-app
     if (/^(apple ?tv|tvos)$/i.test(p)) return 'appletv'; // build 74
-    if (/TV|tizen/i.test(p)) return 'tv';
+    if (/TV|tizen|webos/i.test(p)) return 'tv'; // build 147: ook de LG-tv-app (webos)
     if (/Mac/.test(p)) return 'laptop';
     return 'phone';
   };

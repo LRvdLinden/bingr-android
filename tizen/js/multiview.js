@@ -238,7 +238,7 @@
     // Samsung-tv: één AVPlay-speler. Eén keer per sessie uitleggen waarom de andere tegels gedempt via HTML5 spelen.
     if (B.engines.hasAVPlay() && !MV.explained) {
       MV.explained = true;
-      setTimeout(function () { if (!closed) U.toast(L('A Samsung TV has one full video player: the tile with sound uses it, the other tiles play muted where the TV can.'), 6000); }, 800);
+      setTimeout(function () { if (!closed) U.toast(L(B.platform.texts.multiviewOnePlayer), 6000); }, 800);
     }
     document.documentElement.classList.add('playing');
     U.push(screen);

@@ -33,7 +33,10 @@ DYNAMIC = ['Search', 'Home', 'Live TV', 'Movies', 'Series', 'My List', 'Settings
            'This ticket is closed. Create a new ticket.', "This ticket wasn't found.", 'The diagnostics are too large to send.',
            'Something went wrong. Please try again.', 'Ask', 'Always', 'Never, manually only',
            # build 147: samenvatting van de start en soort verbinding (js/build147.js, via een variabele)
-           'Start: good', 'Start: slow', 'Start: stuck', 'Wi-Fi', 'Mobile', 'Ethernet', 'No connection', 'Unknown']
+           'Start: good', 'Start: slow', 'Start: stuck', 'Wi-Fi', 'Mobile', 'Ethernet', 'No connection', 'Unknown',
+           # build 147: platformlaag (B.platform.texts in js/core.js, via een variabele)
+           'This kind of server is not supported on Samsung TV yet.',
+           'A Samsung TV has one full video player: the tile with sound uses it, the other tiles play muted where the TV can.', 'LG TV']
 
 PAT = [re.compile(r'\bL\(\s*"((?:[^"\\]|\\.)*)"'), re.compile(r"\bL\(\s*'((?:[^'\\]|\\.)*)'")]
 

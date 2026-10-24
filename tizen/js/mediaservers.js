@@ -61,7 +61,7 @@
     this.userID = session ? session.userID : null;
   }
   Jellyfin.prototype.headers = function () {
-    var v = 'MediaBrowser Client="Bingr", Device="Samsung TV", DeviceId="' + B.account.deviceId() + '", Version="1.1.0"';
+    var v = 'MediaBrowser Client="Bingr", Device="' + B.platform.name + '", DeviceId="' + B.account.deviceId() + '", Version="1.1.0"';
     if (this.token) v += ', Token="' + this.token + '"';
     return { 'X-Emby-Authorization': v, 'Authorization': v };
   };
@@ -136,7 +136,7 @@
 
   function plexHeaders() {
     return { 'X-Plex-Product': 'Bingr', 'X-Plex-Client-Identifier': B.account.deviceId(), 'X-Plex-Version': '1.1.0',
-      'X-Plex-Device-Name': 'Samsung TV', 'X-Plex-Platform': 'Tizen', 'Accept': 'application/json' };
+      'X-Plex-Device-Name': B.platform.name, 'X-Plex-Platform': B.platform.os, 'Accept': 'application/json' };
   }
   var Plex = M.Plex = function (session) { this.s = session; };
   Plex.createPin = function () {
@@ -371,7 +371,7 @@
         return new Stremio(addons).library();
       });
     }
-    return Promise.reject(fail(L('This kind of server is not supported on Samsung TV yet.')));
+    return Promise.reject(fail(L(B.platform.texts.unsupportedServer)));
   };
   M.stremioAddons = {};
   M.stremioFor = function (src) {

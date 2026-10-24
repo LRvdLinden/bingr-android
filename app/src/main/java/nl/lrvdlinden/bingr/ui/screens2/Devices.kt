@@ -75,15 +75,20 @@ import java.util.Date
 fun isTizenPlatform(platform: String): Boolean =
     platform.equals("tizen", ignoreCase = true) || platform.equals("Samsung TV", ignoreCase = true)
 
+/** Build 147: LG-tv-app (webOS) meldt zich met platform `webos`. */
+fun isWebOSPlatform(platform: String): Boolean =
+    platform.equals("webos", ignoreCase = true) || platform.equals("LG TV", ignoreCase = true)
+
 /** Webspeler op bingr.online (build 62) meldt zich met platform `browser`; naam zoals "Chrome op Mac". */
 fun isBrowserPlatform(platform: String): Boolean = platform.equals("browser", ignoreCase = true)
 
 /** Build 146: de Windows-app (webspeler in een eigen venster) meldt zich met platform `windows`. */
 fun isWindowsPlatform(platform: String): Boolean = platform.equals("windows", ignoreCase = true)
 
-/** Platformnaam onder de apparaatnaam (`tizen` wordt "Samsung TV", `browser` wordt "Browser", `windows` wordt "Windows"). */
+/** Platformnaam onder de apparaatnaam (`tizen` wordt "Samsung TV", `webos` wordt "LG TV", `browser` wordt "Browser", `windows` wordt "Windows"). */
 fun devicePlatformLabel(platform: String): String = when {
     isTizenPlatform(platform) -> L("Samsung TV")
+    isWebOSPlatform(platform) -> L("LG TV")
     isBrowserPlatform(platform) -> L("Browser")
     isWindowsPlatform(platform) -> "Windows"
     else -> platform
@@ -122,7 +127,7 @@ private const val APPLE_TV_FRAME = "M5.20687 19.4314L14.2907 19.4314C15.949 19.4
 private const val APPLE_TV_LOGO = "M4.85163 12.6004C5.26284 12.6004 5.4373 12.3138 5.94819 12.3138C6.47155 12.3138 6.59616 12.6004 7.04476 12.6004C7.49335 12.6004 7.79241 12.1768 8.09148 11.7655C8.39054 11.3045 8.54007 10.8434 8.54007 10.8185C8.52761 10.8185 7.64288 10.4571 7.64288 9.46027C7.64288 8.61293 8.32823 8.22664 8.36562 8.18925C7.92948 7.56621 7.23167 7.54128 7.04476 7.54128C6.53386 7.54128 6.12265 7.82789 5.86097 7.82789C5.58683 7.82789 5.22546 7.56621 4.77687 7.56621C3.95444 7.56621 3.1071 8.2391 3.1071 9.53503C3.1071 10.345 3.40616 11.1923 3.79245 11.7406C4.14136 12.2141 4.42796 12.6004 4.85163 12.6004ZM5.89835 7.45406C6.5214 7.45406 7.16937 6.78117 7.15691 6.04597C7.16937 6.00859 7.15691 5.95875 7.14444 5.92136C6.48402 5.94628 5.81112 6.60671 5.81112 7.32945C5.81112 7.36683 5.81112 7.42914 5.82359 7.4416C5.83605 7.45406 5.86097 7.45406 5.89835 7.45406ZM11.0073 12.5755C11.2192 12.5755 11.4435 12.563 11.5556 12.5381L11.5805 12.5257L11.5805 11.7157L11.5432 11.7157C11.4809 11.7282 11.3313 11.7406 11.2316 11.7406C10.8578 11.7406 10.6958 11.5662 10.6958 11.1799L10.6958 8.60046L11.593 8.60046L11.593 7.77804L10.6958 7.77804L10.6958 6.65656L9.68648 6.65656L9.68648 7.77804L9.00112 7.77804L9.00112 8.60046L9.68648 8.60046L9.68648 11.292C9.68648 12.2017 10.0728 12.5755 11.0073 12.5755ZM13.6864 12.5381L14.7332 12.5381L16.4029 7.77804L15.3562 7.77804L14.2223 11.4914L13.0759 7.77804L11.9917 7.77804Z"
 
 /** Icoon per platform. */
-fun deviceIcon(platform: String): ImageVector = if (isTizenPlatform(platform)) Icons.Default.Tv
+fun deviceIcon(platform: String): ImageVector = if (isTizenPlatform(platform) || isWebOSPlatform(platform)) Icons.Default.Tv
 else if (isBrowserPlatform(platform)) Icons.Default.Language
 else if (isWindowsPlatform(platform)) Icons.Default.DesktopWindows
 else if (isAppleTvPlatform(platform)) AppleTvIcon else when (platform) {

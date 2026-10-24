@@ -1046,7 +1046,8 @@
   "Wi-Fi": "Wi-Fi",
   "Mobile": "خلوي",
   "Ethernet": "إيثرنت",
-  "No connection": "لا يوجد اتصال"
+  "No connection": "لا يوجد اتصال",
+  "LG TV": "تلفزيون LG"
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -2095,7 +2096,8 @@
   "Wi-Fi": "WLAN",
   "Mobile": "Mobilfunk",
   "Ethernet": "Ethernet",
-  "No connection": "Keine Verbindung"
+  "No connection": "Keine Verbindung",
+  "LG TV": "LG TV"
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -3144,7 +3146,8 @@
   "Wi-Fi": "Wi-Fi",
   "Mobile": "Móvil",
   "Ethernet": "Ethernet",
-  "No connection": "Sin conexión"
+  "No connection": "Sin conexión",
+  "LG TV": "LG TV"
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -4193,7 +4196,8 @@
   "Wi-Fi": "Wi-Fi",
   "Mobile": "Mobile",
   "Ethernet": "Ethernet",
-  "No connection": "Pas de connexion"
+  "No connection": "Pas de connexion",
+  "LG TV": "TV LG"
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -5242,7 +5246,8 @@
   "Wi-Fi": "Wi-Fi",
   "Mobile": "Mobile",
   "Ethernet": "Ethernet",
-  "No connection": "Nessuna connessione"
+  "No connection": "Nessuna connessione",
+  "LG TV": "TV LG"
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -6305,7 +6310,8 @@
   "Wi-Fi": "Wifi",
   "Mobile": "Mobiel",
   "Ethernet": "Ethernet",
-  "No connection": "Geen verbinding"
+  "No connection": "Geen verbinding",
+  "LG TV": "LG TV"
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -7354,7 +7360,8 @@
   "Wi-Fi": "Wi-Fi",
   "Mobile": "Komórkowa",
   "Ethernet": "Ethernet",
-  "No connection": "Brak połączenia"
+  "No connection": "Brak połączenia",
+  "LG TV": "Telewizor LG"
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -8403,7 +8410,8 @@
   "Wi-Fi": "Wi-Fi",
   "Mobile": "Móvel",
   "Ethernet": "Ethernet",
-  "No connection": "Sem ligação"
+  "No connection": "Sem ligação",
+  "LG TV": "TV LG"
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -9452,7 +9460,8 @@
   "Wi-Fi": "Wi-Fi",
   "Mobile": "Mobil",
   "Ethernet": "Ethernet",
-  "No connection": "Bağlantı yok"
+  "No connection": "Bağlantı yok",
+  "LG TV": "LG TV"
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -10501,6 +10510,7 @@
   "Wi-Fi": "Wi-Fi",
   "Mobile": "移动网络",
   "Ethernet": "以太网",
-  "No connection": "无连接"
+  "No connection": "无连接",
+  "LG TV": "LG 电视"
  }
 }

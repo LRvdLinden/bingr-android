@@ -134,7 +134,7 @@
       busy = true; err.textContent = '';
       var req = signup ? auth('/auth/v1/signup', { email: email.trim(), password: pw, data: { lang: B.lang, first_name: firstName, last_name: lastName } })
         // build 141: inloggen via de functie login (blokkade per account); bestaat die niet (404), dan de directe route
-        : auth('/functions/v1/login', { email: email.trim(), password: pw, device_id: A.deviceId(), platform: B.config.platform }).then(function (r) {
+        : auth('/functions/v1/login', { email: email.trim(), password: pw, device_id: A.deviceId(), platform: B.platform.id }).then(function (r) {
           if (r.status !== 404) return r;
           return auth('/auth/v1/token?grant_type=password', { email: email.trim(), password: pw });
         });
@@ -2438,7 +2438,7 @@
     TABS.diagnose = function () { S.diagnoseRows(list.track, row, section, note, render); };
     TABS.about = function () {
       section(L('About'));
-      row('Bingr ' + B.config.version + ' (build ' + B.config.build + ')', 'Samsung TV · Tizen', null);
+      row('Bingr ' + B.config.version + ' (build ' + B.config.build + ')', B.platform.name + ' · ' + B.platform.os, null);
       row(L('Privacy'), 'bingr.online/privacy', function () { S.qrLink(L('Privacy'), S.PRIVACY_URL); });
       row(L('Terms of use'), 'bingr.online/voorwaarden', function () { S.qrLink(L('Terms of use'), S.TERMS_URL); });
       // build 75: hulp nodig? → support.bingr.online (QR-code)

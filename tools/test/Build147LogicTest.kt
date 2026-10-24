@@ -16,7 +16,7 @@ private var failures = 0
 private var checks = 0
 private fun eq(name: String, got: Any?, want: Any?) {
     checks++
-    if (got != want) { failures++; println("FOUT $name kreeg <$got>, verwacht <$want>") }
+    if (got != want) { failures++; println("FOUT $name kreeg <$got>, verwacht <$want>"); println("::error title=Build147LogicTest::$name") }
 }
 private fun ok(name: String, v: Boolean) = eq(name, v, true)
 
@@ -254,10 +254,11 @@ fun main() {
         ok("stukjes: hoofdthread nooit langer dan 250 ms vast (gat ${main.maxGap.get()} ms)", main.maxGap.get() <= 250)
         eq("stukjes: alles gefilterd", out.size, movies.count { it.group !in hidden })
 
-        // tegenproef: hetzelfde werk 2,5 s lang óp de hoofdthread → de bewaking ziet een hang, met taak en stack
+        // tegenproef: hetzelfde werk 3,5 s lang óp de hoofdthread → de bewaking ziet een hang, met taak en stack
+        // (ping elke seconde, 2 s zonder antwoord = hang: een blok van 3 s of langer wordt dus altijd gezien)
         main.exec.submit {
             main.task = "catalogus sorteren"
-            val until = FakeMain.now() + 2_500
+            val until = FakeMain.now() + 3_500
             var n = 0
             while (FakeMain.now() < until) { prepare(movies, channels, hidden); n++ }
             main.task = null

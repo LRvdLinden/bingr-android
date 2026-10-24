@@ -36,7 +36,7 @@
       Promise.resolve().then(function () { return A.lastStreamStop ? A.lastStreamStop() : null; }).catch(B.noop)
     ]);
     withTimeout(work, 1500).then(quit, quit);
-    function quit() { try { tizen.application.getCurrentApplication().exit(); } catch (e) { B.log('exit'); exiting = false; } }
+    function quit() { try { B.platform.exit(); } catch (e) { B.log('exit'); exiting = false; } }
   };
   var exitArmed = 0;
   app.confirmExit = function () {

@@ -18,6 +18,42 @@
     version: '__BINGR_VERSION__'
   };
 
+  /**
+   * Build 147: platformlaag. Alles wat de tv zelf noemt of van het tv-systeem vraagt, staat hier: naam, merk, systeem,
+   * model, systeemversie, afsluiten en de teksten die het merk noemen (Engelse sleutels uit Translations.json). Een andere
+   * tv-app op dezelfde basis (LG webOS) overschrijft alleen dit object, vóór de andere scripts.
+   */
+  B.platform = window.BINGR_PLATFORM || {
+    id: 'tizen',               // `platform` naar de server (register_device, login, entitlements, support, diagnose)
+    name: 'Samsung TV',        // apparaatnaam (koppelen, apparatenlijst, Plex/Jellyfin), "Samsung TV (QE55Q80B)"
+    maker: 'Samsung',          // device.manufacturer en "Samsung QE55Q80B"
+    os: 'Tizen',               // device.os, "Tizen 6.5"
+    texts: {
+      unsupportedServer: 'This kind of server is not supported on Samsung TV yet.',
+      multiviewOnePlayer: 'A Samsung TV has one full video player: the tile with sound uses it, the other tiles play muted where the TV can.'
+    },
+    /** Modelcode ("QE55Q80B") of ''. */
+    model: function () {
+      try { if (window.webapis && webapis.productinfo) return webapis.productinfo.getRealModel() || webapis.productinfo.getModel() || ''; } catch (e) { /* stil */ }
+      return '';
+    },
+    /** Versie van het systeem ("6.5") of ''. */
+    osVersion: function () {
+      var v = null;
+      try {
+        if (window.tizen && tizen.systeminfo && tizen.systeminfo.getCapability) v = tizen.systeminfo.getCapability('http://tizen.org/feature/platform.version');
+      } catch (e) { v = null; }
+      if (!v) {
+        var m = /Tizen[ \/](\d+(?:\.\d+)?)/i.exec(navigator.userAgent || '');
+        if (m) v = m[1];
+      }
+      return v ? String(v).split('.').slice(0, 2).join('.') : '';
+    },
+    /** De app sluiten (gooit buiten de tv). */
+    exit: function () { tizen.application.getCurrentApplication().exit(); }
+  };
+  B.config.platform = B.platform.id;
+
   // MARK: kleine hulpfuncties
 
   B.noop = function () {};

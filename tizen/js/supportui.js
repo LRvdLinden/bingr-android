@@ -215,8 +215,8 @@
   S.diagnoseRows = function (track, row, section, note, render) {
     section(L('This device'));
     row(L('Device type'), L('TV'), null);
-    row(L('Model'), DG.model() ? 'Samsung ' + DG.model() : 'Samsung TV', null);
-    row(L('System'), 'Tizen ' + DG.osVersion(), null);
+    row(L('Model'), DG.model() ? B.platform.maker + ' ' + DG.model() : B.platform.name, null);
+    row(L('System'), B.platform.os + ' ' + DG.osVersion(), null);
     row(L('App version'), B.config.version + ' (' + B.config.build + ')', null);
     row(L('Language'), DG.language(), null);
 
@@ -243,7 +243,7 @@
       if (A.isSignedIn()) {
         row(L('Send to support'), null, function () {
           DG.startFull(p).then(function (j) {
-            return SC.create(L('Start diagnostics') + ' · Samsung ' + (DG.model() || 'TV'), 'apps', L("Start diagnostics from the app (previous start didn't finish)."), j);
+            return SC.create(L('Start diagnostics') + ' · ' + (DG.model() ? B.platform.maker + ' ' + DG.model() : B.platform.name), 'apps', L("Start diagnostics from the app (previous start didn't finish)."), j);
           }).then(function (r) {
             if (r.number) { DG.clearProblem(); U.toast(L('Sent as ticket #%d.', r.number), 4000); } else U.toast(r.error, 4000);
           });
@@ -288,7 +288,7 @@
       row(L('View'), null, function () { S.diagView(d); });
       if (A.isSignedIn()) {
         row(L('Send to support'), sendResult, function () {
-          SC.create(L('App diagnostics') + ' · Samsung ' + (DG.model() || 'TV'), 'apps', L('App diagnostics sent from the app.'), d).then(function (r) {
+          SC.create(L('App diagnostics') + ' · ' + (DG.model() ? B.platform.maker + ' ' + DG.model() : B.platform.name), 'apps', L('App diagnostics sent from the app.'), d).then(function (r) {
             sendResult = r.number ? L('Sent as ticket #%d.', r.number) : r.error;
             render();
           });
