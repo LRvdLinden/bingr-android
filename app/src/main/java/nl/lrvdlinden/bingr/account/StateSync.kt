@@ -1616,7 +1616,7 @@ object StateSync {
         val choice = Build146Logic.PinChoice.read(o.containsKey("pinHash"), hashObj, hashEl is JsonNull, o.containsKey("pin"), plain)
         val pinAt = time(o["pinUpdatedAt"]) ?: (v as? JsonObject)?.let { time(it["updatedAt"]) } ?: 0L
         var legacy = false
-        val pin = when (choice) {
+        val pin: Item<String>? = when (choice) {
             is Build146Logic.PinChoice.Server.Absent -> null
             is Build146Logic.PinChoice.Server.Hashed -> Item(pinAt, choice.hash.json())
             is Build146Logic.PinChoice.Server.Legacy -> {
