@@ -23,6 +23,11 @@ import java.util.TimeZone
  * Build 146: diagnose-bijlage (schema 1, docs/ACCOUNT.md → "Diagnose-bijlage"): de startdiagnose (`start`) en de
  * app-diagnose (`app`). Geen persoonsgegevens: geen e-mail, namen (ook niet de apparaatnaam), gebruikersnamen,
  * wachtwoorden, tokens, URL's of servernamen, IP-/MAC-adressen, titels of zenders.
+ *
+ * Build 147: schema 2 (docs/ACCOUNT.md → "Build 147"). Elke bijlage (`start` en `app`) heeft altijd de startdiagnose:
+ * `start` (samenvatting goed/traag/vastgelopen, app-tijd, wachten op de gebruiker, de vorige start met zijn probleem),
+ * `fetch` (per server s1, s2, … en soort: geleverd, leeg, mislukt, verborgen), `network.type` en `storage` (één totaal
+ * met cache, catalogus en downloads die samen optellen, plus vrij op het apparaat).
  */
 object Diagnostics {
     private val ctx: Context get() = AppState.appContext
@@ -126,14 +131,17 @@ object Diagnostics {
     private fun connection(): Triple<Boolean, String, Boolean> = runCatching {
         val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return@runCatching Triple(false, "none", false)
-        val type = when {
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
-            else -> "other"
-        }
+        // build 147: wifi, cellular of ethernet (een VPN erboven: het onderliggende transport); anders wat de bewaking zag
+        val type = Build147Logic.NetType.of(
+            ethernet = caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET),
+            wifi = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+            cellular = caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR),
+        ).let { if (it == "unknown") StartDiagnostics.netType else it }
         Triple(caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET), type, caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN))
-    }.getOrDefault(Triple(false, "unknown", false))
+    }.getOrDefault(Triple(false, StartDiagnostics.netType, false))
+
+    /** Build 147: soort verbinding voor `network.type` (`wifi`, `cellular`, `ethernet` of `unknown`). */
+    fun networkType(): String = connection().second.let { if (it in setOf("wifi", "cellular", "ethernet")) it else "unknown" }
 
     /**
      * Korte netwerkcheck: Bingr-server (device-auth `ping`) en de eigen IPTV-server (alleen het adres van de server, een
@@ -167,6 +175,7 @@ object Diagnostics {
         )
     }
 
+    /** Build 147: [usedMB] = cache + catalogus ([dbMB]: catalogi en app-gegevens) + downloads, precies opgeteld. */
     data class Storage(val usedMB: Int, val freeMB: Int, val cacheMB: Int, val dbMB: Int, val downloadsMB: Int)
 
     private fun dirBytes(f: File?, budget: IntArray): Long {
@@ -178,13 +187,88 @@ object Diagnostics {
 
     fun storage(): Storage {
         val budget = intArrayOf(20_000)
-        val cache = dirBytes(ctx.cacheDir, budget)
-        val files = dirBytes(ctx.filesDir, budget)
+        val cache = dirBytes(ctx.cacheDir, budget) + dirBytes(ctx.externalCacheDir, budget)
+        // catalogus = de bewaarde catalogi (files/servercache) en de andere app-gegevens (profielen, gids, databases)
+        val files = dirBytes(ctx.filesDir, budget) + dirBytes(runCatching { ctx.getDatabasePath("x").parentFile }.getOrNull(), budget)
         val dl = dirBytes(ctx.getExternalFilesDir("downloads"), budget)
-        val free = runCatching { StatFs(ctx.filesDir.path).availableBytes }.getOrDefault(0L)
-        val mb = { b: Long -> (b / 1_048_576L).toInt() }
-        return Storage(mb(cache + files + dl), mb(free), mb(cache), mb(files), mb(dl))
+        val free = runCatching { StatFs(ctx.filesDir.path).availableBytes }.getOrNull()
+        val p = Build147Logic.Storage.of(cache, files, dl, free)
+        return Storage(p.totalMB, p.freeMB ?: 0, p.cacheMB, p.catalogMB, p.downloadsMB)
     }
+
+    private fun storageJson(st: Storage) = buildJsonObject {
+        put("totalMB", st.usedMB); put("cacheMB", st.cacheMB); put("catalogMB", st.dbMB); put("downloadsMB", st.downloadsMB)
+        put("freeMB", st.freeMB)
+    }
+
+    // MARK: build 147: startdiagnose (deze start en de vorige)
+
+    data class StartInfo(val summary: String, val timing: Build147Logic.Start.Timing, val maxHangMs: Long,
+                         val previous: Build147Logic.Previous.Info?)
+
+    private fun timingOf(marks: List<Build146Logic.Diag.Mark>) = Build147Logic.Start.timing(marks.map { it.name to it.ms })
+
+    fun previousInfo(r: Build146Logic.Diag.Record? = StartDiagnostics.previous): Build147Logic.Previous.Info? {
+        r ?: return null
+        val last = r.marks.lastOrNull()
+        return Build147Logic.Previous.of(
+            crashed = r.crash != null, crashStack = r.crash?.stack ?: emptyList(), finished = r.finished,
+            lastMark = last?.name, lastMs = last?.ms ?: 0L,
+            hangMs = r.hangMs, hangFg = r.hangFg, hangAt = r.hangAt, hangTask = r.hangTask, hangStack = r.hangStack,
+        )
+    }
+
+    /** Deze start: samenvatting, app-tijd en wachten op de gebruiker; plus de vorige start. */
+    fun startInfo(): StartInfo {
+        val t = timingOf(StartDiagnostics.marks())
+        val hang = StartDiagnostics.maxHangMs()
+        return StartInfo(Build147Logic.Start.summary(t.appMs, hang, crashed = false), t, hang, previousInfo())
+    }
+
+    private fun previousJson(p: Build147Logic.Previous.Info) = buildJsonObject {
+        put("problem", p.problem)
+        p.milestone?.let { put("milestone", it) }
+        put("seconds", p.seconds)
+        put("foreground", p.foreground)
+        p.task?.let { put("task", it.take(60)) }
+        put("stack", JsonArray(p.stack.take(50).map { JsonPrimitive(it.take(200)) }))
+    }
+
+    private fun startJson(i: StartInfo = startInfo()) = buildJsonObject {
+        put("summary", i.summary)
+        put("appMs", i.timing.appMs)
+        put("userWaitMs", i.timing.userWaitMs)
+        put("finished", i.timing.finished)
+        if (i.maxHangMs > 0) put("hangMs", i.maxHangMs)
+        i.previous?.let { put("previous", previousJson(it)) }
+    }
+
+    // MARK: build 147: per server en soort
+
+    fun fetchRows(): List<Build147Logic.Fetch.Row> {
+        val active = Playlists.source?.id
+        val raw = Playlists.rawLibrary
+        val lib = Playlists.library
+        return Store.playlists.flatMapIndexed { i, p ->
+            val log = FetchLog.get(p.id)
+            val isActive = p.id.equals(active, ignoreCase = true) && !raw.isEmpty
+            Build147Logic.Fetch.KINDS.map { kind ->
+                val e = log?.get(kind)
+                val rawN = if (isActive) when (kind) { "live" -> raw.channels.size; "movie" -> raw.movies.size; else -> raw.series.size } else e?.first
+                val vis = if (isActive && !Playlists.isFiltering) when (kind) { "live" -> lib.channels.size; "movie" -> lib.movies.size; else -> lib.series.size } else null
+                val err = e?.second
+                val st = Build147Logic.Fetch.status(rawN, vis, err)
+                Build147Logic.Fetch.Row(Build147Logic.Fetch.serverName(i), kind, st, rawN ?: 0, err.takeIf { st == "failed" })
+            }
+        }
+    }
+
+    private fun fetchJson() = JsonArray(fetchRows().map { r ->
+        buildJsonObject {
+            put("server", r.server); put("kind", r.kind); put("status", r.status); put("count", r.count)
+            r.error?.let { put("error", it) }
+        }
+    })
 
     // MARK: de bijlage
 
@@ -196,8 +280,9 @@ object Diagnostics {
         val net = network()
         val st = withContext(Dispatchers.IO) { storage() }
         val lib = Playlists.library
+        val fetch = fetchJson()
         return buildJsonObject {
-            put("schema", 1); put("kind", "app"); put("createdAt", iso(System.currentTimeMillis()))
+            put("schema", 2); put("kind", "app"); put("createdAt", iso(System.currentTimeMillis()))
             put("app", appJson()); put("device", deviceJson())
             put("milestones", marksJson(StartDiagnostics.marks()))
             put("memory", memoryJson())
@@ -222,12 +307,22 @@ object Diagnostics {
                     put("usedMB", st.usedMB); put("freeMB", st.freeMB); put("cacheMB", st.cacheMB); put("dbMB", st.dbMB)
                 })
             })
+            put("start", startJson())
+            put("fetch", fetch)
+            put("network", buildJsonObject { put("type", if (net.type in setOf("wifi", "cellular", "ethernet")) net.type else "unknown") })
+            put("storage", storageJson(st))
         }
     }
 
-    /** Startdiagnose: hoe de vorige start verliep (mijlpalen, geheugen, crash). */
-    fun start(p: Build146Logic.Diag.Problem): JsonObject = buildJsonObject {
-        put("schema", 1); put("kind", "start"); put("createdAt", iso(p.at.takeIf { it > 0 } ?: System.currentTimeMillis()))
+    /** Startdiagnose: hoe de vorige start verliep (mijlpalen, geheugen, crash); build 147 ook deze start, servers en opslag. */
+    suspend fun start(p: Build146Logic.Diag.Problem): JsonObject {
+        val st = withContext(Dispatchers.IO) { storage() }
+        val fetch = fetchJson()
+        return startOf(p, st, fetch)
+    }
+
+    private fun startOf(p: Build146Logic.Diag.Problem, st: Storage, fetch: JsonArray): JsonObject = buildJsonObject {
+        put("schema", 2); put("kind", "start"); put("createdAt", iso(p.at.takeIf { it > 0 } ?: System.currentTimeMillis()))
         put("app", buildJsonObject {
             put("platform", platform); put("version", BuildConfig.VERSION_NAME.take(20)); put("build", p.build); put("engine", engine)
         })
@@ -239,10 +334,60 @@ object Diagnostics {
             put("signedIn", Account.isSignedIn); put("profiles", Store.profiles.size); put("servers", Store.playlists.size)
             put("uptimeS", p.ms / 1000)
         })
+        put("start", startJson())
+        put("fetch", fetch)
+        put("network", buildJsonObject { put("type", networkType()) })
+        put("storage", storageJson(st))
     }
 
     /** Leesbaar voor "Bekijken" (zonder iets weg te laten van wat er meegaat). */
     fun pretty(o: JsonObject): String = prettyJson.encodeToString(JsonObject.serializer(), o)
 
     private val prettyJson = kotlinx.serialization.json.Json { prettyPrint = true }
+}
+
+/**
+ * Build 147: wat elke server bij het laatste ophalen per soort leverde (aantal) of waarom niet (korte foutcode), bewaard
+ * per apparaat (geen namen of URL's; sleutel = id van de server in kleine letters).
+ */
+object FetchLog {
+    private const val KEY = "diag.fetch.v147"
+    private val lock = Any()
+
+    private fun all(): MutableMap<String, JsonObject> = runCatching {
+        (Prefs.string(KEY)?.let { Http.json.parseToJsonElement(it) } as? JsonObject)?.toMutableMap()
+            ?.mapValues { it.value as? JsonObject ?: JsonObject(emptyMap()) }?.toMutableMap()
+    }.getOrNull() ?: HashMap()
+
+    private fun save(m: Map<String, JsonObject>) { runCatching { Prefs.put(KEY, JsonObject(m).toString()) } }
+
+    private fun entry(n: Int, err: String?) = buildJsonObject { put("n", n); err?.let { put("err", it) } }
+
+    fun delivered(serverID: String, live: Int, movies: Int, series: Int, errors: Map<String, String>) = synchronized(lock) {
+        val m = all()
+        val ids = Store.playlists.map { it.id.lowercase(Locale.ROOT) }.toSet()
+        m.keys.retainAll(ids + serverID.lowercase(Locale.ROOT))
+        m[serverID.lowercase(Locale.ROOT)] = buildJsonObject {
+            put("live", entry(live, errors["live"].takeIf { live == 0 }))
+            put("movie", entry(movies, errors["movie"].takeIf { movies == 0 }))
+            put("series", entry(series, errors["series"].takeIf { series == 0 }))
+            put("at", System.currentTimeMillis())
+        }
+        save(m)
+    }
+
+    fun failed(serverID: String, code: String) = synchronized(lock) {
+        val m = all()
+        m[serverID.lowercase(Locale.ROOT)] = buildJsonObject {
+            for (k in Build147Logic.Fetch.KINDS) put(k, entry(0, code))
+            put("at", System.currentTimeMillis())
+        }
+        save(m)
+    }
+
+    /** soort → (aantal, foutcode) van het laatste ophalen, of null als het nog niet is vastgelegd. */
+    fun get(serverID: String): Map<String, Pair<Int, String?>>? = synchronized(lock) {
+        val o = all()[serverID.lowercase(Locale.ROOT)] ?: return null
+        Build147Logic.Fetch.KINDS.associateWith { k -> val e = o[k] as? JsonObject; (e.jI("n") ?: 0) to e.jS("err") }
+    }
 }

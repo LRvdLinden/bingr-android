@@ -1358,6 +1358,32 @@ if __name__ == '__main__':
             (sam[0]['data']['pinHash'] or {}).get('iter') == 100000 and bool(sam[0]['data'].get('pinUpdatedAt'))
         RESULTS.append(('oude pincode (Sam) gehasht en geüpload, pinUpdatedAt gelijk', okPin, str([r.get('data') for r in sam][:1])))
 
+    if which in ('all', 'b147'):
+        # build 147: grote bibliotheek (6000 zenders, 25000 films): na "klaar" geen lange taak van meer dan 2 s op de voorgrond;
+        # diagnose-schema 2 (start, fetch per soort, network.type, storage) en de detector voor lange taken (tegenproef)
+        TAB = 'var t = Array.prototype.filter.call(document.querySelectorAll(".st-tab"), function (x) { return x._tab === "%s"; })[0]; if (t) { B.ui.focus(t, true); } !!t'
+        run(SIGNED_IN, 'big', [
+            ('wait', 2500), ('key', 'Enter', 400), ('wait', 9000),
+            ('expect', 'B.diag.marks().some(function (m) { return m.name === "ready"; })', 'b147: mijlpaal klaar'),
+            ('expect', 'B.lib.raw.movies.length >= 25000', 'b147: grote bibliotheek geladen'),
+            ('wait', 6000),
+            ('eval', 'String(B.diag.maxHangMs())', 'b147: langste lange taak (ms)'),
+            ('expect', 'B.diag.maxHangMs() <= 2000', 'b147: na klaar geen lange taak boven 2 s'),
+            ('expect', 'B.diag.startInfo().summary !== "hung"', 'b147: start niet vastgelopen'),
+            ('eval', 'B.ui.top().show("settings", true) || 1'), ('wait', 800),
+            ('eval', TAB % 'diagnose'), ('key', 'Enter', 600),
+            ('expect', 'document.querySelector(".page.settings").textContent.indexOf(B.L("Start: good").slice(0, 5)) >= 0', 'b147: samenvatting van de start bovenaan'),
+            ('eval', 'var r = Array.prototype.filter.call(document.querySelectorAll(".page.settings .st-row.f"), function (x) { return x.firstChild.textContent === B.L("Run diagnostics"); })[0]; B.ui.focus(r, true); !!r'),
+            ('key', 'Enter', 3000), ('shot', 'b147-01-diagnose'),
+            ('eval', 'B.diag.app().then(function (d) { return JSON.stringify({s: d.schema, st: d.start, f: d.fetch, n: d.network, o: d.storage}); })', 'b147: app-diagnose'),
+            ('expect', '(function () { return B.diag.app().then(function (d) { var f = d.fetch.filter(function (r) { return r.server === "s1"; }); return d.schema === 2 && !!d.start && ["good", "slow", "hung"].indexOf(d.start.summary) >= 0 && typeof d.start.appMs === "number" && typeof d.start.userWaitMs === "number" && f.length === 3 && f.some(function (r) { return r.kind === "movie" && r.status === "ok" && r.count >= 25000; }) && ["wifi", "cellular", "ethernet", "unknown"].indexOf(d.network.type) >= 0 && d.storage.totalMB === d.storage.cacheMB + d.storage.catalogMB + d.storage.downloadsMB && JSON.stringify(d).indexOf("xtream.test") < 0 && JSON.stringify(d).indexOf("leon@") < 0; }); })()', 'b147: schema 2 (start, fetch, network, storage), geen adres of e-mail'),
+            ('expect', '(function () { return B.diag.forSupport().then(function (d) { return !!d.start && d.schema === 2; }); })()', 'b147: diagnose voor support heeft altijd de startdiagnose'),
+            # tegenproef: 2,5 s werk in één keer → de detector ziet een hang met de taak
+            ('eval', 'B.diag.task("tegenproef", function () { var u = Date.now() + 2500; while (Date.now() < u) {} }); 1'), ('wait', 700),
+            ('expect', 'B.diag.maxHangMs() >= 2000', 'b147: detector ziet een lange taak'),
+            ('expect', 'JSON.parse(localStorage.getItem("bingr.diag.start.current.v146") || localStorage.getItem("diag.start.current.v146") || "{}").hangTask === "tegenproef" || (function () { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k.indexOf("diag.start.current") >= 0) { try { return JSON.parse(localStorage.getItem(k)).hangTask === "tegenproef"; } catch (e) { return false; } } } return false; })()', 'b147: hang bewaard met de taak'),
+        ])
+
     if RESULTS or PAGEERRORS:
         print('\n== Samenvatting ==')
         for name, ok, detail in RESULTS:

@@ -324,7 +324,11 @@
         if (opt.binary) r.buffer = x.response;
         else {
           r.text = x.responseText || '';
-          if (r.text) { try { r.json = JSON.parse(r.text); } catch (e) { r.json = null; } }
+          // build 147: een grote catalogus (JSON) inlezen is een lange taak: met een naam voor de detector van lange taken
+          if (r.text) {
+            var parse = function () { try { r.json = JSON.parse(r.text); } catch (e) { r.json = null; } };
+            if (r.text.length > 500000 && B.diag && B.diag.task) B.diag.task('catalogus verwerken', parse); else parse();
+          }
         }
         resolve(r);
       };

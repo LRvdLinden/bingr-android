@@ -209,7 +209,22 @@
     return [];
   }
   Xtream.prototype.list = function (action) {
-    return B.getJSON(this.api(action), null, 120000).then(items, function () { return []; });
+    // build 147 (diagnose): een mislukte lijst blijft leeg (raakt de andere lijsten niet), met een korte foutcode
+    var self = this;
+    self.errors = self.errors || {};
+    return B.getJSON(this.api(action), null, 120000).then(function (r) { delete self.errors[action]; return items(r); }, function (e) {
+      var X7 = B.b147 && B.b147.fetch;
+      self.errors[action] = X7 ? X7.errorCode(e && e.name, e && e.message) : 'error';
+      return [];
+    });
+  };
+  /** Build 147: foutcode per soort (live, movie, series) van de laatste library(). */
+  Xtream.prototype.kindErrors = function () {
+    var e = this.errors || {}, out = {};
+    if (e.get_live_streams) out.live = e.get_live_streams;
+    if (e.get_vod_streams) out.movie = e.get_vod_streams;
+    if (e.get_series) out.series = e.get_series;
+    return out;
   };
   function catMap(cats, other) {
     var m = {};

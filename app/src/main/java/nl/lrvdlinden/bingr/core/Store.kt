@@ -972,8 +972,9 @@ object Store {
     fun profileData(id: String): ProfileData = readProfileData(id)
 
     /** Gegevens van een profiel uit het account (build 44) vervangen; roept geen sync-hooks aan. */
-    fun applySyncedProfileData(id: String, data: ProfileData) {
-        if (data == readProfileData(id)) return
+    fun applySyncedProfileData(id: String, data: ProfileData, current: ProfileData? = null) {
+        // build 147: [current] = net gelezen (buiten de main thread), dan niet opnieuw alle bestanden lezen
+        if (data == (current ?: readProfileData(id))) return
         val d = profileDir(id)
         writeIn(d, "favorites", data.favorites); writeIn(d, "mylist", data.myList)
         writeIn(d, "progress", data.progress); writeIn(d, "watched", data.watched)
@@ -1063,6 +1064,30 @@ object Store {
         if (n != accountMarks) { setAccountMarks(n); StateSync.accountChanged() }
         // ingelogd: pas vastleggen na de eerste sync (dan zijn de per-profiel-sets van de server er ook); mag vaker lopen
         if (allowFlag) Prefs.put("cats.migrated140", true)
+    }
+
+    /**
+     * Build 147: zoals [migrateCategoriesToAccount], maar het lezen van de profielbestanden (verborgen categorieën van elk
+     * profiel) gebeurt buiten de main thread; alleen het toepassen op de main thread ([applying]: binnen
+     * StateSync.applyingChanges, zoals na een sync).
+     */
+    suspend fun migrateCategoriesToAccountOffMain(allowFlag: Boolean, applying: Boolean = false) {
+        val main = kotlinx.coroutines.Dispatchers.Main
+        val ids = kotlinx.coroutines.withContext(main) {
+            if (profiles.isEmpty() || Prefs.bool("cats.migrated140", false)) null else profiles.filter { !it.kids }.map { it.id }
+        } ?: return
+        val union = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ids.flatMap { readProfileData(it).hiddenCategories } }
+        kotlinx.coroutines.withContext(main) {
+            if (profiles.isEmpty() || Prefs.bool("cats.migrated140", false)) return@withContext
+            StartDiagnostics.task("categorieën migreren") {
+                val doMigrate = {
+                    val n = Build140Logic.CatMarks.migrate(accountMarks, union)
+                    if (n != accountMarks) { setAccountMarks(n); StateSync.accountChanged() }
+                    if (allowFlag) Prefs.put("cats.migrated140", true)
+                }
+                if (applying) StateSync.applyingChanges(doMigrate) else doMigrate()
+            }
+        }
     }
 
     /**

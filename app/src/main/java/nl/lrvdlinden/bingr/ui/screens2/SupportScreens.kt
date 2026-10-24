@@ -346,6 +346,14 @@ fun LazyListScope.diagnoseTabItems() {
         var sending by remember { mutableStateOf(false) }
         var result by remember { mutableStateOf<String?>(null) }
         S2Section(L("Start diagnostics"), if (p == null) L("How the app started: milestones with time and memory. If a start doesn't finish or Bingr crashes, it shows here the next time.") else null) {
+            // build 147: samenvatting bovenaan (goed / traag / vastgelopen), app-tijd los van wachten op jou
+            val info = remember(StartDiagnostics.marks().size) { Diagnostics.startInfo() }
+            S2Row(L(Build147Logic.Start.label(info.summary)), value = L("App %@ s · waiting for you %@ s",
+                s2Sec(info.timing.appMs), s2Sec(info.timing.userWaitMs)))
+            if (info.maxHangMs > Build147Logic.Start.SLOW_HANG_MS) S2Row(L("Main thread stuck for %@ s", s2Sec(info.maxHangMs)), tint = Theme.secondary)
+            info.previous?.takeIf { it.problem != "none" }?.let { pv ->
+                S2Row(L("Previous start"), value = previousText(pv))
+            }
             if (p == null) {
                 S2Row(L("The last start went fine."), tint = Theme.secondary)
                 val marks = StartDiagnostics.marks()
@@ -390,18 +398,24 @@ fun LazyListScope.diagnoseTabItems() {
                 fun speed(k: String) = when (net.jS(k)) {
                     "ok" -> L("OK"); "slow" -> L("Slow"); "fail" -> L("Not reachable"); "skipped" -> L("Not checked"); else -> L("Unknown")
                 }
+                // build 147: per server wat er geleverd is (zenders, films, series) of waarom niet
+                val rows = Diagnostics.fetchRows().groupBy { it.server }
                 Diagnostics.serverUpdates().forEachIndexed { i, (kind, at) ->
                     S2Row(L("Server %d (%@)", i + 1, kind), value = if (at > 0) s2DateTime(at) else L("Never updated"))
+                    rows[Build147Logic.Fetch.serverName(i)]?.let { r -> S2Row(r.joinToString(" · ") { fetchText(it) }, tint = Theme.secondary) }
                 }
                 if (Store.playlists.isEmpty()) S2Row(L("Servers"), value = "0")
                 S2Row(L("Last account sync"), value = st.jS("lastSync")?.let { Net.parseISODate(it) }?.let { s2DateTime(it) }
                     ?.let { if (st.jB("lastSyncOk") == false) "$it · " + L("failed") else it } ?: L("Not yet"))
                 S2Row(L("Bingr server"), value = speed("backend") + (net.jL("backendMs")?.let { " · $it ms" } ?: ""))
                 S2Row(L("Your IPTV server"), value = speed("provider") + (net.jL("providerMs")?.let { " · $it ms" } ?: ""))
-                S2Row(L("Network"), value = listOfNotNull(net.jS("type"), if (net.jB("vpn") == true) "VPN" else null).joinToString(" · "))
-                val sto = st.jO("storage")
-                val dl = Diagnostics.storage().downloadsMB
-                S2Row(L("Storage"), value = L("Cache %d MB · downloads %d MB · free %d MB", sto.jI("cacheMB") ?: 0, dl, sto.jI("freeMB") ?: 0))
+                S2Row(L("Network"), value = listOfNotNull(L(Build147Logic.NetType.label(d.jO("network").jS("type") ?: net.jS("type") ?: "unknown")),
+                    if (net.jB("vpn") == true) "VPN" else null).joinToString(" · "))
+                // build 147: één totaal, met cache, catalogus en downloads die samen optellen, en vrij op het apparaat
+                val sto = d.jO("storage")
+                S2Row(L("Storage"), value = L("Total %d MB · free %d MB", sto.jI("totalMB") ?: 0, sto.jI("freeMB") ?: 0))
+                S2Row(L("Cache %d MB · catalog %d MB · downloads %d MB", sto.jI("cacheMB") ?: 0, sto.jI("catalogMB") ?: 0, sto.jI("downloadsMB") ?: 0),
+                    tint = Theme.secondary)
                 val mem = d.jO("memory")
                 S2Row(L("Memory"), value = L("App %d MB · in use %d of %d MB", mem.jI("appMB") ?: 0, mem.jI("usedMB") ?: 0, mem.jI("totalMB") ?: 0))
                 S2Row(L("Profiles"), value = (st.jI("profiles") ?: 0).toString())
@@ -424,5 +438,31 @@ fun LazyListScope.diagnoseTabItems() {
             result?.let { S2Row(it, tint = Theme.secondary) }
         }
         if (view) DiagnosticsViewDialog(diag) { view = false }
+    }
+}
+
+// MARK: build 147
+
+internal fun s2Sec(ms: Long): String = String.format(java.util.Locale.getDefault(), "%.1f", ms / 1000.0)
+
+/** "Zenders 1056", "Series: provider leverde niets", "Films: ophalen mislukt (timeout)", "Series: alles verborgen". */
+internal fun fetchText(r: Build147Logic.Fetch.Row): String {
+    val kind = when (r.kind) { "live" -> L("Channels"); "movie" -> L("Movies"); else -> L("Series") }
+    return when (r.status) {
+        "ok" -> "$kind ${r.count}"
+        "empty" -> kind + ": " + L("provider delivered nothing")
+        "failed" -> kind + ": " + L("fetching failed") + (r.error?.let { " ($it)" } ?: "")
+        else -> kind + ": " + L("all hidden")
+    }
+}
+
+internal fun previousText(p: Build147Logic.Previous.Info): String {
+    val sec = String.format(java.util.Locale.getDefault(), "%.1f", p.seconds)
+    val at = p.task ?: p.milestone ?: ""
+    return when (p.problem) {
+        "crash" -> L("Stopped (crash) at \"%@\"", p.milestone ?: "")
+        "hang" -> L("Stuck for %@ s at \"%@\"", sec, at)
+        "not_finished" -> L("Didn't finish, last milestone \"%@\"", p.milestone ?: "")
+        else -> L("Went fine")
     }
 }

@@ -202,6 +202,15 @@
 
   // MARK: tab Diagnose
 
+  /** Build 147: "Zenders 1056", "Series: provider leverde niets", "Films: ophalen mislukt (timeout)", "Series: alles verborgen". */
+  function fetchText(r) {
+    var kind = r.kind === 'live' ? L('Channels') : r.kind === 'movie' ? L('Movies') : L('Series');
+    if (r.status === 'ok') return kind + ' ' + r.count;
+    if (r.status === 'empty') return kind + ': ' + L('provider delivered nothing');
+    if (r.status === 'failed') return kind + ': ' + L('fetching failed') + (r.error ? ' (' + r.error + ')' : '');
+    return kind + ': ' + L('all hidden');
+  }
+
   var appDiag = null, appBusy = false, sendResult = null;
   S.diagnoseRows = function (track, row, section, note, render) {
     section(L('This device'));
@@ -212,6 +221,17 @@
     row(L('Language'), DG.language(), null);
 
     section(L('Start diagnostics'));
+    // build 147: samenvatting bovenaan (goed / traag / vastgelopen), app-tijd los van wachten op jou
+    var X7 = B.b147, info = DG.startInfo();
+    function sec(ms) { return (ms / 1000).toFixed(1).replace('.', /^(nl|de|fr|es|it|pt|tr|pl)/.test(B.lang || '') ? ',' : '.'); }
+    row(L(X7.start.label(info.summary)), L('App %@ s · waiting for you %@ s', sec(info.timing.appMs), sec(info.timing.userWaitMs)), null);
+    if (info.maxHangMs > X7.start.SLOW_HANG_MS) note(L('Main thread stuck for %@ s', sec(info.maxHangMs)));
+    var pv = info.previous;
+    if (pv && pv.problem !== 'none') {
+      var at = pv.task || pv.milestone || '';
+      row(L('Previous start'), pv.problem === 'crash' ? L("Stopped (crash) at \"%@\"", pv.milestone || '') : pv.problem === 'hang'
+        ? L("Stuck for %@ s at \"%@\"", sec(pv.seconds * 1000), at) : L("Didn't finish, last milestone \"%@\"", pv.milestone || ''), null);
+    }
     var p = DG.lastProblem;
     if (!p) {
       row(L('The last start went fine.'), null, null);
@@ -222,7 +242,9 @@
       note(X.diag.text(p));
       if (A.isSignedIn()) {
         row(L('Send to support'), null, function () {
-          SC.create(L('Start diagnostics') + ' · Samsung ' + (DG.model() || 'TV'), 'apps', L("Start diagnostics from the app (previous start didn't finish)."), DG.startJson(p)).then(function (r) {
+          DG.startFull(p).then(function (j) {
+            return SC.create(L('Start diagnostics') + ' · Samsung ' + (DG.model() || 'TV'), 'apps', L("Start diagnostics from the app (previous start didn't finish)."), j);
+          }).then(function (r) {
             if (r.number) { DG.clearProblem(); U.toast(L('Sent as ticket #%d.', r.number), 4000); } else U.toast(r.error, 4000);
           });
         });
@@ -242,15 +264,22 @@
       function speed(k) {
         return { ok: L('OK'), slow: L('Slow'), fail: L('Not reachable'), skipped: L('Not checked') }[net[k]] || L('Unknown');
       }
+      // build 147: per server wat er geleverd is (zenders, films, series) of waarom niet
+      var fetchRows = d.fetch || [];
       DG.serverUpdates().forEach(function (u, i) {
         row(L('Server %d (%@)', i + 1, u.kind), u.at ? new Date(u.at).toLocaleString(B.lang || undefined) : L('Never updated'), null);
+        var mine = fetchRows.filter(function (r) { return r.server === X7.fetch.serverName(i); });
+        if (mine.length) note(mine.map(fetchText).join('  ·  '));
       });
       if (!D.sources.length) row(L('Servers'), '0', null);
       row(L('Last account sync'), st.lastSync ? new Date(st.lastSync).toLocaleString(B.lang || undefined) + (st.lastSyncOk === false ? '  ·  ' + L('failed') : '') : L('Not yet'), null);
       row(L('Bingr server'), speed('backend') + (net.backendMs != null ? '  ·  ' + net.backendMs + ' ms' : ''), null);
       row(L('Your IPTV server'), speed('provider') + (net.providerMs != null ? '  ·  ' + net.providerMs + ' ms' : ''), null);
-      row(L('Network'), net.type || '', null);
-      row(L('Storage'), (st.storage && st.storage.dbMB != null ? st.storage.dbMB : 0) + ' MB', null);
+      row(L('Network'), L(X7.netLabel((d.network && d.network.type) || DG.netType)), null);
+      // build 147: één totaal, met cache, catalogus en downloads die samen optellen, en vrij op de tv
+      var so = d.storage || {};
+      row(L('Storage'), L('Total %d MB · free %d MB', so.totalMB || 0, so.freeMB || 0), null);
+      note(L('Cache %d MB · catalog %d MB · downloads %d MB', so.cacheMB || 0, so.catalogMB || 0, so.downloadsMB || 0));
       var mem = d.memory || {};
       row(L('Memory'), L('App %d MB · in use %d of %d MB', mem.appMB || 0, mem.usedMB || 0, mem.totalMB || 0), null);
       row(L('Profiles'), String(st.profiles || 0), null);

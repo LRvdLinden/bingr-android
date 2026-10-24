@@ -459,6 +459,11 @@ object Build146Logic {
             /** hoofdthread langer dan [HANG_LIMIT_MS] vast (gezien door de bewaking), in ms */
             val hangMs: Long? = null,
             val hangAt: String? = null,
+            /** build 147: stond de app op de voorgrond tijdens de hang (achtergrond telt niet), taak, stack, na "klaar" */
+            val hangFg: Boolean = true,
+            val hangTask: String? = null,
+            val hangStack: List<String> = emptyList(),
+            val hangAfterReady: Boolean = false,
         )
         enum class Kind { CRASH, HANG, NOT_FINISHED }
         data class Problem(
@@ -496,7 +501,7 @@ object Build146Logic {
                 return Problem(Kind.CRASH, r.build, r.os, r.started, last, dur, r.marks, c, r.peakMB)
             }
             val h = r.hangMs
-            if (h != null && h >= HANG_LIMIT_MS) return Problem(Kind.HANG, r.build, r.os, r.started, r.hangAt ?: last, h, r.marks, null, r.peakMB)
+            if (h != null && h >= HANG_LIMIT_MS && r.hangFg) return Problem(Kind.HANG, r.build, r.os, r.started, r.hangAt ?: last, h, r.marks, null, r.peakMB)
             if (!r.finished) return Problem(Kind.NOT_FINISHED, r.build, r.os, r.started, last, dur, r.marks, null, r.peakMB)
             return null
         }

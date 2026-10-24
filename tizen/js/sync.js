@@ -658,6 +658,8 @@
       chain = chain.then(function () {
         var known = e.known;
         var reuse = known ? X.verify(e.pin, known).then(function (okv) { return okv ? known : null; }) : Promise.resolve(null);
+        // build 147: PBKDF2 in stukjes (X.pbkdf2Chunked, 12 ms per keer) als WebCrypto er niet is
+        if (B.diag && B.diag.task) B.diag.task('pin migreren', B.noop);
         return reuse.then(function (h) { return h || X.make(e.pin); }).then(function (h) {
           D.pins[e.id] = h;
           save();
@@ -698,15 +700,18 @@
         if (pendingSettings) { D.settings.data = applyPending(B.copy(D.settings.data), pendingSettings); uploadSettings(all.settings); }
       } else if (pendingSettings) uploadSettings(null);
       if (all.collections) D.collections = all.collections.data || null;
-      var rp = readPins(all, D.pins);
-      D.pins = rp.pins;
-      save();
-      migratePins(rp.legacy);
-      B.emit('settings');
-      // connections (Trakt/OpenSubtitles) en herinneringen voegen zelf samen
-      B.emit('state', all);
-      // build 140: categorieën per account (section `account`); eenmalig de per-profiel-sets erin
-      migrateAccount(all);
+      // build 147: met een naam voor de detector van lange taken (js/support.js)
+      (B.diag && B.diag.task ? B.diag.task : function (n, fn) { return fn(); })('sync toepassen', function () {
+        var rp = readPins(all, D.pins);
+        D.pins = rp.pins;
+        save();
+        migratePins(rp.legacy);
+        B.emit('settings');
+        // connections (Trakt/OpenSubtitles) en herinneringen voegen zelf samen
+        B.emit('state', all);
+        // build 140: categorieën per account (section `account`); eenmalig de per-profiel-sets erin
+        migrateAccount(all);
+      });
       mergeAccount(all.account).catch(B.noop);
       if (!Q.id) return true;
       // build 128: eerst catalogmeta (remap-regels), dan het actieve profiel, daarna de andere profielen en de collecties

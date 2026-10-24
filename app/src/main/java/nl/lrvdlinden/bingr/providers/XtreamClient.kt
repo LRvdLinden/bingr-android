@@ -70,9 +70,29 @@ class XtreamClient(source: PlaylistSource, val password: String) {
         return c
     }
 
+    /**
+     * Build 147 (diagnose): korte foutcode per mislukte lijst (`get_series` → "timeout", "http_500", …; nooit een URL).
+     * Een mislukte lijst blijft leeg en raakt de andere lijsten niet (ze worden los en parallel opgehaald).
+     */
+    val errors = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     private suspend fun list(action: String): List<JsonElement> {
         val u = api(action) ?: return emptyList()
-        return runCatching { Net.json(u).jItems }.getOrDefault(emptyList())
+        return try {
+            Net.json(u).jItems.also { errors.remove(action) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            errors[action] = Build147Logic.Fetch.errorCode(e.javaClass.simpleName, e.message, (e as? StatusException)?.code)
+            emptyList()
+        }
+    }
+
+    /** Build 147: foutcode per soort (live, movie, series) van de laatste [rawLists]; de lijst zelf telt, niet de categorieën. */
+    fun kindErrors(): Map<String, String> = buildMap {
+        errors["get_live_streams"]?.let { put("live", it) }
+        errors["get_vod_streams"]?.let { put("movie", it) }
+        errors["get_series"]?.let { put("series", it) }
     }
 
     /** Ruwe Xtream-lijsten (zoals de server ze stuurt), voor [parse] en het bron-controlescherm. */

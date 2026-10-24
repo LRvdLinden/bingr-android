@@ -245,7 +245,7 @@
     lastRaw = raw; lastCtx = key;
     if (applyJob) { applyJob.cancel(); applyJob = null; }
     var size = raw.channels.length + raw.movies.length + raw.series.length;
-    if (size < 6000) { finishApply(Lib.apply(raw, ctx)); return Promise.resolve(); }
+    if (size < 6000) { task('catalogus filteren', function () { finishApply(Lib.apply(raw, ctx)); }); return Promise.resolve(); }
     var job = applyJob = Lib.applyChunked(raw, ctx);
     return job.then(function (lib) {
       if (applyJob !== job) return;
@@ -253,12 +253,14 @@
       finishApply(lib);
     }, B.noop);
   };
+  /** Build 147: synchrone taak met een naam (detector van lange taken, js/support.js). */
+  function task(name, fn) { return B.diag && B.diag.task ? B.diag.task(name, fn) : fn(); }
   function finishApply(lib) {
     Lib.lib = lib;
-    buildIndexes();
+    task('indexeren', buildIndexes);
     Lib.version++;
     memo = {};
-    B.emit('library');
+    task('bibliotheek toepassen', function () { B.emit('library'); });
   }
 
   function groupsOf(list) {
@@ -358,7 +360,20 @@
     });
     return w;
   }
+  /** Build 147 (diagnose): per soort vastleggen wat de server leverde of waarom niet (zonder URL of namen). */
   function fetchLibrary(src) {
+    var errs = {};
+    var DG = B.diag;
+    return fetchLibraryFrom(src, errs).then(function (lib) {
+      if (DG && DG.fetchLog) DG.fetchLog.delivered(src.id, lib, errs);
+      return lib;
+    }, function (e) {
+      var X7 = B.b147 && B.b147.fetch;
+      if (DG && DG.fetchLog && X7) DG.fetchLog.failed(src.id, X7.errorCode(e && e.name, e && e.message));
+      throw e;
+    });
+  }
+  function fetchLibraryFrom(src, errs) {
     var kind = src.kind;
     var pw = D.secret(src, 'password');
     if (kind === 'M3U / M3U8') {
@@ -375,6 +390,7 @@
     if (kind === 'Xtream Codes') {
       var x = new P.Xtream(src, pw);
       return x.authenticate().then(function () { return x.library(); }).then(function (lib) {
+        B.assign(errs, x.kindErrors());
         lib.epgURL = P.urlValue(src.epgURL) || x.xmltvURL();
         return lib;
       });

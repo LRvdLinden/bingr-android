@@ -13,20 +13,26 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 /** Fout met een (vertaalde) tekst die direct aan de gebruiker getoond kan worden. */
-class ServiceException(message: String) : Exception(message)
+open class ServiceException(message: String) : Exception(message)
+
+/** Build 147: foutstatus van een server (de code voor de diagnose, zonder URL of inhoud). */
+class StatusException(val code: Int, message: String) : ServiceException(message)
+
+/** Build 147: antwoord niet te lezen (JSON). */
+class JsonParseException(message: String) : ServiceException(message)
 
 /**
  * Netwerk-hulpjes voor de diensten (tegenhanger van HTTP.swift): foutteksten zoals op iOS,
  * JSON als boom (servers sturen rommelige JSON), URL's met query-parameters.
  */
 object Net {
-    fun statusError(code: Int, body: String): ServiceException = ServiceException(
+    fun statusError(code: Int, body: String): ServiceException = StatusException(code,
         if (code == 401 || code == 403 || code == 511)
             L("Sign-in failed (%d). Check the username and password of this playlist.", code)
         else L("Server error %d: %@", code, body.take(200))
     )
     fun badURL() = ServiceException(L("Invalid URL"))
-    fun decoding(m: String) = ServiceException(L("Couldn't read the response: %@", m))
+    fun decoding(m: String): ServiceException = JsonParseException(L("Couldn't read the response: %@", m))
 
     /** Tekst voor de gebruiker bij een willekeurige fout. */
     fun message(e: Throwable): String = when (e) {

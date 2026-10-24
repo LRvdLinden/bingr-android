@@ -566,7 +566,7 @@ object StateSync {
             mergeCollections(all[COLLECTIONS], all.containsKey(COLLECTIONS))
             mergeProfiles(all)
             // build 140: categorieën per account; eenmalig de per-profiel-sets (nu met de gegevens van de server) erin
-            withContext(Dispatchers.Main) { applyingChanges { Store.migrateCategoriesToAccount(allowFlag = true) } }
+            Store.migrateCategoriesToAccountOffMain(allowFlag = true, applying = true)
             mergeAccount(all[ACCOUNT])
             synced = true
         }
@@ -1898,10 +1898,13 @@ object StateSync {
             history = merged.history.values.mapNotNull { it.value }.sortedByDescending { it.date },
             hiddenCategories = present("hiddenCategories").keys,
         )
-        val stillSame = withContext(Dispatchers.Main) {
-            if (snapshot != null && (Store.activeProfileID != id || Store.profileData(id) != snapshot)) return@withContext false
+        // build 147: de bestanden van een niet-actief profiel hier lezen (buiten de main thread); op de main thread alleen
+        // nog toepassen (een profiel dat intussen actief werd, leest daar uit het geheugen)
+        val pre = if (!activeAtStart) Store.profileData(id) else null
+        val stillSame = withContext(Dispatchers.Main) { StartDiagnostics.task("sync toepassen") {
+            if (snapshot != null && (Store.activeProfileID != id || Store.profileData(id) != snapshot)) return@task false
             if (Store.profiles.any { it.id == id }) applyingChanges {
-                val cur = Store.profileData(id)
+                val cur = if (pre != null && Store.activeProfileID != id) pre else Store.profileData(id)
                 // profiel-id in de items houden zoals lokaal (oude items zonder profiel horen bij het hoofdaccount)
                 val curProgress = cur.progress
                 val curHistory = cur.history.associateBy { it.id }
@@ -1909,7 +1912,7 @@ object StateSync {
                     progress = data.progress.mapValues { (k, e) -> curProgress[k]?.takeIf { it.copy(profileID = id) == e } ?: e },
                     history = data.history.map { e -> curHistory[e.id]?.takeIf { it.copy(profileID = id) == e } ?: e },
                 )
-                Store.applySyncedProfileData(id, fixed)
+                Store.applySyncedProfileData(id, fixed, current = cur)
                 val prof = Store.profiles.firstOrNull { it.id == id }
                 val mp = merged.prefs?.value
                 if (merged.prefs != null && mp != null && prefsOf(prof) != mp) {
@@ -1932,7 +1935,7 @@ object StateSync {
                 pinAt = merged.pin?.at,
             ))
             true
-        }
+        } }
         if (!stillSame) return false
         if (localOnly) return true
 

@@ -102,7 +102,7 @@ object ParentalControl {
         val pre = prepared
         val fresh = pre?.takeIf { it.pin == pin }?.fresh
         if (fresh != null && pre != null) { prepared = Prepared(pre.pin, pre.derived, null); return fresh }
-        return Build146Logic.Pin.make(pin)
+        return StartDiagnostics.task("pin hashen") { Build146Logic.Pin.make(pin) }
     }
 
     /** Klopt [pin] met wat onder [key] bewaard is? Een oude leesbare pincode wordt bij een juiste invoer meteen gehasht. */
@@ -113,7 +113,7 @@ object ParentalControl {
             val got = prepared?.takeIf { it.pin == pin }?.derived?.get(saltKey(h))
             val want = Build146Logic.B64.decode(h.hash) ?: return false
             if (got != null) return Build146Logic.Pin.valid(pin) && Build146Logic.Pin.constantTimeEquals(got, want)
-            return Build146Logic.Pin.verify(pin, h)
+            return StartDiagnostics.task("pin controleren") { Build146Logic.Pin.verify(pin, h) }
         }
         if (!Build146Logic.Pin.isLegacy(stored)) return false
         val ok = Build146Logic.Pin.constantTimeEquals(stored.toByteArray(), pin.toByteArray())

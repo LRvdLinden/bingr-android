@@ -279,7 +279,9 @@
         tile.onEnter = function () {
           var go = function () {
             var pin = D.pinFor(p);
-            if (pin) U.askPIN(L('Enter PIN'), function (x) { return B.b146.pin.check(x, pin); }, function () { onPick(p); });
+            // build 147: wachten op de gebruiker telt niet als app-tijd (startdiagnose)
+            B.diag.mark('profile_picked');
+            if (pin) { B.diag.mark('pin'); U.askPIN(L('Enter PIN'), function (x) { return B.b146.pin.check(x, pin); }, function () { B.diag.mark('pin_ok'); onPick(p); }); }
             else onPick(p);
           };
           // build 140: was het laatst actieve profiel op deze tv een kinderprofiel, dan eerst de rekensom (ouderpoort)
@@ -586,7 +588,7 @@
     offs.push(B.on('library', function () {
       if (!el.parentNode || libPending) return;
       libPending = true;
-      B.whenQuiet(function () { libPending = false; if (el.parentNode) screen.refresh(); }, 300);
+      B.whenQuiet(function () { libPending = false; if (el.parentNode) { if (B.diag && B.diag.task) B.diag.task('rijen opbouwen', function () { screen.refresh(); }); else screen.refresh(); } }, 300);
     }));
     /** Huidige pagina opnieuw tekenen en de focus terugzetten op dezelfde titel (in dezelfde rij). */
     var dataStale = false;

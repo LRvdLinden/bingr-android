@@ -31,7 +31,9 @@ DYNAMIC = ['Search', 'Home', 'Live TV', 'Movies', 'Series', 'My List', 'Settings
            'Describe your question in at least 10 characters.', 'Your message is too long (max. 5000 characters).',
            'Your message contains too many links (max. 6).', 'Too many requests. Wait a moment and try again.',
            'This ticket is closed. Create a new ticket.', "This ticket wasn't found.", 'The diagnostics are too large to send.',
-           'Something went wrong. Please try again.', 'Ask', 'Always', 'Never, manually only']
+           'Something went wrong. Please try again.', 'Ask', 'Always', 'Never, manually only',
+           # build 147: samenvatting van de start en soort verbinding (js/build147.js, via een variabele)
+           'Start: good', 'Start: slow', 'Start: stuck', 'Wi-Fi', 'Mobile', 'Ethernet', 'No connection', 'Unknown']
 
 PAT = [re.compile(r'\bL\(\s*"((?:[^"\\]|\\.)*)"'), re.compile(r"\bL\(\s*'((?:[^'\\]|\\.)*)'")]
 

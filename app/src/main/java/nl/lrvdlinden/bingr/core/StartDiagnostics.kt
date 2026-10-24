@@ -27,6 +27,14 @@ import kotlinx.serialization.json.put
  * - Crash: [Thread.setDefaultUncaughtExceptionHandler] (type, reden, stack), daarna de vorige handler (Android toont
  *   en logt de crash zoals altijd).
  * - Geen persoonsgegevens: alleen mijlpalen, tijden, build, systeem en stackregels (opgeschoond, [Build146Logic.Diag.scrub]).
+ *
+ * Build 147 (diagnose-schema 2):
+ * - Hang-detectie: elke seconde een ping naar de main looper; geen antwoord binnen 2 s = hang ([Build147Logic.Hang]).
+ *   Vastgelegd: voorgrond of achtergrond (achtergrond telt niet), de actieve taak ([task]), de mijlpaal en een momentopname
+ *   van de stack van de hoofdthread (`Looper.getMainLooper().thread.stackTrace`, alleen klassen, methoden en regels).
+ *   De bewaking loopt zolang het proces leeft (niet meer alleen de eerste 10 minuten).
+ * - Soort verbinding vanaf de start ([netType], ConnectivityManager-callback).
+ * - De vorige start blijft in het geheugen ([previous]) voor `start.previous`, ook als die goed ging.
  */
 object StartDiagnostics {
     private const val FILE = "bingr.diag"
@@ -38,6 +46,41 @@ object StartDiagnostics {
     private var record = Build146Logic.Diag.Record(0, "", 0L)
     @Volatile private var started = false
     @Volatile private var mainAlive = 0L
+
+    /** Build 147: de vorige start (ook als die goed ging), voor `start.previous`. */
+    @Volatile var previous: Build146Logic.Diag.Record? = null
+        private set
+
+    /** Build 147: naam van wat de hoofdthread nu doet ("sync toepassen", "catalogus filteren", …), voor een hang. */
+    @Volatile var mainTask: String? = null
+        private set
+
+    /** Build 147: staat er een activity op de voorgrond (gestart)? */
+    @Volatile var foreground = false
+        private set
+    private var startedActivities = 0
+
+    /** Build 147: soort verbinding (wifi, cellular, ethernet, none, unknown), gevolgd vanaf de start. */
+    @Volatile var netType: String = "unknown"
+        private set
+
+    private val tracker = Build147Logic.Hang.Tracker()
+
+    /** Langste hang op de voorgrond in deze start (ms). */
+    fun maxHangMs(): Long = synchronized(tracker) { tracker.maxForegroundMs }
+
+    /**
+     * Taaklabel voor de hoofdthread rond [block] (alleen als het op de hoofdthread draait); een hang noemt dan deze taak.
+     * Op een andere thread gewoon [block].
+     */
+    inline fun <T> task(name: String, block: () -> T): T {
+        if (Looper.myLooper() !== Looper.getMainLooper()) return block()
+        val before = mainTask
+        setTask(name)
+        try { return block() } finally { setTask(before) }
+    }
+
+    @PublishedApi internal fun setTask(name: String?) { mainTask = name }
 
     /** Rapport van de vorige start (null = die ging goed of is weggeklikt). */
     var lastProblem by mutableStateOf<Build146Logic.Diag.Problem?>(null)
@@ -63,6 +106,8 @@ object StartDiagnostics {
         prefs = p
         val prev = runCatching { p.getString(K_CURRENT, null)?.let { decode(Http.json.parseToJsonElement(it)) } }.getOrNull()
         // een proces zonder scherm (pushmelding, herstart van het toestel, download) is geen start die "klaar" moet komen
+        // build 147: een proces zonder scherm (pushmelding, download) is geen vorige start van de app
+        previous = prev?.takeIf { it.crash != null || it.marks.any { m -> m.name == "activity" } }
         val problem = Build146Logic.Diag.analyze(prev, requireMark = "activity")
         if (problem != null) {
             lastProblem = problem
@@ -74,6 +119,8 @@ object StartDiagnostics {
         synchronized(lock) { record = Build146Logic.Diag.Record(BuildConfig.VERSION_CODE, os, System.currentTimeMillis()) }
         installHandler()
         mark(Build146Logic.Diag.FIRST_MARK)
+        trackForeground(ctx)
+        trackNetwork(ctx)
         startWatch()
     }
 
@@ -132,29 +179,100 @@ object StartDiagnostics {
         save(r, sync = true)
     }
 
-    // MARK: main-thread-bewaking (ANR-vermoeden), alleen de eerste 10 minuten
+    // MARK: voorgrond en verbinding (build 147)
+
+    private fun trackForeground(ctx: Context) {
+        // al bij de start: gestart door de gebruiker (voorgrond) of door het systeem (pushmelding, download)?
+        runCatching {
+            val info = android.app.ActivityManager.RunningAppProcessInfo()
+            android.app.ActivityManager.getMyMemoryState(info)
+            foreground = info.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
+        }
+        val app = ctx.applicationContext as? android.app.Application ?: return
+        app.registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
+            override fun onActivityStarted(a: android.app.Activity) { startedActivities++; foreground = true }
+            override fun onActivityStopped(a: android.app.Activity) {
+                startedActivities = (startedActivities - 1).coerceAtLeast(0)
+                foreground = startedActivities > 0
+            }
+            override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {}
+            override fun onActivityResumed(a: android.app.Activity) { foreground = true }
+            override fun onActivityPaused(a: android.app.Activity) {}
+            override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) {}
+            override fun onActivityDestroyed(a: android.app.Activity) {}
+        })
+    }
+
+    private fun typeOf(caps: android.net.NetworkCapabilities?): String {
+        caps ?: return "none"
+        return Build147Logic.NetType.of(
+            ethernet = caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET),
+            wifi = caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI),
+            cellular = caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR),
+        )
+    }
+
+    private fun trackNetwork(ctx: Context) {
+        runCatching {
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            netType = typeOf(cm.getNetworkCapabilities(cm.activeNetwork))
+            cm.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onCapabilitiesChanged(n: android.net.Network, c: android.net.NetworkCapabilities) { netType = typeOf(c) }
+                override fun onLost(n: android.net.Network) { netType = "none" }
+            })
+        }
+    }
+
+    // MARK: main-thread-bewaking (build 147: ping elke seconde, geen antwoord binnen 2 s = hang)
+
+    private fun mainStack(): List<String> = runCatching {
+        Looper.getMainLooper().thread.stackTrace.take(Build147Logic.Hang.MAX_STACK)
+            .map { "at ${it.className}.${it.methodName}(${it.fileName ?: "?"}:${it.lineNumber})" }
+    }.map { Build146Logic.Diag.stack(it) }.getOrDefault(emptyList())
 
     private fun startWatch() {
         val main = Handler(Looper.getMainLooper())
         mainAlive = android.os.SystemClock.uptimeMillis()
         val t = Thread({
-            val t0 = android.os.SystemClock.uptimeMillis()
+            var lastPing = 0L
+            var lastMem = 0L
             while (true) {
-                main.post { mainAlive = android.os.SystemClock.uptimeMillis() }
-                try { Thread.sleep(1000) } catch (_: InterruptedException) { return@Thread }
                 val now = android.os.SystemClock.uptimeMillis()
-                val stuck = now - mainAlive
+                var ping = false
+                synchronized(tracker) {
+                    if (!tracker.pending && now - lastPing >= Build147Logic.Hang.PING_MS) { tracker.sent(now); ping = true; lastPing = now }
+                }
+                if (ping) main.post {
+                    val at = android.os.SystemClock.uptimeMillis()
+                    mainAlive = at
+                    synchronized(tracker) { tracker.answered(at) }
+                }
+                try { Thread.sleep(250) } catch (_: InterruptedException) { return@Thread }
+                val now2 = android.os.SystemClock.uptimeMillis()
                 var changed: Build146Logic.Diag.Record? = null
+                val (ready, milestone) = synchronized(lock) { record.finished to record.marks.lastOrNull()?.name }
+                val ev = synchronized(tracker) {
+                    tracker.check(now2, foreground, mainTask, ready, milestone) { mainStack() }
+                }
                 synchronized(lock) {
-                    val mb = appMB()
-                    if (mb >= (record.peakMB ?: 0) + 25) { record = record.copy(peakMB = mb); changed = record }
-                    if (stuck >= Build146Logic.Diag.HANG_LIMIT_MS && stuck > (record.hangMs ?: 0L) + 2000) {
-                        record = record.copy(hangMs = stuck, hangAt = record.marks.lastOrNull()?.name)
-                        changed = record
+                    if (now2 - lastMem >= 1000) {
+                        lastMem = now2
+                        val mb = appMB()
+                        if (mb >= (record.peakMB ?: 0) + 25) { record = record.copy(peakMB = mb); changed = record }
+                    }
+                    if (ev != null) {
+                        val cur = record.hangMs
+                        // voorgrond gaat voor achtergrond; daarna de langste; opslaan in stappen van 2 s
+                        val better = cur == null || (ev.foreground && !record.hangFg) ||
+                            (ev.foreground == record.hangFg && ev.ms > cur + 2000) || (ev.foreground == record.hangFg && ev.stack != record.hangStack && ev.ms >= cur)
+                        if (better) {
+                            record = record.copy(hangMs = ev.ms, hangAt = ev.milestone, hangFg = ev.foreground, hangTask = ev.task,
+                                hangStack = ev.stack, hangAfterReady = ev.afterReady)
+                            changed = record
+                        }
                     }
                 }
                 changed?.let { save(it, sync = false) }
-                if (now - t0 > 600_000L) return@Thread
             }
         }, "bingr.diag.watch")
         t.isDaemon = true
@@ -177,6 +295,10 @@ object StartDiagnostics {
         r.peakMB?.let { put("peakMB", it) }
         r.hangMs?.let { put("hangMs", it) }
         r.hangAt?.let { put("hangAt", it) }
+        if (r.hangMs != null) {
+            put("hangFg", r.hangFg); r.hangTask?.let { put("hangTask", it) }; put("hangAfterReady", r.hangAfterReady)
+            put("hangStack", JsonArray(r.hangStack.map { JsonPrimitive(it) }))
+        }
     }
 
     private fun decodeMarks(e: JsonElement?): List<Build146Logic.Diag.Mark> = e.jList("marks").mapNotNull { m ->
@@ -196,6 +318,8 @@ object StartDiagnostics {
             build = o.jI("build") ?: 0, os = o.jS("os") ?: "", started = o.jL("started") ?: 0L,
             marks = decodeMarks(o), finished = o.jB("finished") == true, crash = decodeCrash(o["crash"]),
             peakMB = o.jI("peakMB"), hangMs = o.jL("hangMs"), hangAt = o.jS("hangAt"),
+            hangFg = o.jB("hangFg") ?: true, hangTask = o.jS("hangTask"),
+            hangStack = o.jList("hangStack").mapNotNull { it.jFlex }, hangAfterReady = o.jB("hangAfterReady") == true,
         )
     }
 

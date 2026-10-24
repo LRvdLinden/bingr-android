@@ -158,9 +158,13 @@
     return new Promise(function (resolve, reject) {
       var s;
       try { s = pbkdf2Steps(pin, salt, iter); } catch (e) { reject(e); return; }
+      // build 147: op tijd in plaats van een vast aantal (een trage tv deed 4000 iteraties niet altijd snel): stukjes van
+      // 250 iteraties tot het budget (12 ms) op is, dan de hoofdthread vrijgeven
+      var budget = chunk ? 0 : 12;
       function go() {
         try {
-          s.run(chunk || 4000);
+          if (chunk) s.run(chunk);
+          else { var t0 = Date.now(); do { s.run(250); } while (!s.done() && Date.now() - t0 < budget); }
           if (s.done()) resolve(s.result()); else setTimeout(go, 0);
         } catch (e) { reject(e); }
       }
@@ -417,7 +421,7 @@
     var base = { build: r.build, os: r.os, at: r.started, lastMark: last ? last.name : G.FIRST, ms: last ? last.ms : 0, marks: r.marks,
       crash: null, peakMB: r.peakMB == null ? null : r.peakMB };
     if (r.crash) return B.assign(base, { kind: 'crash', crash: r.crash });
-    if (r.hangMs != null && r.hangMs >= G.HANG_MS) return B.assign(base, { kind: 'hang', lastMark: r.hangAt || base.lastMark, ms: r.hangMs });
+    if (r.hangMs != null && r.hangMs >= G.HANG_MS && r.hangFg !== false) return B.assign(base, { kind: 'hang', lastMark: r.hangAt || base.lastMark, ms: r.hangMs });
     if (!r.finished) return B.assign(base, { kind: 'notFinished' });
     return null;
   };

@@ -224,7 +224,9 @@ fun PlaylistPickerScreen() {
                                                 managing -> editing = p
                                                 // build 140: vanuit een kinderprofiel naar een ander (geen kinder)profiel: eerst de som
                                                 else -> KidsGate.guardPicker(p) {
-                                                    if (ParentalControl.hasPIN(p)) pinFor = p else AppState.open(p)
+                                                    // build 147: wachten op de gebruiker telt niet als app-tijd (startdiagnose)
+                                                    StartDiagnostics.mark("profile_picked")
+                                                    if (ParentalControl.hasPIN(p)) { StartDiagnostics.mark("pin"); pinFor = p } else AppState.open(p)
                                                 }
                                             }
                                         }
@@ -261,6 +263,7 @@ fun PlaylistPickerScreen() {
     pinFor?.let { p ->
         PinPad(L("PIN for %@", p.name), onDismiss = { pinFor = null }) { pin ->
             if (ParentalControl.verify(pin, p)) {
+                StartDiagnostics.mark("pin_ok")
                 scope.launch { delay(80); AppState.open(p) }
                 true
             } else false

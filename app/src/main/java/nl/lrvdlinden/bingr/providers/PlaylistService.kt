@@ -299,6 +299,19 @@ object Playlists {
     private suspend fun fetch(s: PlaylistSource, quiet: Boolean = false): Library {
         // build 141: belastingmodus (alleen de rooktest-build): nepcatalogus in plaats van het netwerk
         if (StressMode.isActive) return StressMode.fetch(s)
+        // build 147 (diagnose): per soort vastleggen wat er geleverd is of waarom niet (zonder URL of namen)
+        val errs = HashMap<String, String>()
+        return try {
+            fetchFrom(s, quiet, errs).also { FetchLog.delivered(s.id, it.channels.size, it.movies.size, it.series.size, errs) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            FetchLog.failed(s.id, Build147Logic.Fetch.errorCode(e.javaClass.simpleName, e.message, (e as? StatusException)?.code))
+            throw e
+        }
+    }
+
+    private suspend fun fetchFrom(s: PlaylistSource, quiet: Boolean, errs: MutableMap<String, String>): Library {
         fun status(t: String) { if (!quiet) loadingText = t }
         val password = Store.secret(s.passwordKey) ?: ""
         var lib: Library
@@ -318,6 +331,7 @@ object Playlists {
                 x.authenticate()
                 status(L("Fetching live TV, movies and series…"))
                 lib = x.library()
+                errs.putAll(x.kindErrors())
                 val epg = Net.urlValue(s.epgURL) ?: x.xmltvURL
                 if (epg != null) { status(L("Loading TV guide…")); lib = lib.copy(epg = XMLTVParser.load(epg)) }
             }

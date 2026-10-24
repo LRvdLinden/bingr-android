@@ -118,7 +118,13 @@ jobs:
               tools/test/Build146LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b146-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b146-test.jar" | tee "$RUNNER_TEMP/b146-test.txt"; rc8=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 146::$(tail -1 "$RUNNER_TEMP/b146-test.txt")"
-            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ]
+            # build 147: starttijden (app-tijd los van wachten), goed/traag/vastgelopen, hang-detectie (2 s, taak, stack),
+            # vorige start, ophalen per soort, opslag, verbinding, en 10.000 films + 1.000 zenders: hoofdthread ≤ 250 ms vast
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build146Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build147Logic.kt \
+              tools/test/Build147LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b147-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b147-test.jar" | tee "$RUNNER_TEMP/b147-test.txt"; rc9=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 147::$(tail -1 "$RUNNER_TEMP/b147-test.txt")"
+            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi
@@ -530,6 +536,10 @@ jobs:
           # build 146: pincode als hash (WebCrypto en pure JS, testvectoren), keuzelogica, profielen samenvoegen, support en diagnose
           node tizen/test/build146_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b146.log"
           echo "::notice title=Logica-tests build 146 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b146.log")"
+          # build 147: starttijden, goed/traag/vastgelopen, detector voor lange taken, vorige start, ophalen per soort, opslag,
+          # verbinding, en 10.000 films + 1.000 zenders en de PBKDF2-terugval in stukjes (elk stuk ≤ 250 ms)
+          node tizen/test/build147_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b147.log"
+          echo "::notice title=Logica-tests build 147 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b147.log")"
 
       - name: Tizen Studio CLI uit de cache
         id: cache

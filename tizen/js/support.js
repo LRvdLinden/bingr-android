@@ -7,6 +7,10 @@
  * - B.diag: startdiagnose (mijlpalen met tijd en geheugen, vorige start niet klaar, fout via window.onerror /
  *   unhandledrejection) en de app-diagnose (model via productinfo of tizen.systeminfo, netwerk, opslag, geheugen).
  * Geen persoonsgegevens: geen e-mail, namen, gebruikersnamen, wachtwoorden, URL's of servernamen.
+ * Build 147 (diagnose-schema 2, B.b147): detector voor lange taken (gat in een setInterval-tik van 250 ms; 2 s = hang) met
+ * voorgrond/achtergrond, de actieve taak (DG.task) en de laatste taken als "stack" (JavaScript kan de stack van een andere
+ * taak niet lezen); soort verbinding vanaf de start (tizen.systeminfo NETWORK, anders "unknown"); per server en soort wat
+ * er geleverd is (DG.fetchLog); opslag met één totaal; en elke diagnose heeft de startdiagnose (deze start en de vorige).
  * Geschreven voor Chromium M56 (ES2017, geen ?. ?? of spread).
  */
 (function () {
@@ -37,6 +41,7 @@
   DG.start = function () {
     if (record) return;
     var prev = B.store.get(KEY_CUR, null);
+    DG.previous = prev && prev.marks ? prev : null;
     var p = G.analyze(prev);
     if (p) { DG.lastProblem = p; B.store.set(KEY_PROB, p); }
     else DG.lastProblem = B.store.get(KEY_PROB, null);
@@ -69,7 +74,57 @@
   DG.marks = function () { return record ? record.marks : []; };
   DG.uptimeS = function () { return Math.round((Date.now() - t0) / 1000); };
   DG.clearProblem = function () { DG.lastProblem = null; B.store.del(KEY_PROB); B.emit('diag'); };
+
+  // MARK: build 147: taken en lange taken
+
+  var X7 = B.b147;
+  DG.taskName = null;
+  var trail = [];
+  function noteTask(name) { trail.push('taak ' + name); if (trail.length > 12) trail.shift(); }
+  /** Synchrone taak met een naam (een hang noemt dan deze taak). */
+  DG.task = function (name, fn) {
+    var before = DG.taskName;
+    DG.taskName = name; noteTask(name);
+    try { return fn(); } finally { DG.taskName = before; }
+  };
+  var detector = X7 ? new X7.hang.Detector() : null;
+  DG.maxHangMs = function () { return detector ? detector.maxForegroundMs : 0; };
+  function visible() { try { return !document.hidden; } catch (e) { return true; } }
+  function startDetector() {
+    if (!detector) return;
+    try {
+      document.addEventListener('visibilitychange', function () { detector.reset(Date.now()); });
+    } catch (e) { /* stil */ }
+    setInterval(function () {
+      var now = Date.now();
+      var last = record && record.marks.length ? record.marks[record.marks.length - 1].name : null;
+      var e = detector.tick(now, { foreground: visible(), task: DG.taskName || (trail.length ? trail[trail.length - 1].slice(5) : null),
+        afterReady: !!(record && record.finished), milestone: last, trail: trail.slice() });
+      if (!e || !record) return;
+      var cur = record.hangMs;
+      var curFg = record.hangFg !== false;
+      var better = cur == null || (e.foreground && !curFg) || (e.foreground === curFg && e.ms > cur);
+      if (!better) return;
+      record = B.assign({}, record, { hangMs: e.ms, hangAt: e.milestone, hangFg: e.foreground, hangTask: e.task, hangStack: e.stack,
+        hangAfterReady: e.afterReady });
+      save();
+    }, X7.hang.TICK_MS);
+  }
+
+  // soort verbinding vanaf de start (tizen.systeminfo NETWORK; buiten de tv of zonder rechten: "unknown")
+  DG.netType = 'unknown';
+  function trackNetwork() {
+    try {
+      if (!(window.tizen && tizen.systeminfo && tizen.systeminfo.getPropertyValue)) return;
+      var set = function (n) { if (X7) DG.netType = X7.netType(n && n.networkType); };
+      tizen.systeminfo.getPropertyValue('NETWORK', set, function () { /* niet beschikbaar */ });
+      if (tizen.systeminfo.addPropertyValueChangeListener) tizen.systeminfo.addPropertyValueChangeListener('NETWORK', set);
+    } catch (e) { /* buiten de tv */ }
+  }
+
   DG.start();
+  startDetector();
+  trackNetwork();
 
   // MARK: apparaat
 
@@ -112,8 +167,9 @@
         if (!(window.tizen && tizen.systeminfo && tizen.systeminfo.getPropertyValue)) { res(navigator.onLine === false ? 'none' : 'unknown'); return; }
         tizen.systeminfo.getPropertyValue('NETWORK', function (n) {
           var t = String((n && n.networkType) || '').toUpperCase();
-          res(t === 'ETHERNET' ? 'ethernet' : t === 'WIFI' ? 'wifi' : t === 'NONE' ? 'none' : t ? 'other' : 'unknown');
-        }, function () { res('unknown'); });
+          if (X7) DG.netType = X7.netType(t);
+          res(t === 'ETHERNET' ? 'ethernet' : t === 'WIFI' ? 'wifi' : t === 'NONE' ? 'none' : (X7 && X7.netType(t) === 'cellular') ? 'cellular' : t ? 'other' : 'unknown');
+        }, function () { res(DG.netType || 'unknown'); });
       } catch (e) { res('unknown'); }
     });
   }
@@ -155,7 +211,114 @@
     });
   };
 
-  /** App-diagnose (schema 1, kind app). */
+  // MARK: build 147: startdiagnose, ophalen per soort, opslag
+
+  /** Deze start: {summary, timing, maxHangMs, previous}. */
+  DG.startInfo = function () {
+    var t = X7.start.timing(DG.marks());
+    var hang = DG.maxHangMs();
+    return { summary: X7.start.summary(t.appMs, hang, false), timing: t, maxHangMs: hang, previous: X7.previous(DG.previous) };
+  };
+  function startBlock() {
+    var i = DG.startInfo();
+    var o = { summary: i.summary, appMs: i.timing.appMs, userWaitMs: i.timing.userWaitMs, finished: i.timing.finished };
+    if (i.maxHangMs > 0) o.hangMs = i.maxHangMs;
+    if (i.previous) {
+      var p = i.previous, pv = { problem: p.problem, seconds: p.seconds, foreground: p.foreground, stack: (p.stack || []).slice(0, 50) };
+      if (p.milestone) pv.milestone = p.milestone;
+      if (p.task) pv.task = String(p.task).slice(0, 60);
+      o.previous = pv;
+    }
+    return o;
+  }
+
+  var KEY_FETCH = 'diag.fetch.v147';
+  DG.fetchLog = {
+    all: function () { return B.store.get(KEY_FETCH, {}) || {}; },
+    delivered: function (id, lib, errs) {
+      var m = DG.fetchLog.all(), e = errs || {};
+      function ent(n, k) { var o = { n: n }; if (!n && e[k]) o.err = e[k]; return o; }
+      m[String(id).toLowerCase()] = { live: ent((lib.channels || []).length, 'live'), movie: ent((lib.movies || []).length, 'movie'),
+        series: ent((lib.series || []).length, 'series'), at: Date.now() };
+      DG.fetchLog.prune(m);
+      B.store.set(KEY_FETCH, m);
+    },
+    failed: function (id, code) {
+      var m = DG.fetchLog.all();
+      m[String(id).toLowerCase()] = { live: { n: 0, err: code }, movie: { n: 0, err: code }, series: { n: 0, err: code }, at: Date.now() };
+      B.store.set(KEY_FETCH, m);
+    },
+    prune: function (m) {
+      var ids = {};
+      (B.data && B.data.sources || []).forEach(function (s) { ids[String(s.id).toLowerCase()] = true; });
+      if (!Object.keys(ids).length) return;
+      Object.keys(m).forEach(function (k) { if (!ids[k]) delete m[k]; });
+    }
+  };
+  /** [{server: 's1', kind, status, count, error}] voor alle servers (zonder namen of URL's). */
+  DG.fetchRows = function () {
+    var D = B.data, Lib = B.lib, log = DG.fetchLog.all(), out = [];
+    var act = Lib && Lib.source ? String(Lib.source.id).toLowerCase() : null;
+    var raw = Lib && Lib.raw, lib = Lib && Lib.lib;
+    (D.sources || []).forEach(function (s, i) {
+      var id = String(s.id).toLowerCase(), e = log[id] || null;
+      var isActive = id === act && raw && (raw.channels.length || raw.movies.length || raw.series.length);
+      X7.fetch.KINDS.forEach(function (k) {
+        var key = k === 'live' ? 'channels' : k === 'movie' ? 'movies' : 'series';
+        var r = isActive ? raw[key].length : (e && e[k] ? e[k].n : null);
+        var v = isActive && lib && lib[key] ? lib[key].length : null;
+        var err = e && e[k] ? e[k].err || null : null;
+        var st = X7.fetch.status(r, v, err);
+        var row = { server: X7.fetch.serverName(i), kind: k, status: st, count: r || 0 };
+        if (st === 'failed' && err) row.error = err;
+        out.push(row);
+      });
+    });
+    return out;
+  };
+
+  function localBytes() {
+    var n = 0;
+    try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); n += k.length + String(localStorage.getItem(k) || '').length; } } catch (e) { /* stil */ }
+    return n * 2;
+  }
+  /** Opslag: catalogus = IndexedDB + localStorage (navigator.storage.estimate als die er is), vrij via tizen.systeminfo STORAGE. */
+  DG.storage = function () {
+    var est = new Promise(function (res) {
+      try {
+        if (navigator.storage && navigator.storage.estimate) { navigator.storage.estimate().then(function (e) { res(e && e.usage || 0); }, function () { res(0); }); return; }
+      } catch (e) { /* stil */ }
+      res(0);
+    });
+    var free = new Promise(function (res) {
+      try {
+        if (!(window.tizen && tizen.systeminfo && tizen.systeminfo.getPropertyValue)) { res(null); return; }
+        tizen.systeminfo.getPropertyValue('STORAGE', function (st) {
+          var u = st && st.units && st.units[0];
+          res(u && typeof u.availableCapacity === 'number' ? u.availableCapacity : null);
+        }, function () { res(null); });
+      } catch (e) { res(null); }
+    });
+    return Promise.all([est, free]).then(function (r) {
+      var ls = localBytes();
+      return X7.storage(0, Math.max(r[0], ls), 0, r[1]);
+    });
+  };
+  /** Blokken van schema 2 die in elke diagnose zitten. */
+  function schema2(out) {
+    return DG.storage().then(function (st) {
+      out.schema = 2;
+      out.start = startBlock();
+      out.fetch = DG.fetchRows();
+      out.network = { type: DG.netType === 'wifi' || DG.netType === 'ethernet' || DG.netType === 'cellular' ? DG.netType : 'unknown' };
+      var so = { totalMB: st.totalMB, cacheMB: st.cacheMB, catalogMB: st.catalogMB, downloadsMB: st.downloadsMB };
+      if (st.freeMB != null) so.freeMB = st.freeMB;
+      out.storage = so;
+      return out;
+    }, function () { out.schema = 2; out.start = startBlock(); out.fetch = DG.fetchRows(); out.network = { type: 'unknown' }; return out; });
+  }
+
+  /** App-diagnose (schema 2, kind app). */
   DG.app = function () {
     var D = B.data, Lib = B.lib;
     return DG.network().then(function (net) {
@@ -174,7 +337,7 @@
       var out = { schema: 1, kind: 'app', createdAt: new Date().toISOString(), app: appJson(), device: deviceJson(),
         milestones: marksJson(DG.marks()), memory: DG.memory(), state: st };
       if (DG.lastError) out.crash = DG.lastError;
-      return out;
+      return schema2(out);
     });
   };
   /** Startdiagnose van de vorige start. */
@@ -185,8 +348,13 @@
     if (p.crash) out.crash = p.crash;
     return out;
   };
-  /** Wat er bij "Diagnose meesturen" meegaat: na een mislukte vorige start de startdiagnose, anders de app-diagnose. */
-  DG.forSupport = function () { return DG.lastProblem ? Promise.resolve(DG.startJson(DG.lastProblem)) : DG.app(); };
+  /** Build 147: startdiagnose van de vorige start, met deze start, servers, verbinding en opslag (schema 2). */
+  DG.startFull = function (p) { return schema2(DG.startJson(p)); };
+  /**
+   * Wat er bij "Diagnose meesturen" meegaat: na een mislukte vorige start de startdiagnose, anders de app-diagnose. Build 147:
+   * allebei met de startdiagnose (deze start en de vorige).
+   */
+  DG.forSupport = function () { return DG.lastProblem ? DG.startFull(DG.lastProblem) : DG.app(); };
 
   // MARK: support (functie `support`, acties app_*)
 
