@@ -1,0 +1,306 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10.2/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :app:buildKotlinToolingMetadata
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:generateReleaseBuildConfig
+> Task :app:generateReleaseResValues
+> Task :app:checkReleaseAarMetadata
+> Task :app:processReleaseGoogleServices
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:generateReleaseResources
+> Task :app:packageReleaseResources
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease
+> Task :app:parseReleaseLocalResources
+> Task :app:mergeReleaseResources
+
+> Task :app:processReleaseMainManifest
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:146:9-149:34 Warning:
+	service#androidx.work.impl.foreground.SystemForegroundService@android:foregroundServiceType was tagged at AndroidManifest.xml:146 to remove other declarations but no other declaration present
+
+> Task :app:processReleaseManifest
+> Task :app:processReleaseManifestForPackage
+> Task :app:javaPreCompileRelease
+> Task :app:extractProguardFiles
+> Task :app:mergeReleaseJniLibFolders
+> Task :app:mergeReleaseNativeLibs
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:processReleaseResources
+> Task :app:mergeReleaseArtProfile
+> Task :app:mergeReleaseStartupProfile
+> Task :app:mergeReleaseShaders
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+
+> Task :app:stripReleaseDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so, libc++_shared.so, libvlc.so, libvlcjni.so.
+
+> Task :app:mergeReleaseAssets
+> Task :app:extractReleaseNativeSymbolTables
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:compressReleaseAssets
+> Task :app:collectReleaseDependencies
+> Task :app:sdkReleaseDependencyData
+> Task :app:validateSigningRelease
+> Task :app:writeReleaseAppMetadata
+> Task :app:writeReleaseSigningConfigVersions
+> Task :app:optimizeReleaseResources
+> Task :app:compileReleaseKotlin
+w: file:///home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/Localization.kt:93:90 'constructor(p0: String!): Locale' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/parental/ParentalAndReminders.kt:104:30 Condition is always 'true'.
+w: file:///home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/TrackPreferences.kt:110:17 'constructor(p0: String!): Locale' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/TrackPreferences.kt:167:21 'constructor(p0: String!): Locale' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/TrackPreferences.kt:167:53 'constructor(p0: String!): Locale' is deprecated. Deprecated in Java.
+
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:mergeReleaseGeneratedProguardFiles
+> Task :app:processReleaseJavaRes
+> Task :app:expandReleaseArtProfileWildcards
+> Task :app:mergeReleaseJavaResource
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:minifyReleaseWithR8
+> Task :app:lintVitalReportRelease SKIPPED
+> Task :app:lintVitalRelease SKIPPED
+> Task :app:compileReleaseArtProfile
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+> Task :app:generateReleaseLintReportModel
+> Task :app:preReleaseUnitTestBuild UP-TO-DATE
+> Task :app:bundleReleaseClassesToCompileJar
+> Task :app:generateReleaseUnitTestLintModel
+> Task :app:lintAnalyzeReleaseUnitTest
+> Task :app:lintAnalyzeRelease
+
+> Task :app:lintReportRelease
+Wrote HTML report to file:///home/runner/work/bingr-android/bingr-android/app/build/reports/lint-results-release.html
+
+> Task :app:lintRelease
+
+> Task :app:copyReleaseLintReports
+Copying lint text report to /home/runner/work/bingr-android/bingr-android/app/build/reports/lint-results-release.txt
+
+> Task :app:printLintReport
+=== Lint ===
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens/HeroTrailer.kt:263: Warning: Consider using WebViewCompat.getCurrentWebViewPackage instead which will support more devices. [WebViewApiAvailability]
+            HeroTrailer.log("WebView ${WebView.getCurrentWebViewPackage()?.let { it.packageName + " " + it.versionName } ?: "?"}")
+                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/StartDiagnostics.kt:148: Warning: Consider using apply() instead; commit writes its data to persistent storage immediately, whereas apply will handle it in the background [ApplySharedPref]
+            if (sync) e.commit() else e.apply()
+                        ~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/account/AccountService.kt:507: Warning: Field requires API level 25 (current min is 24): android.provider.Settings.Global#DEVICE_NAME [InlinedApi]
+            android.provider.Settings.Global.getString(AppState.appContext.contentResolver, android.provider.Settings.Global.DEVICE_NAME)
+                                                                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:151: Error: <nl.lrvdlinden.bingr.DownloadJobService> requires API level 34 (current min is 24) [NewApi]
+        <service
+        ^
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:57: Warning: Consider splitting data tag into multiple tags with individual attributes to avoid confusion [IntentFilterUniqueDataAttributes]
+                <data android:scheme="bingr" android:host="changelog" />
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:58: Warning: Consider splitting data tag into multiple tags with individual attributes to avoid confusion [IntentFilterUniqueDataAttributes]
+                <data android:scheme="bingr" android:host="live" />
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:60: Warning: Consider splitting data tag into multiple tags with individual attributes to avoid confusion [IntentFilterUniqueDataAttributes]
+                <data android:scheme="bingr" android:host="title" />
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:62: Warning: Consider splitting data tag into multiple tags with individual attributes to avoid confusion [IntentFilterUniqueDataAttributes]
+                <data android:scheme="bingr" android:host="support" />
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:8: Warning: Requiring Wifi permissions limits app availability on TVs that support only Ethernet [LeanbackUsesWifi]
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:25: Warning: An activity in this app supports picture-in-picture and the targetSdkVersion is 31 or above; it is therefore strongly recommended to call both setAutoEnterEnabled(true) and setSourceRectHint(...) [PictureInPictureIssue]
+    <application
+     ~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/Downloads.kt:497: Warning: Specify a valid range of job id's for WorkManager to use. [SpecifyJobSchedulerIdRange from androidx.work]
+class DownloadJobService : JobService() {
+      ~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:120: Warning: A newer version of androidx.activity:activity-compose than 1.9.3 is available: 1.13.0 [GradleDependency]
+    implementation("androidx.activity:activity-compose:1.9.3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:121: Warning: A newer version of androidx.core:core-ktx than 1.15.0 is available: 1.19.1 [GradleDependency]
+    implementation("androidx.core:core-ktx:1.15.0")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:122: Warning: A newer version of androidx.lifecycle:lifecycle-runtime-ktx than 2.8.7 is available: 2.11.0 [GradleDependency]
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:123: Warning: A newer version of androidx.lifecycle:lifecycle-runtime-compose than 2.8.7 is available: 2.11.0 [GradleDependency]
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:125: Warning: A newer version of androidx.lifecycle:lifecycle-process than 2.8.7 is available: 2.11.0 [GradleDependency]
+    implementation("androidx.lifecycle:lifecycle-process:2.8.7")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:134: Warning: A newer version of androidx.media3:media3-exoplayer than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-exoplayer:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:135: Warning: A newer version of androidx.media3:media3-exoplayer-hls than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-exoplayer-hls:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:136: Warning: A newer version of androidx.media3:media3-exoplayer-dash than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-exoplayer-dash:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:137: Warning: A newer version of androidx.media3:media3-ui than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-ui:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:139: Warning: A newer version of androidx.media3:media3-datasource-okhttp than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-datasource-okhttp:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:143: Warning: A newer version of com.google.android.gms:play-services-cast-framework than 21.5.0 is available: 23.0.0 [GradleDependency]
+    implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:144: Warning: A newer version of androidx.mediarouter:mediarouter than 1.7.0 is available: 1.8.1 [GradleDependency]
+    implementation("androidx.mediarouter:mediarouter:1.7.0")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:147: Warning: A newer version of androidx.activity:activity-ktx than 1.9.3 is available: 1.13.0 [GradleDependency]
+    implementation("androidx.activity:activity-ktx:1.9.3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:150: Warning: A newer version of androidx.work:work-runtime-ktx than 2.9.1 is available: 2.12.0 [GradleDependency]
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:153: Warning: A newer version of com.google.firebase:firebase-bom than 33.7.0 is available: 35.1.0 [GradleDependency]
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/SourceCheck.kt:309: Warning: Modifier factory functions should be extensions on Modifier [ModifierFactoryExtensionFunction from androidx.compose.ui]
+private fun checkRowModifier(): Modifier {
+            ~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens/Categories.kt:405: Warning: Optional Modifier parameter should have a default value of Modifier [ModifierParameter from androidx.compose.ui]
+    modifier: Modifier = Modifier.fillMaxWidth(), compact: Boolean = false, onClick: () -> Unit,
+    ~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/Theme.kt:143: Warning: Modifier parameter should be the first optional parameter [ModifierParameter from androidx.compose.ui]
+    modifier: Modifier = Modifier,
+    ~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Manage.kt:122: Error: produceState calls should assign value inside the producer lambda [ProduceStateDoesNotAssignValue from androidx.compose.runtime]
+    val byName by androidx.compose.runtime.produceState(initialValue = linkedMapOf<String, List<String>>(), kind, raw, servers) {
+                                           ~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/xml/network_security_config.xml:10: Warning: Insecure Base Configuration [InsecureBaseConfiguration]
+    <base-config cleartextTrafficPermitted="true">
+                                            ~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerExtras.kt:227: Warning: Unnecessary; SDK_INT is never < 24 [ObsoleteSdkInt]
+        if (Build.VERSION.SDK_INT < 23) return
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerExtras.kt:259: Warning: Unnecessary; SDK_INT is never < 24 [ObsoleteSdkInt]
+        if (!changedMode || Build.VERSION.SDK_INT < 23) return
+                            ~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/Downloads.kt:81: Warning: Do not place Android context classes in static fields (static reference to Downloads which has field ctx pointing to Context); this is a memory leak [StaticFieldLeak]
+/**
+^
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/Downloads.kt:104: Warning: Do not place Android context classes in static fields; this is a memory leak [StaticFieldLeak]
+    private lateinit var ctx: Context
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/AllServers.kt:43: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var version by mutableStateOf(0); private set
+                   ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/CatalogMeta.kt:26: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var version by mutableStateOf(0); private set
+                   ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens/Categories.kt:516: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var sortVersion by remember { mutableStateOf(Metadata.version) }
+                                  ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/ContinueCovers.kt:30: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var version by mutableStateOf(0); private set
+                   ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens/HeroTrailer.kt:133: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var token by mutableStateOf(0)
+                 ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens/Home.kt:683: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var knownTick by remember { mutableStateOf(0) }
+                                ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/meta/Metadata.kt:27: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var version by mutableStateOf(0); private set
+                   ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/NewOnBingr.kt:30: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var version by mutableStateOf(0); private set
+                   ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/parental/ParentalAndReminders.kt:35: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var pinVersion by mutableStateOf(0); private set
+                      ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/parental/ParentalAndReminders.kt:156: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var lockoutVersion by mutableStateOf(0); private set
+                          ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Pin.kt:75: Information: Prefer mutableLongStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var wait by remember { mutableStateOf(if (guarded) ParentalControl.lockoutRemaining() else 0L) }
+                           ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:57: Information: Prefer mutableDoubleStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var position by mutableStateOf(0.0); private set
+                    ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:58: Information: Prefer mutableDoubleStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var currentTime by mutableStateOf(0.0); private set
+                       ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:59: Information: Prefer mutableDoubleStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var duration by mutableStateOf(0.0); private set
+                    ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:63: Information: Prefer mutableDoubleStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var behindLive by mutableStateOf(0.0); private set
+                      ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:66: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var tracksVersion by mutableStateOf(0); private set
+                         ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:68: Information: Prefer mutableFloatStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    private var _rate by mutableStateOf(1f)
+                         ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:847: Information: Prefer mutableDoubleStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    private var _subtitleDelay by mutableStateOf(0.0)
+                                  ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/providers/PlaylistService.kt:72: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var catalogVersion by mutableStateOf(0); private set
+                          ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/Secrets.kt:25: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var revision by mutableStateOf(0)
+                    ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/Store.kt:71: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var photoVersion by mutableStateOf(0); private set
+                        ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/SupportScreens.kt:234: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var reload by remember { mutableStateOf(0) }
+                             ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/TrackPreferences.kt:21: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    private var version by mutableStateOf(0)
+                           ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Guide.kt:117: Warning: State backed values should use the lambda overload of Modifier.offset [UseOfNonLambdaOffsetOverload from androidx.compose.foundation]
+                    Box(Modifier.offset(x = x(now)).width(2.dp).fillMaxHeight().background(Theme.red))
+                                 ~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Guide.kt:139: Warning: State backed values should use the lambda overload of Modifier.offset [UseOfNonLambdaOffsetOverload from androidx.compose.foundation]
+                                    modifier = Modifier.offset(x = x(now) + 8.dp).align(Alignment.CenterStart))
+                                                        ~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Guide.kt:148: Warning: State backed values should use the lambda overload of Modifier.offset [UseOfNonLambdaOffsetOverload from androidx.compose.foundation]
+                            Box(Modifier.offset(x = x(now)).width(2.dp).fillMaxHeight().background(Theme.red))
+                                         ~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/KidsGate.kt:180: Warning: State backed values should use the lambda overload of Modifier.offset [UseOfNonLambdaOffsetOverload from androidx.compose.foundation]
+                    modifier = Modifier.offset(x = shake.value.dp))
+                                        ~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-hdpi/ic_launcher.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-mdpi/ic_launcher.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xhdpi/ic_launcher.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-hdpi/ic_launcher_blue.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-mdpi/ic_launcher_blue.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xhdpi/ic_launcher_blue.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_blue.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_blue.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-hdpi/ic_launcher_dark.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-mdpi/ic_launcher_dark.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xhdpi/ic_launcher_dark.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_dark.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_dark.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-hdpi/ic_launcher_gold.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-mdpi/ic_launcher_gold.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xhdpi/ic_launcher_gold.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_gold.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_gold.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-hdpi/ic_launcher_light.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-mdpi/ic_launcher_light.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xhdpi/ic_launcher_light.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_light.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_light.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/drawable/tv_banner.png: Warning: Found bitmap drawable res/drawable/tv_banner.png in densityless folder [IconLocation]
+2 errors, 63 warnings
+
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_6-1792842580716.json
+
+BUILD SUCCESSFUL in 4m 51s
+56 actionable tasks: 56 executed
