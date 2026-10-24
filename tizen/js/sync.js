@@ -659,7 +659,7 @@
         var known = e.known;
         var reuse = known ? X.verify(e.pin, known).then(function (okv) { return okv ? known : null; }) : Promise.resolve(null);
         // build 147: PBKDF2 in stukjes (X.pbkdf2Chunked, 12 ms per keer) als WebCrypto er niet is
-        if (B.diag && B.diag.task) B.diag.task('pin migreren', B.noop);
+        if (B.diag && B.diag.task) B.diag.task('pin_migrate', B.noop);
         return reuse.then(function (h) { return h || X.make(e.pin); }).then(function (h) {
           D.pins[e.id] = h;
           save();

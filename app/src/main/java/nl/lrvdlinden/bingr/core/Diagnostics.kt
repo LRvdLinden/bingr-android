@@ -87,7 +87,11 @@ object Diagnostics {
         put("version", BuildConfig.VERSION_NAME.take(20))
         put("build", BuildConfig.VERSION_CODE)
         put("engine", engine)
+        put("lang", appLang)
     }
+
+    /** Build 148: de app-taal (`app.lang`), niet die van het systeem. */
+    val appLang: String get() = Localizer.language.takeIf { Regex("^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$").matches(it) && it.length <= 12 } ?: "en"
 
     private fun deviceJson() = buildJsonObject {
         put("type", deviceType)
@@ -114,9 +118,11 @@ object Diagnostics {
         put("usedMB", m.usedMB); put("totalMB", m.totalMB); put("appMB", m.appMB); put("lowMemory", m.low)
     }
 
-    private fun marksJson(marks: List<Build146Logic.Diag.Mark>) = JsonArray(marks.take(Build146Logic.Diag.MAX_MARKS).map { m ->
-        buildJsonObject { put("name", m.name); put("ms", m.ms); put("ok", true) }
-    })
+    /** Build 148 (schema 3): mijlpalen als code (elke code één keer), de oude naam mag mee. */
+    private fun marksJson(marks: List<Build146Logic.Diag.Mark>) =
+        JsonArray(Build148Logic.Codes.dedupe(marks.take(Build146Logic.Diag.MAX_MARKS)) { it.name }.map { (code, m) ->
+            buildJsonObject { put("code", code); put("name", m.name); put("ms", m.ms); put("ok", true) }
+        })
 
     private fun crashJson(c: Build146Logic.Diag.Crash) = buildJsonObject {
         put("at", iso(c.at)); put("type", c.type.take(80)); put("reason", c.reason.take(300)); put("build", c.build)
@@ -227,10 +233,10 @@ object Diagnostics {
 
     private fun previousJson(p: Build147Logic.Previous.Info) = buildJsonObject {
         put("problem", p.problem)
-        p.milestone?.let { put("milestone", it) }
+        Build148Logic.Codes.of(p.milestone)?.let { put("milestone", it) }
         put("seconds", p.seconds)
         put("foreground", p.foreground)
-        p.task?.let { put("task", it.take(60)) }
+        Build148Logic.Codes.of(p.task)?.let { put("task", it) }
         put("stack", JsonArray(p.stack.take(50).map { JsonPrimitive(it.take(200)) }))
     }
 
@@ -239,7 +245,17 @@ object Diagnostics {
         put("appMs", i.timing.appMs)
         put("userWaitMs", i.timing.userWaitMs)
         put("finished", i.timing.finished)
-        if (i.maxHangMs > 0) put("hangMs", i.maxHangMs)
+        if (i.maxHangMs > 0) { put("hangMs", i.maxHangMs); put("maxHangMs", i.maxHangMs) }
+        // build 148: langste hang van deze start (duur, taak, mijlpaal, voorgrond, stack)
+        StartDiagnostics.longestHang()?.let { h ->
+            put("longestHang", buildJsonObject {
+                put("ms", h.ms.coerceIn(0L, 3_600_000L))
+                Build148Logic.Codes.of(h.task)?.let { put("task", it) }
+                Build148Logic.Codes.of(h.milestone)?.let { put("milestone", it) }
+                put("foreground", h.foreground)
+                put("stack", JsonArray(h.stack.take(30).map { JsonPrimitive(it.take(200)) }))
+            })
+        }
         i.previous?.let { put("previous", previousJson(it)) }
     }
 
@@ -263,12 +279,48 @@ object Diagnostics {
         }
     }
 
-    private fun fetchJson() = JsonArray(fetchRows().map { r ->
-        buildJsonObject {
-            put("server", r.server); put("kind", r.kind); put("status", r.status); put("count", r.count)
-            r.error?.let { put("error", it) }
+    /**
+     * Build 148: per soort van de open server: geleverd, zichtbaar en waarom verborgen (categorieën, kinderfilter, dubbel,
+     * overig). Op de achtergrond (tienduizenden titels); andere servers alleen "geleverd" (uit [FetchLog]).
+     */
+    suspend fun visibility(): Map<String, Build148Logic.Hidden.Counts> {
+        val src = Playlists.source ?: return emptyMap()
+        val raw = Playlists.rawLibrary
+        val lib = Playlists.library
+        if (raw.isEmpty || Playlists.isFiltering) return emptyMap()
+        val ctx = Playlists.context(src)
+        val c = ctx.custom
+        return withContext(Dispatchers.Default) {
+            val kidsOn = ctx.kids && !ctx.unlocked
+            fun hiddenCat(g: String) = g in ctx.hiddenCategories || (c.merged[g] ?: g) in ctx.hiddenCategories
+            fun notKids(g: String) = kidsOn && !Build140Logic.Kids.isKidsCategory(g)
+            val H = Build148Logic.Hidden
+            mapOf(
+                "live" to H.count(raw.channels, lib.channels.size, { it.group }, ::hiddenCat, ::notKids),
+                "movie" to H.count(raw.movies, lib.movies.size, { it.group }, ::hiddenCat, ::notKids),
+                "series" to H.count(raw.series, lib.series.size, { it.group }, ::hiddenCat, ::notKids),
+            )
         }
-    })
+    }
+
+    private suspend fun fetchJson(): JsonArray {
+        val vis = runCatching { visibility() }.getOrDefault(emptyMap())
+        val activeName = Store.playlists.indexOfFirst { it.id.equals(Playlists.source?.id, ignoreCase = true) }
+            .takeIf { it >= 0 }?.let { Build147Logic.Fetch.serverName(it) }
+        return JsonArray(fetchRows().map { r ->
+            buildJsonObject {
+                put("server", r.server); put("kind", r.kind); put("status", r.status); put("count", r.count)
+                r.error?.let { put("error", it) }
+                val v = if (r.server == activeName) vis[r.kind] else null
+                if (v != null) {
+                    put("delivered", v.delivered); put("visible", v.visible)
+                    put("hidden", buildJsonObject {
+                        put("categories", v.categories); put("kids", v.kids); put("duplicates", v.duplicates); put("other", v.other)
+                    })
+                } else if (r.status != "failed") put("delivered", r.count)
+            }
+        })
+    }
 
     // MARK: de bijlage
 
@@ -282,7 +334,7 @@ object Diagnostics {
         val lib = Playlists.library
         val fetch = fetchJson()
         return buildJsonObject {
-            put("schema", 2); put("kind", "app"); put("createdAt", iso(System.currentTimeMillis()))
+            put("schema", 3); put("kind", "app"); put("createdAt", iso(System.currentTimeMillis()))
             put("app", appJson()); put("device", deviceJson())
             put("milestones", marksJson(StartDiagnostics.marks()))
             put("memory", memoryJson())
@@ -309,6 +361,8 @@ object Diagnostics {
             })
             put("start", startJson())
             put("fetch", fetch)
+            put("updates", UpdateLog.attachment())
+            if (PlaybackStalls.list.isNotEmpty()) put("playback", PlaybackStalls.attachment())
             put("network", buildJsonObject { put("type", if (net.type in setOf("wifi", "cellular", "ethernet")) net.type else "unknown") })
             put("storage", storageJson(st))
         }
@@ -322,9 +376,10 @@ object Diagnostics {
     }
 
     private fun startOf(p: Build146Logic.Diag.Problem, st: Storage, fetch: JsonArray): JsonObject = buildJsonObject {
-        put("schema", 2); put("kind", "start"); put("createdAt", iso(p.at.takeIf { it > 0 } ?: System.currentTimeMillis()))
+        put("schema", 3); put("kind", "start"); put("createdAt", iso(p.at.takeIf { it > 0 } ?: System.currentTimeMillis()))
         put("app", buildJsonObject {
             put("platform", platform); put("version", BuildConfig.VERSION_NAME.take(20)); put("build", p.build); put("engine", engine)
+            put("lang", appLang)
         })
         put("device", deviceJson())
         put("milestones", marksJson(p.marks))
@@ -336,6 +391,8 @@ object Diagnostics {
         })
         put("start", startJson())
         put("fetch", fetch)
+        put("updates", UpdateLog.attachment())
+        if (PlaybackStalls.list.isNotEmpty()) put("playback", PlaybackStalls.attachment())
         put("network", buildJsonObject { put("type", networkType()) })
         put("storage", storageJson(st))
     }
@@ -389,5 +446,75 @@ object FetchLog {
     fun get(serverID: String): Map<String, Pair<Int, String?>>? = synchronized(lock) {
         val o = all()[serverID.lowercase(Locale.ROOT)] ?: return null
         Build147Logic.Fetch.KINDS.associateWith { k -> val e = o[k] as? JsonObject; (e.jI("n") ?: 0) to e.jS("err") }
+    }
+}
+
+/**
+ * Build 148: de laatste 5 keer bijwerken van een server (`updates` in schema 3), met per fase (ophalen, inlezen,
+ * indexeren, toepassen, bewaren) de duur en het geheugen aan het eind. Server geanonimiseerd (s1, s2, … op volgorde in de
+ * app); bewaard per apparaat, geen namen of URL's.
+ */
+object UpdateLog {
+    private const val KEY = "diag.updates.v148"
+    private val lock = Any()
+
+    class Rec(val rec: Build148Logic.Updates.Recorder)
+
+    private fun now() = android.os.SystemClock.elapsedRealtime()
+
+    fun begin(p: PlaylistSource): Rec {
+        val i = Store.playlists.indexOfFirst { it.id.equals(p.id, ignoreCase = true) }.coerceAtLeast(0)
+        return Rec(Build148Logic.Updates.Recorder(Build147Logic.Fetch.serverName(i), System.currentTimeMillis(), now(), StartDiagnostics.appMB()))
+    }
+
+    fun phase(r: Rec?, code: String) { r ?: return; synchronized(r) { r.rec.phase(code, now(), StartDiagnostics.appMB()) } }
+
+    fun finish(r: Rec?, result: String) {
+        r ?: return
+        val u = synchronized(r) { r.rec.sample(StartDiagnostics.appMB()); r.rec.finish(result, now()) }
+        synchronized(lock) {
+            last = Build148Logic.Updates.push(all(), u)
+            runCatching { Prefs.put(KEY, JsonArray(last!!.map { json(it) }).toString()) }
+        }
+    }
+
+    @Volatile private var last: List<Build148Logic.Updates.Update>? = null
+
+    fun all(): List<Build148Logic.Updates.Update> = last ?: synchronized(lock) {
+        last ?: runCatching {
+            (Prefs.string(KEY)?.let { Http.json.parseToJsonElement(it) } as? JsonArray)?.mapNotNull { e ->
+                val o = e as? JsonObject ?: return@mapNotNull null
+                Build148Logic.Updates.Update(o.jS("server") ?: return@mapNotNull null, o.jL("atMs") ?: 0L,
+                    o.jList("phases").mapNotNull { f -> f.jS("code")?.let { Build148Logic.Updates.Phase(it, f.jL("ms") ?: 0L, f.jI("memMB") ?: 0) } },
+                    o.jL("totalMs") ?: 0L, o.jI("peakMB") ?: 0, o.jS("result") ?: "ok")
+            }
+        }.getOrNull().orEmpty().also { last = it }
+    }
+
+    private fun json(u: Build148Logic.Updates.Update) = buildJsonObject {
+        put("server", u.server); put("atMs", u.at); put("totalMs", u.totalMs); put("peakMB", u.peakMB); put("result", u.result)
+        put("phases", JsonArray(u.phases.map { f -> buildJsonObject { put("code", f.code); put("ms", f.ms); put("memMB", f.memMB) } }))
+    }
+
+    /** Voor de bijlage (contract: `at` als ISO-8601). */
+    fun attachment(): JsonArray = JsonArray(all().take(Build148Logic.Updates.MAX).map { u ->
+        buildJsonObject {
+            put("server", u.server); put("at", Diagnostics.iso(u.at))
+            put("phases", JsonArray(u.phases.take(5).map { f -> buildJsonObject { put("code", f.code); put("ms", f.ms); put("memMB", f.memMB) } }))
+            put("totalMs", u.totalMs); put("peakMB", u.peakMB); put("result", u.result)
+        }
+    })
+}
+
+/** Build 148: haperingen tijdens het afspelen (code `playback_stall`), de laatste 10 van dit proces. */
+object PlaybackStalls {
+    private val lock = Any()
+    @Volatile var list: List<Build148Logic.Stalls.Stall> = emptyList(); private set
+    fun add(s: Build148Logic.Stalls.Stall) = synchronized(lock) { list = Build148Logic.Stalls.push(list, s) }
+    fun attachment(): JsonObject = buildJsonObject {
+        put("code", "playback_stall")
+        put("count", list.size)
+        list.maxOfOrNull { it.ms }?.let { put("longestMs", it) }
+        put("stalls", JsonArray(list.map { s -> buildJsonObject { put("ms", s.ms); put("atS", s.atS); put("live", s.live) } }))
     }
 }

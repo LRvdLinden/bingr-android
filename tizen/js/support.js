@@ -89,6 +89,8 @@
   };
   var detector = X7 ? new X7.hang.Detector() : null;
   DG.maxHangMs = function () { return detector ? detector.maxForegroundMs : 0; };
+  /** Build 148: langste hang van deze start (voorgrond gaat voor): {ms, task, milestone, foreground, stack} of null. */
+  DG.longestHang = function () { return detector ? detector.worst : null; };
   function visible() { try { return !document.hidden; } catch (e) { return true; } }
   function startDetector() {
     if (!detector) return;
@@ -174,7 +176,13 @@
     });
   }
   function engine() { return window.webapis && webapis.avplay ? 'avplay' : 'html5'; }
-  function appJson(build) { return { platform: B.platform.id, version: String(B.config.version || '').slice(0, 20), build: build || buildNo(), engine: engine() }; }
+  function appJson(build) { return { platform: B.platform.id, version: String(B.config.version || '').slice(0, 20), build: build || buildNo(), engine: engine(), lang: DG.appLang() }; }
+  /** Build 148: de app-taal (`app.lang`), niet die van het systeem. */
+  DG.appLang = function () {
+    var l = '';
+    try { l = String(B.lang || ''); } catch (e) { l = ''; }
+    return /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(l) && l.length <= 12 ? l : 'en';
+  };
   function deviceJson() {
     var d = { type: 'tv', manufacturer: B.platform.maker, os: B.platform.os, osVersion: DG.osVersion(), language: DG.language() };
     var m = DG.model();
@@ -183,8 +191,12 @@
     if (sc) d.screen = sc;
     return d;
   }
+  /** Build 148 (schema 3): mijlpalen als code (elke code één keer), de oude naam mag mee. */
   function marksJson(marks) {
-    return (marks || []).slice(0, G.MAX_MARKS).map(function (m) { return { name: m.name, ms: m.ms, ok: true }; });
+    var C8 = B.b148 && B.b148.codes;
+    var l = (marks || []).slice(0, G.MAX_MARKS);
+    if (!C8) return l.map(function (m) { return { name: m.name, ms: m.ms, ok: true }; });
+    return C8.dedupe(l).map(function (x) { return { code: x.code, name: x.m.name, ms: x.m.ms, ok: true }; });
   }
 
   /** Per server (zonder naam of URL): soort en wanneer de lijst het laatst is bijgewerkt (0 = nooit). */
@@ -222,14 +234,60 @@
   function startBlock() {
     var i = DG.startInfo();
     var o = { summary: i.summary, appMs: i.timing.appMs, userWaitMs: i.timing.userWaitMs, finished: i.timing.finished };
-    if (i.maxHangMs > 0) o.hangMs = i.maxHangMs;
+    if (i.maxHangMs > 0) { o.hangMs = i.maxHangMs; o.maxHangMs = i.maxHangMs; }
+    var C8 = B.b148 && B.b148.codes;
+    // build 148: langste hang van deze start, met taak en mijlpaal als code
+    var h = DG.longestHang();
+    if (h && C8) {
+      var lh = { ms: Math.max(0, Math.min(3600000, Math.round(h.ms))), foreground: !!h.foreground, stack: (h.stack || []).slice(0, 30).map(function (x) { return String(x).slice(0, 200); }) };
+      var tc = C8.of(h.task), mc = C8.of(h.milestone);
+      if (tc) lh.task = tc;
+      if (mc) lh.milestone = mc;
+      o.longestHang = lh;
+    }
     if (i.previous) {
       var p = i.previous, pv = { problem: p.problem, seconds: p.seconds, foreground: p.foreground, stack: (p.stack || []).slice(0, 50) };
-      if (p.milestone) pv.milestone = p.milestone;
-      if (p.task) pv.task = String(p.task).slice(0, 60);
+      var pm = C8 ? C8.of(p.milestone) : p.milestone, pt = C8 ? C8.of(p.task) : p.task;
+      if (pm) pv.milestone = pm;
+      if (pt) pv.task = String(pt).slice(0, 60);
       o.previous = pv;
     }
     return o;
+  }
+
+  // MARK: build 148: bijwerken per server (fasen) en haperingen tijdens het afspelen
+
+  var X8 = B.b148;
+  var KEY_UPD = 'diag.updates.v148';
+  DG.updates = {
+    all: function () { var l = B.store.get(KEY_UPD, []); return Array.isArray(l) ? l : []; },
+    begin: function (src) {
+      if (!X8) return null;
+      var i = 0;
+      (B.data && B.data.sources || []).forEach(function (s, n) { if (src && String(s.id).toLowerCase() === String(src.id).toLowerCase()) i = n; });
+      return new X8.updates.Recorder(X7.fetch.serverName(i), Date.now(), Date.now(), memMB() || 0);
+    },
+    phase: function (rec, code) { if (rec) rec.phase(code, Date.now(), memMB() || 0); },
+    finish: function (rec, result) {
+      if (!rec || rec.finished) return;
+      rec.finished = true;
+      rec.sample(memMB() || 0);
+      var u = rec.finish(result, Date.now());
+      try { B.store.set(KEY_UPD, X8.updates.push(DG.updates.all(), u)); } catch (e) { /* stil */ }
+    },
+    attachment: function () {
+      return DG.updates.all().slice(0, 5).map(function (u) {
+        return { server: u.server, at: new Date(u.at || Date.now()).toISOString(), phases: (u.phases || []).slice(0, 5),
+          totalMs: u.totalMs || 0, peakMB: u.peakMB || 0, result: u.result || 'ok' };
+      });
+    }
+  };
+  DG.stalls = [];
+  DG.addStall = function (st) { if (X8 && st) DG.stalls = X8.stalls.push(DG.stalls, st); };
+  function playbackBlock() {
+    var l = DG.stalls, longest = 0;
+    l.forEach(function (x) { if (x.ms > longest) longest = x.ms; });
+    return { code: 'playback_stall', count: l.length, longestMs: longest, stalls: l.map(function (x) { return { ms: x.ms, atS: x.atS, live: x.live }; }) };
   }
 
   var KEY_FETCH = 'diag.fetch.v147';
@@ -254,6 +312,23 @@
       if (!Object.keys(ids).length) return;
       Object.keys(m).forEach(function (k) { if (!ids[k]) delete m[k]; });
     }
+  };
+  /** Build 148: fetchRows met geleverd, zichtbaar en waarom verborgen (open server). */
+  DG.fetchRows3 = function () {
+    var rows = DG.fetchRows();
+    var vis = null;
+    try { vis = B.lib && B.lib.visibility ? B.lib.visibility() : null; } catch (e) { vis = null; }
+    var act = -1;
+    (B.data && B.data.sources || []).forEach(function (s, n) { if (B.lib && B.lib.source && String(s.id).toLowerCase() === String(B.lib.source.id).toLowerCase()) act = n; });
+    var an = act >= 0 ? X7.fetch.serverName(act) : null;
+    rows.forEach(function (r) {
+      var v = vis && r.server === an ? vis[r.kind] : null;
+      if (v) {
+        r.delivered = v.delivered; r.visible = v.visible;
+        r.hidden = { categories: v.categories, kids: v.kids, duplicates: v.duplicates, other: v.other };
+      } else if (r.status !== 'failed') r.delivered = r.count;
+    });
+    return rows;
   };
   /** [{server: 's1', kind, status, count, error}] voor alle servers (zonder namen of URL's). */
   DG.fetchRows = function () {
@@ -304,18 +379,24 @@
       return X7.storage(0, Math.max(r[0], ls), 0, r[1]);
     });
   };
-  /** Blokken van schema 2 die in elke diagnose zitten. */
+  /** Blokken van schema 2 en (build 148) schema 3 die in elke diagnose zitten. */
   function schema2(out) {
+    function three() {
+      out.schema = 3;
+      out.updates = DG.updates.attachment();
+      if (DG.stalls.length) out.playback = playbackBlock();
+    }
     return DG.storage().then(function (st) {
       out.schema = 2;
       out.start = startBlock();
-      out.fetch = DG.fetchRows();
+      out.fetch = DG.fetchRows3();
+      three();
       out.network = { type: DG.netType === 'wifi' || DG.netType === 'ethernet' || DG.netType === 'cellular' ? DG.netType : 'unknown' };
       var so = { totalMB: st.totalMB, cacheMB: st.cacheMB, catalogMB: st.catalogMB, downloadsMB: st.downloadsMB };
       if (st.freeMB != null) so.freeMB = st.freeMB;
       out.storage = so;
       return out;
-    }, function () { out.schema = 2; out.start = startBlock(); out.fetch = DG.fetchRows(); out.network = { type: 'unknown' }; return out; });
+    }, function () { out.start = startBlock(); out.fetch = DG.fetchRows3(); out.network = { type: 'unknown' }; three(); return out; });
   }
 
   /** App-diagnose (schema 2, kind app). */

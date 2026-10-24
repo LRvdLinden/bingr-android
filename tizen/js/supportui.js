@@ -211,6 +211,28 @@
     return kind + ': ' + L('all hidden');
   }
 
+  // MARK: build 148: codes in de app-taal, geleverd/zichtbaar, bijwerken per fase
+
+  function codeLabel(c) { var C8 = B.b148 && B.b148.codes; return C8 ? L(C8.label(C8.of(c) || c)) : String(c || ''); }
+  function num(n) { try { return Number(n || 0).toLocaleString(B.lang || undefined); } catch (e) { return String(n || 0); } }
+  /** "Films: 36.593 geleverd · 10.286 zichtbaar (26.307 verborgen door categorieën)". */
+  function deliveredText(r) {
+    var kind = r.kind === 'live' ? L('Channels') : r.kind === 'movie' ? L('Movies') : L('Series');
+    var h = r.hidden || {}, why = [];
+    if (h.categories > 0) why.push(L('%@ hidden by categories', num(h.categories)));
+    if (h.kids > 0) why.push(L('%@ hidden by the kids filter', num(h.kids)));
+    if (h.duplicates > 0) why.push(L('%@ duplicates', num(h.duplicates)));
+    if (h.other > 0) why.push(L('%@ hidden otherwise', num(h.other)));
+    return kind + ': ' + L('%@ delivered · %@ visible', num(r.delivered), num(r.visible)) + (why.length ? ' (' + why.join(', ') + ')' : '');
+  }
+  function updateText(u, sec) {
+    var res = u.result === 'ok' ? L('OK') : u.result === 'cancelled' ? L('cancelled') : L('failed');
+    var ph = (u.phases || []).map(function (f) { return codeLabel(f.code) + ' ' + sec(f.ms || 0) + ' s ' + (f.memMB || 0) + ' MB'; });
+    ph.push(L('peak %d MB', u.peakMB || 0));
+    return { title: L('Update %@', String(u.server || '').toUpperCase()) + '  ·  ' + (u.at ? new Date(u.at).toLocaleString(B.lang || undefined) + '  ·  ' : '') + res,
+      text: ph.join('  ·  ') };
+  }
+
   var appDiag = null, appBusy = false, sendResult = null;
   S.diagnoseRows = function (track, row, section, note, render) {
     section(L('This device'));
@@ -226,17 +248,23 @@
     function sec(ms) { return (ms / 1000).toFixed(1).replace('.', /^(nl|de|fr|es|it|pt|tr|pl)/.test(B.lang || '') ? ',' : '.'); }
     row(L(X7.start.label(info.summary)), L('App %@ s · waiting for you %@ s', sec(info.timing.appMs), sec(info.timing.userWaitMs)), null);
     if (info.maxHangMs > X7.start.SLOW_HANG_MS) note(L('Main thread stuck for %@ s', sec(info.maxHangMs)));
+    // build 148: langste hang van deze start, met taak en mijlpaal in de app-taal
+    var lh = DG.longestHang ? DG.longestHang() : null;
+    if (lh) row(L('Longest hang'), [sec(lh.ms) + ' s', lh.task ? codeLabel(lh.task) : null, lh.milestone ? L('after %@', codeLabel(lh.milestone)) : null,
+      lh.foreground ? null : L('in the background')].filter(Boolean).join('  ·  '), null);
     var pv = info.previous;
     if (pv && pv.problem !== 'none') {
-      var at = pv.task || pv.milestone || '';
-      row(L('Previous start'), pv.problem === 'crash' ? L("Stopped (crash) at \"%@\"", pv.milestone || '') : pv.problem === 'hang'
-        ? L("Stuck for %@ s at \"%@\"", sec(pv.seconds * 1000), at) : L("Didn't finish, last milestone \"%@\"", pv.milestone || ''), null);
+      var at = pv.task ? codeLabel(pv.task) : pv.milestone ? codeLabel(pv.milestone) : '';
+      row(L('Previous start'), pv.problem === 'crash' ? L("Stopped (crash) at \"%@\"", codeLabel(pv.milestone)) : pv.problem === 'hang'
+        ? L("Stuck for %@ s at \"%@\"", sec(pv.seconds * 1000), at) : L("Didn't finish, last milestone \"%@\"", codeLabel(pv.milestone)), null);
     }
     var p = DG.lastProblem;
     if (!p) {
       row(L('The last start went fine.'), null, null);
       var marks = DG.marks();
-      if (marks.length) note(marks.map(function (m) { return m.name + ' ' + (m.ms / 1000).toFixed(1) + 's' + (m.mb != null ? ' ' + m.mb + 'MB' : ''); }).join('  ·  '));
+      var C8 = B.b148 && B.b148.codes;
+      var shown = C8 ? C8.dedupe(marks).map(function (x) { return { label: L(C8.label(x.code)), m: x.m }; }) : marks.map(function (m) { return { label: m.name, m: m }; });
+      if (shown.length) note(shown.map(function (x) { return x.label + ' ' + sec(x.m.ms) + ' s' + (x.m.mb != null ? ' ' + x.m.mb + ' MB' : ''); }).join('  ·  '));
       note(L("How the app started: milestones with time and memory. If a start doesn't finish or Bingr crashes, it shows here the next time."));
     } else {
       note(X.diag.text(p));
@@ -269,8 +297,13 @@
       DG.serverUpdates().forEach(function (u, i) {
         row(L('Server %d (%@)', i + 1, u.kind), u.at ? new Date(u.at).toLocaleString(B.lang || undefined) : L('Never updated'), null);
         var mine = fetchRows.filter(function (r) { return r.server === X7.fetch.serverName(i); });
-        if (mine.length) note(mine.map(fetchText).join('  ·  '));
+        // build 148: geleverd naast zichtbaar (open server), anders zoals in build 147
+        var full = mine.filter(function (r) { return r.visible != null; });
+        if (full.length) full.forEach(function (r) { note(deliveredText(r)); });
+        else if (mine.length) note(mine.map(fetchText).join('  ·  '));
       });
+      (d.updates || []).forEach(function (u) { var t = updateText(u, sec); row(t.title, null, null); note(t.text); });
+      if (d.playback) row(codeLabel('playback_stall'), L('%d · longest %@ s', d.playback.count || 0, sec(d.playback.longestMs || 0)), null);
       if (!D.sources.length) row(L('Servers'), '0', null);
       row(L('Last account sync'), st.lastSync ? new Date(st.lastSync).toLocaleString(B.lang || undefined) + (st.lastSyncOk === false ? '  ·  ' + L('failed') : '') : L('Not yet'), null);
       row(L('Bingr server'), speed('backend') + (net.backendMs != null ? '  ·  ' + net.backendMs + ' ms' : ''), null);

@@ -54,6 +54,8 @@ class PlayerController(item: PlayableItem) {
     var usingExo by mutableStateOf(false); private set
     var isPlaying by mutableStateOf(false); private set
     var isBuffering by mutableStateOf(true); private set
+    /** Build 148: haperingen tijdens het afspelen (diagnose). */
+    private val stallTracker = Build148Logic.Stalls.Tracker()
     var position by mutableStateOf(0.0); private set
     var currentTime by mutableStateOf(0.0); private set
     var duration by mutableStateOf(0.0); private set
@@ -173,6 +175,7 @@ class PlayerController(item: PlayableItem) {
             externalSubtitleFile = null; externalSubtitleLang = null
         }
         attempts = 0; triedOtherEngine = false; reconnecting = false; errorText = null; isBuffering = true
+        stallTracker.reset()
         stallSince = null; backgroundResume = null; pauseWhenReady = false
         retryPending = false; everPlayed = false; lastGoodPosition = 0.0; triedBackup = false; backupPending = false
     }
@@ -341,11 +344,13 @@ class PlayerController(item: PlayableItem) {
             scrobble(Trakt.Scrobble.START, position, announce = true)
         }
         if (st == EngineState.PLAYING) watchedSeconds += 0.5
+        // build 148: haperingen na het eerste beeld vastleggen voor de diagnose (code playback_stall)
+        if (!isPreview) stallTracker.update(android.os.SystemClock.elapsedRealtime(), st == EngineState.PLAYING, isBuffering, isLive)?.let { PlaybackStalls.add(it) }
         // ook als er meteen naar een Chromecast gecast wordt (lokaal gepauzeerd, lengte wel bekend)
         if (!tracksApplied && (st == EngineState.PLAYING || (Casting.connected && duration > 0))) {
             playingTicks += 1
             // sporen zijn er meestal na een paar tellen; daarna niet meer ingrijpen (jouw eigen keuze blijft staan)
-            if (engine.audioTracks.isNotEmpty() || playingTicks > 12) applyTrackPreferences()
+            if (engine.audioTracks.isNotEmpty() || playingTicks > 12) StartDiagnostics.task("track_prefs") { applyTrackPreferences() }
         }
         // sporenpaneel bijwerken als er sporen bijkomen of wisselen
         val sig = "${engine.audioTracks.size}|${engine.subtitleTracks.size}|${engine.currentAudio}|${engine.currentSubtitle}"

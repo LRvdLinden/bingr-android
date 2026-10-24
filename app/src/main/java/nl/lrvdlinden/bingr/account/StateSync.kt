@@ -1901,7 +1901,7 @@ object StateSync {
         // build 147: de bestanden van een niet-actief profiel hier lezen (buiten de main thread); op de main thread alleen
         // nog toepassen (een profiel dat intussen actief werd, leest daar uit het geheugen)
         val pre = if (!activeAtStart) Store.profileData(id) else null
-        val stillSame = withContext(Dispatchers.Main) { StartDiagnostics.task("sync toepassen") {
+        val stillSame = withContext(Dispatchers.Main) { StartDiagnostics.task("sync_apply") {
             if (snapshot != null && (Store.activeProfileID != id || Store.profileData(id) != snapshot)) return@task false
             if (Store.profiles.any { it.id == id }) applyingChanges {
                 val cur = if (pre != null && Store.activeProfileID != id) pre else Store.profileData(id)

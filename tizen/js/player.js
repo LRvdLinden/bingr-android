@@ -307,6 +307,14 @@
     var marker = null;
     var extCues = null, extOffset = 0, extTimer = null, scrobbled = false, stopSent = false;
     var startGen = 0, limited = false, t0 = 0, marks = {}, audioChosen = false, autoSubsDone = false, autoSubsRetried = false;
+    // build 148: sporen gezien bij de eerste keuze; haperingen tijdens het afspelen (diagnose, code playback_stall)
+    var audioSeen = 0;
+    var stallTracker = B.b148 ? new B.b148.stalls.Tracker() : { update: function () { return null; }, reset: B.noop };
+    function noteStall(playing, buffering) {
+      var st = stallTracker.update(Date.now(), playing, buffering, isLive());
+      if (st && B.diag && B.diag.addStall) B.diag.addStall(st);
+    }
+    function diagTask(name, fn) { return B.diag && B.diag.task ? B.diag.task(name, fn) : fn(); }
     // app naar de achtergrond: AVPlay is vrijgegeven; bij terugkomen opnieuw openen op deze plek
     var suspended = false, bgPos = 0, bgPaused = false, pauseAfterOpen = false;
     // build 97: laatst bekende afspeelpositie (voor "Opnieuw proberen" na een fout; engine.time() is dan vaak 0)
@@ -447,6 +455,8 @@
      */
     function start(resumeAt) {
       var gen = ++startGen;
+      audioSeen = 0;
+      stallTracker.reset();
       lastPos = !isLive() && resumeAt > 0 ? resumeAt : 0;
       t0 = Date.now(); marks = {}; limited = false; audioChosen = false; autoSubsDone = false; autoSubsRetried = false;
       errorBox.style.display = 'none';
@@ -486,7 +496,11 @@
     function openURL(url, resumeAt) {
       if (engine) engine.stop();
       var events = {
-        buffering: function (b) { spinner.style.display = b ? 'flex' : 'none'; },
+        buffering: function (b) {
+          spinner.style.display = b ? 'flex' : 'none';
+          // build 148: haperingen na het eerste beeld voor de diagnose (playback_stall)
+          if (engine === my) noteStall(!b, b);
+        },
         ended: function () { onEnded(); },
         // build 97: alleen fouten van de engine die nu speelt (een oude poging telt niet meer)
         error: function (msg) { if (engine === my && !closed) fail(new Error(msg)); },
@@ -500,6 +514,7 @@
         if (closed || limited || suspended) { my.stop(); return; }
         if (engine !== my) return;
         mark('playing');
+        noteStall(true, false);
         attempts = 0;
         spinner.style.display = 'none';
         if (pauseAfterOpen) { pauseAfterOpen = false; my.pause(); }
@@ -511,12 +526,17 @@
         // na het eerste beeld, niets hiervan houdt de start op
         setTimeout(function () {
           if (closed || engine !== my) return;
-          if (!audioChosen) applyTrackPrefs();
+          if (!audioChosen) diagTask('track_prefs', applyTrackPrefs);
           if (!scrobbled) { scrobbled = true; scrobble('start'); }
           autoSubtitles();
         }, 1200);
-        // HLS: sommige audiosporen verschijnen pas na een paar segmenten
-        setTimeout(function () { if (!closed && engine === my && !audioChosen) applyTrackPrefs(); }, 5000);
+        // HLS: sommige audiosporen verschijnen pas na een paar segmenten. Build 148: bij live tv niet opnieuw als de sporen er
+        // na 1,2 s al waren (de sporen opvragen is bij AVPlay een synchrone aanroep op de hoofdthread, rond 5 s na de start)
+        setTimeout(function () {
+          if (closed || engine !== my || audioChosen) return;
+          if (isLive() && audioSeen > 0) return;
+          diagTask('track_prefs', applyTrackPrefs);
+        }, 5000);
       }, function (e) {
         // AVPlay lukt niet: één keer met HTML5 <video> proberen (vooral MP4/HLS)
         if (closed || suspended || engine !== my) return;
@@ -538,6 +558,7 @@
       var pref = B.clang.preferredAudio();
       if (!pref) return;
       var tr = engine.tracks();
+      audioSeen = tr.audio.length;
       if (tr.audio.length < 2) return;
       for (var i = 0; i < tr.audio.length; i++) {
         if (B.clang.norm(tr.audio[i].lang) === pref) {

@@ -208,11 +208,13 @@
     if (j && typeof j === 'object') return Object.keys(j).map(function (k) { return j[k]; });
     return [];
   }
-  Xtream.prototype.list = function (action) {
+  Xtream.prototype.list = function (action, keys) {
     // build 147 (diagnose): een mislukte lijst blijft leeg (raakt de andere lijsten niet), met een korte foutcode
+    // build 148: met [keys] een grote lijst in een Worker inlezen, met alleen die velden (B.getJSONList)
     var self = this;
     self.errors = self.errors || {};
-    return B.getJSON(this.api(action), null, 120000).then(function (r) { delete self.errors[action]; return items(r); }, function (e) {
+    var get = keys ? B.getJSONList(this.api(action), keys, 120000) : B.getJSON(this.api(action), null, 120000);
+    return get.then(function (r) { delete self.errors[action]; return items(r); }, function (e) {
       var X7 = B.b147 && B.b147.fetch;
       self.errors[action] = X7 ? X7.errorCode(e && e.name, e && e.message) : 'error';
       return [];
@@ -231,59 +233,78 @@
     cats.forEach(function (c) { var id = B.str(c && c.category_id); if (id != null && !B.has(m, id)) m[id] = c.category_name || other; });
     return m;
   }
-  Xtream.prototype.library = function () {
+  // build 148: alleen deze velden blijven per item over (lichte objecten, js/jsonworker.js)
+  var KEYS_LIVE = ['stream_id', 'name', 'stream_icon', 'category_id', 'epg_channel_id', 'num', 'tv_archive', 'tv_archive_duration'];
+  var KEYS_VOD = ['stream_id', 'name', 'stream_icon', 'category_id', 'container_extension', 'rating', 'added', 'year'];
+  var KEYS_SERIES = ['series_id', 'name', 'year', 'releaseDate', 'cover', 'category_id', 'plot', 'rating', 'last_modified'];
+  Xtream.KEYS = { live: KEYS_LIVE, vod: KEYS_VOD, series: KEYS_SERIES };
+  Xtream.prototype.movieOf = function (v, vc, other) {
+    var sid = B.str(v && v.stream_id); if (sid == null) return null;
+    var pt = B.parseTitle(v.name || '');
+    var added = B.num(v.added);
+    var mv = {
+      id: 'xv' + sid, title: pt.title, year: B.int(v.year) || pt.year, poster: urlValue(v.stream_icon),
+      group: vc[B.str(v.category_id) || ''] || other,
+      streamURL: this.server + '/movie/' + this.username + '/' + this.password + '/' + sid + '.' + (v.container_extension || 'mp4'),
+      rating: B.num(v.rating), addedAt: added ? added * 1000 : null, xtreamVodID: B.int(sid)
+    };
+    var vcl = B.clang.parse(v.name);
+    if (vcl) mv.cl = vcl;
+    return mv;
+  };
+  Xtream.prototype.seriesOf = function (s, sc, other) {
+    var sid = B.int(s && s.series_id); if (sid == null) return null;
+    var pt = B.parseTitle(s.name || '');
+    var y = B.int(s.year) || (s.releaseDate ? B.int(String(s.releaseDate).slice(0, 4)) : null) || pt.year;
+    var lm = B.num(s.last_modified);   // build 111: laatst bijgewerkt, voor "Nieuw toegevoegd"
+    var se = {
+      id: 'xs' + sid, title: pt.title, year: y, poster: urlValue(s.cover), group: sc[B.str(s.category_id) || ''] || other,
+      plot: s.plot || null, rating: B.num(s.rating), xtreamSeriesID: sid, episodes: [], addedAt: lm > 0 ? lm * 1000 : null
+    };
+    var scl = B.clang.parse(s.name);
+    if (scl) se.cl = scl;
+    return se;
+  };
+  Xtream.prototype.channelOf = function (l, lc, other) {
+    var sid = B.str(l && l.stream_id); if (sid == null) return null;
+    return {
+      id: 'x' + sid, name: l.name || 'Channel', logo: urlValue(l.stream_icon), group: lc[B.str(l.category_id) || ''] || other,
+      streamURL: this.server + '/live/' + this.username + '/' + this.password + '/' + sid + '.' + (this.preferHLS ? 'm3u8' : 'ts'),
+      epgID: l.epg_channel_id || null,
+      number: B.int(l.num), catchupDays: B.int(l.tv_archive) === 1 ? (B.int(l.tv_archive_duration) || 0) : 0
+    };
+  };
+  /**
+   * Live, films en series. Build 148: elke lijst wordt ingelezen zodra hij binnen is (in een Worker, lichte objecten) en in
+   * stukjes van ~12 ms omgezet (B.chunked); de ruwe lijst gaat daarna weg. hooks.fetched() = alle lijsten zijn binnen.
+   */
+  Xtream.prototype.library = function (hooks) {
     var self = this;
-    var acts = ['get_live_categories', 'get_live_streams', 'get_vod_categories', 'get_vod_streams', 'get_series_categories', 'get_series'];
-    return Promise.all(acts.map(function (a) { return self.list(a); })).then(function (r) {
-      var other = L('Other');
-      var lc = catMap(r[0], other), vc = catMap(r[2], other), sc = catMap(r[4], other);
-      var ext = self.preferHLS ? 'm3u8' : 'ts';
-      var base = self.server, u = self.username, p = self.password;
-      var channels = [], movies = [], series = [];
-      channels = self.mapLive(r[1], lc, other);
-      r[3].forEach(function (v) {
-        var sid = B.str(v.stream_id); if (sid == null) return;
-        var pt = B.parseTitle(v.name || '');
-        var added = B.num(v.added);
-        var mv = {
-          id: 'xv' + sid, title: pt.title, year: B.int(v.year) || pt.year, poster: urlValue(v.stream_icon),
-          group: vc[B.str(v.category_id) || ''] || other,
-          streamURL: base + '/movie/' + u + '/' + p + '/' + sid + '.' + (v.container_extension || 'mp4'),
-          rating: B.num(v.rating), addedAt: added ? added * 1000 : null, xtreamVodID: B.int(sid)
-        };
-        var vcl = B.clang.parse(v.name);
-        if (vcl) mv.cl = vcl;
-        movies.push(mv);
+    hooks = hooks || {};
+    var other = L('Other');
+    var cats = Promise.all(['get_live_categories', 'get_vod_categories', 'get_series_categories'].map(function (a) { return self.list(a); }))
+      .then(function (r) { return [catMap(r[0], other), catMap(r[1], other), catMap(r[2], other)]; });
+    var arrived = 0;
+    function got(l) { if (++arrived === 3 && hooks.fetched) { try { hooks.fetched(); } catch (e) { /* stil */ } } return l; }
+    function kind(action, keys, ci, fn) {
+      return Promise.all([self.list(action, keys).then(got), cats]).then(function (r) {
+        var list = r[0], map = r[1][ci], out = [];
+        return B.chunked(list, function (x) { var o = fn.call(self, x, map, other); if (o) out.push(o); }).then(function () {
+          list.length = 0;
+          return out;
+        });
       });
-      r[5].forEach(function (s) {
-        var sid = B.int(s.series_id); if (sid == null) return;
-        var pt = B.parseTitle(s.name || '');
-        var y = B.int(s.year) || (s.releaseDate ? B.int(String(s.releaseDate).slice(0, 4)) : null) || pt.year;
-        var lm = B.num(s.last_modified);   // build 111: laatst bijgewerkt, voor "Nieuw toegevoegd"
-        var se = {
-          id: 'xs' + sid, title: pt.title, year: y, poster: urlValue(s.cover), group: sc[B.str(s.category_id) || ''] || other,
-          plot: s.plot || null, rating: B.num(s.rating), xtreamSeriesID: sid, episodes: [], addedAt: lm > 0 ? lm * 1000 : null
-        };
-        var scl = B.clang.parse(s.name);
-        if (scl) se.cl = scl;
-        series.push(se);
-      });
-      return { channels: channels, movies: movies, series: series, epg: {} };
-    });
+    }
+    return Promise.all([
+      kind('get_live_streams', KEYS_LIVE, 0, self.channelOf),
+      kind('get_vod_streams', KEYS_VOD, 1, self.movieOf),
+      kind('get_series', KEYS_SERIES, 2, self.seriesOf)
+    ]).then(function (r) { return { channels: r[0], movies: r[1], series: r[2], epg: {} }; });
   };
   /** Live-zenders uit get_live_streams (build 97: ook los gebruikt voor de reservebron). */
   Xtream.prototype.mapLive = function (list, lc, other) {
-    var ext = this.preferHLS ? 'm3u8' : 'ts';
-    var base = this.server, u = this.username, p = this.password;
-    var channels = [];
-    (list || []).forEach(function (l) {
-      var sid = B.str(l && l.stream_id); if (sid == null) return;
-      channels.push({
-        id: 'x' + sid, name: l.name || 'Channel', logo: urlValue(l.stream_icon), group: lc[B.str(l.category_id) || ''] || other,
-        streamURL: base + '/live/' + u + '/' + p + '/' + sid + '.' + ext, epgID: l.epg_channel_id || null,
-        number: B.int(l.num), catchupDays: B.int(l.tv_archive) === 1 ? (B.int(l.tv_archive_duration) || 0) : 0
-      });
-    });
+    var self = this, channels = [];
+    (list || []).forEach(function (l) { var c = self.channelOf(l, lc, other); if (c) channels.push(c); });
     return channels;
   };
   /** build 97: alleen get_live_streams (geen films, series of categorieën), voor de reservebron. */

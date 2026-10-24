@@ -351,13 +351,21 @@ fun LazyListScope.diagnoseTabItems() {
             S2Row(L(Build147Logic.Start.label(info.summary)), value = L("App %@ s · waiting for you %@ s",
                 s2Sec(info.timing.appMs), s2Sec(info.timing.userWaitMs)))
             if (info.maxHangMs > Build147Logic.Start.SLOW_HANG_MS) S2Row(L("Main thread stuck for %@ s", s2Sec(info.maxHangMs)), tint = Theme.secondary)
+            // build 148: langste hang van deze start, met taak en mijlpaal (in de app-taal)
+            StartDiagnostics.longestHang()?.let { h ->
+                S2Row(L("Longest hang"), value = listOfNotNull("${s2Sec(h.ms)} s",
+                    Build148Logic.Codes.of(h.task)?.let { L(Build148Logic.Codes.label(it)) },
+                    Build148Logic.Codes.of(h.milestone)?.let { L("after %@", L(Build148Logic.Codes.label(it))) },
+                    if (h.foreground) null else L("in the background")).joinToString(" · "))
+            }
             info.previous?.takeIf { it.problem != "none" }?.let { pv ->
                 S2Row(L("Previous start"), value = previousText(pv))
             }
             if (p == null) {
                 S2Row(L("The last start went fine."), tint = Theme.secondary)
                 val marks = StartDiagnostics.marks()
-                if (marks.isNotEmpty()) S2Row(marks.joinToString(" · ") { m -> "${m.name} ${"%.1f".format(m.ms / 1000.0)}s" + (m.mb?.let { " ${it}MB" } ?: "") },
+                if (marks.isNotEmpty()) S2Row(Build148Logic.Codes.dedupe(marks) { it.name }.joinToString(" · ") { (code, m) ->
+                    L(Build148Logic.Codes.label(code)) + " ${s2Sec(m.ms)} s" + (m.mb?.let { " $it MB" } ?: "") },
                     tint = Theme.secondary, onClick = if (AppState.isTV) ({}) else null)
             } else {
                 S2Row(Build146Logic.Diag.text(p), tint = Theme.secondary, onClick = if (AppState.isTV) ({}) else null)
@@ -402,7 +410,16 @@ fun LazyListScope.diagnoseTabItems() {
                 val rows = Diagnostics.fetchRows().groupBy { it.server }
                 Diagnostics.serverUpdates().forEachIndexed { i, (kind, at) ->
                     S2Row(L("Server %d (%@)", i + 1, kind), value = if (at > 0) s2DateTime(at) else L("Never updated"))
-                    rows[Build147Logic.Fetch.serverName(i)]?.let { r -> S2Row(r.joinToString(" · ") { fetchText(it) }, tint = Theme.secondary) }
+                    val sn = Build147Logic.Fetch.serverName(i)
+                    // build 148: geleverd naast zichtbaar (open server), anders zoals in build 147
+                    val fx = d.jList("fetch").filter { it.jS("server") == sn && it.jObj?.get("visible") != null }
+                    if (fx.isNotEmpty()) fx.forEach { f -> S2Row(deliveredText(f), tint = Theme.secondary) }
+                    else rows[sn]?.let { r -> S2Row(r.joinToString(" · ") { fetchText(it) }, tint = Theme.secondary) }
+                }
+                // build 148: de laatste keren bijwerken, per fase duur en geheugen
+                d.jList("updates").forEach { u -> S2Row(updateTitle(u), value = updatePhases(u), tint = Theme.secondary) }
+                d.jObj?.get("playback")?.let { pb ->
+                    S2Row(L(Build148Logic.Codes.label("playback_stall")), value = L("%d · longest %@ s", pb.jI("count") ?: 0, s2Sec(pb.jL("longestMs") ?: 0L)))
                 }
                 if (Store.playlists.isEmpty()) S2Row(L("Servers"), value = "0")
                 S2Row(L("Last account sync"), value = st.jS("lastSync")?.let { Net.parseISODate(it) }?.let { s2DateTime(it) }
@@ -456,13 +473,42 @@ internal fun fetchText(r: Build147Logic.Fetch.Row): String {
     }
 }
 
+// MARK: build 148
+
+private fun s2Num(n: Int): String = java.text.NumberFormat.getIntegerInstance(java.util.Locale.forLanguageTag(Diagnostics.appLang)).format(n)
+
+/** "Films: 36.593 geleverd · 10.286 zichtbaar (26.307 verborgen door categorieën)". */
+internal fun deliveredText(f: kotlinx.serialization.json.JsonElement): String {
+    val kind = when (f.jS("kind")) { "live" -> L("Channels"); "movie" -> L("Movies"); else -> L("Series") }
+    val h = f.jO("hidden")
+    val why = listOfNotNull(
+        (h.jI("categories") ?: 0).takeIf { it > 0 }?.let { L("%@ hidden by categories", s2Num(it)) },
+        (h.jI("kids") ?: 0).takeIf { it > 0 }?.let { L("%@ hidden by the kids filter", s2Num(it)) },
+        (h.jI("duplicates") ?: 0).takeIf { it > 0 }?.let { L("%@ duplicates", s2Num(it)) },
+        (h.jI("other") ?: 0).takeIf { it > 0 }?.let { L("%@ hidden otherwise", s2Num(it)) },
+    )
+    return "$kind: " + L("%@ delivered · %@ visible", s2Num(f.jI("delivered") ?: 0), s2Num(f.jI("visible") ?: 0)) +
+        (if (why.isEmpty()) "" else " (" + why.joinToString(", ") + ")")
+}
+
+internal fun updateTitle(u: kotlinx.serialization.json.JsonElement): String {
+    val res = when (u.jS("result")) { "ok" -> L("OK"); "cancelled" -> L("cancelled"); else -> L("failed") }
+    val at = u.jS("at")?.let { Net.parseISODate(it) }?.let { s2DateTime(it) } ?: ""
+    return L("Update %@", (u.jS("server") ?: "").uppercase()) + " · " + listOf(at, res).filter { it.isNotEmpty() }.joinToString(" · ")
+}
+
+internal fun updatePhases(u: kotlinx.serialization.json.JsonElement): String =
+    u.jList("phases").joinToString(" · ") { f ->
+        L(Build148Logic.Codes.label(f.jS("code"))) + " " + s2Sec(f.jL("ms") ?: 0L) + " s " + (f.jI("memMB") ?: 0) + " MB"
+    } + " · " + L("peak %d MB", u.jI("peakMB") ?: 0)
+
 internal fun previousText(p: Build147Logic.Previous.Info): String {
     val sec = String.format(java.util.Locale.getDefault(), "%.1f", p.seconds)
-    val at = p.task ?: p.milestone ?: ""
+    val at = (Build148Logic.Codes.of(p.task) ?: Build148Logic.Codes.of(p.milestone))?.let { L(Build148Logic.Codes.label(it)) } ?: p.task ?: p.milestone ?: ""
     return when (p.problem) {
-        "crash" -> L("Stopped (crash) at \"%@\"", p.milestone ?: "")
+        "crash" -> L("Stopped (crash) at \"%@\"", Build148Logic.Codes.of(p.milestone)?.let { L(Build148Logic.Codes.label(it)) } ?: p.milestone ?: "")
         "hang" -> L("Stuck for %@ s at \"%@\"", sec, at)
-        "not_finished" -> L("Didn't finish, last milestone \"%@\"", p.milestone ?: "")
+        "not_finished" -> L("Didn't finish, last milestone \"%@\"", Build148Logic.Codes.of(p.milestone)?.let { L(Build148Logic.Codes.label(it)) } ?: p.milestone ?: "")
         else -> L("Went fine")
     }
 }

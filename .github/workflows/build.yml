@@ -124,7 +124,13 @@ jobs:
               tools/test/Build147LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b147-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b147-test.jar" | tee "$RUNNER_TEMP/b147-test.txt"; rc9=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 147::$(tail -1 "$RUNNER_TEMP/b147-test.txt")"
-            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ]
+            # build 148: codes, bijwerken in fasen, geleverd/zichtbaar, haperingen en 37.000 films + 12.000 zenders + 9.000
+            # series: inlezen per soort (geheugen vóór/na), Compose-state referentieel (vóór/na), hoofdthread ≤ 250 ms vast
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build147Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build148Logic.kt \
+              tools/test/Build148LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b148-test.jar" 2>&1 | grep -v '^warning' || true
+            java -Xmx512m -jar "$RUNNER_TEMP/b148-test.jar" | tee "$RUNNER_TEMP/b148-test.txt"; rc10=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 148::$(grep -E '^(geheugen|toewijzen|37k)' "$RUNNER_TEMP/b148-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b148-test.txt")"
+            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi
@@ -540,6 +546,10 @@ jobs:
           # verbinding, en 10.000 films + 1.000 zenders en de PBKDF2-terugval in stukjes (elk stuk ≤ 250 ms)
           node tizen/test/build147_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b147.log"
           echo "::notice title=Logica-tests build 147 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b147.log")"
+          # build 148: codes, bijwerken in fasen, geleverd/zichtbaar, haperingen, merge sort in stukken, en 37.000 films +
+          # 12.000 zenders + 9.000 series: Xtream in stukjes (≤ 250 ms per stuk) en lichte objecten (geheugen vóór/na)
+          node tizen/test/build148_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b148.log"
+          echo "::notice title=Logica-tests build 148 (Samsung TV)::$(grep -E '^(geheugen|Xtream|sorteren 37k)' "$RUNNER_TEMP/tlogs/b148.log" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/tlogs/b148.log")"
 
       - name: Tizen Studio CLI uit de cache
         id: cache

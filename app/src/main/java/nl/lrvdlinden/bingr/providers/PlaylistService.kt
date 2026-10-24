@@ -2,6 +2,7 @@ package nl.lrvdlinden.bingr
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.CancellationException
@@ -56,8 +57,11 @@ import java.io.File
 @OptIn(FlowPreview::class)
 object Playlists {
     var source by mutableStateOf<PlaylistSource?>(null); private set
-    var library by mutableStateOf(Library()); private set
-    var rawLibrary by mutableStateOf(Library()); private set
+    // build 148: referentiële gelijkheid. Met de standaard (structureel) vergeleek Compose bij elke nieuwe bibliotheek de
+    // oude en de nieuwe lijst item voor item óp de hoofdthread (37.000 films, 12.000 zenders, 9.000 series: honderden ms
+    // bij een catalogus die niet veranderde). Een nieuwe lijst is altijd een nieuw object.
+    var library by mutableStateOf(Library(), referentialEqualityPolicy()); private set
+    var rawLibrary by mutableStateOf(Library(), referentialEqualityPolicy()); private set
     var isLoading by mutableStateOf(false); private set
     var loadingText by mutableStateOf(""); private set
     var error by mutableStateOf<String?>(null)
@@ -70,7 +74,7 @@ object Playlists {
     var refreshFailed by mutableStateOf<List<String>>(emptyList()); private set
     /** Build 130: verhoogt als de cache van een server ververst is (de achtergrond van [AllServers] kijkt dan opnieuw). */
     var catalogVersion by mutableStateOf(0); private set
-    var episodeCache by mutableStateOf(mapOf<String, List<Episode>>()); private set
+    var episodeCache by mutableStateOf(mapOf<String, List<Episode>>(), referentialEqualityPolicy()); private set
     /**
      * Bezig met filteren op de achtergrond (grote lijsten). Bij een profiel met leeftijdsgrens is [library]
      * dan leeg (niets ongefilterds tonen): laat geen "lege lijst"-melding zien zolang dit true is.
@@ -145,7 +149,7 @@ object Playlists {
             val cached = try { withContext(Dispatchers.IO) { readCache(p) } } finally { isLoading = false }
             if (source?.id != p.id) return
             if (cached != null) {
-                setRaw(cached)
+                StartDiagnostics.task("apply") { setRaw(cached) }
                 StartDiagnostics.mark("servers_loaded")
                 // build 141: eerst het scherm (de lijst uit de cache, gefilterd en met de rijen), pas daarna het netwerk.
                 // Build 145: met een bewaarde lijst wordt bij het openen NIETS vanzelf opgehaald (ook niet na 45 s zoals in
@@ -272,21 +276,31 @@ object Playlists {
         if (showSpinner) isLoading = true
         val background = !showSpinner && source?.id == s.id
         if (background) updating = true
+        // build 148: fasen van dit bijwerken (ophalen, inlezen, indexeren, toepassen, bewaren) voor de diagnose
+        val rec = UpdateLog.begin(s)
         try {
-            val fetched = fetch(s)
+            val fetched = fetch(s, rec = rec)
             // build 141: eerst wegschrijven, dan de gids van schijf gebruiken (DiskEpg) in plaats van de hele gids in het
             // geheugen te houden; lukt het schrijven niet, dan zoals vroeger in het geheugen
             writeCacheNow(s, fetched)
+            UpdateLog.phase(rec, "save")
             val lib = if (fetched.epg.isEmpty()) fetched
                 else withContext(Dispatchers.IO) { CatalogFiles.openEpg(cachePaths(s), Http.json) }?.let { fetched.copy(epg = it) } ?: fetched
+            UpdateLog.phase(rec, "index")
             if (source?.id == s.id) {
-                setRaw(lib)
+                StartDiagnostics.task("apply") { setRaw(lib) }
                 saveSplashPosters(lib)
+                // toepassen = filteren (op de achtergrond) tot de nieuwe lijst er staat
+                withTimeoutOrNull(60_000) { while (isFiltering) kotlinx.coroutines.delay(50) }
+                UpdateLog.phase(rec, "apply")
             }
+            UpdateLog.finish(rec, "ok")
             return true
         } catch (e: CancellationException) {
+            UpdateLog.finish(rec, "cancelled")
             throw e
         } catch (e: Exception) {
+            UpdateLog.finish(rec, "failed")
             if (source?.id == s.id && rawLibrary.isEmpty) error = Net.message(e)
             return false
         } finally {
@@ -296,13 +310,16 @@ object Playlists {
     }
 
     /** Inhoud van server [s] ophalen van het netwerk (zonder cache en zonder de stand van de actieve server te wijzigen). */
-    private suspend fun fetch(s: PlaylistSource, quiet: Boolean = false): Library {
+    private suspend fun fetch(s: PlaylistSource, quiet: Boolean = false, rec: UpdateLog.Rec? = null): Library {
         // build 141: belastingmodus (alleen de rooktest-build): nepcatalogus in plaats van het netwerk
-        if (StressMode.isActive) return StressMode.fetch(s)
+        if (StressMode.isActive) return StressMode.fetch(s).also { UpdateLog.phase(rec, "parse") }
         // build 147 (diagnose): per soort vastleggen wat er geleverd is of waarom niet (zonder URL of namen)
         val errs = HashMap<String, String>()
         return try {
-            fetchFrom(s, quiet, errs).also { FetchLog.delivered(s.id, it.channels.size, it.movies.size, it.series.size, errs) }
+            fetchFrom(s, quiet, errs, rec).also {
+                UpdateLog.phase(rec, "parse")
+                FetchLog.delivered(s.id, it.channels.size, it.movies.size, it.series.size, errs)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -311,7 +328,7 @@ object Playlists {
         }
     }
 
-    private suspend fun fetchFrom(s: PlaylistSource, quiet: Boolean, errs: MutableMap<String, String>): Library {
+    private suspend fun fetchFrom(s: PlaylistSource, quiet: Boolean, errs: MutableMap<String, String>, rec: UpdateLog.Rec? = null): Library {
         fun status(t: String) { if (!quiet) loadingText = t }
         val password = Store.secret(s.passwordKey) ?: ""
         var lib: Library
@@ -319,21 +336,26 @@ object Playlists {
             PlaylistKind.M3U -> {
                 status(L("Downloading playlist…"))
                 val u = Net.urlValue(s.m3uURL) ?: throw Net.badURL()
-                val text = Net.text(u)
+                var text = Net.text(u)
+                UpdateLog.phase(rec, "fetch")
                 status(L("Sorting channels and movies…"))
                 lib = withContext(Dispatchers.Default) { M3UParser.library(text, s.id) }
                 val epg = Net.urlValue(s.epgURL) ?: M3UParser.epgURL(text)
-                if (epg != null) { status(L("Loading TV guide…")); lib = lib.copy(epg = XMLTVParser.load(epg)) }
+                // build 148: de tekst van de lijst niet vasthouden tijdens het laden van de gids
+                text = ""
+                UpdateLog.phase(rec, "parse")
+                if (epg != null) { status(L("Loading TV guide…")); lib = lib.copy(epg = XMLTVParser.load(epg)); UpdateLog.phase(rec, "fetch") }
             }
             PlaylistKind.XTREAM -> {
                 status(L("Signing in to server…"))
                 val x = XtreamClient(s, password)
                 x.authenticate()
                 status(L("Fetching live TV, movies and series…"))
-                lib = x.library()
+                lib = x.library(onFetched = { UpdateLog.phase(rec, "fetch") })
+                UpdateLog.phase(rec, "parse")
                 errs.putAll(x.kindErrors())
                 val epg = Net.urlValue(s.epgURL) ?: x.xmltvURL
-                if (epg != null) { status(L("Loading TV guide…")); lib = lib.copy(epg = XMLTVParser.load(epg)) }
+                if (epg != null) { status(L("Loading TV guide…")); lib = lib.copy(epg = XMLTVParser.load(epg)); UpdateLog.phase(rec, "fetch") }
             }
             PlaylistKind.STALKER -> {
                 status(L("Connecting to portal…"))
@@ -366,6 +388,8 @@ object Playlists {
                 lib = StremioClient(addons).library()
             }
         }
+        // build 148: bij de andere soorten zit inlezen in het ophalen (één fase)
+        if (s.kind != PlaylistKind.M3U && s.kind != PlaylistKind.XTREAM) UpdateLog.phase(rec, "fetch")
         return lib
     }
 
@@ -400,13 +424,17 @@ object Playlists {
     private fun markFetch(p: PlaylistSource) = Prefs.put(fetchKey(p), System.currentTimeMillis().toString())
 
     /** Build 130: een andere server (niet de actieve) nu verversen, stil en met een time-out. true = gelukt. */
-    private suspend fun refreshOther(p: PlaylistSource): Boolean = try {
-        markFetch(p)
-        val lib = withTimeoutOrNull(AllServersLogic.FETCH_TIMEOUT) { fetch(p, quiet = true) }
-        // build 141: meteen wegschrijven (niet in een losse taak die de catalogus nog vasthoudt terwijl het volgende begint)
-        if (lib != null) writeCacheNow(p, lib)
-        lib != null
-    } catch (e: CancellationException) { throw e } catch (_: Exception) { false }
+    private suspend fun refreshOther(p: PlaylistSource): Boolean {
+        val rec = UpdateLog.begin(p)
+        return try {
+            markFetch(p)
+            val lib = withTimeoutOrNull(AllServersLogic.FETCH_TIMEOUT) { fetch(p, quiet = true, rec = rec) }
+            // build 141: meteen wegschrijven (niet in een losse taak die de catalogus nog vasthoudt terwijl het volgende begint)
+            if (lib != null) { writeCacheNow(p, lib); UpdateLog.phase(rec, "save") }
+            UpdateLog.finish(rec, if (lib != null) "ok" else "failed")
+            lib != null
+        } catch (e: CancellationException) { UpdateLog.finish(rec, "cancelled"); throw e } catch (_: Exception) { UpdateLog.finish(rec, "failed"); false }
+    }
 
     /** Build 128: de server van een item ([Movie.sourceID] e.d.); null = de actieve. */
     fun sourceFor(id: String?): PlaylistSource? =

@@ -116,7 +116,7 @@ fun MainScreen() {
     // build 128: categorieën aan/uit per profiel (eenmalige migratie van de keuzes per server)
     // build 140: daarna naar de account-set (ingelogd: vastgelegd na de eerste sync, zie StateSync)
     LaunchedEffect(Store.profiles.size) {
-        StartDiagnostics.task("categorieën migreren") { Store.migrateCategoriesToProfiles() }
+        StartDiagnostics.task("categories_migrate") { Store.migrateCategoriesToProfiles() }
         // build 147: de profielbestanden buiten de main thread lezen
         Store.migrateCategoriesToAccountOffMain(allowFlag = !Account.isSignedIn)
     }

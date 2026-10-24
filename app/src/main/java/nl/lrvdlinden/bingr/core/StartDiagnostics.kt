@@ -69,6 +69,9 @@ object StartDiagnostics {
     /** Langste hang op de voorgrond in deze start (ms). */
     fun maxHangMs(): Long = synchronized(tracker) { tracker.maxForegroundMs }
 
+    /** Build 148: de langste hang van deze start (voorgrond gaat voor), met taak, mijlpaal en stack; null = geen. */
+    fun longestHang(): Build147Logic.Hang.Event? = synchronized(tracker) { tracker.worst }
+
     /**
      * Taaklabel voor de hoofdthread rond [block] (alleen als het op de hoofdthread draait); een hang noemt dan deze taak.
      * Op een andere thread gewoon [block].

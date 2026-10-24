@@ -361,9 +361,10 @@
         else {
           r.text = x.responseText || '';
           // build 147: een grote catalogus (JSON) inlezen is een lange taak: met een naam voor de detector van lange taken
-          if (r.text) {
+          // build 148: opt.rawText = niet hier inlezen (B.getJSONList leest grote lijsten in een Worker in)
+          if (r.text && !opt.rawText) {
             var parse = function () { try { r.json = JSON.parse(r.text); } catch (e) { r.json = null; } };
-            if (r.text.length > 500000 && B.diag && B.diag.task) B.diag.task('catalogus verwerken', parse); else parse();
+            if (r.text.length > 500000 && B.diag && B.diag.task) B.diag.task('parse', parse); else parse();
           }
         }
         resolve(r);
@@ -388,6 +389,70 @@
       if (r.status < 200 || r.status >= 300) throw new NetError('http_' + r.status);
       if (r.json == null) throw new NetError('bad_json');
       return r.json;
+    });
+  };
+  // build 148: grote JSON-lijsten in een Worker (js/jsonworker.js) inlezen, met alleen de nodige velden (lichte objecten),
+  // in pakketjes terug; lukt de Worker niet (oude tv, geen Worker, fout), dan zoals vroeger op de hoofdthread.
+  var jw = null, jwSeq = 0, jwJobs = {};
+  function jsonItems(j) {
+    if (Array.isArray(j)) return j;
+    if (j && typeof j === 'object') return Object.keys(j).map(function (k) { return j[k]; });
+    return [];
+  }
+  function pick(list, keys) {
+    if (!keys) return list;
+    return list.map(function (x) {
+      if (!x || typeof x !== 'object') return x;
+      var o = {};
+      for (var k = 0; k < keys.length; k++) { var v = x[keys[k]]; if (v != null && v !== '') o[keys[k]] = v; }
+      return o;
+    });
+  }
+  function parseHere(text, keys) {
+    var run = function () { try { return pick(jsonItems(JSON.parse(text)), keys); } catch (e) { return null; } };
+    return B.diag && B.diag.task ? B.diag.task('parse', run) : run();
+  }
+  function worker() {
+    if (jw === false) return null;
+    if (jw) return jw;
+    try {
+      if (typeof Worker === 'undefined') { jw = false; return null; }
+      jw = new Worker('js/jsonworker.js');
+      jw.onmessage = function (ev) {
+        var m = ev.data || {}, j = jwJobs[m.id];
+        if (!j) return;
+        if (m.error) { delete jwJobs[m.id]; clearTimeout(j.timer); j.resolve(null); return; }
+        if (m.batch) { for (var i = 0; i < m.batch.length; i++) j.out.push(m.batch[i]); return; }
+        if (m.done) { delete jwJobs[m.id]; clearTimeout(j.timer); j.resolve(j.out); }
+      };
+      jw.onerror = function () {
+        // Worker niet te laden of kapot: alles wat nog loopt op de hoofdthread, en voortaan zonder Worker
+        jw = false;
+        Object.keys(jwJobs).forEach(function (id) { var j = jwJobs[id]; delete jwJobs[id]; clearTimeout(j.timer); j.resolve(parseHere(j.text, j.keys)); });
+      };
+    } catch (e) { jw = false; return null; }
+    return jw;
+  }
+  /** Tekst → lijst (Xtream-lijst of object met waarden), met alleen [keys] per item (null = alles). null = geen JSON. */
+  B.parseJSONList = function (text, keys) {
+    if (!text) return Promise.resolve(null);
+    var w = text.length > 200000 ? worker() : null;
+    if (!w) return Promise.resolve(parseHere(text, keys));
+    return new Promise(function (resolve) {
+      var id = ++jwSeq;
+      var job = jwJobs[id] = { out: [], resolve: resolve, text: text, keys: keys };
+      job.timer = setTimeout(function () { if (jwJobs[id]) { delete jwJobs[id]; resolve(parseHere(text, keys)); } }, 90000);
+      try { w.postMessage({ id: id, text: text, keys: keys || null }); } catch (e) { delete jwJobs[id]; clearTimeout(job.timer); resolve(parseHere(text, keys)); }
+    });
+  };
+  /** Build 148: als B.getJSON, maar voor grote lijsten: inlezen in een Worker, lichte objecten met [keys]. */
+  B.getJSONList = function (url, keys, timeout) {
+    return B.http(url, { timeout: timeout || 60000, rawText: true }).then(function (r) {
+      if (r.status < 200 || r.status >= 300) throw new NetError('http_' + r.status);
+      return B.parseJSONList(r.text, keys).then(function (l) {
+        if (l == null) throw new NetError('bad_json');
+        return l;
+      });
     });
   };
   B.query = function (base, params) {

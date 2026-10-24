@@ -36,7 +36,13 @@ DYNAMIC = ['Search', 'Home', 'Live TV', 'Movies', 'Series', 'My List', 'Settings
            'Start: good', 'Start: slow', 'Start: stuck', 'Wi-Fi', 'Mobile', 'Ethernet', 'No connection', 'Unknown',
            # build 147: platformlaag (B.platform.texts in js/core.js, via een variabele)
            'This kind of server is not supported on Samsung TV yet.',
-           'A Samsung TV has one full video player: the tile with sound uses it, the other tiles play muted where the TV can.', 'LG TV']
+           'A Samsung TV has one full video player: the tile with sound uses it, the other tiles play muted where the TV can.', 'LG TV',
+           # build 148: codes van mijlpalen, taken en fasen (js/build148.js, via een variabele)
+           'Started', 'Storage loaded', 'Account', 'First screen', 'Intro done', 'Profile picker', 'Profile chosen', 'PIN screen',
+           'PIN correct', 'Profile opened', 'Servers loaded', 'Home', 'Catalog', 'Ready', 'Fetching', 'Reading', 'Indexing',
+           'Applying', 'Saving', 'Applying sync', 'Filtering catalog', 'Sorting catalog', 'Catalog details', 'Migrating PIN',
+           'Building rows', 'Reading TV guide', 'Migrating categories', 'Securing PIN', 'Checking PIN',
+           'Choosing audio and subtitles', 'Playback stall']
 
 PAT = [re.compile(r'\bL\(\s*"((?:[^"\\]|\\.)*)"'), re.compile(r"\bL\(\s*'((?:[^'\\]|\\.)*)'")]
 

@@ -588,7 +588,7 @@
     offs.push(B.on('library', function () {
       if (!el.parentNode || libPending) return;
       libPending = true;
-      B.whenQuiet(function () { libPending = false; if (el.parentNode) { if (B.diag && B.diag.task) B.diag.task('rijen opbouwen', function () { screen.refresh(); }); else screen.refresh(); } }, 300);
+      B.whenQuiet(function () { libPending = false; if (el.parentNode) { if (B.diag && B.diag.task) B.diag.task('rows_build', function () { screen.refresh(); }); else screen.refresh(); } }, 300);
     }));
     /** Huidige pagina opnieuw tekenen en de focus terugzetten op dezelfde titel (in dezelfde rij). */
     var dataStale = false;

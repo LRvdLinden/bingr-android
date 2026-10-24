@@ -121,8 +121,26 @@ class XtreamClient(source: PlaylistSource, val password: String) {
         RawLists(liveCats.await(), live.await(), vodCats.await(), vod.await(), serCats.await(), ser.await())
     }
 
-    /** Live, films en series in één keer (parallel); omzetten op Dispatchers.Default. Series-info pas bij openen ([episodes]). */
-    suspend fun library(): Library = withContext(Dispatchers.Default) { parse(rawLists()) }
+    /**
+     * Live, films en series in één keer (parallel); omzetten op Dispatchers.Default. Series-info pas bij openen ([episodes]).
+     * Build 148: elke lijst wordt meteen na het ophalen omgezet en de ruwe JSON daarna losgelaten (niet eerst alle zes de
+     * ruwe lijsten tegelijk in het geheugen, dan pas omzetten). [onFetched] = alle lijsten zijn binnen (einde van "ophalen").
+     */
+    suspend fun library(onFetched: () -> Unit = {}): Library = withContext(Dispatchers.Default) {
+        coroutineScope {
+            val arrived = java.util.concurrent.atomic.AtomicInteger(0)
+            fun got() { if (arrived.incrementAndGet() == 3) runCatching { onFetched() } }
+            val lc = async { categoryMap(list("get_live_categories")) }
+            val vc = async { categoryMap(list("get_vod_categories")) }
+            val sc = async { categoryMap(list("get_series_categories")) }
+            val other = L("Other")
+            val liveExt = if (preferHLS) "m3u8" else "ts"
+            val ch = async { val raw = list("get_live_streams"); got(); parseLive(raw, lc.await(), other, liveExt) }
+            val mv = async { val raw = list("get_vod_streams"); got(); parseVod(raw, vc.await(), other) }
+            val se = async { val raw = list("get_series"); got(); parseSeries(raw, sc.await(), other) }
+            Library(channels = ch.await(), movies = mv.await(), series = se.await())
+        }
+    }
 
     /** Categorie-id → naam (zoals [parse] ze gebruikt). */
     fun categoryMap(cats: List<JsonElement>): Map<String, String> {
@@ -135,10 +153,13 @@ class XtreamClient(source: PlaylistSource, val password: String) {
     /** Ruwe lijsten omzetten naar een [Library] (zwaar: buiten de main thread aanroepen). */
     fun parse(raw: RawLists): Library {
         val other = L("Other")
-        val lcMap = categoryMap(raw.liveCats); val vcMap = categoryMap(raw.vodCats); val scMap = categoryMap(raw.serCats)
         val liveExt = if (preferHLS) "m3u8" else "ts"
+        return Library(channels = parseLive(raw.live, categoryMap(raw.liveCats), other, liveExt),
+            movies = parseVod(raw.vod, categoryMap(raw.vodCats), other), series = parseSeries(raw.ser, categoryMap(raw.serCats), other))
+    }
 
-        val channels = raw.live.mapNotNull { l ->
+    private fun parseLive(list: List<JsonElement>, lcMap: Map<String, String>, other: String, liveExt: String): List<Channel> =
+        list.mapNotNull { l ->
             val sid = l.jS("stream_id") ?: return@mapNotNull null
             Channel(id = "x$sid", name = l.jS("name") ?: "Channel", logo = Net.urlValue(l.jS("stream_icon")),
                 group = lcMap[l.jS("category_id") ?: ""] ?: other,
@@ -147,7 +168,9 @@ class XtreamClient(source: PlaylistSource, val password: String) {
                 number = l.jI("num"),
                 catchupDays = if (l.jI("tv_archive") == 1) (l.jI("tv_archive_duration") ?: 0) else 0)
         }
-        val movies = raw.vod.mapNotNull { v ->
+
+    private fun parseVod(list: List<JsonElement>, vcMap: Map<String, String>, other: String): List<Movie> =
+        list.mapNotNull { v ->
             val sid = v.jS("stream_id") ?: return@mapNotNull null
             val p = TitleCleaner.parse(v.jS("name") ?: "")
             Movie(id = "xv$sid", title = p.title, year = v.jI("year") ?: p.year, poster = Net.urlValue(v.jS("stream_icon")),
@@ -157,7 +180,9 @@ class XtreamClient(source: PlaylistSource, val password: String) {
                 addedAt = v.jD("added")?.let { (it * 1000).toLong() },
                 xtreamVodID = sid.toIntOrNull())
         }
-        val series = raw.ser.mapNotNull { s ->
+
+    private fun parseSeries(list: List<JsonElement>, scMap: Map<String, String>, other: String): List<Series> =
+        list.mapNotNull { s ->
             val sid = s.jI("series_id") ?: return@mapNotNull null
             val p = TitleCleaner.parse(s.jS("name") ?: "")
             val y = s.jI("year") ?: s.jS("releaseDate")?.take(4)?.toIntOrNull() ?: p.year
@@ -166,8 +191,6 @@ class XtreamClient(source: PlaylistSource, val password: String) {
                 plot = s.jS("plot"), rating = s.jD("rating"), xtreamSeriesID = sid,
                 addedAt = s.jD("last_modified")?.takeIf { it > 0 }?.let { (it * 1000).toLong() })
         }
-        return Library(channels = channels, movies = movies, series = series)
-    }
 
     suspend fun episodes(series: Series): List<Episode> {
         val sid = series.xtreamSeriesID ?: return emptyList()

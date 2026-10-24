@@ -1079,7 +1079,7 @@ object Store {
         val union = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ids.flatMap { readProfileData(it).hiddenCategories } }
         kotlinx.coroutines.withContext(main) {
             if (profiles.isEmpty() || Prefs.bool("cats.migrated140", false)) return@withContext
-            StartDiagnostics.task("categorieën migreren") {
+            StartDiagnostics.task("categories_migrate") {
                 val doMigrate = {
                     val n = Build140Logic.CatMarks.migrate(accountMarks, union)
                     if (n != accountMarks) { setAccountMarks(n); StateSync.accountChanged() }
