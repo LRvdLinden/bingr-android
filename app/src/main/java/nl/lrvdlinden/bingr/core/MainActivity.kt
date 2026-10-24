@@ -27,6 +27,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         current = this
+        StartDiagnostics.mark("activity")
         // screenshotmodus (alleen in de screenshot-build met de intent-extra bingr.screenshots, zie ScreenshotMode.kt)
         Screenshots.init(intent)
         // build 141: belastingmodus (alleen de rooktest-build): nepgegevens klaarzetten of zelf een profiel kiezen

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Laptop
 import androidx.compose.material.icons.filled.PhoneIphone
 import androidx.compose.material.icons.filled.Smartphone
@@ -77,15 +78,24 @@ fun isTizenPlatform(platform: String): Boolean =
 /** Webspeler op bingr.online (build 62) meldt zich met platform `browser`; naam zoals "Chrome op Mac". */
 fun isBrowserPlatform(platform: String): Boolean = platform.equals("browser", ignoreCase = true)
 
-/** Platformnaam onder de apparaatnaam (`tizen` wordt "Samsung TV", `browser` wordt "Browser"). */
+/** Build 146: de Windows-app (webspeler in een eigen venster) meldt zich met platform `windows`. */
+fun isWindowsPlatform(platform: String): Boolean = platform.equals("windows", ignoreCase = true)
+
+/** Platformnaam onder de apparaatnaam (`tizen` wordt "Samsung TV", `browser` wordt "Browser", `windows` wordt "Windows"). */
 fun devicePlatformLabel(platform: String): String = when {
     isTizenPlatform(platform) -> L("Samsung TV")
     isBrowserPlatform(platform) -> L("Browser")
+    isWindowsPlatform(platform) -> "Windows"
     else -> platform
 }
 
 /** Apparaatnaam in Nu aan het kijken en de kijkgeschiedenis: bij de webspeler met "Browser" erachter ("Chrome op Mac · Browser"). */
 fun deviceNameWithLabel(name: String, platform: String): String {
+    // build 146: de Windows-app: "Windows" (of de naam met "· Windows" als die het nog niet zegt)
+    if (isWindowsPlatform(platform)) {
+        return if (name.isBlank() || name.equals(platform, ignoreCase = true)) "Windows"
+            else if (name.contains("Windows", ignoreCase = true)) name else "$name · Windows"
+    }
     if (!isBrowserPlatform(platform)) return name
     val label = L("Browser")
     return if (name.isBlank() || name.equals(platform, ignoreCase = true) || name.equals(label, ignoreCase = true)) label else "$name · $label"
@@ -114,6 +124,7 @@ private const val APPLE_TV_LOGO = "M4.85163 12.6004C5.26284 12.6004 5.4373 12.31
 /** Icoon per platform. */
 fun deviceIcon(platform: String): ImageVector = if (isTizenPlatform(platform)) Icons.Default.Tv
 else if (isBrowserPlatform(platform)) Icons.Default.Language
+else if (isWindowsPlatform(platform)) Icons.Default.DesktopWindows
 else if (isAppleTvPlatform(platform)) AppleTvIcon else when (platform) {
     "iPhone" -> Icons.Default.PhoneIphone
     "iPad", "Android tablet" -> Icons.Default.Tablet

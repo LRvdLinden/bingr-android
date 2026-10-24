@@ -678,7 +678,11 @@ object Account {
                 // vernieuwen mislukt met 400/401 tijdens de aanroep → sessie is al gewist
                 if (!isSignedIn) AppState.signedOut()
                 // account_data opnieuw lezen (o.a. nieuwe profielfoto's van andere apparaten)
-                else { ProfileSync.refreshFromServer(); SourceSync.refreshFromServer(); StateSync.refreshFromServer() }
+                else {
+                    ProfileSync.refreshFromServer(); SourceSync.refreshFromServer(); StateSync.refreshFromServer()
+                    // build 146: ongelezen supportantwoorden (badge), ook op apparaten zonder push
+                    SupportCenter.refresh()
+                }
             } finally {
                 checking = false
             }
@@ -1042,6 +1046,67 @@ object Account {
         ))
         val r = authedDeviceAuth(body) ?: return false
         return r.ok && r.json.jB("ok") != false
+    }
+
+    // MARK: build 146: profielen via device-auth (versleuteld op de server)
+
+    /** Antwoord van get_profiles / put_profiles. [unsupported] = de functie kent de actie niet (terugrol): oude REST-route. */
+    class ProfilesResult(val profiles: List<JsonObject>?, val updatedAt: String?, val unsupported: Boolean = false)
+
+    private fun profilesOf(r: Reply): ProfilesResult? {
+        if (!r.ok) return if (isUnknownAction(r)) ProfilesResult(null, null, unsupported = true) else null
+        val j = r.json.jObj ?: return null
+        val list = j["profiles"]
+        if (list != null && list !is JsonArray && list !is JsonNull) return null
+        return ProfilesResult(
+            profiles = j.jList("profiles").mapNotNull { it as? JsonObject }.filter { !it.jS("id").isNullOrBlank() },
+            updatedAt = j.jS("updatedAt")?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    /** get_profiles: de hele lijst (ook tombstones). null = mislukt (netwerk, geen sessie, serverfout). */
+    suspend fun getProfiles(): ProfilesResult? {
+        val r = authedDeviceAuth(buildJsonObject { put("action", "get_profiles") }) ?: return null
+        return profilesOf(r)
+    }
+
+    /** put_profiles: altijd de hele lijst met tombstones; het antwoord is de samengevoegde lijst van de server. */
+    suspend fun putProfiles(profiles: JsonArray): ProfilesResult? {
+        val r = authedDeviceAuth(JsonObject(mapOf("action" to JsonPrimitive("put_profiles"), "profiles" to profiles))) ?: return null
+        if (r.ok && r.json.jB("ok") == false) return null
+        return profilesOf(r)
+    }
+
+    // MARK: build 146: support vanuit de app (functie `support`, acties app_*)
+
+    class SupportReply(val code: Int, val json: JsonElement?) {
+        val ok get() = code in 200..299
+        val error: String? get() = json.jS("error")
+    }
+
+    /** Aanvraag aan `support` met de sessie van het account; bij 401 één keer vernieuwen. null = geen sessie of geen netwerk. */
+    internal suspend fun supportCall(body: JsonElement): SupportReply? {
+        if (!isSignedIn || !configured) return null
+        var token = runCatching { validAccessToken() }.getOrNull() ?: return null
+        repeat(2) { attempt ->
+            val r = try { post("/functions/v1/support", body, bearer = token) } catch (e: AccountException) { return null }
+            if (isBanned(r)) { bannedSignOut(); return null }
+            if (r.code != 401 || attempt == 1) return SupportReply(r.code, r.json)
+            when (refresh()) {
+                RefreshResult.OK -> token = accessToken ?: return null
+                RefreshResult.INVALID -> { withContext(Dispatchers.Main.immediate) { AppState.signedOut() }; return null }
+                RefreshResult.OFFLINE -> return null
+            }
+        }
+        return null
+    }
+
+    /** Netwerkcheck voor de diagnose: device-auth `ping` (zonder inloggen). Tijd in ms, of null als het mislukt. */
+    suspend fun pingBackend(): Long? {
+        if (!configured) return null
+        val t0 = android.os.SystemClock.elapsedRealtime()
+        val r = try { post("/functions/v1/device-auth", buildJsonObject { put("action", "ping") }) } catch (e: AccountException) { return null }
+        return if (r.ok) android.os.SystemClock.elapsedRealtime() - t0 else null
     }
 
     // MARK: tegelijk kijken, wie kijkt er nu, kijkgeschiedenis (build 51)

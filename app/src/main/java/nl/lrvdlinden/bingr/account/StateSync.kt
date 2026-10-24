@@ -544,11 +544,19 @@ object StateSync {
         try { block() } catch (e: CancellationException) { throw e } catch (_: Exception) { }
     }
 
+    /** Build 146 (diagnose): laatste poging om met het account te synchroniseren (epoch-ms, 0 = nog niet) en of die lukte. */
+    @Volatile var lastSyncAt: Long = 0L
+        private set
+    @Volatile var lastSyncOk: Boolean? = null
+        private set
+
     private suspend fun sync() {
         // profielen eerst (nieuwe profielen moeten bestaan voor hun gegevens)
         ProfileSync.awaitRunning()
         lock.withLock {
-            val all = Account.getState() ?: return
+            lastSyncAt = System.currentTimeMillis()
+            val all = Account.getState() ?: run { lastSyncOk = false; return }
+            lastSyncOk = true
             if (!active) return
             mergeConnections(all[CONNECTIONS])
             mergeSettings(all[SETTINGS])
@@ -1390,6 +1398,8 @@ object StateSync {
         val pin: Item<String>?,
         /** Startscherm (build 51): het hele object wint op updatedAt */
         val home: Item<HomeLayout>? = null,
+        /** build 146: de server had nog een leesbare pincode (oude app): die is hier gehasht en moet geüpload worden */
+        val pinLegacy: Boolean = false,
     )
 
     /**
@@ -1591,22 +1601,49 @@ object StateSync {
                 s("audioLanguage"), s("streamSubtitleLanguage"),
             ))
         }
-        val pin = if (!o.containsKey("pin")) null else {
-            val v = o["pin"]
-            val value = when (v) {
-                is JsonObject -> (v.jS("pin") ?: v.jS("value") ?: v.jS("code"))?.takeIf { it.isNotEmpty() }
-                else -> v.jFlex?.takeIf { it.isNotEmpty() }
-            }
-            val at = time(o["pinUpdatedAt"]) ?: (v as? JsonObject)?.let { time(it["updatedAt"]) } ?: 0L
-            Item(at, value)
+        // build 146: `pinHash` (PBKDF2) gaat voor; een leesbare `pin` zonder hash is van een oude app: meteen hashen (met
+        // dezelfde pinUpdatedAt) en uploaden. Lokaal staat alleen de hash (als JSON, Build146Logic.Pin.Hash.json).
+        val v = o["pin"]
+        val plain = when (v) {
+            null, is JsonNull -> null
+            is JsonObject -> (v.jS("pin") ?: v.jS("value") ?: v.jS("code"))?.takeIf { it.isNotEmpty() }
+            else -> v.jFlex?.takeIf { it.isNotEmpty() }
         }
-        return PState(sets, progress, history, prefs, pin, parseHomeLayout(o["homeLayout"]))
+        val hashEl = o["pinHash"]
+        val hashObj = (hashEl as? JsonObject)?.let { h ->
+            Build146Logic.Pin.parse(h.jS("alg"), (h["iter"] as? JsonPrimitive)?.content?.toDoubleOrNull(), h.jS("salt"), h.jS("hash"))
+        }
+        val choice = Build146Logic.PinChoice.read(o.containsKey("pinHash"), hashObj, hashEl is JsonNull, o.containsKey("pin"), plain)
+        val pinAt = time(o["pinUpdatedAt"]) ?: (v as? JsonObject)?.let { time(it["updatedAt"]) } ?: 0L
+        var legacy = false
+        val pin = when (choice) {
+            is Build146Logic.PinChoice.Server.Absent -> null
+            is Build146Logic.PinChoice.Server.Hashed -> Item(pinAt, choice.hash.json())
+            is Build146Logic.PinChoice.Server.Legacy -> {
+                legacy = true
+                // dezelfde salt houden als dit apparaat de pincode al als hash heeft (anders telkens een andere hash)
+                val local = ParentalControl.storedPIN(id)
+                val h = if (ParentalControl.hashMatches(choice.pin, local)) local
+                    else runCatching { Build146Logic.Pin.make(choice.pin).json() }.getOrNull()
+                Item(pinAt, h)
+            }
+            else -> Item(pinAt, null)
+        }
+        return PState(sets, progress, history, prefs, pin, parseHomeLayout(o["homeLayout"]), pinLegacy = legacy)
     }
 
     private fun <T> mergeItems(local: Map<String, Item<T>>, server: Map<String, Item<T>>): Map<String, Item<T>> {
         val out = HashMap(local)
         for ((k, v) in server) { val l = out[k]; if (l == null || v.at > l.at) out[k] = v }
         return out
+    }
+
+    /** build 146: pincode (hash): nieuwste tijd wint; bij gelijke tijd zie [Build146Logic.PinChoice.pick]. */
+    private fun newestPin(local: Item<String>?, server: Item<String>?): Item<String>? = when {
+        local == null -> server
+        server == null -> local
+        Build146Logic.PinChoice.pick(local.at, local.value, server.at, server.value) == Build146Logic.PinChoice.Side.SERVER -> server
+        else -> local
     }
 
     private fun <T> newest(local: Item<T>?, server: Item<T>?): Item<T>? = when {
@@ -1637,6 +1674,11 @@ object StateSync {
         }
         return s.copy(sets = sets, progress = prog, history = hist)
     }
+
+    private fun pinHashJson(h: Build146Logic.Pin.Hash) = JsonObject(mapOf(
+        "alg" to JsonPrimitive(Build146Logic.Pin.ALG), "iter" to JsonPrimitive(h.iter),
+        "salt" to JsonPrimitive(h.salt), "hash" to JsonPrimitive(h.hash),
+    ))
 
     private fun profileJson(base: JsonObject?, s: PState): JsonObject {
         val now = System.currentTimeMillis()
@@ -1690,9 +1732,13 @@ object StateSync {
                 "updatedAt" to JsonPrimitive(iso(p.at)),
             ))
         }
-        s.pin?.let { p ->
-            out["pin"] = p.value?.let { JsonPrimitive(it) } ?: JsonNull
-            out["pinUpdatedAt"] = JsonPrimitive(iso(p.at))
+        // build 146: alleen de hash; `pin` altijd null (ook een oude pincode die nog in `base` stond)
+        val sp = s.pin
+        if (sp != null) {
+            val h = sp.value?.let { v -> Build146Logic.Pin.fromStored(v) ?: v.takeIf { Build146Logic.Pin.isLegacy(it) }?.let { Build146Logic.Pin.make(it) } }
+            out["pinHash"] = h?.let { pinHashJson(it) } ?: JsonNull
+            out["pin"] = JsonNull
+            out["pinUpdatedAt"] = JsonPrimitive(iso(sp.at))
         }
         s.home?.value?.let { h ->
             out["homeLayout"] = JsonObject(mapOf(
@@ -1820,7 +1866,8 @@ object StateSync {
                 PState(
                     setFields.associateWith { f -> mergeItems(a.sets[f] ?: emptyMap(), s.sets[f] ?: emptyMap()) },
                     mergeItems(a.progress, s.progress), mergeItems(a.history, s.history),
-                    newest(a.prefs, s.prefs), newest(a.pin, s.pin), newest(a.home, s.home),
+                    newest(a.prefs, s.prefs), newestPin(a.pin, s.pin), newest(a.home, s.home),
+                    pinLegacy = a.pinLegacy || s.pinLegacy,
                 )
             } ?: s
         }
@@ -1829,7 +1876,7 @@ object StateSync {
             setFields.associateWith { f -> mergeItems(local.sets[f] ?: emptyMap(), srv?.sets?.get(f) ?: emptyMap()) },
             mergeItems(local.progress, srv?.progress ?: emptyMap()),
             mergeItems(local.history, srv?.history ?: emptyMap()),
-            newest(local.prefs, srv?.prefs), newest(local.pin, srv?.pin), newest(local.home, srv?.home),
+            newest(local.prefs, srv?.prefs), newestPin(local.pin, srv?.pin), newest(local.home, srv?.home),
         )
         // van vóór build 44 (tijd -1) en de server heeft niets: nu stempelen
         val now = System.currentTimeMillis()

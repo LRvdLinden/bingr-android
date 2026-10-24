@@ -91,6 +91,8 @@ object AppState {
         // build 97: upgradevenster en "Too many devices" horen bij het vorige account: dicht
         Upgrade.close()
         Account.deviceLimit = null
+        // build 146: supporttickets en de badge horen bij het vorige account
+        SupportCenter.reset()
         if (!Account.configured && skippedAccount) return
         stage = Stage.AUTH
     }

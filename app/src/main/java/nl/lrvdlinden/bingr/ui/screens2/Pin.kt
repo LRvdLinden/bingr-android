@@ -52,7 +52,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 /**
@@ -78,19 +80,27 @@ fun PinPad(title: String, onDismiss: () -> Unit, guarded: Boolean = true, onSubm
         while (wait > 0) { delay(1000); wait = ParentalControl.lockoutRemaining() }
     }
 
+    // build 146: de pincode is een hash (PBKDF2, 100.000 iteraties): eerst buiten de main thread afleiden ("Controleren…"),
+    // daarna gebruikt [onSubmit] (ParentalControl.verify/check/setPIN) die uitkomst
+    var checking by remember { mutableStateOf(false) }
     fun tap(k: String) {
+        if (checking) return
         if (guarded && ParentalControl.lockoutRemaining() > 0) { pin = ""; return }
         if (k == "⌫") { if (pin.isNotEmpty()) pin = pin.dropLast(1); return }
         if (pin.length >= 4) return
         pin += k
         if (pin.length == 4) {
             val entered = pin
-            val ok = onSubmit(entered)
-            if (guarded) { if (ok) ParentalControl.pinSucceeded() else ParentalControl.pinFailed() }
-            if (ok) onDismiss()
-            else {
-                pin = ""
-                scope.launch {
+            checking = true
+            scope.launch {
+                withContext(Dispatchers.Default) { runCatching { ParentalControl.prepare(entered, newPin = !guarded) } }
+                checking = false
+                val ok = onSubmit(entered)
+                ParentalControl.forgetPrepared()
+                if (guarded) { if (ok) ParentalControl.pinSucceeded() else ParentalControl.pinFailed() }
+                if (ok) onDismiss()
+                else {
+                    pin = ""
                     repeat(3) { shake.animateTo(-10f, tween(40)); shake.animateTo(10f, tween(40)) }
                     shake.animateTo(0f, tween(40))
                 }
@@ -131,6 +141,7 @@ fun PinPad(title: String, onDismiss: () -> Unit, guarded: Boolean = true, onSubm
                         maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 820.dp))
                     Spacer(Modifier.height(22.dp))
                     PinDots(pin.length, 18.dp, 18.dp, shake.value)
+                    PinChecking(checking, 18)
                     PinWait(wait, 18)
                     Spacer(Modifier.height(26.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
@@ -160,6 +171,7 @@ fun PinPad(title: String, onDismiss: () -> Unit, guarded: Boolean = true, onSubm
                         modifier = Modifier.widthIn(max = 420.dp))
                     Spacer(Modifier.height(16.dp))
                     PinDots(pin.length, 14.dp, 14.dp, shake.value)
+                    PinChecking(checking, 14)
                     PinWait(wait, 14)
                     Spacer(Modifier.height(18.dp))
                     val rows = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("", "0", "⌫"))
@@ -181,6 +193,14 @@ fun PinPad(title: String, onDismiss: () -> Unit, guarded: Boolean = true, onSubm
         }
         LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
     }
+}
+
+/** Build 146: de pincode wordt gecontroleerd (afleiden van de hash). */
+@Composable
+private fun PinChecking(checking: Boolean, size: Int) {
+    if (!checking) return
+    Spacer(Modifier.height(10.dp))
+    Text(L("Checking…"), color = Theme.secondary, fontSize = size.sp, textAlign = TextAlign.Center)
 }
 
 /** Build 141: melding tijdens de wachttijd na te veel foute pincodes. */

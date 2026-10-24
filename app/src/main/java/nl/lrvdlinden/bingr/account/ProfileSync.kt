@@ -22,7 +22,8 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Profielen van het Bingr-account (tabel `account_data`, PostgREST), volgens "Profielen migreren en delen"
+ * Profielen van het Bingr-account (build 146: via device-auth `get_profiles`/`put_profiles`, versleuteld op de server;
+ * vroeger rechtstreeks `account_data` via PostgREST), volgens "Profielen migreren en delen"
  * in docs/ACCOUNT.md van de iOS-repo:
  * - server leeg, lokaal profielen → migreren (uploaden)
  * - lokaal geen profielen (alleen het automatische hoofdprofiel of niets), server wel → importeren (zelfde id, zonder pincode)
@@ -207,18 +208,33 @@ object ProfileSync {
 
     private fun idKey(id: String) = id.lowercase()
 
-    /** `account_data.profiles` lezen (ook tombstones); null = mislukt. */
+    /**
+     * Build 146: de profielen via device-auth `get_profiles` (versleuteld op de server, ook tombstones); null = mislukt.
+     * Kent de functie de actie niet (alleen bij een terugrol): stil de oude REST-route op `account_data`.
+     */
     private suspend fun readServer(): List<JsonObject>? {
+        val res = Account.getProfiles() ?: return null
+        if (res.unsupported) { useRest = true; return readServerRest() }
+        useRest = false
+        val list = res.profiles ?: return null
+        return withContext(Dispatchers.Default) { sortedProfiles(list) }
+    }
+
+    /** Alleen na 400 unknown_action van get_profiles/put_profiles (oude functie): de route van vóór build 146. */
+    private var useRest = false
+
+    private fun sortedProfiles(list: List<JsonObject>): List<JsonObject> =
+        list.filter { !it.jS("id").isNullOrBlank() }.sortedBy { it.jI("order") ?: Int.MAX_VALUE }
+
+    /** `account_data.profiles` rechtstreeks lezen (vóór build 146; alleen nog als terugval). */
+    private suspend fun readServerRest(): List<JsonObject>? {
         val r = call("/rest/v1/account_data?select=profiles,updated_at", "GET") ?: return null
         if (!r.ok) return null
         // build 97: JSON lezen buiten de main thread
         return withContext(Dispatchers.Default) {
             val rows = runCatching { Http.json.parseToJsonElement(r.body.ifBlank { "[]" }) }.getOrNull() as? JsonArray
                 ?: return@withContext null
-            rows.firstOrNull().jList("profiles")
-                .mapNotNull { it as? JsonObject }
-                .filter { !it.jS("id").isNullOrBlank() }
-                .sortedBy { it.jI("order") ?: Int.MAX_VALUE }
+            sortedProfiles(rows.firstOrNull().jList("profiles").mapNotNull { it as? JsonObject })
         }
     }
 
@@ -266,68 +282,37 @@ object ProfileSync {
         val byKey = all.associateBy { idKey(it.jS("id")!!) }
         val tombs = localTombstones()
         val mainKey = Store.mainProfileID?.let(::idKey)
-        var needUpload = false
-        // build 97: hoofdprofiel van de server (isMain) overnemen als die regel óf de regel van het oude hoofdprofiel
-        // nieuwer is dan wat hier staat (vóór build 97 alleen als de regel van het nieuwe hoofdprofiel nieuwer was).
-        // Vóór het samenvoegen bepalen: daarna zijn de lokale tijden bijgewerkt.
-        val serverMainKey = all.firstOrNull { !isTombstone(it) && it.jB("isMain") == true }?.jS("id")?.let(::idKey)
-        fun rowNewer(key: String?): Boolean {
-            if (key == null) return false
-            val o = byKey[key] ?: return false
-            if (isTombstone(o)) return false
-            val su = o.jS("updatedAt")?.takeIf { it.isNotBlank() } ?: EPOCH
-            return newerStrict(su, localUpdatedAt(key) ?: EPOCH)
-        }
-        val adoptMain = serverMainKey != null && serverMainKey != mainKey && serverMainKey !in tombs &&
-            (rowNewer(serverMainKey) || rowNewer(mainKey))
-
         val local = Store.profiles
-        val removed = mutableListOf<String>()
-        val merged = mutableListOf<Pair<ViewerProfile, Int>>()
-        local.forEachIndexed { i, p ->
-            val key = idKey(p.id)
-            val o = byKey[key]
-            when {
-                o == null -> { needUpload = true; merged += p to i }
-                isTombstone(o) -> {
-                    if (key == mainKey) { needUpload = true; merged += p to i }   // hoofdprofiel nooit verwijderen
-                    else removed += p.id
-                }
-                else -> {
-                    val su = o.jS("updatedAt")?.takeIf { it.isNotBlank() } ?: EPOCH
-                    val lu = localUpdatedAt(key) ?: EPOCH
-                    if (newerStrict(su, lu)) {
-                        merged += toProfile(o, existing = p) to (o.jI("order") ?: i)
-                        setLocalUpdatedAt(key, su)
-                        // build 89: hoofdprofiel elders (of op bingr.online) gewijzigd → overnemen (build 97: zie adoptMain)
-                    } else {
-                        if (newerStrict(lu, su)) needUpload = true
-                        // build 54: lokaal nog geen accentkleur en de server wel → overnemen (ook als de server niet nieuwer is)
-                        val accent = Accent.valid(o.jS("accentColor"))
-                        merged += (if (p.accentColor == null && accent != null) p.copy(accentColor = accent) else p) to i
-                    }
+        // build 146: de beslissingen staan in Build146Logic.ProfileMerge (getest in tools/test/Build146LogicTest.kt)
+        val plan = Build146Logic.ProfileMerge.plan(
+            local = local.map { Build146Logic.ProfileMerge.Local(idKey(it.id), localUpdatedAt(idKey(it.id))) },
+            rows = all.map { o ->
+                Build146Logic.ProfileMerge.Row(idKey(o.jS("id")!!), o.jS("updatedAt"), isTombstone(o), o.jB("isMain") == true, o.jI("order"))
+            },
+            tombs = tombs.keys,
+            mainKey = mainKey,
+            newer = ::newerStrict,
+        )
+        val list = plan.entries.mapNotNull { e ->
+            val o = e.row?.let { byKey[it] }
+            val p = e.local?.let { local.getOrNull(it) }
+            when (e.kind) {
+                Build146Logic.ProfileMerge.Kind.TAKE -> if (o != null && p != null) toProfile(o, existing = p) else p
+                Build146Logic.ProfileMerge.Kind.ADD -> o?.let { toProfile(it) }
+                Build146Logic.ProfileMerge.Kind.KEEP -> p?.let { pp ->
+                    // build 54: lokaal nog geen accentkleur en de server wel → overnemen (ook als de server niet nieuwer is)
+                    val accent = Accent.valid(o?.jS("accentColor"))
+                    if (pp.accentColor == null && accent != null) pp.copy(accentColor = accent) else pp
                 }
             }
         }
-        val present = local.map { idKey(it.id) }.toSet()
-        for (o in all) {
-            val key = idKey(o.jS("id")!!)
-            if (isTombstone(o) || key in present) continue
-            if (key in tombs) { needUpload = true; continue }               // hier verwijderd, server weet het nog niet
-            val su = o.jS("updatedAt")?.takeIf { it.isNotBlank() } ?: EPOCH
-            val np = toProfile(o)
-            merged += np to (o.jI("order") ?: Int.MAX_VALUE)
-            setLocalUpdatedAt(key, su)
-        }
-        // lokale tombstones die nog niet als tombstone op de server staan
-        if (tombs.keys.any { k -> byKey[k]?.let { !isTombstone(it) } ?: true }) needUpload = true
-
-        val list = merged.withIndex().sortedWith(compareBy<IndexedValue<Pair<ViewerProfile, Int>>>({ it.value.second }, { it.index })).map { it.value.first }
-        val newMain: String? = if (adoptMain) list.firstOrNull { idKey(it.id) == serverMainKey }?.id else null
+        plan.stamps.forEach { (k, v) -> setLocalUpdatedAt(k, v) }
+        val removed = plan.removed.mapNotNull { local.getOrNull(it)?.id }
+        val newMain: String? = plan.adoptMain?.let { k -> list.firstOrNull { idKey(it.id) == k }?.id }
         if (list.isNotEmpty() && (list != local || removed.isNotEmpty() || newMain != null)) {
             withoutUpload { Store.applySyncedProfiles(list, removed, newMain) }
         }
-        return needUpload
+        return plan.needUpload
     }
 
     /**
@@ -576,6 +561,28 @@ object ProfileSync {
         if (profiles.isEmpty()) return
         val key = profiles.toString()
         if (key == lastUploaded) return
+        if (!useRest) {
+            // build 146: put_profiles (de hele lijst); het antwoord is de samengevoegde lijst van de server: meteen toepassen
+            var res = Account.putProfiles(profiles)
+            if (res != null && !res.unsupported && res.profiles == null) return
+            if (res == null) {
+                // 503 try_again (gelijktijdige schrijfactie) of netwerk: één keer later opnieuw
+                delay(1_500)
+                if (!active) return
+                res = Account.putProfiles(profiles) ?: return
+            }
+            if (res.unsupported) useRest = true
+            else {
+                val list = res.profiles ?: return
+                lastUploaded = key
+                val sent = profiles.mapNotNull { it as? JsonObject }.associate { idKey(it.jS("id") ?: "") to it["photo"] }
+                photoOverrides.entries.removeAll { (k, v) -> k !in sent || sent[k] == v }
+                val merged = withContext(Dispatchers.Default) { sortedProfiles(list) }
+                serverObjects = merged.associateBy { idKey(it.jS("id")!!) }
+                if (merge(merged)) scheduleUpload()
+                return
+            }
+        }
         val userID = Account.userId ?: return
         val body = JsonObject(mapOf(
             "user_id" to JsonPrimitive(userID),

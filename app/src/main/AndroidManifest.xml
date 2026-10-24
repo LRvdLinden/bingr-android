@@ -58,6 +58,8 @@
                 <data android:scheme="bingr" android:host="live" />
                 <!-- build 120: titel uit een e-mail van Bingr (fallbackknop op bingr.online/titel/) -->
                 <data android:scheme="bingr" android:host="title" />
+                <!-- build 146: antwoord van support (pushmelding support_reply): bingr://support en bingr://support/ticket?n= -->
+                <data android:scheme="bingr" android:host="support" />
             </intent-filter>
             <!-- Build 120: app link uit de e-mail van Bingr: https://bingr.online/titel/?type=&id=&q=&y=
                  (geverifieerd via https://bingr.online/.well-known/assetlinks.json; eigen filter, zodat autoVerify alleen

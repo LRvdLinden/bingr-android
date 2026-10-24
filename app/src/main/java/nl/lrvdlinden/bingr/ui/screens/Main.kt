@@ -119,6 +119,16 @@ fun MainScreen() {
         Store.migrateCategoriesToProfiles()
         Store.migrateCategoriesToAccount(allowFlag = !Account.isSignedIn)
     }
+    // build 146: startdiagnose "klaar" zodra het hoofdscherm even in beeld is; support-badge bijwerken
+    LaunchedEffect(Unit) {
+        delay(1_500)
+        StartDiagnostics.mark("ready")
+        SupportCenter.refresh()
+    }
+    // build 146: tik op de pushmelding support_reply / bingr://support: Instellingen → Support (kinderprofiel: ouderpoort)
+    LaunchedEffect(SupportCenter.openRequest) {
+        if (SupportCenter.openRequest != null) MyBingrNav.openSettings(SettingsTab.SUPPORT)
+    }
     LaunchedEffect(MyBingrNav.tabRequest) {
         val t = MyBingrNav.tabRequest ?: return@LaunchedEffect
         MyBingrNav.tabRequest = null
@@ -239,6 +249,11 @@ fun MainScreen() {
                 Spacer(Modifier.width(8.dp))
                 Text(Playlists.refreshStatus ?: L("Updating…"), color = Color.White, fontSize = tsp(12), fontWeight = FontWeight.Medium)
             }
+        }
+
+        // build 146: de tv-gids is verlopen (geen programma's meer voor nu of de komende uren): kleine melding, blokkeert niets
+        if (current == 0 || current == 1) {
+            EpgExpiredNotice(Modifier.align(Alignment.TopCenter).padding(top = if (tv) 84.dp else 56.dp, start = 12.dp, end = 12.dp))
         }
 
         ScreensStackHost()

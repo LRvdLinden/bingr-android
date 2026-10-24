@@ -112,7 +112,13 @@ jobs:
               tools/test/Build145LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b145-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b145-test.jar" | tee "$RUNNER_TEMP/b145-test.txt"; rc7=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 145::$(tail -1 "$RUNNER_TEMP/b145-test.txt")"
-            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ]
+            # build 146: pincode als hash (testvectoren uit docs/ACCOUNT.md), welke pincode geldt, profielen samenvoegen,
+            # support (groepen, deeplink, formulier) en de startdiagnose
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build146Logic.kt \
+              tools/test/Build146LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b146-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b146-test.jar" | tee "$RUNNER_TEMP/b146-test.txt"; rc8=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 146::$(tail -1 "$RUNNER_TEMP/b146-test.txt")"
+            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi

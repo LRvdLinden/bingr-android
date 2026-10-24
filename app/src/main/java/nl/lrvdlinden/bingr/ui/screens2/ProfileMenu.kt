@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material3.DropdownMenu
@@ -52,6 +53,9 @@ import kotlinx.coroutines.launch
 /** Pagina's van Mijn Bingr (build 72): overzicht, Instellingen, Profielen beheren, Account en apparaten, Trakt. */
 enum class MyBingrPage { ROOT, SETTINGS, PROFILES, ACCOUNT, TRAKT }
 
+/** Build 146: de tabs van Instellingen (op alle apps gelijk). */
+enum class SettingsTab { GENERAL, PLAYBACK, LANGUAGE, SERVERS, PROFILES, ACCOUNT, CONNECTIONS, SUPPORT, DIAGNOSE, ABOUT }
+
 /**
  * Navigatie naar (een pagina van) Mijn Bingr, ook vanuit het profielmenu bovenin (build 72).
  * [jumps] telt op bij elke sprong, zodat Mijn Bingr open subschermen (geschiedenis, collecties…) sluit.
@@ -62,9 +66,21 @@ object MyBingrNav {
         private set
     /** Gevraagd tabblad (5 = Mijn Bingr); MainScreen neemt het over en zet het terug op null. */
     var tabRequest by mutableStateOf<Int?>(null)
+    /** Build 146: open tab van Instellingen. */
+    var settingsTab by mutableStateOf(SettingsTab.GENERAL)
 
     fun go(p: MyBingrPage) {
+        // build 146: Account en apparaten = de tab Account van Instellingen
+        if (p == MyBingrPage.ACCOUNT) { openSettings(SettingsTab.ACCOUNT); return }
         page = p
+        jumps++
+        tabRequest = 5
+    }
+
+    /** Build 146: Instellingen op een bepaalde tab (vanuit het profielmenu, Mijn Bingr of een melding). */
+    fun openSettings(tab: SettingsTab) {
+        settingsTab = tab
+        page = MyBingrPage.SETTINGS
         jumps++
         tabRequest = 5
     }
@@ -90,6 +106,8 @@ fun ProfileMenuButton(avatarSize: Dp, modifier: Modifier = Modifier) {
         ) {
             Box(if (focused && tv) Modifier.border(2.dp, Color.White, CircleShape) else Modifier) {
                 ProfileAvatar(size = avatarSize)
+                // build 146: ongelezen antwoorden van support (Instellingen → Support)
+                SupportBadge(SupportCenter.unread, Modifier.align(Alignment.TopEnd))
             }
             Spacer(Modifier.width(4.dp))
             Icon(if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, L("Switch profile"),
@@ -136,6 +154,14 @@ fun ProfileMenu(expanded: Boolean, onDismiss: () -> Unit) {
             }
         }
         if (others.isNotEmpty()) ProfileMenuDivider()
+        // build 146: alle servers vernieuwen (één voor één, met de bijwerk-indicator), direct boven "Wissel profiel";
+        // niet bij een kinderprofiel
+        if (Store.activeProfile?.kids != true && Store.playlists.isNotEmpty()) {
+            ProfileMenuItem(L("Refresh servers"), Icons.Default.Refresh, focus = firstOnce()) {
+                onDismiss()
+                if (!Playlists.refreshingAll) AppScope.launch { runCatching { Playlists.refreshAll(spinner = true) } }
+            }
+        }
         ProfileMenuItem(L("Switch profile"), Icons.Default.People, focus = firstOnce()) {
             onDismiss(); KidsGate.guard { AppState.switchPlaylist() }
         }
@@ -145,12 +171,12 @@ fun ProfileMenu(expanded: Boolean, onDismiss: () -> Unit) {
         }
         // build 140: Mijn Bingr, Instellingen en Account vanuit een kinderprofiel: de rekensom zit in MainScreen (tabRequest 5)
         ProfileMenuItem(L("My Bingr"), Icons.Default.Person) { onDismiss(); MyBingrNav.go(MyBingrPage.ROOT) }
-        ProfileMenuItem(L("Settings"), Icons.Default.Settings) { onDismiss(); MyBingrNav.go(MyBingrPage.SETTINGS) }
+        ProfileMenuItem(L("Settings"), Icons.Default.Settings, badge = SupportCenter.unread) { onDismiss(); MyBingrNav.openSettings(SettingsTab.GENERAL) }
         if (Account.isSignedIn) {
-            ProfileMenuItem(L("Account & devices"), Icons.Default.AccountCircle) { onDismiss(); MyBingrNav.go(MyBingrPage.ACCOUNT) }
+            ProfileMenuItem(L("Account & devices"), Icons.Default.AccountCircle) { onDismiss(); MyBingrNav.openSettings(SettingsTab.ACCOUNT) }
         }
-        // build 75: support.bingr.online (telefoon: browser, TV: QR-code)
-        ProfileMenuItem(L("Support"), Icons.Default.SupportAgent) { onDismiss(); Support.open(ctx) }
+        // build 146: Support is een tab in Instellingen (tickets en diagnose)
+        ProfileMenuItem(L("Support"), Icons.Default.SupportAgent, badge = SupportCenter.unread) { onDismiss(); MyBingrNav.openSettings(SettingsTab.SUPPORT) }
         if (Account.isSignedIn) {
             ProfileMenuDivider()
             ProfileMenuItem(L("Sign out"), Icons.AutoMirrored.Filled.Logout) { onDismiss(); KidsGate.guard { confirmSignOut = true } }
@@ -184,6 +210,7 @@ private fun ProfileMenuItem(
     focus: FocusRequester? = null,
     leading: (@Composable () -> Unit)? = null,
     locked: Boolean = false,
+    badge: Int = 0,
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -197,6 +224,7 @@ private fun ProfileMenuItem(
         },
         trailingIcon = {
             if (locked) Icon(Icons.Default.Lock, null, tint = if (lit) Color.Black else Theme.secondary, modifier = Modifier.size(tvs(14)))
+            SupportBadge(badge)
         },
         onClick = onClick,
         modifier = Modifier

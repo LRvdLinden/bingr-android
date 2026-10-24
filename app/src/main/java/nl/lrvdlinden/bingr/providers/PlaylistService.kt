@@ -146,6 +146,7 @@ object Playlists {
             if (source?.id != p.id) return
             if (cached != null) {
                 setRaw(cached)
+                StartDiagnostics.mark("servers_loaded")
                 // build 141: eerst het scherm (de lijst uit de cache, gefilterd en met de rijen), pas daarna het netwerk.
                 // Build 145: met een bewaarde lijst wordt bij het openen NIETS vanzelf opgehaald (ook niet na 45 s zoals in
                 // build 144, en geen vernieuwtermijn meer). Na het kiezen van een profiel: de vraag "Servers bijwerken?",
@@ -159,6 +160,7 @@ object Playlists {
         // geen bewaarde lijst (eerste keer, nieuwe server zonder cache): deze server nu laden, met de laadmelding.
         // Build 145: geen vraag; bij "Altijd" daarna (als deze klaar is) de andere servers ([afterProfileOpen])
         refresh(p, showSpinner = true)
+        StartDiagnostics.mark("servers_loaded")
         if (source?.id == p.id) afterProfileOpen(savedList = false)
     }
 

@@ -71,11 +71,14 @@ import kotlin.coroutines.resume
 object Push {
     const val CH_RELEASES = "releases"
     const val CH_MESSAGES = "messages"
+    /** Build 146: antwoorden van Bingr Support (`support_reply`). */
+    const val CH_SUPPORT = "support"
 
     const val EXTRA_KIND = "nl.lrvdlinden.bingr.push.kind"
     const val EXTRA_URL = "nl.lrvdlinden.bingr.push.url"
     const val EXTRA_DEEPLINK = "nl.lrvdlinden.bingr.push.deeplink"
     const val EXTRA_MSG_ID = "nl.lrvdlinden.bingr.push.msg_id"
+    const val EXTRA_TICKET = "nl.lrvdlinden.bingr.push.ticket"
 
     /** Schakelaar "Pushmeldingen" (per apparaat, gaat niet mee met het account). */
     private const val K_ENABLED = "push.enabled"
@@ -286,6 +289,7 @@ object Push {
             nm.createNotificationChannels(listOf(
                 NotificationChannel(CH_RELEASES, L("New versions"), NotificationManager.IMPORTANCE_DEFAULT),
                 NotificationChannel(CH_MESSAGES, L("Messages from Bingr"), NotificationManager.IMPORTANCE_HIGH),
+                NotificationChannel(CH_SUPPORT, L("Support"), NotificationManager.IMPORTANCE_HIGH),
             ))
         }
         Reminders.ensureChannel(c)
@@ -318,8 +322,11 @@ object Push {
         val channel = when (kind) {
             "release" -> CH_RELEASES
             "reminder" -> Reminders.CHANNEL_ID
+            "support_reply" -> CH_SUPPORT
             else -> CH_MESSAGES
         }
+        // build 146: een nieuw antwoord van support: de badge meteen bijwerken
+        if (kind == "support_reply") AppScope.launch { SupportCenter.refresh(force = true) }
         ensureChannels(c)
         val notifId = (msgId ?: (title + body)).hashCode()
         val open = Intent(c, MainActivity::class.java).apply {
@@ -329,6 +336,7 @@ object Push {
             d["url"]?.takeIf { it.isNotBlank() }?.let { putExtra(EXTRA_URL, it) }
             d["deeplink"]?.takeIf { it.isNotBlank() }?.let { putExtra(EXTRA_DEEPLINK, it) }
             msgId?.let { putExtra(EXTRA_MSG_ID, it) }
+            d["ticket"]?.takeIf { it.isNotBlank() }?.let { putExtra(EXTRA_TICKET, it) }
         }
         val pi = PendingIntent.getActivity(c, notifId, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val b = NotificationCompat.Builder(c, channel)
@@ -398,10 +406,16 @@ object PushNav {
         val kind = i.getStringExtra(Push.EXTRA_KIND) ?: (if (fromSystem) i.getStringExtra("kind") else null) ?: return
         val url = i.getStringExtra(Push.EXTRA_URL) ?: (if (fromSystem) i.getStringExtra("url") else null)
         val link = i.getStringExtra(Push.EXTRA_DEEPLINK) ?: (if (fromSystem) i.getStringExtra("deeplink") else null)
-        listOf(Push.EXTRA_KIND, Push.EXTRA_URL, Push.EXTRA_DEEPLINK, Push.EXTRA_MSG_ID, "kind", "url", "deeplink", "msg_id", "google.message_id")
-            .forEach { i.removeExtra(it) }
+        val ticket = i.getStringExtra(Push.EXTRA_TICKET) ?: (if (fromSystem) i.getStringExtra("ticket") else null)
+        listOf(Push.EXTRA_KIND, Push.EXTRA_URL, Push.EXTRA_DEEPLINK, Push.EXTRA_MSG_ID, Push.EXTRA_TICKET, "kind", "url", "deeplink",
+            "msg_id", "google.message_id", "ticket").forEach { i.removeExtra(it) }
         val deep = link?.let { runCatching { Uri.parse(it) }.getOrNull() }?.takeIf { it.scheme.equals("bingr", ignoreCase = true) }
         when (kind) {
+            // build 146: antwoord van support: de tab Support met dat ticket (niet ingelogd of 404: de lijst)
+            "support_reply" -> {
+                val n = Build146Logic.Support.parseLink(link)?.ticket ?: ticket?.trim()?.toIntOrNull()
+                SupportCenter.openRequest = n ?: 0
+            }
             "release", "reminder" -> when {
                 deep != null -> openDeepLink(deep)
                 kind == "release" -> openUrl(url ?: "https://bingr.online/changelog/?p=android")
@@ -425,6 +439,8 @@ object PushNav {
                 val b = u.getQueryParameter("b")?.filter { it.isDigit() }?.takeIf { it.isNotEmpty() }
                 openUrl("https://bingr.online/changelog/?p=$p" + (b?.let { "#build-$it" } ?: ""))
             }
+            // build 146: bingr://support (de lijst) en bingr://support/ticket?n=<nummer>
+            "support" -> SupportCenter.openRequest = Build146Logic.Support.parseLink(u.toString())?.ticket ?: 0
             "live" -> {
                 val ch = u.getQueryParameter("channel")?.takeIf { it.isNotBlank() } ?: return
                 pending = Live(ch, u.getQueryParameter("profile")?.takeIf { it.isNotBlank() })

@@ -58,6 +58,8 @@ import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Key
@@ -179,6 +181,18 @@ fun SettingsScreen() {
     var showDevices by remember { mutableStateOf(false) }
     var accountConfirm by remember { mutableStateOf<String?>(null) }
     var accountError by remember { mutableStateOf<String?>(null) }
+    // build 146: support (tab in Instellingen): open ticket en nieuw ticket
+    var supportOpen by remember { mutableStateOf<Int?>(null) }
+    var supportNew by remember { mutableStateOf(false) }
+    // tik op de pushmelding support_reply of bingr://support/ticket?n=: de tab Support, met dat ticket (0 = de lijst)
+    LaunchedEffect(SupportCenter.openRequest) {
+        val r = SupportCenter.openRequest ?: return@LaunchedEffect
+        SupportCenter.openRequest = null
+        MyBingrNav.page = MyBingrPage.SETTINGS
+        MyBingrNav.settingsTab = SettingsTab.SUPPORT
+        supportNew = false
+        supportOpen = r.takeIf { it > 0 && Account.isSignedIn }
+    }
 
     // instellingen (Prefs) als Compose-state
     var startTab by remember { mutableIntStateOf(Prefs.int("ui.startTab", 0)) }
@@ -293,7 +307,8 @@ fun SettingsScreen() {
     // al het andere staat onder Instellingen, Account en apparaten, Profielen beheren en Trakt
     val page = when (val p = MyBingrNav.page) {
         MyBingrPage.PROFILES, MyBingrPage.TRAKT -> if (isMain) p else MyBingrPage.ROOT
-        MyBingrPage.ACCOUNT -> if (Account.isSignedIn) p else MyBingrPage.ROOT
+        // build 146: Account en apparaten is de tab Account van Instellingen
+        MyBingrPage.ACCOUNT -> MyBingrPage.SETTINGS
         else -> p
     }
     val pageState = remember(page) { LazyListState() }
@@ -356,143 +371,23 @@ fun SettingsScreen() {
                         value = Store.profiles.size.takeIf { it > 0 }?.toString()) { MyBingrNav.page = MyBingrPage.PROFILES }
                 }
                 S2NavRow(L("Home screen"), Icons.Default.ViewAgenda) { sub = S2SettingsSub.HOME_SCREEN }
-                S2NavRow(L("Settings"), Icons.Default.Settings) { MyBingrNav.page = MyBingrPage.SETTINGS }
+                // build 146: Instellingen in tabs; de badge = ongelezen antwoorden van support
+                S2NavRow(L("Settings"), Icons.Default.Settings, badge = SupportCenter.unread) { MyBingrNav.openSettings(SettingsTab.GENERAL) }
                 if (Account.isSignedIn) {
-                    S2NavRow(L("Account & devices"), Icons.Default.AccountCircle) { MyBingrNav.page = MyBingrPage.ACCOUNT }
+                    S2NavRow(L("Account & devices"), Icons.Default.AccountCircle) { MyBingrNav.openSettings(SettingsTab.ACCOUNT) }
                     // build 88: abonnement (Gratis / Lifetime); tik = vergelijking en upgraden
                     Entitlements.current?.let { e ->
                         S2NavRow(L("Subscription"), leading = { LifetimeMark(tvs(20)) },
                             value = if (e.isFree) L("Free") else L("Lifetime")) { Upgrade.show(null) }
                     }
                 }
-                // build 75: support.bingr.online (telefoon: browser, TV: QR-code)
-                S2Row(L("Support"), icon = Icons.Default.SupportAgent, onClick = { Support.open(ctx) })
+                // build 146: Support als tab in Instellingen (tickets, reageren, nieuw ticket, diagnose)
+                S2NavRow(L("Support"), Icons.Default.SupportAgent, badge = SupportCenter.unread) { MyBingrNav.openSettings(SettingsTab.SUPPORT) }
             }
         }
 
         // MARK: onderaan: app-icoon, versie en copyright (op TV focusbaar, zodat het in beeld scrolt)
         item { S2AppFooter() }
-      }
-
-      if (page == MyBingrPage.SETTINGS) {
-        // MARK: profiel
-        item {
-            S2Section(L("Profile"), if (!isMain) L("The server and all settings are managed in the main account.") else null) {
-                if (profile != null) {
-                    S2Row(profile.name,
-                        subtitle = when {
-                            Store.isMain(profile) -> L("Main account")
-                            profile.effectiveAgeLimit != null -> L("Up to %d years", profile.effectiveAgeLimit ?: 0)
-                            else -> null
-                        },
-                        leading = { ProfileAvatar(profile, tvs(44)) })
-                    S2Row(L("Edit profile"), icon = Icons.Default.Edit, onClick = { editingProfile = profile })
-                }
-                S2Row(L("Switch profile"), icon = Icons.Default.SwapHoriz, onClick = { AppState.switchPlaylist() })
-            }
-        }
-
-      }
-
-      if (page == MyBingrPage.ACCOUNT) {
-        // MARK: Bingr-account (hoofdaccount en alle profielen)
-        if (Account.isSignedIn) {
-            item {
-                S2Section(L("Account")) {
-                    S2Row(L("Signed in as %@", Account.email ?: ""), icon = Icons.Default.AccountCircle)
-                    if (!AppState.isTV) S2Row(L("Link a TV"), icon = Icons.Default.Tv, onClick = { linkingTv = true })
-                    S2Row(L("Devices"), icon = Icons.Default.Devices, onClick = { showDevices = true })
-                    if (isMain) {
-                        // build 88: Nu aan het kijken en de geschiedenis van 7 dagen horen bij Lifetime
-                        val nw = Entitlements.nowWatching
-                        S2Row(L("Watching now"), icon = Icons.Default.PlayCircle,
-                            value = watching?.takeIf { nw }?.let { w -> L("%d of %d watching now", w.streams.size, w.limit) },
-                            onClick = { Upgrade.gate(Entitlements.Feature.NOW_WATCHING) { sub = S2SettingsSub.WATCHING } },
-                            trailing = { if (!(nw)) LifetimeBadge() })
-                        S2Row(L("Watch history (7 days)"), icon = Icons.Default.History,
-                            onClick = { Upgrade.gate(Entitlements.Feature.NOW_WATCHING) { sub = S2SettingsSub.WATCH_LOG } },
-                            trailing = { if (!(nw)) LifetimeBadge() })
-                    }
-                    S2Row(L("Sign out"), icon = Icons.AutoMirrored.Filled.Logout, onClick = { accountConfirm = "signout" })
-                    S2Row(L("Delete account"), icon = Icons.Default.Delete, tint = Theme.red, onClick = { accountConfirm = "delete" })
-                    if (Account.busy) S2Row("", leading = {
-                        CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
-                    })
-                    accountError?.let { S2Row(it, tint = Theme.red) }
-                }
-            }
-        }
-        // build 75: hulp nodig? → support.bingr.online
-        item {
-            S2Section(L("Help")) {
-                S2Row(L("Support"), icon = Icons.Default.SupportAgent, value = Support.URL.removePrefix("https://"),
-                    onClick = { Support.open(ctx) })
-            }
-        }
-
-      }
-
-      // build 130: alle servers van het account zijn er voor elk profiel (kiezen en vernieuwen); toevoegen, wijzigen en
-      // verwijderen blijven bij het hoofdprofiel
-      if (page == MyBingrPage.SETTINGS) {
-            // MARK: server
-            item {
-                S2Section(L("Server"), if (isMain) L("The server, Trakt and OpenSubtitles belong to the main account and are used by all profiles.")
-                    else L("All servers of the account are available in every profile. Adding, editing and removing servers is done in the main account.")) {
-                    Store.playlists.forEach { src ->
-                        val active = src.id == source?.id
-                        S2Row(src.name, subtitle = src.kind.title,
-                            leading = { AvatarCircle(src, tvs(34)) },
-                            onLongClick = { if (isMain) editing = src },
-                            onClick = { if (!active) AppState.open(src) },
-                            trailing = { if (active) Icon(Icons.Default.Check, null, tint = Theme.red, modifier = Modifier.size(tvs(20))) })
-                    }
-                    if (source != null) {
-                        val current = Store.playlists.firstOrNull { it.id == source.id } ?: source
-                        S2Row(L("%@ · %d channels · %d movies · %d series", current.kind.title,
-                            lib.channels.size, lib.movies.size, lib.series.size), tint = Theme.secondary)
-                        if (isMain) {
-                            S2Row(L("Edit server"), icon = Icons.Default.Dns, onClick = { editing = current })
-                            S2Row(L("Categories on/off (NL, BE, DE…)"), icon = Icons.Default.FilterList, onClick = { sub = S2SettingsSub.CATEGORIES })
-                            S2Row(L("Manage groups and channels"), icon = Icons.Default.Tune, onClick = { sub = S2SettingsSub.MANAGE })
-                            S2Row(L("Check source"), icon = Icons.Default.Analytics, onClick = { sub = S2SettingsSub.CHECK })
-                        }
-                        // build 130: eerst deze server, daarna de andere één voor één op de achtergrond
-                        S2Row(L("Refresh now"), icon = Icons.Default.Refresh, enabled = !Playlists.refreshingAll,
-                            subtitle = refreshSubtitle(), onClick = {
-                            AppScope.launch { runCatching { Playlists.refreshAll(spinner = true) } }
-                        })
-                    }
-                    // build 88: met Gratis één server; bestaande extra servers blijven gewoon werken
-                    val canAdd = Entitlements.canAddServer(Store.playlists.size)
-                    if (isMain) S2Row(L("Add server"), icon = Icons.Default.Add,
-                        onClick = { if (canAdd) addingServer = true else Upgrade.show(Entitlements.Feature.MULTI_SERVER) },
-                        trailing = { if (!(canAdd)) LifetimeBadge() })
-                    if (source != null && isMain) {
-                        val current = Store.playlists.firstOrNull { it.id == source.id } ?: source
-                        S2Row(L("Delete server"), icon = Icons.Default.Delete, tint = Theme.red, onClick = { deletingServer = current })
-                    }
-                }
-            }
-
-      }
-
-      if (page == MyBingrPage.SETTINGS) {
-            // MARK: afspeellijsten bijwerken (build 130: vernieuwen voor elk profiel)
-            // build 145: geen vernieuwtermijn meer; "Servers laden bij openen" (Vragen / Altijd / Nooit, alleen handmatig),
-            // per apparaat, voor elk profiel behalve een kinderprofiel
-            item {
-                S2Section(L("Update playlists"), L("Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.")) {
-                    if (Store.activeProfile?.kids != true) S2Dropdown(L("Load servers on open"),
-                        Build145Logic.LoadOnOpen.Mode.entries.map { it to loadOnOpenTitle(it) }, loadMode) {
-                        loadMode = it; Playlists.loadOnOpen = it
-                    }
-                    val busy = Playlists.refreshingAll
-                    S2Row(L("Refresh all playlists now"), icon = Icons.Default.Refresh, enabled = !busy, subtitle = refreshSubtitle(),
-                        onClick = { AppScope.launch { runCatching { Playlists.refreshAll() } } },
-                        trailing = { if (busy) CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(18.dp)) })
-                }
-            }
       }
 
       if (page == MyBingrPage.PROFILES) {
@@ -516,17 +411,6 @@ fun SettingsScreen() {
                 }
             }
         }
-
-      if (page == MyBingrPage.SETTINGS && isMain) {
-            // MARK: NAS en netwerk (stond vroeger onder Bibliotheek)
-            item {
-                S2Section(L("Library"), L("Watch history is kept per profile. Plex, Jellyfin and Emby can be added as a playlist.")) {
-                    S2Row(L("NAS & network (SMB/DLNA)"), icon = Icons.Default.Lan, onClick = { sub = S2SettingsSub.NAS })
-                }
-            }
-
-
-      }
 
       if (page == MyBingrPage.TRAKT) {
             // MARK: Trakt
@@ -575,247 +459,433 @@ fun SettingsScreen() {
             }
         }
 
+      // build 146: Instellingen in tabs (op alle apps gelijk): Algemeen, Afspelen, Taal en ondertitels, Servers, Profielen en
+      // kinderslot, Account, Koppelingen, Support, Diagnose, Over. Niets is verdwenen; elke instelling staat in de meest
+      // logische tab, met dezelfde regels als voorheen (hoofdprofiel / kinderprofiel).
       if (page == MyBingrPage.SETTINGS) {
-        // MARK: OpenSubtitles
-        item {
-            S2Section("OpenSubtitles", L("While playing, choose OpenSubtitles to pick another subtitle or language. Automatically uses a subtitle track in the stream first; otherwise the best match from OpenSubtitles is loaded (requires sign-in).") +
-                " " + L("Automatic subtitles “When needed”: if the audio isn't in your subtitle language, subtitles in that language are turned on by themselves.") +
-                " " + L("These choices apply to this profile only.")) {
-                if (OpenSubtitles.isLoggedIn) {
-                    S2Row(L("Signed in as"), value = OpenSubtitles.username ?: "")
-                    OpenSubtitles.remainingDownloads?.let { S2Row(L("Downloads left today"), value = "$it") }
-                    if (isMain) {
-                        S2Row(L("Sign out"), icon = Icons.AutoMirrored.Filled.Logout, tint = Theme.red, onClick = {
-                            AppScope.launch { runCatching { OpenSubtitles.logout() } }
+        val tabs = settingsTabs()
+        val tab = MyBingrNav.settingsTab.takeIf { it in tabs } ?: SettingsTab.GENERAL
+        item { SettingsTabBar(tabs, tab) { MyBingrNav.settingsTab = it } }
+        when (tab) {
+          SettingsTab.GENERAL -> {
+            // MARK: taal
+            item {
+                S2Section(L("Language")) {
+                    S2Dropdown(L("App language"), listOf("" to L("System")) + Localizer.supported, Localizer.override) {
+                        Localizer.setOverride(it)
+                    }
+                }
+            }
+            // MARK: weergave: startscherm en tabbladen
+            item {
+                S2Section(L("Interface")) {
+                    S2Dropdown(L("Start screen"),
+                        listOf(0 to L("Home"), 1 to L("Live TV"), 2 to L("Movies"), 3 to L("Series")), startTab) {
+                        startTab = it; Prefs.put("ui.startTab", it)
+                    }
+                    S2Toggle(L("Show Live TV"), showLive) { showLive = it; Prefs.put("ui.showLive", it) }
+                    S2Toggle(L("Show Movies"), showMovies) { showMovies = it; Prefs.put("ui.showMovies", it) }
+                    S2Toggle(L("Show Series"), showSeries) { showSeries = it; Prefs.put("ui.showSeries", it) }
+                    S2Row(L("Home screen"), icon = Icons.Default.ViewAgenda, onClick = { sub = S2SettingsSub.HOME_SCREEN })
+                }
+            }
+            // MARK: uiterlijk (build 52; build 54: accentkleur per profiel, app-icoon alleen voor het hoofdprofiel)
+            item {
+                S2Section(L("Appearance"),
+                    if (AppIcon.canChoose) L("Each profile has its own accent color. The app icon is only changed on this device.")
+                    else L("Each profile has its own accent color.")) {
+                    // build 88: accentkleuren horen bij Lifetime
+                    if (Entitlements.themes) {
+                        S2Dropdown(L("Accent color"), Accent.options.map { it.key to L(it.titleKey) }, Accent.key) { Accent.set(it) }
+                    } else {
+                        S2Row(L("Accent color"), value = L("Red"), onClick = { Upgrade.show(Entitlements.Feature.THEMES) },
+                            trailing = { LifetimeBadge() })
+                    }
+                    if (AppIcon.canChoose) {
+                        S2Dropdown(L("App icon"), AppIcon.options.map { it.key to L(it.titleKey) }, AppIcon.current) { k ->
+                            if (k != AppIcon.current) iconConfirm = k
+                        }
+                    }
+                }
+            }
+            // MARK: pushmeldingen (docs/PUSH.md): per apparaat, alleen telefoon/tablet met Firebase in de build en een account
+            if (!AppState.isTV && Push.configured && Account.isSignedIn) {
+                item {
+                    S2Section(L("Notifications"),
+                        L("Get a notification when a new version of Bingr is available, when a program you set a reminder for is about to start, and for messages from Bingr.")) {
+                        val pushOn = Push.enabled
+                        S2Toggle(L("Push notifications"), pushOn, icon = Icons.Default.Notifications) { Push.enabled = it }
+                        if (pushOn && !Push.permitted) {
+                            S2Row(L("Notifications are turned off for Bingr in Android settings."), tint = Theme.secondary)
+                            S2Row(L("Open notification settings"), icon = Icons.Default.Settings, onClick = { Push.openSystemSettings(ctx) })
+                        }
+                    }
+                }
+            }
+            // niet op TV (build 60): daar is geen deelmenu of bestandskiezer, dus beide knoppen liepen dood
+            if (isMain && !AppState.isTV) {
+                // MARK: delen tussen apparaten (vervangt iCloud)
+                item {
+                    S2Section(L("Share between devices"),
+                        L("Export saves your playlists (incl. passwords), favorites, My List, watch progress, history and your changes to a file. Import it on another device to merge.")) {
+                        S2Row(L("Playlists"), value = "${Store.playlists.size}")
+                        S2Row(L("Watch progress"), value = L("%d titles", Store.progress.size))
+                        // build 141 (M7): eerst een waarschuwing, dan de pincode (als die er is), dan pas het deelmenu
+                        S2Row(L("Export to file"), icon = Icons.Default.Upload, onClick = { confirmExport = true })
+                        S2Row(L("Import from file"), icon = Icons.Default.Download, onClick = {
+                            val ok = runCatching { importLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream")) }.isSuccess
+                            if (!ok) shareStatus = L("Import failed")
+                        })
+                        shareStatus?.let { S2Row(it, tint = Theme.secondary) }
+                    }
+                }
+            }
+          }
+
+          SettingsTab.PLAYBACK -> {
+            // MARK: speler
+            item {
+                S2Section(L("Player"), L("Automatic uses ExoPlayer for HLS, DASH and MP4 and VLC for everything else. If a stream fails, Bingr switches over and reconnects automatically. The default languages are chosen automatically when a stream has them.")) {
+                    S2Dropdown(L("Player engine"), listOf("auto" to L("Automatic"), "apple" to "ExoPlayer", "vlc" to "VLC"), engine) {
+                        engine = it; Prefs.put("player.engine", it)
+                    }
+                    S2Dropdown(L("Deinterlacing"), PlayerSettings.deinterlaceOptions, deinterlace) {
+                        deinterlace = it; PlayerSettings.deinterlace = it
+                    }
+                    S2Toggle(L("Start with last channel"), resumeLastChannel,
+                        subtitle = L("After choosing a profile, the channel it watched last starts playing.")) {
+                        resumeLastChannel = it; PlayerSettings.resumeLastChannel = it
+                    }
+                    S2Dropdown(L("Zap delay"), PlayerSettings.zapDelayOptions, zapDelay) {
+                        zapDelay = it; PlayerSettings.zapDelay = it
+                    }
+                    S2Toggle(L("Channel preview"), channelPreview) { channelPreview = it; PlayerSettings.channelPreview = it }
+                    if (AppState.isTV) {
+                        S2Toggle(L("Match frame rate"), matchFrameRate) { matchFrameRate = it; PlayerSettings.matchFrameRate = it }
+                    } else {
+                        S2Toggle(L("Show on external display"), ExternalDisplay.enabled) { ExternalDisplay.use(it) }
+                    }
+                }
+            }
+            // build 82: trailer zonder geluid in de kop van film- en seriepagina's
+            item {
+                S2Section(L("Trailers")) {
+                    S2Toggle(L("Play trailers automatically"), autoplayTrailers,
+                        subtitle = if (autoplayTrailers) L("Muted, on movie and series pages. Not on metered connections or with animations off.") else null
+                    ) { autoplayTrailers = it; HeroTrailer.enabled = it }
+                }
+            }
+          }
+
+          SettingsTab.LANGUAGE -> {
+            item {
+                S2Section(L("Audio and subtitles"), L("These choices apply to this profile only.")) {
+                    // build 59: standaard de taal van de app; "Zoals de stream" kiest niets automatisch
+                    S2Dropdown(L("Default audio language"),
+                        listOf("" to L("App language"), TrackPreferences.STREAM to L("As in the stream")) +
+                            TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },
+                        TrackPreferences.audio) { v ->
+                        viewingChange {
+                            TrackPreferences.audio = v
+                            Store.updateActivePreferences { it.copy(audioLanguage = v) }
+                        }
+                    }
+                    // build 60 (docs/ACCOUNT.md): `subtitleLanguage` = taal van ondertitels in de stream, "" = de app-taal.
+                    S2Dropdown(L("Default subtitle language"),
+                        listOf("" to L("App language")) + TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },
+                        TrackPreferences.subtitle.takeIf { it != "off" } ?: "") { v ->
+                        viewingChange {
+                            // oud "off" eerst vastleggen als automatische stand, anders gaat "Uit" verloren
+                            if (TrackPreferences.subtitle == "off") TrackPreferences.autoSubtitles = TrackPreferences.autoSubtitles
+                            TrackPreferences.subtitle = v
+                            Store.updateActivePreferences { it.copy(streamSubtitleLanguage = v) }
+                        }
+                    }
+                    // Prefs "subtitle.size": 0 klein, 1 middel, 2 groot (ook tijdens het afspelen bij Opties)
+                    S2Dropdown(L("Subtitle size"), SubtitleSize.entries.map { it to it.title }, SubtitleSize.current) {
+                        SubtitleSize.current = it
+                    }
+                    // build 59: uit / alleen als nodig (andere audiotaal) / altijd
+                    S2Dropdown(L("Automatic subtitles"), listOf(
+                        TrackPreferences.AUTO_OFF to L("Off"),
+                        TrackPreferences.AUTO_WHEN_NEEDED to L("When needed"),
+                        TrackPreferences.AUTO_ALWAYS to L("Always"),
+                    ), TrackPreferences.autoSubtitles) { v -> // build 91: rechtstreeks lezen (ook na een wijziging uit de sync)
+                        viewingChange {
+                            TrackPreferences.autoSubtitles = v
+                            Store.updateActivePreferences { it.copy(autoSubtitles = null, autoSubtitleMode = v) }
+                        }
+                    }
+                }
+            }
+            // MARK: OpenSubtitles (taal); inloggen staat onder Koppelingen
+            item {
+                S2Section("OpenSubtitles", L("While playing, choose OpenSubtitles to pick another subtitle or language. Automatically uses a subtitle track in the stream first; otherwise the best match from OpenSubtitles is loaded (requires sign-in).") +
+                    " " + L("Automatic subtitles “When needed”: if the audio isn't in your subtitle language, subtitles in that language are turned on by themselves.")) {
+                    S2Dropdown(L("Default language"),
+                        listOf("" to L("All languages")) + TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },
+                        OpenSubtitles.defaultLanguage) { v ->
+                        viewingChange {
+                            OpenSubtitles.defaultLanguage = v
+                            Store.updateActivePreferences { it.copy(subtitleLanguage = v) }
+                        }
+                    }
+                    S2Row("OpenSubtitles", value = if (OpenSubtitles.isLoggedIn) OpenSubtitles.username ?: L("On") else L("Off"),
+                        onClick = { MyBingrNav.settingsTab = SettingsTab.CONNECTIONS })
+                }
+            }
+          }
+
+          SettingsTab.SERVERS -> {
+            // build 130: alle servers van het account zijn er voor elk profiel (kiezen en vernieuwen); toevoegen, wijzigen en
+            // verwijderen blijven bij het hoofdprofiel
+            item {
+                S2Section(L("Your servers"), if (isMain) L("The server, Trakt and OpenSubtitles belong to the main account and are used by all profiles.")
+                    else L("All servers of the account are available in every profile. Adding, editing and removing servers is done in the main account.")) {
+                    Store.playlists.forEach { src ->
+                        val active = src.id == source?.id
+                        S2Row(src.name, subtitle = src.kind.title,
+                            leading = { AvatarCircle(src, tvs(34)) },
+                            onLongClick = { if (isMain) editing = src },
+                            onClick = { if (!active) AppState.open(src) },
+                            trailing = { if (active) Icon(Icons.Default.Check, null, tint = Theme.red, modifier = Modifier.size(tvs(20))) })
+                    }
+                    if (source != null) {
+                        val current = Store.playlists.firstOrNull { it.id == source.id } ?: source
+                        S2Row(L("%@ · %d channels · %d movies · %d series", current.kind.title,
+                            lib.channels.size, lib.movies.size, lib.series.size), tint = Theme.secondary)
+                        if (isMain) {
+                            S2Row(L("Edit server"), icon = Icons.Default.Dns, onClick = { editing = current })
+                            S2Row(L("Manage groups and channels"), icon = Icons.Default.Tune, onClick = { sub = S2SettingsSub.MANAGE })
+                            S2Row(L("Check source"), icon = Icons.Default.Analytics, onClick = { sub = S2SettingsSub.CHECK })
+                        }
+                        // build 130: eerst deze server, daarna de andere één voor één op de achtergrond
+                        S2Row(L("Refresh now"), icon = Icons.Default.Refresh, enabled = !Playlists.refreshingAll,
+                            subtitle = refreshSubtitle(), onClick = {
+                            AppScope.launch { runCatching { Playlists.refreshAll(spinner = true) } }
                         })
                     }
-                } else if (isMain) {
-                    S2Row(L("Sign in to OpenSubtitles"), icon = Icons.Default.Subtitles, onClick = {
-                        s2WithServerKeys({ Secrets.openSubtitlesReady }, { showOSLogin = true }, { setup = "opensubtitles" })
-                    })
-                }
-                S2Dropdown(L("Default language"),
-                    listOf("" to L("All languages")) + TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },
-                    OpenSubtitles.defaultLanguage) { v ->
-                    viewingChange {
-                        OpenSubtitles.defaultLanguage = v
-                        Store.updateActivePreferences { it.copy(subtitleLanguage = v) }
-                    }
-                }
-                // build 59: uit / alleen als nodig (andere audiotaal) / altijd
-                S2Dropdown(L("Automatic subtitles"), listOf(
-                    TrackPreferences.AUTO_OFF to L("Off"),
-                    TrackPreferences.AUTO_WHEN_NEEDED to L("When needed"),
-                    TrackPreferences.AUTO_ALWAYS to L("Always"),
-                ), TrackPreferences.autoSubtitles) { v -> // build 91: rechtstreeks lezen (ook na een wijziging uit de sync)
-                    viewingChange {
-                        TrackPreferences.autoSubtitles = v
-                        Store.updateActivePreferences { it.copy(autoSubtitles = null, autoSubtitleMode = v) }
+                    // build 88: met Gratis één server; bestaande extra servers blijven gewoon werken
+                    val canAdd = Entitlements.canAddServer(Store.playlists.size)
+                    if (isMain) S2Row(L("Add server"), icon = Icons.Default.Add,
+                        onClick = { if (canAdd) addingServer = true else Upgrade.show(Entitlements.Feature.MULTI_SERVER) },
+                        trailing = { if (!(canAdd)) LifetimeBadge() })
+                    if (source != null && isMain) {
+                        val current = Store.playlists.firstOrNull { it.id == source.id } ?: source
+                        S2Row(L("Delete server"), icon = Icons.Default.Delete, tint = Theme.red, onClick = { deletingServer = current })
                     }
                 }
             }
-        }
-
-        // MARK: speler
-        item {
-            S2Section(L("Player"), L("Automatic uses ExoPlayer for HLS, DASH and MP4 and VLC for everything else. If a stream fails, Bingr switches over and reconnects automatically. The default languages are chosen automatically when a stream has them.")) {
-                S2Dropdown(L("Player engine"), listOf("auto" to L("Automatic"), "apple" to "ExoPlayer", "vlc" to "VLC"), engine) {
-                    engine = it; Prefs.put("player.engine", it)
-                }
-                // Prefs "subtitle.size": 0 klein, 1 middel, 2 groot (ook tijdens het afspelen bij Opties)
-                S2Dropdown(L("Subtitle size"), SubtitleSize.entries.map { it to it.title }, SubtitleSize.current) {
-                    SubtitleSize.current = it
-                }
-                // build 59: standaard de taal van de app; "Zoals de stream" kiest niets automatisch
-                S2Dropdown(L("Default audio language"),
-                    listOf("" to L("App language"), TrackPreferences.STREAM to L("As in the stream")) +
-                        TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },
-                    TrackPreferences.audio) { v ->
-                    viewingChange {
-                        TrackPreferences.audio = v
-                        Store.updateActivePreferences { it.copy(audioLanguage = v) }
+            // MARK: afspeellijsten bijwerken (build 145: "Servers laden bij openen"; build 146: de tv-gids volgt dezelfde keuze)
+            item {
+                S2Section(L("Update playlists"), L("Bingr opens with your saved list. Choose whether it asks to update your servers, updates them right away, or only when you refresh.") +
+                    " " + L("The TV guide is updated together with your servers.")) {
+                    if (Store.activeProfile?.kids != true) S2Dropdown(L("Load servers on open"),
+                        Build145Logic.LoadOnOpen.Mode.entries.map { it to loadOnOpenTitle(it) }, loadMode) {
+                        loadMode = it; Playlists.loadOnOpen = it
                     }
-                }
-                S2Dropdown(L("Zap delay"), PlayerSettings.zapDelayOptions, zapDelay) {
-                    zapDelay = it; PlayerSettings.zapDelay = it
-                }
-                S2Toggle(L("Channel preview"), channelPreview) { channelPreview = it; PlayerSettings.channelPreview = it }
-                S2Toggle(L("Start with last channel"), resumeLastChannel,
-                    subtitle = L("After choosing a profile, the channel it watched last starts playing.")) {
-                    resumeLastChannel = it; PlayerSettings.resumeLastChannel = it
-                }
-                S2Dropdown(L("Deinterlacing"), PlayerSettings.deinterlaceOptions, deinterlace) {
-                    deinterlace = it; PlayerSettings.deinterlace = it
-                }
-                if (AppState.isTV) {
-                    S2Toggle(L("Match frame rate"), matchFrameRate) { matchFrameRate = it; PlayerSettings.matchFrameRate = it }
-                } else {
-                    S2Toggle(L("Show on external display"), ExternalDisplay.enabled) { ExternalDisplay.use(it) }
-                }
-                // build 60 (docs/ACCOUNT.md): `subtitleLanguage` = taal van ondertitels in de stream, "" = de app-taal.
-                // Het oude "Uit" is nu "Automatische ondertitels: Uit" en staat hier niet meer.
-                S2Dropdown(L("Default subtitle language"),
-                    listOf("" to L("App language")) + TrackPreferences.sortedCodes.map { it to TrackPreferences.label(it) },
-                    TrackPreferences.subtitle.takeIf { it != "off" } ?: "") { v ->
-                    viewingChange {
-                        // oud "off" eerst vastleggen als automatische stand, anders gaat "Uit" verloren
-                        if (TrackPreferences.subtitle == "off") TrackPreferences.autoSubtitles = TrackPreferences.autoSubtitles
-                        TrackPreferences.subtitle = v
-                        Store.updateActivePreferences { it.copy(streamSubtitleLanguage = v) }
+                    val busy = Playlists.refreshingAll
+                    S2Row(L("Refresh all playlists now"), icon = Icons.Default.Refresh, enabled = !busy, subtitle = refreshSubtitle(),
+                        onClick = { AppScope.launch { runCatching { Playlists.refreshAll() } } },
+                        trailing = { if (busy) CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(18.dp)) })
+                    source?.let { src ->
+                        val at = Playlists.cacheStamp(src)
+                        S2Row(L("TV guide"), value = if (at > 0) L("Updated %@", s2DateTime(at)) else L("Never updated"))
                     }
                 }
             }
-        }
+            // MARK: categorieën en weergave van de server
+            item {
+                S2Section(L("Categories and channels")) {
+                    // build 140: categorieën aan/uit voor het hele account (alle profielen behalve kinderprofielen; die zien dit niet)
+                    if (Store.activeProfile?.kids != true) {
+                        S2Row(L("Categories on/off (NL, BE, DE…)"), icon = Icons.Default.FilterList, onClick = { sub = S2SettingsSub.CATEGORIES })
+                    }
+                    if (isMain) S2Row(L("Rename, hide and reorder"), icon = Icons.Default.Tune, onClick = { sub = S2SettingsSub.MANAGE })
+                    // MARK: NAS en netwerk (stond vroeger onder Bibliotheek)
+                    if (isMain) S2Row(L("NAS & network (SMB/DLNA)"), icon = Icons.Default.Lan, subtitle = L("Plex, Jellyfin and Emby can be added as a playlist."),
+                        onClick = { sub = S2SettingsSub.NAS })
+                }
+            }
+          }
 
-        // MARK: pincode (per profiel) + kinderslot (hoofdaccount)
-        item {
-            S2Section(L("PIN code"), L("With a PIN, the profile asks for the code when it is chosen in “Who's watching?”.")) {
-                if (profile != null) {
-                    val has = ParentalControl.hasPIN(profile)
-                    S2Row(if (has) L("This profile is protected with a PIN") else L("No PIN on this profile"),
-                        icon = if (has) Icons.Default.Lock else Icons.Default.LockOpen,
-                        tint = if (has) Theme.green else Theme.secondary)
-                    if (has) {
-                        // build 141 (H1): eerst de huidige pincode (PinChangeScreen)
-                        S2Row(L("Change PIN"), onClick = { pinMode = S2PinMode.SET })
-                        S2Row(L("Remove PIN"), tint = Theme.red, onClick = { pinMode = S2PinMode.DISABLE })
-                    } else {
-                        S2Row(L("Set PIN"), icon = Icons.Default.Lock, onClick = { pinMode = S2PinMode.SET })
+          SettingsTab.PROFILES -> {
+            // MARK: profiel
+            item {
+                S2Section(L("Profile"), if (!isMain) L("The server and all settings are managed in the main account.") else null) {
+                    if (profile != null) {
+                        S2Row(profile.name,
+                            subtitle = when {
+                                Store.isMain(profile) -> L("Main account")
+                                profile.effectiveAgeLimit != null -> L("Up to %d years", profile.effectiveAgeLimit ?: 0)
+                                else -> null
+                            },
+                            leading = { ProfileAvatar(profile, tvs(44)) })
+                        S2Row(L("Edit profile"), icon = Icons.Default.Edit, onClick = { editingProfile = profile })
+                    }
+                    S2Row(L("Switch profile"), icon = Icons.Default.SwapHoriz, onClick = { AppState.switchPlaylist() })
+                    if (isMain) {
+                        S2Row(L("Manage profiles"), icon = Icons.Default.People,
+                            value = Store.profiles.size.takeIf { it > 0 }?.toString(), onClick = { MyBingrNav.page = MyBingrPage.PROFILES })
                     }
                 }
-                val mainHasPIN = profile?.let { ParentalControl.hasPIN(it) } ?: ParentalControl.hasPIN
-                if (isMain && mainHasPIN) {
-                    val parental = Store.parental
-                    // build 141 (H1): uitzetten alleen met de pincode (aanzetten mag altijd)
-                    S2Toggle(L("Lock adult content with this PIN"), parental.enabled) { v ->
-                        if (v) Store.updateParental { it.copy(enabled = true) }
-                        else mainPinFor = L("Enter PIN to turn off") to { Store.updateParental { it.copy(enabled = false) } }
-                    }
-                    if (parental.enabled) {
-                        S2Toggle(L("Lock adult groups automatically"), parental.autoLockAdult) { v ->
-                            if (v) Store.updateParental { it.copy(autoLockAdult = true) }
-                            else mainPinFor = L("Enter PIN to turn off") to { Store.updateParental { it.copy(autoLockAdult = false) } }
+            }
+            // MARK: pincode (per profiel) + kinderslot (hoofdaccount)
+            item {
+                S2Section(L("PIN code"), L("With a PIN, the profile asks for the code when it is chosen in “Who's watching?”.")) {
+                    if (profile != null) {
+                        val has = ParentalControl.hasPIN(profile)
+                        S2Row(if (has) L("This profile is protected with a PIN") else L("No PIN on this profile"),
+                            icon = if (has) Icons.Default.Lock else Icons.Default.LockOpen,
+                            tint = if (has) Theme.green else Theme.secondary)
+                        if (has) {
+                            // build 141 (H1): eerst de huidige pincode (PinChangeScreen)
+                            S2Row(L("Change PIN"), onClick = { pinMode = S2PinMode.SET })
+                            S2Row(L("Remove PIN"), tint = Theme.red, onClick = { pinMode = S2PinMode.DISABLE })
+                            // build 146: oude apps (≤ 145) kennen de hash niet
+                            S2Row(L("Also update Bingr on your other devices, otherwise the PIN won't work there."), tint = Theme.secondary)
+                        } else {
+                            S2Row(L("Set PIN"), icon = Icons.Default.Lock, onClick = { pinMode = S2PinMode.SET })
                         }
-                        val unlocked = ParentalControl.isUnlocked
-                        S2Row(if (unlocked) L("Unlocked for 30 minutes") else L("Locked"),
-                            icon = if (unlocked) Icons.Default.LockOpen else Icons.Default.Lock,
-                            tint = if (unlocked) Theme.imdb else Theme.green)
-                        if (unlocked) S2Row(L("Lock now"), tint = Theme.red, onClick = { ParentalControl.lock() })
-                        else S2Row(L("Unlock with PIN"), tint = Theme.red, onClick = { pinMode = S2PinMode.UNLOCK })
-                        S2Row(L("Lock individual groups under Manage groups and channels (hold a group). Set age limits per profile under Profiles."),
-                            tint = Theme.secondary)
+                    }
+                    val mainHasPIN = profile?.let { ParentalControl.hasPIN(it) } ?: ParentalControl.hasPIN
+                    if (isMain && mainHasPIN) {
+                        val parental = Store.parental
+                        // build 141 (H1): uitzetten alleen met de pincode (aanzetten mag altijd)
+                        S2Toggle(L("Lock adult content with this PIN"), parental.enabled) { v ->
+                            if (v) Store.updateParental { it.copy(enabled = true) }
+                            else mainPinFor = L("Enter PIN to turn off") to { Store.updateParental { it.copy(enabled = false) } }
+                        }
+                        if (parental.enabled) {
+                            S2Toggle(L("Lock adult groups automatically"), parental.autoLockAdult) { v ->
+                                if (v) Store.updateParental { it.copy(autoLockAdult = true) }
+                                else mainPinFor = L("Enter PIN to turn off") to { Store.updateParental { it.copy(autoLockAdult = false) } }
+                            }
+                            val unlocked = ParentalControl.isUnlocked
+                            S2Row(if (unlocked) L("Unlocked for 30 minutes") else L("Locked"),
+                                icon = if (unlocked) Icons.Default.LockOpen else Icons.Default.Lock,
+                                tint = if (unlocked) Theme.imdb else Theme.green)
+                            if (unlocked) S2Row(L("Lock now"), tint = Theme.red, onClick = { ParentalControl.lock() })
+                            else S2Row(L("Unlock with PIN"), tint = Theme.red, onClick = { pinMode = S2PinMode.UNLOCK })
+                            S2Row(L("Lock individual groups under Manage groups and channels (hold a group). Set age limits per profile under Profiles."),
+                                tint = Theme.secondary)
+                        }
                     }
                 }
             }
-        }
+          }
 
-        // MARK: weergave
-        item {
-            S2Section(L("Interface")) {
-                S2Dropdown(L("Start screen"),
-                    listOf(0 to L("Home"), 1 to L("Live TV"), 2 to L("Movies"), 3 to L("Series")), startTab) {
-                    startTab = it; Prefs.put("ui.startTab", it)
-                }
-                // build 140: categorieën aan/uit voor het hele account (alle profielen behalve kinderprofielen; die zien dit niet)
-                if (Store.activeProfile?.kids != true) {
-                    S2Row(L("Categories on/off (NL, BE, DE…)"), icon = Icons.Default.FilterList, onClick = { sub = S2SettingsSub.CATEGORIES })
-                }
-                S2Toggle(L("Show Live TV"), showLive) { showLive = it; Prefs.put("ui.showLive", it) }
-                S2Toggle(L("Show Movies"), showMovies) { showMovies = it; Prefs.put("ui.showMovies", it) }
-                S2Toggle(L("Show Series"), showSeries) { showSeries = it; Prefs.put("ui.showSeries", it) }
-                // build 82: trailer zonder geluid in de kop van film- en seriepagina's
-                S2Toggle(L("Play trailers automatically"), autoplayTrailers,
-                    subtitle = if (autoplayTrailers) L("Muted, on movie and series pages. Not on metered connections or with animations off.") else null
-                ) { autoplayTrailers = it; HeroTrailer.enabled = it }
-                if (isMain) S2Row(L("Rename, hide and reorder"), icon = Icons.Default.Tune, onClick = { sub = S2SettingsSub.MANAGE })
-            }
-        }
-
-        // MARK: uiterlijk (build 52; build 54: accentkleur per profiel, app-icoon alleen voor het hoofdprofiel)
-        item {
-            S2Section(L("Appearance"),
-                if (AppIcon.canChoose) L("Each profile has its own accent color. The app icon is only changed on this device.")
-                else L("Each profile has its own accent color.")) {
-                // build 88: accentkleuren horen bij Lifetime
-                if (Entitlements.themes) {
-                    S2Dropdown(L("Accent color"), Accent.options.map { it.key to L(it.titleKey) }, Accent.key) { Accent.set(it) }
-                } else {
-                    S2Row(L("Accent color"), value = L("Red"), onClick = { Upgrade.show(Entitlements.Feature.THEMES) },
-                        trailing = { LifetimeBadge() })
-                }
-                if (AppIcon.canChoose) {
-                    S2Dropdown(L("App icon"), AppIcon.options.map { it.key to L(it.titleKey) }, AppIcon.current) { k ->
-                        if (k != AppIcon.current) iconConfirm = k
-                    }
-                }
-            }
-        }
-
-        // MARK: pushmeldingen (docs/PUSH.md): per apparaat, alleen telefoon/tablet met Firebase in de build en een account
-        if (!AppState.isTV && Push.configured && Account.isSignedIn) {
+          SettingsTab.ACCOUNT -> {
+            // MARK: Bingr-account (hoofdaccount en alle profielen)
             item {
-                S2Section(L("Notifications"),
-                    L("Get a notification when a new version of Bingr is available, when a program you set a reminder for is about to start, and for messages from Bingr.")) {
-                    val pushOn = Push.enabled
-                    S2Toggle(L("Push notifications"), pushOn, icon = Icons.Default.Notifications) { Push.enabled = it }
-                    if (pushOn && !Push.permitted) {
-                        S2Row(L("Notifications are turned off for Bingr in Android settings."), tint = Theme.secondary)
-                        S2Row(L("Open notification settings"), icon = Icons.Default.Settings, onClick = { Push.openSystemSettings(ctx) })
+                S2Section(L("Account")) {
+                    S2Row(L("Signed in as %@", Account.email ?: ""), icon = Icons.Default.AccountCircle)
+                    // build 88: abonnement (Gratis / Lifetime); tik = vergelijking en upgraden
+                    Entitlements.current?.let { e ->
+                        S2Row(L("Subscription"), leading = { LifetimeMark(tvs(20)) },
+                            value = if (e.isFree) L("Free") else L("Lifetime"), onClick = { Upgrade.show(null) })
                     }
-                }
-            }
-        }
-
-        // MARK: taal
-        item {
-            S2Section(L("Language")) {
-                S2Dropdown(L("App language"), listOf("" to L("System")) + Localizer.supported, Localizer.override) {
-                    Localizer.setOverride(it)
-                }
-            }
-        }
-
-        // niet op TV (build 60): daar is geen deelmenu of bestandskiezer, dus beide knoppen liepen dood
-        if (isMain && !AppState.isTV) {
-            // MARK: delen tussen apparaten (vervangt iCloud)
-            item {
-                S2Section(L("Share between devices"),
-                    L("Export saves your playlists (incl. passwords), favorites, My List, watch progress, history and your changes to a file. Import it on another device to merge.")) {
-                    S2Row(L("Playlists"), value = "${Store.playlists.size}")
-                    S2Row(L("Watch progress"), value = L("%d titles", Store.progress.size))
-                    // build 141 (M7): eerst een waarschuwing, dan de pincode (als die er is), dan pas het deelmenu
-                    S2Row(L("Export to file"), icon = Icons.Default.Upload, onClick = { confirmExport = true })
-                    S2Row(L("Import from file"), icon = Icons.Default.Download, onClick = {
-                        val ok = runCatching { importLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream")) }.isSuccess
-                        if (!ok) shareStatus = L("Import failed")
+                    if (!AppState.isTV) S2Row(L("Link a TV"), icon = Icons.Default.Tv, onClick = { linkingTv = true })
+                    S2Row(L("Devices"), icon = Icons.Default.Devices, onClick = { showDevices = true })
+                    if (isMain) {
+                        // build 88: Nu aan het kijken en de geschiedenis van 7 dagen horen bij Lifetime
+                        val nw = Entitlements.nowWatching
+                        S2Row(L("Watching now"), icon = Icons.Default.PlayCircle,
+                            value = watching?.takeIf { nw }?.let { w -> L("%d of %d watching now", w.streams.size, w.limit) },
+                            onClick = { Upgrade.gate(Entitlements.Feature.NOW_WATCHING) { sub = S2SettingsSub.WATCHING } },
+                            trailing = { if (!(nw)) LifetimeBadge() })
+                        S2Row(L("Watch history (7 days)"), icon = Icons.Default.History,
+                            onClick = { Upgrade.gate(Entitlements.Feature.NOW_WATCHING) { sub = S2SettingsSub.WATCH_LOG } },
+                            trailing = { if (!(nw)) LifetimeBadge() })
+                    }
+                    S2Row(L("Sign out"), icon = Icons.AutoMirrored.Filled.Logout, onClick = { accountConfirm = "signout" })
+                    S2Row(L("Delete account"), icon = Icons.Default.Delete, tint = Theme.red, onClick = { accountConfirm = "delete" })
+                    if (Account.busy) S2Row("", leading = {
+                        CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
                     })
-                    shareStatus?.let { S2Row(it, tint = Theme.secondary) }
+                    accountError?.let { S2Row(it, tint = Theme.red) }
                 }
             }
-        }
+          }
 
-        // MARK: over
-        item {
-            // build 112: verplichte bronvermelding van TMDB en JustWatch (stond eerder onder de Home-rijen)
-            S2Section(L("About"), footer = DiscoverKind.attribution) {
-                S2Row(L("Version"), value = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                S2Row(L("IMDb data"), value = if (Secrets.isSet(Secrets.omdbAPIKey)) L("Active (OMDb)") else L("No OMDb key"))
-            }
-        }
-
-        // MARK: koppelingen (geavanceerd, onderaan): de sleutels komen normaal van de Bingr-server
-        if (isMain) {
+          SettingsTab.CONNECTIONS -> {
             item {
-                S2Section(footer = L("Trakt and OpenSubtitles require a one-time app registration. Saved on this device; use Export to take them along.")) {
-                    S2Row(L("Set up connections"), icon = Icons.Default.Key, onClick = { setup = "all" })
+                S2Section(L("Connections"), L("The server, Trakt and OpenSubtitles belong to the main account and are used by all profiles.")) {
+                    if (isMain) {
+                        S2NavRow("Trakt",
+                            locked = !Trakt.isLoggedIn && !Entitlements.trakt,
+                            subtitle = if (Trakt.isLoggedIn) Trakt.username ?: Trakt.displayName else L("Connect Trakt"),
+                            value = if (Trakt.isLoggedIn) Trakt.lastRefresh?.let { L("Trakt synced %@", s2Time(it)) } else null,
+                            leading = {
+                                Box(Modifier.size(tvs(28)).clip(CircleShape).background(Theme.elevated), contentAlignment = Alignment.Center) {
+                                    val a = Trakt.avatar
+                                    if (Trakt.isLoggedIn && a != null) RemoteImage(a, Modifier.size(tvs(28)).clip(CircleShape))
+                                    else Icon(Icons.Default.Sync, null, tint = Theme.red, modifier = Modifier.size(tvs(18)))
+                                }
+                            }) { MyBingrNav.page = MyBingrPage.TRAKT }
+                    } else {
+                        S2Row("Trakt", value = if (Trakt.isLoggedIn) Trakt.username ?: L("On") else L("Off"))
+                    }
                 }
             }
-        }
+            // MARK: OpenSubtitles (inloggen; de taal staat onder Taal en ondertitels)
+            item {
+                S2Section("OpenSubtitles") {
+                    if (OpenSubtitles.isLoggedIn) {
+                        S2Row(L("Signed in as"), value = OpenSubtitles.username ?: "")
+                        OpenSubtitles.remainingDownloads?.let { S2Row(L("Downloads left today"), value = "$it") }
+                        if (isMain) {
+                            S2Row(L("Sign out"), icon = Icons.AutoMirrored.Filled.Logout, tint = Theme.red, onClick = {
+                                AppScope.launch { runCatching { OpenSubtitles.logout() } }
+                            })
+                        }
+                    } else if (isMain) {
+                        S2Row(L("Sign in to OpenSubtitles"), icon = Icons.Default.Subtitles, onClick = {
+                            s2WithServerKeys({ Secrets.openSubtitlesReady }, { showOSLogin = true }, { setup = "opensubtitles" })
+                        })
+                    } else S2Row(L("Off"), tint = Theme.secondary)
+                }
+            }
+            // MARK: koppelingen (geavanceerd): de sleutels komen normaal van de Bingr-server
+            if (isMain) {
+                item {
+                    S2Section(footer = L("Trakt and OpenSubtitles require a one-time app registration. Saved on this device; use Export to take them along.")) {
+                        S2Row(L("Set up connections"), icon = Icons.Default.Key, onClick = { setup = "all" })
+                    }
+                }
+            }
+          }
 
+          SettingsTab.SUPPORT -> supportTabItems(onOpen = { supportOpen = it }, onNew = { supportNew = true })
+
+          SettingsTab.DIAGNOSE -> diagnoseTabItems()
+
+          SettingsTab.ABOUT -> {
+            item {
+                // build 112: verplichte bronvermelding van TMDB en JustWatch (stond eerder onder de Home-rijen)
+                S2Section(L("About"), footer = DiscoverKind.attribution) {
+                    S2Row(L("Version"), value = BuildConfig.VERSION_NAME)
+                    S2Row(L("Build"), value = BuildConfig.VERSION_CODE.toString())
+                    S2Row(L("IMDb data"), value = if (Secrets.isSet(Secrets.omdbAPIKey)) L("Active (OMDb)") else L("No OMDb key"))
+                    S2Row(L("Privacy"), icon = Icons.Default.Lock, value = "bingr.online/privacy", onClick = { Support.openUrl(ctx, PRIVACY_URL) })
+                    S2Row(L("Terms of use"), icon = Icons.Default.Description, value = "bingr.online/voorwaarden", onClick = { Support.openUrl(ctx, TERMS_URL) })
+                }
+            }
+            item { S2AppFooter() }
+          }
+        }
       }
+
+
     }
 
     // MARK: dialogen
+    // build 146: support
+    supportOpen?.let { n ->
+        SupportTicketScreen(n, onClose = { supportOpen = null; SupportCenter.refresh(force = true) },
+            onNew = { supportOpen = null; supportNew = true })
+    }
+    if (supportNew) SupportNewScreen(onClose = { supportNew = false }, onCreated = { n -> supportNew = false; supportOpen = n })
     if (linkingTv) S2LinkTvScreen { linkingTv = false }
     if (showDevices) DevicesScreen { showDevices = false }
     when (accountConfirm) {
@@ -1139,10 +1209,13 @@ private fun S2NavRow(
     leading: (@Composable () -> Unit)? = null,
     /** Build 88: hoort bij Lifetime (Gratis): slotje "Lifetime" voor het pijltje. */
     locked: Boolean = false,
+    /** Build 146: ongelezen supportantwoorden. */
+    badge: Int = 0,
     onClick: () -> Unit,
 ) {
     S2Row(title, icon = icon, value = value, subtitle = subtitle, leading = leading, onClick = onClick, trailing = {
         if (locked) LifetimeBadge()
+        SupportBadge(badge)
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Theme.secondary, modifier = Modifier.size(tvs(20)))
     })
 }
@@ -1182,4 +1255,70 @@ fun loadOnOpenTitle(m: Build145Logic.LoadOnOpen.Mode): String = when (m) {
     Build145Logic.LoadOnOpen.Mode.ASK -> L("Ask")
     Build145Logic.LoadOnOpen.Mode.ALWAYS -> L("Always")
     Build145Logic.LoadOnOpen.Mode.NEVER -> L("Never, manually only")
+}
+
+
+/** Build 146: privacyverklaring en voorwaarden (telefoon: browser, tv: QR-code). */
+const val PRIVACY_URL = "https://bingr.online/privacy.html"
+const val TERMS_URL = "https://bingr.online/voorwaarden/"
+
+/** Build 146: de tabs van Instellingen die dit profiel ziet (Account alleen ingelogd). */
+fun settingsTabs(): List<SettingsTab> = SettingsTab.entries.filter { t ->
+    when (t) {
+        SettingsTab.ACCOUNT -> Account.isSignedIn && Account.configured
+        else -> true
+    }
+}
+
+fun settingsTabTitle(t: SettingsTab): String = when (t) {
+    SettingsTab.GENERAL -> L("General")
+    SettingsTab.PLAYBACK -> L("Playback")
+    SettingsTab.LANGUAGE -> L("Language and subtitles")
+    SettingsTab.SERVERS -> L("Servers")
+    SettingsTab.PROFILES -> L("Profiles and parental lock")
+    SettingsTab.ACCOUNT -> L("Account")
+    SettingsTab.CONNECTIONS -> L("Connections")
+    SettingsTab.SUPPORT -> L("Support")
+    SettingsTab.DIAGNOSE -> L("Diagnostics")
+    SettingsTab.ABOUT -> L("About")
+}
+
+/**
+ * Build 146: de tabs bovenaan Instellingen, als een rij die horizontaal scrolt (telefoon: vegen; tv: links/rechts met de
+ * afstandsbediening, OK kiest, omlaag gaat naar de instellingen). De gekozen tab is wit; Support heeft de badge.
+ */
+@Composable
+private fun SettingsTabBar(tabs: List<SettingsTab>, selected: SettingsTab, onSelect: (SettingsTab) -> Unit) {
+    val state = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(selected) {
+        val i = tabs.indexOf(selected)
+        if (i > 0) runCatching { state.animateScrollToItem((i - 1).coerceAtLeast(0)) }
+    }
+    androidx.compose.foundation.lazy.LazyRow(
+        Modifier.widthIn(max = S2MaxWidth).fillMaxWidth().padding(top = tvs(6)),
+        state = state,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = Theme.edge),
+        horizontalArrangement = Arrangement.spacedBy(tvs(8)),
+    ) {
+        items(tabs) { t ->
+            var focused by remember { mutableStateOf(false) }
+            val sel = t == selected
+            Row(
+                Modifier.onFocusChanged { focused = it.isFocused }
+                    .focusLift(1.06f) { onSelect(t) }
+                    .clip(RoundedCornerShape(50))
+                    .background(if (sel) Color.White else Theme.card)
+                    .then(if (focused) Modifier.border(2.dp, if (sel) Theme.red else Color.White, RoundedCornerShape(50)) else Modifier)
+                    .padding(horizontal = tvs(14), vertical = tvs(8)),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(settingsTabTitle(t), color = if (sel) Color.Black else Color.White, fontSize = tsp(14),
+                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
+                if (t == SettingsTab.SUPPORT && SupportCenter.unread > 0) {
+                    Spacer(Modifier.width(6.dp))
+                    SupportBadge(SupportCenter.unread)
+                }
+            }
+        }
+    }
 }

@@ -98,6 +98,13 @@ fun BingrRoot() {
             NotificationPrimerDialog()
         }
         LaunchedEffect(AppState.stage) {
+            // build 146: mijlpalen van de startdiagnose
+            StartDiagnostics.mark(when (AppState.stage) {
+                AppState.Stage.SPLASH -> "splash"
+                AppState.Stage.AUTH -> "auth"
+                AppState.Stage.PICKER -> "profiles"
+                AppState.Stage.MAIN -> "home"
+            })
             if (AppState.stage == AppState.Stage.MAIN) {
                 Push.mainShown()
                 PushNav.consume()

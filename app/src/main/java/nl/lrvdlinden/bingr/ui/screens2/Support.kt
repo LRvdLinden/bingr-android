@@ -39,10 +39,17 @@ object Support {
 
     /** QR-venster zichtbaar (één venster voor de hele app, zodat het menu dat het opent gewoon dicht kan). */
     var showQR by mutableStateOf(false)
+    /** Build 146: adres in het QR-venster (support, privacy, voorwaarden). */
+    var qrURL by mutableStateOf(URL)
+        private set
 
-    fun open(ctx: Context) {
+    fun open(ctx: Context) = openUrl(ctx, URL)
+
+    /** Build 146: een pagina van Bingr openen: telefoon/tablet in de browser, tv (of zonder browser) als QR-code. */
+    fun openUrl(ctx: Context, url: String) {
+        qrURL = url
         if (AppState.isTV) { showQR = true; return }
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(URL))
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
             .addCategory(Intent.CATEGORY_BROWSABLE)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         // geen browser op dit apparaat → QR-code
@@ -63,11 +70,14 @@ fun SupportDialogHost() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(tvs(14))
         ) {
-            Text(L("Support"), color = Color.White, fontSize = tsp(20), fontWeight = FontWeight.Bold)
-            Text(L("Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page."),
+            val url = Support.qrURL
+            val isSupport = url == Support.URL
+            Text(if (isSupport) L("Support") else "Bingr", color = Color.White, fontSize = tsp(20), fontWeight = FontWeight.Bold)
+            Text(if (isSupport) L("Questions or problems? Scan the QR code with your phone's camera to open the Bingr support page.")
+                else L("Scan the QR code with your phone's camera to open this page."),
                 color = Theme.secondary, fontSize = tsp(13), textAlign = TextAlign.Center)
-            QrCodeImage(Support.URL, tvs(180))
-            Text(Support.URL.removePrefix("https://"), color = Color.White, fontSize = tsp(16), fontWeight = FontWeight.SemiBold)
+            QrCodeImage(url, tvs(180))
+            Text(url.removePrefix("https://"), color = Color.White, fontSize = tsp(16), fontWeight = FontWeight.SemiBold)
             NetflixButton(L("Close"), Icons.Default.Close, kind = NetflixKind.PRIMARY,
                 modifier = Modifier.fillMaxWidth().focusRequester(fr)) { close() }
         }

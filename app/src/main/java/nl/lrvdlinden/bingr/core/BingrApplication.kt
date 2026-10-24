@@ -30,6 +30,8 @@ class BingrApplication : Application(), ImageLoaderFactory {
         super.onCreate()
         AppState.appContext = applicationContext
         Prefs.init(this)
+        // build 146: startdiagnose (mijlpalen, vorige start niet klaar, crash-handler) zo vroeg mogelijk
+        StartDiagnostics.start(this)
         // build 145: eenmalige omzetting: de vernieuwtermijn ("Afspeellijsten bijwerken": handmatig, elke start, 6 uur,
         // dagelijks, wekelijks) vervalt; "Servers laden bij openen" wordt "Vragen" (per apparaat, niet gesynct)
         Build145Logic.LoadOnOpen.migrate(Prefs.string(Build145Logic.LoadOnOpen.PREF))?.let { Prefs.put(Build145Logic.LoadOnOpen.PREF, it.raw) }
@@ -55,5 +57,8 @@ class BingrApplication : Application(), ImageLoaderFactory {
         // pushmeldingen (alleen telefoon/tablet en alleen met Firebase in de build): kanalen voor releases en berichten
         if (Push.supported) Push.ensureChannels(this)
         ExternalDisplay.init(this)
+        // build 146: oude leesbare pincodes op dit apparaat hashen (op de achtergrond, pinUpdatedAt blijft gelijk)
+        ParentalControl.migrateLocalPins()
+        StartDiagnostics.mark("app")
     }
 }

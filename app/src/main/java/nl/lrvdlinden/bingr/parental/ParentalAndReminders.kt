@@ -42,14 +42,13 @@ object ParentalControl {
     val hasPIN: Boolean get() { pinVersion; return Store.secret(PIN_KEY) != null }
     val isUnlocked: Boolean get() = (unlockedUntil ?: 0L) > System.currentTimeMillis()
 
-    /** Pincode van het hoofdaccount/kinderslot zetten (null = wissen). */
-    fun setPIN(pin: String?) { Store.setSecret(PIN_KEY, pin); pinVersion++ }
+    /** Pincode van het hoofdaccount/kinderslot zetten (null = wissen). Build 146: bewaard als hash. */
+    fun setPIN(pin: String?) { Store.setSecret(PIN_KEY, pin?.let { hashFor(it).json() }); pinVersion++ }
 
     /** Juiste pincode van het hoofdaccount? Dan 30 min ontgrendelen. (Build 141: niet tijdens de wachttijd.) */
     fun verify(pin: String): Boolean {
         if (lockoutRemaining() > 0) return false
-        val stored = Store.secret(PIN_KEY) ?: return false
-        if (stored != pin) return false
+        if (!matches(pin, PIN_KEY)) return false
         unlock()
         return true
     }
@@ -57,9 +56,92 @@ object ParentalControl {
     /** Alleen controleren (één titel toestaan), zónder de hele bibliotheek te ontgrendelen. */
     fun check(pin: String): Boolean {
         if (lockoutRemaining() > 0) return false
-        val stored = Store.secret(PIN_KEY) ?: return false
-        return stored == pin
+        return matches(pin, PIN_KEY)
     }
+
+    // MARK: build 146: pincode als hash (docs/ACCOUNT.md, "Build 146" → "Pincode als hash")
+
+    /**
+     * Lokaal staat alleen nog de hash ([Build146Logic.Pin.Hash.json], in [Store.secret] zoals vroeger de pincode). Een
+     * pincode van vóór build 146 (alleen cijfers) wordt bij het starten ([migrateLocalPins]) of bij de eerste juiste invoer
+     * gehasht, zonder de tijd van de pincode (`pinUpdatedAt`) te veranderen.
+     * Afleiden kost 100.000 iteraties: [PinPad] rekent het buiten de main thread uit ([prepare]) en de controle daarna
+     * gebruikt die uitkomst.
+     */
+    private class Prepared(val pin: String, val derived: Map<String, ByteArray>, val fresh: Build146Logic.Pin.Hash?)
+    @Volatile private var prepared: Prepared? = null
+
+    private fun saltKey(h: Build146Logic.Pin.Hash) = "${h.iter}|${h.salt}"
+
+    /** Alle sleutels waaronder een pincode kan staan (hoofdaccount en elk profiel). */
+    private fun pinKeys(): List<String> = (listOf(PIN_KEY) + Store.profiles.map { pinKey(it.id) }).distinct()
+
+    /**
+     * Buiten de main thread (PinPad): de ingetypte pincode afleiden tegen alle bewaarde hashes, en met [newPin] ook een
+     * nieuwe hash (nieuwe salt) maken voor [setPIN].
+     */
+    fun prepare(pin: String, newPin: Boolean) {
+        if (!Build146Logic.Pin.valid(pin)) { prepared = null; return }
+        val out = HashMap<String, ByteArray>()
+        for (k in pinKeys()) {
+            val h = Build146Logic.Pin.fromStored(Store.secret(k)) ?: continue
+            val sk = saltKey(h)
+            if (sk in out) continue
+            val salt = Build146Logic.B64.decode(h.salt) ?: continue
+            out[sk] = runCatching { Build146Logic.Pin.derive(pin, salt, h.iter) }.getOrNull() ?: continue
+        }
+        val fresh = if (newPin) runCatching { Build146Logic.Pin.make(pin) }.getOrNull() else null
+        prepared = Prepared(pin, out, fresh)
+    }
+
+    /** Na het invoeren: de voorbereide uitkomst weer vergeten. */
+    fun forgetPrepared() { prepared = null }
+
+    /** Nieuwe hash voor [pin]: de voorbereide (nieuwe salt) als die er is, anders nu uitrekenen. Elke keer een eigen salt. */
+    private fun hashFor(pin: String): Build146Logic.Pin.Hash {
+        val pre = prepared
+        val fresh = pre?.takeIf { it.pin == pin }?.fresh
+        if (fresh != null && pre != null) { prepared = Prepared(pre.pin, pre.derived, null); return fresh }
+        return Build146Logic.Pin.make(pin)
+    }
+
+    /** Klopt [pin] met wat onder [key] bewaard is? Een oude leesbare pincode wordt bij een juiste invoer meteen gehasht. */
+    private fun matches(pin: String, key: String): Boolean {
+        val stored = Store.secret(key) ?: return false
+        val h = Build146Logic.Pin.fromStored(stored)
+        if (h != null) {
+            val got = prepared?.takeIf { it.pin == pin }?.derived?.get(saltKey(h))
+            val want = Build146Logic.B64.decode(h.hash) ?: return false
+            if (got != null) return Build146Logic.Pin.valid(pin) && Build146Logic.Pin.constantTimeEquals(got, want)
+            return Build146Logic.Pin.verify(pin, h)
+        }
+        if (!Build146Logic.Pin.isLegacy(stored)) return false
+        val ok = Build146Logic.Pin.constantTimeEquals(stored.toByteArray(), pin.toByteArray())
+        if (ok) migrateKey(key, stored)
+        return ok
+    }
+
+    /** Oude leesbare pincode onder [key] op de achtergrond hashen (tijd van de pincode blijft gelijk). */
+    private fun migrateKey(key: String, plain: String) {
+        AppScope.launch {
+            val h = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                runCatching { Build146Logic.Pin.make(plain) }.getOrNull()
+            } ?: return@launch
+            if (Store.secret(key) != plain) return@launch
+            StateSync.applyingChanges { Store.setSecret(key, h.json()) }
+            pinVersion++
+        }
+    }
+
+    /** Bij het starten (build 146): alle oude leesbare pincodes op dit apparaat hashen. */
+    fun migrateLocalPins() {
+        val legacy = pinKeys().mapNotNull { k -> Store.secret(k)?.takeIf { Build146Logic.Pin.isLegacy(it) }?.let { k to it } }
+        legacy.forEach { (k, v) -> migrateKey(k, v) }
+    }
+
+    /** Is [plain] de pincode van de bewaarde hash [storedHash]? (Voor de sync: dezelfde salt houden.) */
+    fun hashMatches(plain: String, storedHash: String?): Boolean =
+        Build146Logic.Pin.verify(plain, Build146Logic.Pin.fromStored(storedHash))
 
     // MARK: build 141 (M6): limiet op pincodepogingen
 
@@ -120,12 +202,12 @@ object ParentalControl {
     fun hasPIN(profileID: String): Boolean { pinVersion; return Store.secret(pinKey(profileID)) != null }
 
     fun setPIN(pin: String?, profile: ViewerProfile) = setPIN(pin, profile.id)
-    fun setPIN(pin: String?, profileID: String) { Store.setSecret(pinKey(profileID), pin); pinVersion++ }
+    fun setPIN(pin: String?, profileID: String) { Store.setSecret(pinKey(profileID), pin?.let { hashFor(it).json() }); pinVersion++ }
 
-    /** Pincode van dit profiel zoals hij lokaal bewaard is (voor de account-sync, build 44). */
+    /** Pincode van dit profiel zoals hij lokaal bewaard is (build 146: de hash als JSON; voor de account-sync). */
     fun storedPIN(profileID: String): String? = Store.secret(pinKey(profileID))
 
-    /** Pincode uit het Bingr-account (build 44); null = geen pincode. */
+    /** Pincode uit het Bingr-account (build 44; build 146: de hash als JSON); null = geen pincode. */
     fun applySyncedPIN(pin: String?, profileID: String) {
         if (Store.secret(pinKey(profileID)) == pin) return
         StateSync.applyingChanges { Store.setSecret(pinKey(profileID), pin) }
@@ -136,8 +218,7 @@ object ParentalControl {
     fun verify(pin: String, profile: ViewerProfile): Boolean = verify(pin, profile.id)
     fun verify(pin: String, profileID: String): Boolean {
         if (lockoutRemaining() > 0) return false
-        val stored = Store.secret(pinKey(profileID)) ?: return false
-        if (stored != pin) return false
+        if (!matches(pin, pinKey(profileID))) return false
         if (Store.mainProfileID == profileID) unlock()
         return true
     }
