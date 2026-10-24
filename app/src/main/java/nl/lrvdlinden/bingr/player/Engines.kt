@@ -285,6 +285,8 @@ class ExoEngine(ctx: Context) : PlaybackEngine {
         if (gi !in groups.indices) return
         val g = groups[gi]
         if (g.type != type || ti !in 0 until g.length) return
+        // build 148: alleen wisselen als het spoor echt anders is (een nieuwe keuze leegt de buffer: hapering)
+        if (current(type) == t.id) return
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(type, false)
             .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, ti))
@@ -294,6 +296,8 @@ class ExoEngine(ctx: Context) : PlaybackEngine {
     override fun selectSubtitle(t: MediaTrack?) {
         if (released) return
         if (t == null) {
+            // build 148: staan ondertitels al uit, dan niets veranderen
+            if (player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) return
             player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
@@ -467,8 +471,13 @@ class VlcEngine(ctx: Context) : PlaybackEngine {
     override val currentAudio: String? get() = if (released) null else player.getAudioTrack().toString()
     override val currentSubtitle: String?
         get() = if (released) null else player.getSpuTrack().let { if (it == -1) null else it.toString() }
-    override fun selectAudio(t: MediaTrack) { if (!released) t.id.toIntOrNull()?.let { player.setAudioTrack(it) } }
-    override fun selectSubtitle(t: MediaTrack?) { if (!released) player.setSpuTrack(t?.id?.toIntOrNull() ?: -1) }
+    // build 148: alleen wisselen als het spoor echt anders is
+    override fun selectAudio(t: MediaTrack) { if (!released) t.id.toIntOrNull()?.let { if (player.getAudioTrack() != it) player.setAudioTrack(it) } }
+    override fun selectSubtitle(t: MediaTrack?) {
+        if (released) return
+        val id = t?.id?.toIntOrNull() ?: -1
+        if (player.getSpuTrack() != id) player.setSpuTrack(id)
+    }
     override fun addSubtitle(file: File) {
         // 0 = IMedia.Slave.Type.Subtitle
         if (released) return

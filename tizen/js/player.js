@@ -145,8 +145,16 @@
     return null;
   };
   AVEngine.prototype.setRect = function (r) { try { webapis.avplay.setDisplayRect(Math.round(r.x), Math.round(r.y), Math.round(r.w), Math.round(r.h)); } catch (e) { /* stil */ } };
-  AVEngine.prototype.selectAudio = function (i) { try { webapis.avplay.setSelectTrack('AUDIO', i); } catch (e) { /* stil */ } };
+  // build 148: alleen wisselen als het spoor echt anders is (setSelectTrack leegt de buffer: hapering)
+  AVEngine.prototype.selectAudio = function (i) {
+    if (this._audio === i) return;
+    try { var cur = this.tracks().currentAudio; if (cur === i) { this._audio = i; return; } } catch (e) { /* onbekend: wel kiezen */ }
+    try { webapis.avplay.setSelectTrack('AUDIO', i); this._audio = i; } catch (e) { /* stil */ }
+  };
   AVEngine.prototype.selectText = function (i) {
+    var key = i == null ? 'off' : i;
+    if (this._text === key) return;
+    this._text = key;
     try {
       if (i == null) { webapis.avplay.setSilentSubtitle(true); this.ev.subtitle(''); return; }
       webapis.avplay.setSilentSubtitle(false);
@@ -238,8 +246,9 @@
     if (tt) for (var j = 0; j < tt.length; j++) { out.text.push({ index: j, lang: tt[j].language, label: langName(tt[j].language) || tt[j].label || (L('Subtitles') + ' ' + (j + 1)) }); if (tt[j].mode === 'showing') out.currentText = j; }
     return out;
   };
-  HTMLEngine.prototype.selectAudio = function (i) { var at = this.v.audioTracks; if (at) for (var k = 0; k < at.length; k++) at[k].enabled = k === i; };
-  HTMLEngine.prototype.selectText = function (i) { var tt = this.v.textTracks; if (tt) for (var k = 0; k < tt.length; k++) tt[k].mode = k === i ? 'showing' : 'disabled'; };
+  // build 148: alleen wijzigen wat echt anders is
+  HTMLEngine.prototype.selectAudio = function (i) { var at = this.v.audioTracks; if (at) for (var k = 0; k < at.length; k++) { var on = k === i; if (at[k].enabled !== on) at[k].enabled = on; } };
+  HTMLEngine.prototype.selectText = function (i) { var tt = this.v.textTracks; if (tt) for (var k = 0; k < tt.length; k++) { var m = k === i ? 'showing' : 'disabled'; if (tt[k].mode !== m) tt[k].mode = m; } };
 
   B.engines = { AV: AVEngine, HTML: HTMLEngine, hasAVPlay: hasAVPlay };
 
