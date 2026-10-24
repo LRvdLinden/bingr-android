@@ -482,9 +482,14 @@ object Build146Logic {
             )
         }
 
-        /** Wat er mis was met de vorige start (null = die kwam bij "klaar", zonder crash of lange hang). */
-        fun analyze(r: Record?): Problem? {
+        /**
+         * Wat er mis was met de vorige start (null = die kwam bij "klaar", zonder crash of lange hang). [requireMark]: een
+         * start zonder die mijlpaal (Android: "activity"; het proces startte zonder scherm, bijv. voor een pushmelding, na een
+         * herstart van het toestel of voor een download) telt alleen bij een crash.
+         */
+        fun analyze(r: Record?, requireMark: String? = null): Problem? {
             r ?: return null
+            if (requireMark != null && r.crash == null && r.marks.none { it.name == requireMark }) return null
             val last = r.marks.lastOrNull()?.name ?: FIRST_MARK
             val dur = r.marks.lastOrNull()?.ms ?: 0L
             r.crash?.let { c ->

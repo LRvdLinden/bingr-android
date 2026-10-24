@@ -86,9 +86,8 @@
   DG.osVersion = function () { return osLabel().replace(/^Tizen\s*/, '') || ''; };
   DG.language = function () {
     var lang = B.lang || 'en';
-    var nav = String((navigator && navigator.language) || '');
-    var region = nav.indexOf('-') > 0 ? nav.split('-')[1] : '';
-    return lang.indexOf('-') < 0 && region ? lang + '-' + region.toUpperCase() : lang;
+    var m = /^[A-Za-z]{2,3}[-_]([A-Za-z]{2})\b/.exec(String((navigator && navigator.language) || ''));
+    return lang.indexOf('-') < 0 && m ? lang + '-' + m[1].toUpperCase() : lang;
   };
   DG.screen = function () { try { return screen.width + 'x' + screen.height; } catch (e) { return ''; } };
   DG.memory = function () {

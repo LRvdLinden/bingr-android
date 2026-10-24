@@ -62,7 +62,8 @@ object StartDiagnostics {
         val p = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
         prefs = p
         val prev = runCatching { p.getString(K_CURRENT, null)?.let { decode(Http.json.parseToJsonElement(it)) } }.getOrNull()
-        val problem = Build146Logic.Diag.analyze(prev)
+        // een proces zonder scherm (pushmelding, herstart van het toestel, download) is geen start die "klaar" moet komen
+        val problem = Build146Logic.Diag.analyze(prev, requireMark = "activity")
         if (problem != null) {
             lastProblem = problem
             runCatching { p.edit().putString(K_PROBLEM, encodeProblem(problem).toString()).apply() }

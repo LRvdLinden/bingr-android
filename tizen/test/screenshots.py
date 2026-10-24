@@ -618,6 +618,7 @@ if __name__ == '__main__':
             ('eval', 'B.app.switchProfile(); 1'), ('wait', 600), ('key', 'Enter', 400), ('wait', 1500),
             ('eval', 'B.app.switchProfile(); 1'), ('wait', 600), ('key', 'Enter', 400), ('wait', 1500),
             ('eval', 'B.app.switchProfile(); 1'), ('wait', 600), ('key', 'Enter', 400), ('wait', 1500),
+            ('eval', '["epg", "library", "profileData", "profiles", "connections"].map(function (e) { return B.listenerCount(e); }).join(",") + " (eerst " + window.__l0 + ")"', 'luisteraars na wisselen'),
             ('expect', '["epg", "library", "profileData", "profiles", "connections"].map(function (e) { return B.listenerCount(e); }).join(",") === window.__l0', 'geen extra luisteraars na 3x wisselen'),
         ])
     if which in ('all', 'details'):
