@@ -1,0 +1,60 @@
+/home/runner/tizen-studio:
+jdk
+library
+license
+package-manager
+platforms
+sdk.info
+tools
+
+/home/runner/tizen-studio/tools/ide/bin:
+tizen
+tizen.sh
+Tizen CLI 2.5.25
+Setting configuration is succeeded....
+
+default.build.architecture=x86
+default.build.compiler=llvm
+default.build.configuration=Debug
+default.csharp.buildtool.path=C:/Program Files/Microsoft Visual Studio/2022/Professional/Msbuild/Current/Bin/amd64/MSBuild.exe
+default.csharp.toolchain=dotnet-cli
+default.dotnet.tool.path=/usr/bin/dotnet
+default.profiles.path=/home/runner/tizen-studio-data/profile/profiles.xml
+default.sdb.timeout=60000
+No path option. Will be generated on '/home/runner/tizen-studio-data/keystore/author'.
+Created the working directory.
+Working path: /home/runner/tizen-studio-data/keystore/author
+Generating a certificate with
+  File name = bingr-ci
+  Container Password = ***************************
+  Alias = BingrCI
+  Key Password = ***************************
+  Country = NL
+  City = Bingr
+  Name = Bingr CI
+  Organization = Bingr
+  Internal Certificates Directory = /home/runner/tizen-studio/tools/certificate-generator
+'bingr-ci' has been generated in '/home/runner/tizen-studio-data/keystore/author'.
+Loaded in '/home/runner/tizen-studio-data/profile/profiles.xml'.
+author path: /home/runner/tizen-studio-data/keystore/author/bingr-ci.p12
+author password: ***************************
+distributor1 path: /home/runner/tizen-studio/tools/certificate-generator/certificates/distributor/tizen-distributor-signer.p12
+distributor1 password: *************************
+distributor1 CA path: /home/runner/tizen-studio/tools/certificate-generator/certificates/distributor/tizen-distributor-ca.cer
+
+Wrote to '/home/runner/tizen-studio-data/profile/profiles.xml'.
+Succeed to add 'bingr' profile.
+If want to sign by this, add the file of security profiles in CLI configuration
+  like 'tizen cli-config "profiles.path=/home/runner/tizen-studio-data/profile/profiles.xml"'.
+::warning::Secrets TIZEN_AUTHOR_P12_BASE64 / TIZEN_DISTRIBUTOR_P12_BASE64 ontbreken: de .wgt krijgt een tijdelijk test-certificaat en installeert niet op een Samsung-tv. Zie tizen/README.md.
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<profiles active="bingr" version="3.1">
+<profile name="bingr">
+<profileitem ca="" distributor="0" key="/home/runner/tizen-studio-data/keystore/author/bingr-ci.p12" password="***" rootca=""/>
+<profileitem ca="/home/runner/tizen-studio/tools/certificate-generator/certificates/distributor/tizen-distributor-ca.cer" distributor="1" key="/home/runner/tizen-studio/tools/certificate-generator/certificates/distributor/tizen-distributor-signer.p12" password="***" rootca=""/>
+<profileitem ca="" distributor="2" key="" password="***" rootca=""/>
+</profile>
+</profiles>
+Loaded in '/home/runner/tizen-studio-data/profile/profiles.xml'.
+[Profile Name]      [Active]  
+bingr               O         
