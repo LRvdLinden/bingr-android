@@ -1,0 +1,4 @@
+datums: 20.000 keer opmaken vóór 1021 ms (toLocaleDateString), na 53 ms
+geheugen vóór: 60 MB vastgehouden (165591 items, 286 ms) · na: 12 MB (33119 ingelezen, 132472 verborgen geteld, 232 ms)
+zoeken: eerste keer 62 ms (sleutels maken), daarna 22 ms (24668 titels)
+build149: alle 49 controles geslaagd

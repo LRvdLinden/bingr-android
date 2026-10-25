@@ -1,0 +1,17 @@
+Bingr 1.0.1 build 151 -> Tizen-versie 1.0.151
+strings.js: 670 teksten, 10 talen
+version="1.0"
+version="1.0.151"
+strings: 10 talen los in /home/runner/work/_temp/out/app/js/strings
+bundel: 36 scripts → js/bingr.min.js (556 KB, terser)
+Author certficate: /home/runner/tizen-studio-data/keystore/author/bingr-ci.p12
+Distributor1 certificate : /home/runner/tizen-studio/tools/certificate-generator/certificates/distributor/tizen-distributor-signer.p12
+Excludes File Pattern: {.manifest.tmp, .delta.lst}
+Ignore File: /home/runner/work/_temp/out/app/.manifest.tmp
+Package File Location: /home/runner/work/_temp/out/app/Bingr.wgt
+/home/runner/work/_temp/out/Bingr-1.0.1-build151.wgt
+total 816
+drwxr-xr-x 3 runner runner   4096 Oct 25 12:43 .
+drwxr-xr-x 9 runner runner   4096 Oct 25 12:43 ..
+-rw-r--r-- 1 runner runner 822038 Oct 25 12:43 Bingr-1.0.1-build151.wgt
+drwxr-xr-x 6 runner runner   4096 Oct 25 12:43 app

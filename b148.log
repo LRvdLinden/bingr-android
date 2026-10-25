@@ -1,0 +1,4 @@
+geheugen ruwe lijsten 37k/12k/9k: vóór (volledige objecten) 34.6 MB, na (lichte objecten) 14.6 MB
+Xtream 37k/12k/9k in stukjes: 534 ms, langste stuk 40 ms
+sorteren 37k in stukken: langste stap 12 ms
+build148: alle 57 controles geslaagd
