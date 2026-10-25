@@ -715,9 +715,11 @@ fun HomeScreen(filter: Filter) {
         }
     }
     val recentChannels = Store.recentChannels
-    val liveChannels = remember(favChannels, recentChannels, index, pid, allV) {
-        favChannels.ifEmpty { if (pid == null) emptyList() else AllServers.channels(recentChannels, pid) { index.channel(it, pid) } }
+    // build 151: recente zenders apart, voor de rij "Zenders" (recent eerst, dan favorieten)
+    val recentList = remember(recentChannels, index, pid, allV) {
+        if (pid == null) emptyList() else AllServers.channels(recentChannels, pid) { index.channel(it, pid) }
     }
+    val liveChannels = remember(favChannels, recentList) { favChannels.ifEmpty { recentList } }
     val collections = Collections.visible
     // build 141: zonder "Nieuw toegevoegd"; "Nieuw op Bingr" staat op die plek (HomeLayouts.displayed)
     val layoutRows = remember(Store.activeHomeLayout, collections) { HomeLayouts.displayed(Store.activeHomeLayout, collections) }
@@ -801,6 +803,8 @@ fun HomeScreen(filter: Filter) {
                 item(key = "browse") { CategoriesHomeRow() }
                 // build 149: Ontdek categorieën (grote tegels per categorie van de server, logo van de dienst uit TMDB)
                 item(key = "discovercats") { DiscoverCategoriesRow() }
+                // build 151: Zenders (logo's van de eigen server; recent en favorieten eerst, klikken = meteen spelen)
+                item(key = "channelsrow") { ChannelsHomeRow(recentList, favChannels) }
             }
             /** Na elke getoonde rij: tellen vanaf "Nu live" en de categorierij na de vijfde plaatsen. */
             fun LazyListScope.shown(visible: Boolean = true) {

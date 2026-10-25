@@ -1094,7 +1094,8 @@
   "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "بيانات الأفلام والمسلسلات: TMDB. يستخدم هذا التطبيق واجهة TMDB البرمجية لكنه غير معتمد أو مصدّق من TMDB. بيانات البث: JustWatch.",
   "Hidden category": "فئة مخفية",
   "In hidden categories": "في الفئات المخفية",
-  "Show category “%@”?": "إظهار الفئة “%@”؟"
+  "Show category “%@”?": "إظهار الفئة “%@”؟",
+  "Watch %@ live": "شاهد %@ مباشرة"
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -2191,7 +2192,8 @@
   "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Film- und Seriendaten: TMDB. Diese App verwendet die TMDB-API, wird aber nicht von TMDB unterstützt oder zertifiziert. Streamingdaten: JustWatch.",
   "Hidden category": "Ausgeblendete Kategorie",
   "In hidden categories": "In ausgeblendeten Kategorien",
-  "Show category “%@”?": "Kategorie „%@“ einblenden?"
+  "Show category “%@”?": "Kategorie „%@“ einblenden?",
+  "Watch %@ live": "%@ live ansehen"
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -3288,7 +3290,8 @@
   "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Datos de películas y series: TMDB. Esta aplicación usa la API de TMDB, pero TMDB no la respalda ni la certifica. Datos de streaming: JustWatch.",
   "Hidden category": "Categoría oculta",
   "In hidden categories": "En categorías ocultas",
-  "Show category “%@”?": "¿Mostrar la categoría «%@»?"
+  "Show category “%@”?": "¿Mostrar la categoría «%@»?",
+  "Watch %@ live": "Ver %@ en directo"
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -4385,7 +4388,8 @@
   "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Données des films et séries : TMDB. Cette application utilise l’API TMDB mais n’est ni approuvée ni certifiée par TMDB. Données de streaming : JustWatch.",
   "Hidden category": "Catégorie masquée",
   "In hidden categories": "Dans les catégories masquées",
-  "Show category “%@”?": "Afficher la catégorie « %@ » ?"
+  "Show category “%@”?": "Afficher la catégorie « %@ » ?",
+  "Watch %@ live": "Regarder %@ en direct"
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -5482,7 +5486,8 @@
   "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Dati di film e serie: TMDB. Questa app usa l’API di TMDB ma non è approvata né certificata da TMDB. Dati di streaming: JustWatch.",
   "Hidden category": "Categoria nascosta",
   "In hidden categories": "Nelle categorie nascoste",
-  "Show category “%@”?": "Mostrare la categoria “%@”?"
+  "Show category “%@”?": "Mostrare la categoria “%@”?",
+  "Watch %@ live": "Guarda %@ in diretta"
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -6593,7 +6598,8 @@
   "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Film- en seriegegevens: TMDB. Deze app gebruikt de TMDB-API maar wordt niet door TMDB ondersteund of gecertificeerd. Streamingdata: JustWatch.",
   "Hidden category": "Verborgen categorie",
   "In hidden categories": "In verborgen categorieën",
-  "Show category “%@”?": "Categorie ‘%@’ weer tonen?"
+  "Show category “%@”?": "Categorie ‘%@’ weer tonen?",
+  "Watch %@ live": "%@ live kijken"
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -7690,7 +7696,8 @@
   "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Dane filmów i seriali: TMDB. Ta aplikacja korzysta z API TMDB, ale nie jest wspierana ani certyfikowana przez TMDB. Dane o streamingu: JustWatch.",
   "Hidden category": "Ukryta kategoria",
   "In hidden categories": "W ukrytych kategoriach",
-  "Show category “%@”?": "Pokazać kategorię „%@”?"
+  "Show category “%@”?": "Pokazać kategorię „%@”?",
+  "Watch %@ live": "Oglądaj %@ na żywo"
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -8787,7 +8794,8 @@
   "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Dados de filmes e séries: TMDB. Esta aplicação utiliza a API do TMDB, mas não é aprovada nem certificada pelo TMDB. Dados de streaming: JustWatch.",
   "Hidden category": "Categoria oculta",
   "In hidden categories": "Em categorias ocultas",
-  "Show category “%@”?": "Mostrar a categoria “%@”?"
+  "Show category “%@”?": "Mostrar a categoria “%@”?",
+  "Watch %@ live": "Ver %@ em direto"
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -9884,7 +9892,8 @@
   "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Film ve dizi verileri: TMDB. Bu uygulama TMDB API'sini kullanır ancak TMDB tarafından desteklenmez veya onaylanmaz. Yayın verileri: JustWatch.",
   "Hidden category": "Gizli kategori",
   "In hidden categories": "Gizli kategorilerde",
-  "Show category “%@”?": "“%@” kategorisi gösterilsin mi?"
+  "Show category “%@”?": "“%@” kategorisi gösterilsin mi?",
+  "Watch %@ live": "%@ canlı izle"
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -10981,6 +10990,7 @@
   "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "影视数据：TMDB。本应用使用 TMDB API，但未获得 TMDB 的认可或认证。流媒体数据：JustWatch。",
   "Hidden category": "已隐藏的分类",
   "In hidden categories": "在已隐藏的分类中",
-  "Show category “%@”?": "显示分类“%@”？"
+  "Show category “%@”?": "显示分类“%@”？",
+  "Watch %@ live": "直播观看 %@"
  }
 }

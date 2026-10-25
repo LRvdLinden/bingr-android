@@ -5,7 +5,7 @@
   als een nieuwe app en ben je je gegevens kwijt. De versie zet CI op 1.0.<BINGR_BUILD>.
 -->
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
-        id="http://bingr.online/tizen" version="1.0.150" viewmodes="maximized">
+        id="http://bingr.online/tizen" version="1.0.151" viewmodes="maximized">
   <tizen:application id="BingrTVapp.Bingr" package="BingrTVapp" required_version="4.0"/>
   <tizen:profile name="tv-samsung"/>
   <name>Bingr</name>

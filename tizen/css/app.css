@@ -931,3 +931,16 @@ html.mv-hole .layer.multiview { background: transparent; }
 .dc-chips { margin-left: auto; padding: 3px 10px; border-radius: 14px; background: rgba(0,0,0,0.28); color: rgba(255,255,255,0.85);
   font-size: 18px; font-weight: 700; white-space: nowrap; -webkit-flex: 0 0 auto; flex: 0 0 auto; }
 .dc-name { min-width: 0; }
+
+/* build 151: rij "Zenders" op Home — zenderlogo's van de eigen server op een neutrale achtergrond, eronder wat er nu speelt */
+.zr-row .row-track { align-items: flex-start; }
+.zr-tile { position: relative; flex: 0 0 auto; width: 240px; margin: 0 22px 0 0; -webkit-transition: -webkit-transform 0.15s; transition: transform 0.15s; }
+.zr-box { height: 136px; border-radius: 12px; overflow: hidden; background: #2a2a2e; display: -webkit-box; display: -webkit-flex; display: flex;
+  -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; }
+.zr-logo { width: 78%; height: 72%; background-position: center; background-repeat: no-repeat; }
+.zr-logo .img-fallback { font-size: 26px; color: #fff; }
+.zr-name { color: #fff; font-size: 28px; font-weight: 800; text-align: center; padding: 0 14px; max-height: 76px; overflow: hidden; }
+.zr-now { margin-top: 10px; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zr-tile.focused { -webkit-transform: scale(1.07); transform: scale(1.07); z-index: 2; }
+.zr-tile.focused .zr-box { box-shadow: 0 0 0 5px #fff, 0 8px 18px rgba(0,0,0,0.7); }
+.zr-tile.focused .zr-now { color: #fff; }

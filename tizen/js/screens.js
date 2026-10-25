@@ -409,6 +409,44 @@
     return card;
   }
   S.channelCard = channelCard;
+  /**
+   * Build 151: rij "Zenders" op Home (na "Ontdek categorieën"): zenderlogo's van de eigen server, zoals een rij
+   * streamingdiensten. Recent en favorieten eerst, aangevuld uit de grootste zichtbare live-categorieën, hooguit 15
+   * (B.b151.channels). Logo op een neutrale achtergrond (zonder logo de opgeschoonde naam), eronder klein wat er nu
+   * speelt. Enter start de zender meteen. Kinderprofiel: alleen zenders die het kinderfilter toelaat. Zelfde focus als
+   * de andere rijen.
+   */
+  S.channelsHomeRow = function () {
+    var X1 = B.b151, lib = Lib.lib;
+    if (!X1 || !B.allservers) return null;
+    var p = B.app && B.app.profile, kids = !!(p && p.kids);
+    var pref = B.allservers.channels(D.setList('recentChannels').concat(D.setList('favorites')));
+    var by = Lib.byGroup('channel'), groups = Object.keys(by).map(function (g) { return [g, by[g]]; });
+    if (!pref.length && !lib.channels.length) return null;
+    function keyOf(c) { return (c._src || '') + '|' + c.id; }
+    var pick = X1.channels.pick(pref, groups, {
+      key: keyOf, name: function (c) { return c.name; }, hasLogo: function (c) { return !!c.logo; },
+      allowed: function (c) { return !kids || B.b140.isKidsCategory(c.rawGroup || c.group); }
+    });
+    if (pick.length < X1.channels.MIN) return null;
+    var tiles = pick.map(function (ch) {
+      var name = X1.channels.name(ch.name), nn = ch._src ? {} : Lib.nowNext(ch);
+      var t = h('div.zr-tile.f', [
+        h('div.zr-box', [ch.logo ? U.img(ch.logo, 'logo-img.zr-logo', name) : h('div.zr-name', name)]),
+        nn.now ? h('div.zr-now.dim', nn.now.title) : null
+      ]);
+      t.setAttribute('aria-label', L('Watch %@ live', name) + (nn.now ? ', ' + nn.now.title : ''));
+      t.onEnter = function () {
+        // zender van een andere (of verwijderde) server: daar spelen, of eerst zoeken (zoals de rij Nu live)
+        if (ch._src && B.allservers.open({ type: 'channel', item: ch })) return;
+        B.player.playChannel(ch, pick.filter(function (c) { return !c._src === !ch._src; }));
+      };
+      t._key = 'zr:' + keyOf(ch);
+      if (B.parity) B.parity.attachMenu(t, { type: 'channel', item: ch, list: pick });
+      return t;
+    });
+    return rowBlock(L('Channels'), tiles, 'zr-row');
+  };
   function top10Card(x, type, i) {
     var card = h('div.card.top10.f', [h('div.top10-num', String(i + 1)), U.img(x.poster, 'poster-img', x.title)]);
     langStrip(card, x, type);
@@ -947,8 +985,10 @@
     // build 149: "Ontdek categorieën" (blocks.browse[1]) blijft direct onder de categorierij
     function positionCats() {
       positionCats0();
-      var cat = blocks.browse && blocks.browse[0], dc = blocks.browse && blocks.browse[1];
+      var cat = blocks.browse && blocks.browse[0], dc = blocks.browse && blocks.browse[1], zr = blocks.browse && blocks.browse[2];
       if (cat && dc && cat.parentNode === track && cat.nextSibling !== dc) track.insertBefore(dc, cat.nextSibling);
+      // build 151: en "Zenders" (blocks.browse[1] of [2]) daar direct onder
+      if (dc && zr && dc.parentNode === track && dc.nextSibling !== zr) track.insertBefore(zr, dc.nextSibling);
     }
     function positionCats0() {
       var cat = blocks.browse && blocks.browse[0];
@@ -979,6 +1019,9 @@
       // build 149: "Ontdek categorieën" direct onder de categorierij (zelfde focus als de andere rijen)
       var dc = S.discoverCategoriesRow ? S.discoverCategoriesRow() : null;
       if (dc) { dc._row = 'browse'; blocks.browse.push(dc); track.insertBefore(dc, row.nextSibling); }
+      // build 151: "Zenders" direct onder Ontdek categorieën (of onder de categorierij als die er niet is)
+      var zr = S.channelsHomeRow ? S.channelsHomeRow() : null;
+      if (zr) { zr._row = 'browse'; var after = dc || row; blocks.browse.push(zr); track.insertBefore(zr, after.nextSibling); }
       if (fKey) {
         blocks.browse.some(function (r) {
           var c = r.querySelectorAll('.f');
@@ -1083,7 +1126,15 @@
       // nieuwe collectie (net gemaakt): de rij op zijn plek invoegen
       if (built) colls.forEach(function (k) { if (!blocks[k]) blocks[k] = []; });
       refreshRows(['continue', 'mylist', 'live', 'foryou'].concat(colls));
+      zrSoon();
     };
+    // build 151: recente/favoriete zenders of de gids veranderd → de rij Zenders (met de categorierijen) opnieuw, als het stil is
+    var zrPending = false;
+    function zrSoon() {
+      if (zrPending || !built || !blocks.browse || !blocks.browse.length) return;
+      zrPending = true;
+      B.whenQuiet(function () { zrPending = false; if (document.body.contains(scroller) && blocks.browse) buildCats(); }, 2500);
+    }
     var built = false;
     /** build 102: Top 10 (trending) en Voor jou op de achtergrond; daarna alleen die rijen opnieuw. */
     var extrasJob = 0;
@@ -1107,7 +1158,7 @@
         });
       }).catch(B.noop);
     }
-    pg.onEpg = function () { refreshRows(['live']); };
+    pg.onEpg = function () { refreshRows(['live']); zrSoon(); };
     pg.focusIn = function () { var f = track.querySelector('.f.autofocus') || track.querySelector('.f'); if (f) { U.focus(f); return true; } return false; };
     pg.onBack = function () {
       if (U.scrollPos(scroller) > 0) { U.scrollTo(scroller, 0); pg.focusIn(); return true; }
