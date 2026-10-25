@@ -1,0 +1,69 @@
+{
+  "_uitleg": "Build 151: gedeelde gevallen voor tools/test/Build151LogicTest.kt (Android) en tizen/test/build151_test.js (Samsung TV en LG). names: [ruw, naam, sleutel]. pick: zenders {id: [naam, heeft logo, kinderzender]}, preferred/groups met id's, kids = kinderprofiel (alleen kinderzenders), want = id's in volgorde.",
+  "names": [
+    ["NL | NPO 1 HD", "NPO 1", "npo1"],
+    ["NL: NPO 1 FHD", "NPO 1", "npo1"],
+    ["NPO 1", "NPO 1", "npo1"],
+    ["| NL | RTL 4 4K", "RTL 4", "rtl4"],
+    ["BE ¦ VTM HD", "VTM", "vtm"],
+    ["ZIGGO SPORT", "ZIGGO SPORT", "ziggosport"],
+    ["Ziggo Sport (NL)", "Ziggo Sport", "ziggosport"],
+    ["Discovery Channel", "Discovery Channel", "discoverychannel"],
+    ["UK: BBC One", "BBC One", "bbcone"],
+    ["NL", "NL", "nl"],
+    ["Nickelodeon [NL]", "Nickelodeon", "nickelodeon"],
+    ["", "", ""]
+  ],
+  "pick": [
+    {
+      "name": "recent en favorieten eerst, aangevuld uit de grootste categorie (logo eerst)",
+      "channels": { "a": ["NL | NPO 1 HD", true, false], "b": ["NL | RTL 4", true, false], "c": ["NL | SBS6", false, false],
+        "d": ["NL | Veronica", true, false], "e": ["UK: BBC One", true, false], "f": ["NL | NPO 2", true, false] },
+      "preferred": ["e", "a"],
+      "groups": [["UK", ["e"]], ["NL", ["a", "b", "c", "d", "f"]]],
+      "kids": false, "max": 15,
+      "want": ["e", "a", "b", "d", "f"]
+    },
+    {
+      "name": "dezelfde zender in HD en FHD telt één keer",
+      "channels": { "a": ["NL | NPO 1 HD", true, false], "a2": ["NL: NPO 1 FHD", true, false], "b": ["NL | RTL 4", true, false] },
+      "preferred": ["a"],
+      "groups": [["NL", ["a2", "a", "b"]]],
+      "kids": false, "max": 15,
+      "want": ["a", "b"]
+    },
+    {
+      "name": "zonder logo pas als er geen met logo meer is",
+      "channels": { "a": ["Een", false, false], "b": ["Twee", false, false], "c": ["Drie", true, false] },
+      "preferred": [],
+      "groups": [["G", ["a", "b", "c"]]],
+      "kids": false, "max": 15,
+      "want": ["c", "a", "b"]
+    },
+    {
+      "name": "hooguit 3 per categorie, grootste categorie eerst, en het maximum",
+      "channels": { "a1": ["A1", true, false], "a2": ["A2", true, false], "a3": ["A3", true, false], "a4": ["A4", true, false],
+        "b1": ["B1", true, false], "b2": ["B2", true, false], "c1": ["C1", true, false] },
+      "preferred": [],
+      "groups": [["B", ["b1", "b2"]], ["C", ["c1"]], ["A", ["a1", "a2", "a3", "a4"]]],
+      "kids": false, "max": 5,
+      "want": ["a1", "a2", "a3", "b1", "b2"]
+    },
+    {
+      "name": "kinderprofiel: alleen kinderzenders, ook bij recent en favorieten",
+      "channels": { "k1": ["NL | Nickelodeon", true, true], "k2": ["NL | Disney Junior", true, true], "x": ["NL | RTL 4", true, false] },
+      "preferred": ["x", "k2"],
+      "groups": [["NL", ["x", "k1", "k2"]]],
+      "kids": true, "max": 15,
+      "want": ["k2", "k1"]
+    },
+    {
+      "name": "geen zenders",
+      "channels": {},
+      "preferred": [],
+      "groups": [],
+      "kids": false, "max": 15,
+      "want": []
+    }
+  ]
+}
