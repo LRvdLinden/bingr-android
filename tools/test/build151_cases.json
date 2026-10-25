@@ -1,69 +1,540 @@
 {
-  "_uitleg": "Build 151: gedeelde gevallen voor tools/test/Build151LogicTest.kt (Android) en tizen/test/build151_test.js (Samsung TV en LG). names: [ruw, naam, sleutel]. pick: zenders {id: [naam, heeft logo, kinderzender]}, preferred/groups met id's, kids = kinderprofiel (alleen kinderzenders), want = id's in volgorde.",
+  "_uitleg": "Build 151: gedeelde gevallen voor tools/test/Build151LogicTest.kt (Android) en tizen/test/build151_test.js (Samsung TV en LG). names: [ruw, naam, sleutel]. pick: zenders {id: [naam, heeft logo, kinderzender]}, preferred/groups met id's, kids = kinderprofiel (alleen kinderzenders), want = id's in volgorde. dedupe: twee servers (A = actief, B) met overlappende titels; mode titles (taal, dan actieve server), recent (Verder kijken: nieuwste voortgang) of channels (opgeschoonde zendernaam); want = k's in volgorde.",
   "names": [
-    ["NL | NPO 1 HD", "NPO 1", "npo1"],
-    ["NL: NPO 1 FHD", "NPO 1", "npo1"],
-    ["NPO 1", "NPO 1", "npo1"],
-    ["| NL | RTL 4 4K", "RTL 4", "rtl4"],
-    ["BE ¦ VTM HD", "VTM", "vtm"],
-    ["ZIGGO SPORT", "ZIGGO SPORT", "ziggosport"],
-    ["Ziggo Sport (NL)", "Ziggo Sport", "ziggosport"],
-    ["Discovery Channel", "Discovery Channel", "discoverychannel"],
-    ["UK: BBC One", "BBC One", "bbcone"],
-    ["NL", "NL", "nl"],
-    ["Nickelodeon [NL]", "Nickelodeon", "nickelodeon"],
-    ["", "", ""]
+    [
+      "NL | NPO 1 HD",
+      "NPO 1",
+      "npo1"
+    ],
+    [
+      "NL: NPO 1 FHD",
+      "NPO 1",
+      "npo1"
+    ],
+    [
+      "NPO 1",
+      "NPO 1",
+      "npo1"
+    ],
+    [
+      "| NL | RTL 4 4K",
+      "RTL 4",
+      "rtl4"
+    ],
+    [
+      "BE ¦ VTM HD",
+      "VTM",
+      "vtm"
+    ],
+    [
+      "ZIGGO SPORT",
+      "ZIGGO SPORT",
+      "ziggosport"
+    ],
+    [
+      "Ziggo Sport (NL)",
+      "Ziggo Sport",
+      "ziggosport"
+    ],
+    [
+      "Discovery Channel",
+      "Discovery Channel",
+      "discoverychannel"
+    ],
+    [
+      "UK: BBC One",
+      "BBC One",
+      "bbcone"
+    ],
+    [
+      "NL",
+      "NL",
+      "nl"
+    ],
+    [
+      "Nickelodeon [NL]",
+      "Nickelodeon",
+      "nickelodeon"
+    ],
+    [
+      "",
+      "",
+      ""
+    ]
   ],
   "pick": [
     {
       "name": "recent en favorieten eerst, aangevuld uit de grootste categorie (logo eerst)",
-      "channels": { "a": ["NL | NPO 1 HD", true, false], "b": ["NL | RTL 4", true, false], "c": ["NL | SBS6", false, false],
-        "d": ["NL | Veronica", true, false], "e": ["UK: BBC One", true, false], "f": ["NL | NPO 2", true, false] },
-      "preferred": ["e", "a"],
-      "groups": [["UK", ["e"]], ["NL", ["a", "b", "c", "d", "f"]]],
-      "kids": false, "max": 15,
-      "want": ["e", "a", "b", "d", "f"]
+      "channels": {
+        "a": [
+          "NL | NPO 1 HD",
+          true,
+          false
+        ],
+        "b": [
+          "NL | RTL 4",
+          true,
+          false
+        ],
+        "c": [
+          "NL | SBS6",
+          false,
+          false
+        ],
+        "d": [
+          "NL | Veronica",
+          true,
+          false
+        ],
+        "e": [
+          "UK: BBC One",
+          true,
+          false
+        ],
+        "f": [
+          "NL | NPO 2",
+          true,
+          false
+        ]
+      },
+      "preferred": [
+        "e",
+        "a"
+      ],
+      "groups": [
+        [
+          "UK",
+          [
+            "e"
+          ]
+        ],
+        [
+          "NL",
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "f"
+          ]
+        ]
+      ],
+      "kids": false,
+      "max": 15,
+      "want": [
+        "e",
+        "a",
+        "b",
+        "d",
+        "f"
+      ]
     },
     {
       "name": "dezelfde zender in HD en FHD telt één keer",
-      "channels": { "a": ["NL | NPO 1 HD", true, false], "a2": ["NL: NPO 1 FHD", true, false], "b": ["NL | RTL 4", true, false] },
-      "preferred": ["a"],
-      "groups": [["NL", ["a2", "a", "b"]]],
-      "kids": false, "max": 15,
-      "want": ["a", "b"]
+      "channels": {
+        "a": [
+          "NL | NPO 1 HD",
+          true,
+          false
+        ],
+        "a2": [
+          "NL: NPO 1 FHD",
+          true,
+          false
+        ],
+        "b": [
+          "NL | RTL 4",
+          true,
+          false
+        ]
+      },
+      "preferred": [
+        "a"
+      ],
+      "groups": [
+        [
+          "NL",
+          [
+            "a2",
+            "a",
+            "b"
+          ]
+        ]
+      ],
+      "kids": false,
+      "max": 15,
+      "want": [
+        "a",
+        "b"
+      ]
     },
     {
       "name": "zonder logo pas als er geen met logo meer is",
-      "channels": { "a": ["Een", false, false], "b": ["Twee", false, false], "c": ["Drie", true, false] },
+      "channels": {
+        "a": [
+          "Een",
+          false,
+          false
+        ],
+        "b": [
+          "Twee",
+          false,
+          false
+        ],
+        "c": [
+          "Drie",
+          true,
+          false
+        ]
+      },
       "preferred": [],
-      "groups": [["G", ["a", "b", "c"]]],
-      "kids": false, "max": 15,
-      "want": ["c", "a", "b"]
+      "groups": [
+        [
+          "G",
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ]
+      ],
+      "kids": false,
+      "max": 15,
+      "want": [
+        "c",
+        "a",
+        "b"
+      ]
     },
     {
       "name": "hooguit 3 per categorie, grootste categorie eerst, en het maximum",
-      "channels": { "a1": ["A1", true, false], "a2": ["A2", true, false], "a3": ["A3", true, false], "a4": ["A4", true, false],
-        "b1": ["B1", true, false], "b2": ["B2", true, false], "c1": ["C1", true, false] },
+      "channels": {
+        "a1": [
+          "A1",
+          true,
+          false
+        ],
+        "a2": [
+          "A2",
+          true,
+          false
+        ],
+        "a3": [
+          "A3",
+          true,
+          false
+        ],
+        "a4": [
+          "A4",
+          true,
+          false
+        ],
+        "b1": [
+          "B1",
+          true,
+          false
+        ],
+        "b2": [
+          "B2",
+          true,
+          false
+        ],
+        "c1": [
+          "C1",
+          true,
+          false
+        ]
+      },
       "preferred": [],
-      "groups": [["B", ["b1", "b2"]], ["C", ["c1"]], ["A", ["a1", "a2", "a3", "a4"]]],
-      "kids": false, "max": 5,
-      "want": ["a1", "a2", "a3", "b1", "b2"]
+      "groups": [
+        [
+          "B",
+          [
+            "b1",
+            "b2"
+          ]
+        ],
+        [
+          "C",
+          [
+            "c1"
+          ]
+        ],
+        [
+          "A",
+          [
+            "a1",
+            "a2",
+            "a3",
+            "a4"
+          ]
+        ]
+      ],
+      "kids": false,
+      "max": 5,
+      "want": [
+        "a1",
+        "a2",
+        "a3",
+        "b1",
+        "b2"
+      ]
     },
     {
       "name": "kinderprofiel: alleen kinderzenders, ook bij recent en favorieten",
-      "channels": { "k1": ["NL | Nickelodeon", true, true], "k2": ["NL | Disney Junior", true, true], "x": ["NL | RTL 4", true, false] },
-      "preferred": ["x", "k2"],
-      "groups": [["NL", ["x", "k1", "k2"]]],
-      "kids": true, "max": 15,
-      "want": ["k2", "k1"]
+      "channels": {
+        "k1": [
+          "NL | Nickelodeon",
+          true,
+          true
+        ],
+        "k2": [
+          "NL | Disney Junior",
+          true,
+          true
+        ],
+        "x": [
+          "NL | RTL 4",
+          true,
+          false
+        ]
+      },
+      "preferred": [
+        "x",
+        "k2"
+      ],
+      "groups": [
+        [
+          "NL",
+          [
+            "x",
+            "k1",
+            "k2"
+          ]
+        ]
+      ],
+      "kids": true,
+      "max": 15,
+      "want": [
+        "k2",
+        "k1"
+      ]
     },
     {
       "name": "geen zenders",
       "channels": {},
       "preferred": [],
       "groups": [],
-      "kids": false, "max": 15,
+      "kids": false,
+      "max": 15,
       "want": []
+    }
+  ],
+  "dedupe": [
+    {
+      "name": "films en series: voorkeurstaal, dan actieve server, op de plek van de eerste",
+      "mode": "titles",
+      "preferred": [
+        "NL"
+      ],
+      "items": [
+        {
+          "k": "a1",
+          "id": "tt1",
+          "title": "Dune",
+          "year": 2021,
+          "src": "A",
+          "group": "| EN | Films"
+        },
+        {
+          "k": "b1",
+          "id": "tt1",
+          "title": "NL | Dune",
+          "year": 2021,
+          "src": "B",
+          "group": "Films"
+        },
+        {
+          "k": "a2",
+          "id": null,
+          "title": "The Witcher",
+          "year": 2019,
+          "src": "A",
+          "group": "Series"
+        },
+        {
+          "k": "b2",
+          "id": null,
+          "title": "The Witcher",
+          "year": 2019,
+          "src": "B",
+          "group": "Series"
+        },
+        {
+          "k": "b3",
+          "id": "tt5",
+          "title": "Oppenheimer",
+          "year": 2023,
+          "src": "B",
+          "group": "Films"
+        },
+        {
+          "k": "a3",
+          "id": null,
+          "title": "Oppenheimer (4K)",
+          "year": 2023,
+          "src": "A",
+          "group": "Films"
+        },
+        {
+          "k": "b4",
+          "id": null,
+          "title": "Dune",
+          "year": 1984,
+          "src": "B",
+          "group": "Films"
+        }
+      ],
+      "want": [
+        "b1",
+        "a2",
+        "a3",
+        "b4"
+      ]
+    },
+    {
+      "name": "meertalig gaat voor een andere taal, ook van een andere server",
+      "mode": "titles",
+      "preferred": [
+        "DE"
+      ],
+      "items": [
+        {
+          "k": "a1",
+          "id": null,
+          "title": "EN | Wednesday",
+          "year": 2022,
+          "src": "A",
+          "group": "Netflix"
+        },
+        {
+          "k": "b1",
+          "id": null,
+          "title": "Wednesday",
+          "year": 2022,
+          "src": "B",
+          "group": "| MULTI | Netflix"
+        }
+      ],
+      "want": [
+        "b1"
+      ]
+    },
+    {
+      "name": "zonder overlap verandert er niets",
+      "mode": "titles",
+      "preferred": [
+        "NL"
+      ],
+      "items": [
+        {
+          "k": "a1",
+          "id": "tt1",
+          "title": "Dune",
+          "year": 2021,
+          "src": "A",
+          "group": "Films"
+        },
+        {
+          "k": "b1",
+          "id": "tt2",
+          "title": "Arrival",
+          "year": 2016,
+          "src": "B",
+          "group": "Films"
+        }
+      ],
+      "want": [
+        "a1",
+        "b1"
+      ]
+    },
+    {
+      "name": "Verder kijken: één tegel met de nieuwste voortgang",
+      "mode": "recent",
+      "preferred": [
+        "NL"
+      ],
+      "items": [
+        {
+          "k": "a1",
+          "id": null,
+          "title": "Dune",
+          "year": 2021,
+          "src": "A",
+          "group": "",
+          "updated": 100
+        },
+        {
+          "k": "b1",
+          "id": null,
+          "title": "NL | Dune",
+          "year": 2021,
+          "src": "B",
+          "group": "",
+          "updated": 300
+        },
+        {
+          "k": "a2",
+          "id": null,
+          "title": "Arrival",
+          "year": 2016,
+          "src": "A",
+          "group": "",
+          "updated": 200
+        }
+      ],
+      "want": [
+        "b1",
+        "a2"
+      ]
+    },
+    {
+      "name": "zenders op de opgeschoonde naam, de taal gaat voor de actieve server",
+      "mode": "channels",
+      "preferred": [
+        "NL"
+      ],
+      "items": [
+        {
+          "k": "b1",
+          "id": null,
+          "title": "NL | NPO 1 HD",
+          "year": null,
+          "src": "B",
+          "group": "NL"
+        },
+        {
+          "k": "a1",
+          "id": null,
+          "title": "NPO 1 FHD",
+          "year": null,
+          "src": "A",
+          "group": "Zenders"
+        },
+        {
+          "k": "a2",
+          "id": null,
+          "title": "RTL 4",
+          "year": null,
+          "src": "A",
+          "group": "Zenders"
+        }
+      ],
+      "want": [
+        "b1",
+        "a2"
+      ]
     }
   ]
 }

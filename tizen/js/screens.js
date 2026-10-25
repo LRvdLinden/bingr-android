@@ -410,6 +410,30 @@
   }
   S.channelCard = channelCard;
   /**
+   * Build 151: een rij op Home ontdubbelen over servers heen (B.b151.rows): zelfde IMDb-id of titel + jaar = één tegel;
+   * de bron in de audio- of app-taal blijft, dan de actieve server. Andere servers blijven via "Andere bronnen" op de
+   * detailpagina. [list] = items, of entries met .item; [itemOf] haalt het item eruit.
+   */
+  function dedupeRow(list, itemOf) {
+    var X1 = B.b151;
+    if (!X1 || !list || list.length < 2) return list || [];
+    itemOf = itemOf || function (x) { return x; };
+    var pref = [];
+    try { if (B.clang) pref = [B.clang.preferredAudio(), B.clang.appLanguage()].filter(function (x) { return !!x; }); } catch (e) { pref = []; }
+    var a = Lib.source ? Lib.source.id : null, R = X1.rows;
+    return R.dedupe(list, {
+      id: function (x) { var it = itemOf(x); return it && it.imdbID; },
+      title: function (x) { var it = itemOf(x); return it ? (it.rawTitle || it.title || '') : ''; },
+      year: function (x) { var it = itemOf(x); return it ? it.year : null; },
+      rank: function (x) {
+        var it = itemOf(x) || {};
+        var active = !it._src || (B.allservers && B.allservers.sameServer ? B.allservers.sameServer(it._src, a) : false);
+        return R.rank(R.tags(it.rawGroup || it.group, it.rawTitle || it.title), active, pref);
+      }
+    });
+  }
+  S.dedupeRow = dedupeRow;
+  /**
    * Build 151: rij "Zenders" op Home (na "Ontdek categorieën"): zenderlogo's van de eigen server, zoals een rij
    * streamingdiensten. Recent en favorieten eerst, aangevuld uit de grootste zichtbare live-categorieën, hooguit 15
    * (B.b151.channels). Logo op een neutrale achtergrond (zonder logo de opgeschoonde naam), eronder klein wat er nu
@@ -818,9 +842,12 @@
     function myListRow() {
       var cards = [], all = [];
       // build 128: over alle servers, laatst toegevoegd eerst
-      B.allservers.myList().forEach(function (hit) { all.push(hit); if (cards.length < 40) cards.push(posterCard(hit.item, hit.type)); });
+      B.allservers.myList().forEach(function (hit) { all.push(hit); });
       // build 111: TMDB-titels (Binnenkort op Bingr / Nieuw op Bingr) die niet in je bibliotheek staan
-      if (B.discover) B.discover.myListHits().forEach(function (hit) { all.push(hit); if (cards.length < 40) cards.push(posterCard(hit.item, hit.type)); });
+      if (B.discover) B.discover.myListHits().forEach(function (hit) { all.push(hit); });
+      // build 151: dezelfde titel van twee servers één keer
+      all = dedupeRow(all, function (x) { return x.item; });
+      all.slice(0, 40).forEach(function (hit) { cards.push(posterCard(hit.item, hit.type)); });
       return rowBlock(L('My List'), cards, null, seeAll(L('My List'), all));
     }
     function liveRow() {
@@ -840,6 +867,8 @@
           // build 102: Top 10 uit TMDB/Trakt trending (kinderprofiel: populaire animatie/familie), gekoppeld aan je lijst
           var P = B.parity;
           var ms = P ? P.top10('movie') : Lib.top10(lib.movies), ss = P ? P.top10('series') : Lib.top10(lib.series);
+          // build 151: dezelfde titel van twee servers één keer
+          ms = dedupeRow(ms); ss = dedupeRow(ss);
           var kids = B.app.profile.kids;
           var st = kids ? L('Top 10 kids series') : L('Top 10 series today'), mt = kids ? L('Top 10 kids movies') : L('Top 10 movies today');
           var sb = rowBlock(st, ss.map(function (s, i) { return top10Card(s, 'series', i); }), 'top10row',
@@ -858,6 +887,7 @@
             return !D.progress(e.item.id) && !(e.type === 'movie' && B.parity.movieWatched(e.item));
           });
           var title = B.parity && B.parity.forYouPopular && B.parity.forYouPopular() ? L('Popular') : L('For you');
+          list = dedupeRow(list, function (e) { return e.item; });
           // build 141: label FILM/SERIE op de tegels (zoals op Android en Apple TV)
           return rowBlock(title, list.map(function (e) { return posterCard(e.item, e.type, { badge: B.b141.typeBadge(e.type) }); }), 'foryou', seeAll(title, list));
         },
@@ -867,7 +897,7 @@
         // build 140: Nieuw op Bingr = laatst toegevoegd aan je bibliotheek (alle servers), nieuwste eerst (js/newonbingr.js)
         // build 141: op de plek van "Nieuw toegevoegd", met het label FILM/SERIE op de tegels (zoals Voor jou)
         'streaming': function () {
-          var list = B.newOnBingr ? B.newOnBingr.list() : [];
+          var list = dedupeRow(B.newOnBingr ? B.newOnBingr.list() : [], function (e) { return e.item; });
           return rowBlock(L('New on Bingr'), list.map(function (e) { return posterCard(e.item, e.type, { badge: B.b141.typeBadge(e.type) }); }), null, seeAll(L('New on Bingr'), list));
         },
         'movies': function () { return rowBlock(L('Movies'), lib.movies.slice(0, 30).map(function (m) { return posterCard(m, 'movie'); }), null, seeAll(L('Movies'), entries(lib.movies, 'movie'))); },
@@ -877,11 +907,11 @@
           // build 150: rijen per opgeschoonde naam samengevoegd en ontdubbeld
           var MG = Lib.mergedGroups('movie'), SG = Lib.mergedGroups('series'), mg = MG.items, sg = SG.items;
           MG.names.slice(0, 8).forEach(function (g) {
-            var r = rowBlock(g, (mg[g] || []).slice(0, 30).map(function (m) { return posterCard(m, 'movie'); }), null, seeAll(g, entries(mg[g] || [], 'movie')));
+            var r = rowBlock(g, dedupeRow((mg[g] || []).slice(0, 45)).slice(0, 30).map(function (m) { return posterCard(m, 'movie'); }), null, seeAll(g, entries(mg[g] || [], 'movie')));
             if (r) out.push(r);
           });
           SG.names.slice(0, 6).forEach(function (g) {
-            var r = rowBlock(g, (sg[g] || []).slice(0, 30).map(function (s) { return posterCard(s, 'series'); }), null, seeAll(g, entries(sg[g] || [], 'series')));
+            var r = rowBlock(g, dedupeRow((sg[g] || []).slice(0, 45)).slice(0, 30).map(function (s) { return posterCard(s, 'series'); }), null, seeAll(g, entries(sg[g] || [], 'series')));
             if (r) out.push(r);
           });
           return out;

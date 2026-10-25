@@ -719,7 +719,7 @@ fun HomeScreen(filter: Filter) {
     val recentList = remember(recentChannels, index, pid, allV) {
         if (pid == null) emptyList() else AllServers.channels(recentChannels, pid) { index.channel(it, pid) }
     }
-    val liveChannels = remember(favChannels, recentList) { favChannels.ifEmpty { recentList } }
+    val liveChannels = remember(favChannels, recentList) { HomeDedupe.channels(favChannels.ifEmpty { recentList }) }
     val collections = Collections.visible
     // build 141: zonder "Nieuw toegevoegd"; "Nieuw op Bingr" staat op die plek (HomeLayouts.displayed)
     val layoutRows = remember(Store.activeHomeLayout, collections) { HomeLayouts.displayed(Store.activeHomeLayout, collections) }
@@ -822,7 +822,7 @@ fun HomeScreen(filter: Filter) {
                         when (filter) {
                             Filter.ALL -> {
                                 val mine = allMine
-                                if (mine.isNotEmpty()) TargetRow(L("My List"), mine, pid)
+                                if (mine.isNotEmpty()) TargetRow(L("My List"), rememberDeduped(mine, HomeDedupe::targets), pid)
                             }
                             Filter.MOVIES -> if (myMovies.isNotEmpty()) MovieRow(L("My List"), myMovies, myMovies, pid)
                             Filter.SERIES -> if (mySeries.isNotEmpty()) SeriesRow(L("My List"), mySeries, mySeries)
@@ -839,7 +839,7 @@ fun HomeScreen(filter: Filter) {
                             Filter.MOVIES -> model.newOnBingr.filter { !it.isSeries }
                             Filter.SERIES -> model.newOnBingr.filter { it.isSeries }
                         }
-                        if (list.isNotEmpty()) item(key = "d|streaming") { LabeledTargetRow(L("New on Bingr"), list) }
+                        if (list.isNotEmpty()) item(key = "d|streaming") { LabeledTargetRow(L("New on Bingr"), rememberDeduped(list, HomeDedupe::targets)) }
                         shown(list.isNotEmpty())
                     }
                     "upcoming" -> if (filter == Filter.ALL) {
@@ -849,16 +849,16 @@ fun HomeScreen(filter: Filter) {
                         shown(list.isNotEmpty())
                     }
                     // Voor jou
-                    "foryou" -> { item(key = "foryou") { ForYouRow(filter, model.forYou, model.forYouPopular) }; shown(model.forYou.isNotEmpty()) }
+                    "foryou" -> { item(key = "foryou") { ForYouRow(filter, rememberDeduped(model.forYou, HomeDedupe::targets), model.forYouPopular) }; shown(model.forYou.isNotEmpty()) }
                     // Top 10 (Home: eerst series, dan films)
                     "top10" -> {
                         if (filter != Filter.MOVIES) item(key = "top10s") {
                             val list = model.trendingSeries
-                            if (list.isNotEmpty()) Top10SeriesRow(if (kids) L("Top 10 kids series") else L("Top 10 series today"), list)
+                            if (list.isNotEmpty()) Top10SeriesRow(if (kids) L("Top 10 kids series") else L("Top 10 series today"), rememberDeduped(list, HomeDedupe::series))
                         }.also { shown(model.trendingSeries.isNotEmpty()) }
                         if (filter != Filter.SERIES) item(key = "top10m") {
                             val list = model.trendingMovies
-                            if (list.isNotEmpty()) Top10MoviesRow(if (kids) L("Top 10 kids movies") else L("Top 10 movies today"), list)
+                            if (list.isNotEmpty()) Top10MoviesRow(if (kids) L("Top 10 kids movies") else L("Top 10 movies today"), rememberDeduped(list, HomeDedupe::movies))
                         }.also { shown(model.trendingMovies.isNotEmpty()) }
                     }
                     // favoriete zenders (anders de laatst bekeken zenders)
@@ -890,11 +890,11 @@ fun HomeScreen(filter: Filter) {
                     "categories" -> {
                         // per groep één item, zodat de categorierij er ook tussen kan staan (vijf rijen onder "Nu live")
                         if (filter != Filter.SERIES) for ((g, all) in index.movieGroups.take(groupLimit)) {
-                            item(key = "m|$g") { if (all.isNotEmpty()) MovieRow(g, all.take(40), all, pid) }
+                            item(key = "m|$g") { if (all.isNotEmpty()) MovieRow(g, rememberDeduped(all.take(60), HomeDedupe::movies).take(40), all, pid) }
                             shown(all.isNotEmpty())
                         }
                         if (filter != Filter.MOVIES) for ((g, all) in index.seriesGroups.take(groupLimit)) {
-                            item(key = "s|$g") { if (all.isNotEmpty()) SeriesRow(g, all.take(40), all) }
+                            item(key = "s|$g") { if (all.isNotEmpty()) SeriesRow(g, rememberDeduped(all.take(60), HomeDedupe::series).take(40), all) }
                             shown(all.isNotEmpty())
                         }
                     }

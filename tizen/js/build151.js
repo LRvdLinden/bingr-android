@@ -6,6 +6,10 @@
  *   recente zenders en favorieten, aangevuld met zenders uit de grootste zichtbare live-categorieën (met logo eerst),
  *   hooguit MAX. Dezelfde zender in HD/FHD/4K of met "NL |" ervoor telt één keer. Kinderprofiel: alleen zenders die het
  *   kinderfilter toelaat.
+ * - X.rows: elke rij op Home ontdubbelen over servers heen: dezelfde titel (TMDB/IMDb-id, of anders genormaliseerde
+ *   titel + jaar; zenders op de opgeschoonde naam) maar één tegel, op de plek waar hij het eerst staat. Welke bron
+ *   blijft: in de audio- of app-taal, dan de actieve server, dan de rest; bij Verder kijken de nieuwste voortgang. De
+ *   andere servers blijven als "Andere bronnen" op de detailpagina.
  * ES5 (oude tv's).
  */
 (function () {
@@ -59,4 +63,46 @@
     }
     return out;
   };
+
+  var R = X.rows = {};
+  function skey(t) { return (B.b149 && B.b149.search) ? B.b149.search.key(t) : String(t || '').toLowerCase(); }
+  /** Titelsleutel: genormaliseerde titel (taal/kwaliteit eraf, zoals zoeken) + jaar. */
+  R.titleKey = function (title, year) { return skey(title).replace(/ /g, '') + '|' + (year == null ? '' : year); };
+  /** Rangorde van een bron (lager = beter): taal uit preferred, dan meertalig, dan de rest; daarbinnen de actieve server. */
+  R.rank = function (tags, active, preferred) {
+    var up = (tags || []).map(function (x) { return String(x).toUpperCase(); }), p = (preferred || []).map(function (x) { return String(x).toUpperCase(); });
+    var lang = -1;
+    for (var i = 0; i < p.length && lang < 0; i++) if (up.indexOf(p[i]) >= 0 || (p[i] === 'NL' && up.indexOf('BE') >= 0)) lang = i;
+    if (lang < 0) lang = p.length + (up.indexOf('MULTI') >= 0 ? 0 : 1);
+    return lang * 2 + (active ? 0 : 1);
+  };
+  /** Labels van een bron: uit de categorie en uit de titel. */
+  R.tags = function (group, title) {
+    var C = B.b150 && B.b150.cat, out = [];
+    if (!C) return out;
+    C.cached(String(group || '')).tags.concat(C.strip(String(title || '')).tags).forEach(function (t) { if (out.indexOf(t) < 0) out.push(t); });
+    return out;
+  };
+  /**
+   * Ontdubbelen: zelfde id (fn.id) of zelfde titelsleutel = één groep (ook als het ene item een id heeft en het andere
+   * niet); per groep het item met de laagste fn.rank (gelijk: het eerste), op de plek van het eerste. fn = {id, title, year, rank}.
+   */
+  R.dedupe = function (items, fn) {
+    if (!items || items.length < 2) return items || [];
+    var byId = {}, byT = {}, best = [], bestRank = [];
+    for (var ix = 0; ix < items.length; ix++) {
+      var x = items[ix], d = fn.id(x), ttl = fn.title(x);
+      d = d ? '#' + String(d).trim().toLowerCase() : null;
+      if (d === '#') d = null;
+      var t = skey(ttl).trim() ? '#' + R.titleKey(ttl, fn.year(x)) : null;
+      var g = d && has(byId, d) ? byId[d] : (t && has(byT, t) ? byT[t] : -1);
+      if (g < 0) { best.push(ix); bestRank.push(fn.rank(x)); g = best.length - 1; }
+      else if (best[g] !== ix) { var r = fn.rank(x); if (r < bestRank[g]) { best[g] = ix; bestRank[g] = r; } }
+      if (d && !has(byId, d)) byId[d] = g;
+      if (t && !has(byT, t)) byT[t] = g;
+    }
+    if (best.length === items.length) return items;
+    return best.map(function (i) { return items[i]; });
+  };
+  function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
 })();

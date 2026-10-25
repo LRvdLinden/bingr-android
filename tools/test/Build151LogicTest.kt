@@ -71,6 +71,21 @@ fun main(args: Array<String>) {
         eq("kiezen: ${c["name"]}", got.map { it.id }, c["want"])
     }
 
+    // ontdubbelen per rij: twee servers (A = actief, B) met overlappende titels
+    val RW = Build151Logic.Rows
+    for (c in cases["dedupe"] as List<Map<String, Any?>>) {
+        val items = c["items"] as List<Map<String, Any?>>
+        val pref = c["preferred"] as List<String>
+        fun year(x: Map<String, Any?>) = (x["year"] as Double?)?.toInt()
+        fun langRank(x: Map<String, Any?>) = RW.rank(RW.tags(x["group"] as String, x["title"] as String), x["src"] == "A", pref)
+        val got = when (c["mode"]) {
+            "channels" -> RW.dedupe(items, { "c:" + CH.sameKey(it["title"] as String) }, { "" }, { null }) { langRank(it) }
+            "recent" -> RW.dedupe(items, { it["id"] as String? }, { it["title"] as String }, { year(it) }) { -((it["updated"] as Double).toLong()) }
+            else -> RW.dedupe(items, { it["id"] as String? }, { it["title"] as String }, { year(it) }) { langRank(it) }
+        }
+        eq("ontdubbelen: ${c["name"]}", got.map { it["k"] }, c["want"])
+    }
+
     // belasting: 12.000 zenders in 400 categorieën, 50 recente/favoriete
     val big = (0 until 12_000).map { Ch("c$it", "NL | Zender $it HD", it % 3 != 0, false) }
     val bigGroups = big.groupBy { "G" + (it.id.drop(1).toInt() % 400) }.toList()

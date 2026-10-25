@@ -39,6 +39,17 @@ CASES.pick.forEach(function (c) {
   eq('kiezen: ' + c.name, got.map(function (x) { return x.id; }), c.want);
 });
 
+// ontdubbelen per rij: twee servers (A = actief, B) met overlappende titels
+var RW = win.B.b151.rows;
+CASES.dedupe.forEach(function (c) {
+  var fn = c.mode === 'channels'
+    ? { id: function (x) { return 'c:' + CH.sameKey(x.title); }, title: function () { return ''; }, year: function () { return null; },
+        rank: function (x) { return RW.rank(RW.tags(x.group, x.title), x.src === 'A', c.preferred); } }
+    : { id: function (x) { return x.id; }, title: function (x) { return x.title; }, year: function (x) { return x.year; },
+        rank: c.mode === 'recent' ? function (x) { return -x.updated; } : function (x) { return RW.rank(RW.tags(x.group, x.title), x.src === 'A', c.preferred); } };
+  eq('ontdubbelen: ' + c.name, RW.dedupe(c.items, fn).map(function (x) { return x.k; }), c.want);
+});
+
 // belasting: 12.000 zenders in 400 categorieën, 50 recente/favoriete
 var big = [], by = {};
 for (var i = 0; i < 12000; i++) { var ch = { id: 'c' + i, name: 'NL | Zender ' + i + ' HD', logo: i % 3 !== 0 }; big.push(ch); (by['G' + (i % 400)] = by['G' + (i % 400)] || []).push(ch); }
