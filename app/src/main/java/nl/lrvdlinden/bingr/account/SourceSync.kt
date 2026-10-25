@@ -465,9 +465,9 @@ object SourceSync {
 
     // MARK: tijden
 
-    private fun isoFormat() = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply { timeZone = TimeZone.getTimeZone("UTC") }
-    private fun isoNow(): String = isoFormat().format(Date())
-    private fun iso(ms: Long): String = isoFormat().format(Date(ms))
+    // build 149: geen opmaker per item
+    private fun isoNow(): String = Build149Logic.Dates.formatIso(System.currentTimeMillis())
+    private fun iso(ms: Long): String = Build149Logic.Dates.formatIso(ms)
 
     /** Is [a] strikt nieuwer dan [b] (ISO-8601, op de milliseconde)? */
     private fun newerStrict(a: String, b: String): Boolean = preciseMillis(a) > preciseMillis(b)

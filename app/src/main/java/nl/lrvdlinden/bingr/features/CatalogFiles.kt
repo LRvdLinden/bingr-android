@@ -34,6 +34,8 @@ object CatalogFiles {
         val channels: List<Channel> = emptyList(),
         val movies: List<Movie> = emptyList(),
         val series: List<Series> = emptyList(),
+        /** build 149: telling van de niet ingelezen items uit verborgen categorieën */
+        val hiddenGroups: Map<String, Int> = emptyMap(),
     )
 
     class Paths(val core: File, val epg: File, val index: File) {
@@ -67,7 +69,7 @@ object CatalogFiles {
                 }
             }
             tIdx.writeText(json.encodeToString(indexSer, index))
-            tCore.outputStream().buffered(64 * 1024).use { json.encodeToStream(Core.serializer(), Core(lib.channels, lib.movies, lib.series), it) }
+            tCore.outputStream().buffered(64 * 1024).use { json.encodeToStream(Core.serializer(), Core(lib.channels, lib.movies, lib.series, lib.hiddenGroups), it) }
             replace(tEpg, p.epg); replace(tIdx, p.index); replace(tCore, p.core)
         } finally {
             tEpg.delete(); tIdx.delete(); tCore.delete()
@@ -84,7 +86,7 @@ object CatalogFiles {
         if (!f.exists()) return null
         return runCatching {
             f.inputStream().buffered(64 * 1024).use { json.decodeFromStream(Core.serializer(), it) }
-        }.getOrNull()?.let { Library(it.channels, it.movies, it.series) }
+        }.getOrNull()?.let { Library(it.channels, it.movies, it.series, hiddenGroups = it.hiddenGroups) }
     }
 
     /** Oud formaat (tot build 140): alles in één bestand. */

@@ -141,7 +141,7 @@ class StalkerClient(source: PlaylistSource) {
         }
         if (token == null) runCatching { connect() }.onFailure { return fallback() }
         val cid = channelID.removePrefix("st")
-        val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(start))
+        val day = Build149Logic.Dates.fmt("yyyy-MM-dd").format(java.util.Date(start))
         var progID: String? = null
         var page = 1
         while (progID == null && page <= 6) {

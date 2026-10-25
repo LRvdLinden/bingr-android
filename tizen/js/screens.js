@@ -943,7 +943,13 @@
      * Categorieën; zijn er daarna minder, dan onderaan. Telt de rijen zoals ze in de pagina staan (Top 10 = twee
      * rijen, lege rijen tellen niet). Heeft het profiel de rij elders gezet, dan op die plek (.browse-slot).
      */
+    // build 149: "Ontdek categorieën" (blocks.browse[1]) blijft direct onder de categorierij
     function positionCats() {
+      positionCats0();
+      var cat = blocks.browse && blocks.browse[0], dc = blocks.browse && blocks.browse[1];
+      if (cat && dc && cat.parentNode === track && cat.nextSibling !== dc) track.insertBefore(dc, cat.nextSibling);
+    }
+    function positionCats0() {
       var cat = blocks.browse && blocks.browse[0];
       if (!cat) return;
       var slot = track.querySelector('.browse-slot');
@@ -969,9 +975,15 @@
       row._row = 'browse';
       track.insertBefore(row, track.querySelector('.page-end'));
       positionCats();
+      // build 149: "Ontdek categorieën" direct onder de categorierij (zelfde focus als de andere rijen)
+      var dc = S.discoverCategoriesRow ? S.discoverCategoriesRow() : null;
+      if (dc) { dc._row = 'browse'; blocks.browse.push(dc); track.insertBefore(dc, row.nextSibling); }
       if (fKey) {
-        var c = row.querySelectorAll('.f');
-        for (var i = 0; i < c.length; i++) if (c[i]._key === fKey) { U.focus(c[i], true); break; }
+        blocks.browse.some(function (r) {
+          var c = r.querySelectorAll('.f');
+          for (var i = 0; i < c.length; i++) if (c[i]._key === fKey) { U.focus(c[i], true); return true; }
+          return false;
+        });
       }
     }
     function nodesOf(r) { return r == null ? [] : (Array.isArray(r) ? r : [r]); }
@@ -1035,6 +1047,10 @@
     }
     // nieuwe genres binnen (TMDB): de rij Categorieën opnieuw als de afstandsbediening stil is
     var catPending = false;
+    // build 149: logo's van de streamingdiensten binnen → de rij Ontdek categorieën opnieuw (als het stil is)
+    var offLogos = B.on('discoverLogos', function () {
+      B.whenQuiet(function () { if (document.body.contains(scroller) && blocks.browse) buildCats(); }, 2500);
+    });
     var offCats = B.on('ageRatings', function () {
       if (catPending || !blocks.browse) return;
       catPending = true;
@@ -1057,7 +1073,7 @@
     var offDiscover = B.on('discover', function () {
       B.whenQuiet(function () { if (document.body.contains(scroller)) refreshRows(['mylist', 'upcoming', 'streaming']); }, 300);
     });
-    pg.destroy = function () { offCats(); offDiscover(); clearInterval(heroTimer); heroTimer = null; };
+    pg.destroy = function () { offCats(); offLogos(); offDiscover(); clearInterval(heroTimer); heroTimer = null; };
     pg.refresh = render;
     // build 102: ook de collectierijen (toevoegen via het contextmenu) en Voor jou (bekeken/voortgang)
     pg.onData = function () {
@@ -1420,7 +1436,7 @@
       buttons.push({ label: L('Catch-up offset…') + (off ? ' (' + (off > 0 ? '+' : '') + off + ' min)' : ''), fn: function () { S.catchupOffset(ch); } });
     }
     buttons.push({ label: L('Close') });
-    var text = ch.name + '  ·  ' + new Date(p.start).toLocaleDateString(B.lang, { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' +
+    var text = ch.name + '  ·  ' + B.fmtDate(p.start, B.lang, { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' +
       B.fmtTime(p.start) + ' – ' + B.fmtTime(p.end) + (p.description ? '\n\n' + p.description : '');
     U.modal({ title: p.title, text: text, buttons: buttons });
   };
@@ -2537,7 +2553,7 @@
       return A.listDevices().then(function (r) { return { items: r.devices, header: L('%d of %d devices', r.devices.length, r.limit) }; });
     }, function (d, refresh) {
       var sub = [A.platformLabel(d.platform)];
-      if (d.createdAt) sub.push(L('Linked %@', new Date(d.createdAt).toLocaleDateString(B.lang, { day: 'numeric', month: 'short', year: 'numeric' })));
+      if (d.createdAt) sub.push(L('Linked %@', B.fmtDate(d.createdAt, B.lang, { day: 'numeric', month: 'short', year: 'numeric' })));
       sub.push(L('Last used %@', d.current ? L('Now') : relTime(d.lastSeenAt)));
       var r = h('div.st-row.f.dev', [U.icon(platformIcon(d.platform)), h('div.st-label', [h('div', d.name + (d.current ? '  ·  ' + L('This device') : '')),
         h('div.dim', sub.join('  ·  '))])]);
@@ -2578,7 +2594,7 @@
       return A.watchLog(7).then(function (e) { return { items: e }; });
     }, function (e) {
       var d = new Date(e.startedAt);
-      return h('div.st-row.f', [h('div.wl-time', d.toLocaleDateString(B.lang, { weekday: 'short', day: 'numeric', month: 'short' }) + '  ' + B.fmtTime(e.startedAt)),
+      return h('div.st-row.f', [h('div.wl-time', B.fmtDate(d.getTime(), B.lang, { weekday: 'short', day: 'numeric', month: 'short' }) + '  ' + B.fmtTime(e.startedAt)),
         S.rowAvatar(e.profileId, e.profileName), h('div.st-label', [h('div', e.title), h('div.dim', e.profileName + '  ·  ' + A.deviceNameWithLabel(e.deviceName, e.platform) + '  ·  ' + e.minutes + ' min')]),
         U.icon(platformIcon(e.platform), 'trail')]);
     }, L('No history yet'));
@@ -2619,6 +2635,10 @@
         });
         return p.then(function (raw) {
           var items = (raw && raw[field]) || [], seen = {};
+          // build 149: ook de verborgen categorieën die niet zijn ingelezen (anders zijn ze niet meer aan te zetten)
+          var hk = kind === 'live' ? 'live' : kind === 'movies' ? 'movie' : 'series';
+          var hn = B.b149 ? B.b149.hiddenNames(raw, hk) : [];
+          if (hn.length) items = items.concat(hn.map(function (n) { return { group: n }; }));
           for (var i = 0; i < items.length; i++) {
             var g = items[i].group || '';
             if (seen[g]) continue;

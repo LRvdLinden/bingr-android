@@ -208,14 +208,21 @@
     });
   };
 
-  /** Korte netwerkcheck: Bingr-server (ping) en de eigen IPTV-server (HEAD op het adres van de server; niets bewaard). */
+  /** Korte netwerkcheck: Bingr-server (ping) en de eigen IPTV-server (build 149: kleine GET, bij Xtream de login; niets bewaard). */
   DG.network = function () {
     var src = B.lib && B.lib.source;
     var base = src ? String(src.serverURL || src.url || src.m3uURL || '').trim() : '';
     var origin = (/^(https?:\/\/[^/?#]+)/i.exec(base) || [])[1] || null;
     var p1 = A.ping();
     var t1 = Date.now();
-    var p2 = origin ? B.http(origin + '/', { method: 'HEAD', timeout: 6000 }).then(function () { return Date.now() - t1; }, function () { return null; }) : Promise.resolve(undefined);
+    // build 149: kleine GET in plaats van HEAD (veel IPTV-servers weigeren HEAD); bij Xtream de login van player_api.php
+    var probe = origin + '/';
+    if (origin && src.kind === 'Xtream Codes') {
+      var D0 = B.data;
+      probe = B.query(B.normalizedServer(src.serverURL || origin) + '/player_api.php',
+        [['username', src.username || ''], ['password', (D0 && D0.secret ? D0.secret(src, 'password') : '') || '']]);
+    }
+    var p2 = origin ? B.http(probe, { timeout: 6000, rawText: true }).then(function () { return Date.now() - t1; }, function () { return null; }) : Promise.resolve(undefined);
     return Promise.all([p1, p2, networkType()]).then(function (r) {
       var online = navigator.onLine !== false && r[2] !== 'none';
       return { online: online, type: r[2], backend: G.speed(r[0], r[0] != null), backendMs: r[0], provider: r[1] === undefined ? 'skipped' : G.speed(r[1], r[1] != null),
@@ -296,8 +303,10 @@
     delivered: function (id, lib, errs) {
       var m = DG.fetchLog.all(), e = errs || {};
       function ent(n, k) { var o = { n: n }; if (!n && e[k]) o.err = e[k]; return o; }
-      m[String(id).toLowerCase()] = { live: ent((lib.channels || []).length, 'live'), movie: ent((lib.movies || []).length, 'movie'),
-        series: ent((lib.series || []).length, 'series'), at: Date.now() };
+      // build 149: geleverd = ingelezen + niet ingelezen (verborgen categorieën)
+      var X9 = B.b149, hn = function (k) { return X9 ? X9.hiddenCount(lib, k) : 0; };
+      m[String(id).toLowerCase()] = { live: ent((lib.channels || []).length + hn('live'), 'live'), movie: ent((lib.movies || []).length + hn('movie'), 'movie'),
+        series: ent((lib.series || []).length + hn('series'), 'series'), at: Date.now() };
       DG.fetchLog.prune(m);
       B.store.set(KEY_FETCH, m);
     },

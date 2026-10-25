@@ -40,8 +40,26 @@
   var catTimer = null;
   B.on('accountCats', function () {
     clearTimeout(catTimer);
-    catTimer = setTimeout(function () { if (Lib.raw) Lib.applyFilters(); }, 450);
+    catTimer = setTimeout(function () { if (Lib.raw) Lib.applyFilters(); reloadUnhidden(); }, 450);
   });
+  // build 149: categorieën die bij het ophalen verborgen waren, zijn niet ingelezen (raw.hiddenGroups). Staat er daarvan
+  // weer één aan (of geldt het verbergen niet meer, kinderprofiel), dan de open server op de achtergrond opnieuw ophalen.
+  // Andere servers krijgen die categorie bij hun volgende keer bijwerken.
+  var reloading = false;
+  function reloadUnhidden() {
+    var src = Lib.source, X9 = B.b149;
+    if (!X9 || !src || !Lib.raw || reloading || Lib.isUpdating()) return;
+    if (!X9.needsReload(Lib.raw, Lib.hiddenPredicate(src))) return;
+    reloading = true;
+    Promise.resolve(Lib.refresh(src)).then(function () { reloading = false; }, function () { reloading = false; });
+  }
+  B.on('profileData', function () { setTimeout(reloadUnhidden, 500); });
+  /** Build 149: wat bij het ophalen van [src] niet ingelezen hoeft te worden (verborgen categorie, ook via samenvoegen). */
+  Lib.hiddenPredicate = function (src) {
+    var hc = D.hiddenCategoryNames(src.id) || {}, merged = (D.customization(src) || {}).merged || {};
+    if (!Object.keys(hc).length) return function () { return false; };
+    return function (g) { return !!(hc[g] || (merged[g] && hc[merged[g]])); };
+  };
   function anyIn(s, words) { for (var i = 0; i < words.length; i++) if (s.indexOf(words[i]) >= 0) return true; return false; }
   PC.isAdultGroup = function (g) { return anyIn(String(g || '').toLowerCase(), adultWords); };
   PC.isKidsGroup = function (g) {
@@ -136,10 +154,15 @@
     function hiddenCat(g) { return !!(hc[g] || hc[c.merged[g] || g]); }
     function notKids(g) { return kids && !B.b140.isKidsCategory(g); }
     function g(x) { return x.group; }
+    // build 149: plus wat niet is ingelezen omdat de categorie verborgen was (geleverd én verborgen)
+    function plus(c, kind) {
+      var n = B.b149 ? B.b149.hiddenCount(raw, kind) : 0;
+      return n > 0 ? X8.hidden.of(c.delivered + n, c.visible, c.categories + n, c.kids, c.duplicates) : c;
+    }
     return {
-      live: X8.hidden.count(raw.channels, lib.channels.length, g, hiddenCat, notKids),
-      movie: X8.hidden.count(raw.movies, lib.movies.length, g, hiddenCat, notKids),
-      series: X8.hidden.count(raw.series, lib.series.length, g, hiddenCat, notKids)
+      live: plus(X8.hidden.count(raw.channels, lib.channels.length, g, hiddenCat, notKids), 'live'),
+      movie: plus(X8.hidden.count(raw.movies, lib.movies.length, g, hiddenCat, notKids), 'movie'),
+      series: plus(X8.hidden.count(raw.series, lib.series.length, g, hiddenCat, notKids), 'series')
     };
   };
   /** Filter per item (= Playlists.apply): geeft per soort een functie item → gefilterde kopie of null. */
@@ -440,7 +463,7 @@
     }
     if (kind === 'Xtream Codes') {
       var x = new P.Xtream(src, pw);
-      return x.authenticate().then(function () { return x.library({ fetched: function () { phase(rec, 'fetch'); } }); }).then(function (lib) {
+      return x.authenticate().then(function () { return x.library({ fetched: function () { phase(rec, 'fetch'); }, hidden: Lib.hiddenPredicate(src) }); }).then(function (lib) {
         B.assign(errs, x.kindErrors());
         lib.epgURL = P.urlValue(src.epgURL) || x.xmltvURL();
         return lib;
@@ -863,6 +886,9 @@
     var f = B.fold(q).trim();
     if (!f) return { channels: [], movies: [], series: [] };
     limit = limit || 40;
+    // build 149: op woorden (volgorde maakt niet uit), genormaliseerd, met ranking en één typefout (B.b149.search)
+    var SE = B.b149 && B.b149.search;
+    if (SE) return { channels: SE.find(Lib.lib.channels, q, limit, 'name'), movies: SE.find(Lib.lib.movies, q, limit, 'title'), series: SE.find(Lib.lib.series, q, limit, 'title') };
     function hit(list, field) {
       var starts = [], contains = [];
       for (var i = 0; i < list.length && starts.length < limit; i++) {

@@ -64,7 +64,8 @@ private fun s2RawGroups(kind: S2Kind): List<String> {
         S2Kind.LIVE -> raw.channels.map { it.group }
         S2Kind.MOVIES -> raw.movies.map { it.group }
         S2Kind.SERIES -> raw.series.map { it.group }
-    }.distinct()
+    // build 149: ook de verborgen categorieën die niet zijn ingelezen (anders kun je ze niet meer aanzetten)
+    }.plus(raw.hiddenGroupNames(when (kind) { S2Kind.LIVE -> "live"; S2Kind.MOVIES -> "movie"; S2Kind.SERIES -> "series" })).distinct()
 }
 
 /**
@@ -88,7 +89,7 @@ private suspend fun s2AllServerGroups(kind: S2Kind, servers: List<PlaylistSource
                     S2Kind.LIVE -> lib.channels.map { it.group }
                     S2Kind.MOVIES -> lib.movies.map { it.group }
                     S2Kind.SERIES -> lib.series.map { it.group }
-                }.distinct()
+                }.plus(lib.hiddenGroupNames(when (kind) { S2Kind.LIVE -> "live"; S2Kind.MOVIES -> "movie"; S2Kind.SERIES -> "series" })).distinct()
             }.also { if (stamp != 0L) { s2GroupCache.keys.removeAll { it.startsWith("${p.id}|${kind.name}|") }; s2GroupCache[ck] = it } }
         } ?: continue
         for (g in groups) out.getOrPut(g) { ArrayList() }.add(p.id)

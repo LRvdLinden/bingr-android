@@ -1088,7 +1088,9 @@
   "%@ delivered · %@ visible": "%@ مُسلَّمة · %@ ظاهرة",
   "cancelled": "أُلغي",
   "Update %@": "تحديث %@",
-  "peak %d MB": "الذروة %d ميغابايت"
+  "peak %d MB": "الذروة %d ميغابايت",
+  "Discover categories": "اكتشف الفئات",
+  "This server is very large. Hide categories you don't use and it will load faster.": "هذا الخادم كبير جدًا. أخفِ الفئات التي لا تستخدمها وسيتم تحميله بشكل أسرع."
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -2179,7 +2181,9 @@
   "%@ delivered · %@ visible": "%@ geliefert · %@ sichtbar",
   "cancelled": "abgebrochen",
   "Update %@": "Aktualisierung %@",
-  "peak %d MB": "Spitze %d MB"
+  "peak %d MB": "Spitze %d MB",
+  "Discover categories": "Kategorien entdecken",
+  "This server is very large. Hide categories you don't use and it will load faster.": "Dieser Server ist sehr groß. Blende Kategorien aus, die du nicht nutzt, dann lädt er schneller."
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -3270,7 +3274,9 @@
   "%@ delivered · %@ visible": "%@ entregados · %@ visibles",
   "cancelled": "cancelado",
   "Update %@": "Actualización %@",
-  "peak %d MB": "pico %d MB"
+  "peak %d MB": "pico %d MB",
+  "Discover categories": "Descubre categorías",
+  "This server is very large. Hide categories you don't use and it will load faster.": "Este servidor es muy grande. Oculta las categorías que no uses y cargará más rápido."
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -4361,7 +4367,9 @@
   "%@ delivered · %@ visible": "%@ fournis · %@ visibles",
   "cancelled": "annulé",
   "Update %@": "Mise à jour %@",
-  "peak %d MB": "pic %d Mo"
+  "peak %d MB": "pic %d Mo",
+  "Discover categories": "Découvrir les catégories",
+  "This server is very large. Hide categories you don't use and it will load faster.": "Ce serveur est très volumineux. Masque les catégories que tu n'utilises pas et il se chargera plus vite."
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -5452,7 +5460,9 @@
   "%@ delivered · %@ visible": "%@ forniti · %@ visibili",
   "cancelled": "annullato",
   "Update %@": "Aggiornamento %@",
-  "peak %d MB": "picco %d MB"
+  "peak %d MB": "picco %d MB",
+  "Discover categories": "Scopri le categorie",
+  "This server is very large. Hide categories you don't use and it will load faster.": "Questo server è molto grande. Nascondi le categorie che non usi e si caricherà più velocemente."
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -6557,7 +6567,9 @@
   "%@ delivered · %@ visible": "%@ geleverd · %@ zichtbaar",
   "cancelled": "geannuleerd",
   "Update %@": "Bijwerken %@",
-  "peak %d MB": "piek %d MB"
+  "peak %d MB": "piek %d MB",
+  "Discover categories": "Ontdek categorieën",
+  "This server is very large. Hide categories you don't use and it will load faster.": "Deze server is erg groot. Verberg categorieën die je niet gebruikt, dan laadt hij sneller."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -7648,7 +7660,9 @@
   "%@ delivered · %@ visible": "%@ dostarczonych · %@ widocznych",
   "cancelled": "anulowano",
   "Update %@": "Aktualizacja %@",
-  "peak %d MB": "szczyt %d MB"
+  "peak %d MB": "szczyt %d MB",
+  "Discover categories": "Odkryj kategorie",
+  "This server is very large. Hide categories you don't use and it will load faster.": "Ten serwer jest bardzo duży. Ukryj kategorie, których nie używasz, a będzie się ładować szybciej."
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -8739,7 +8753,9 @@
   "%@ delivered · %@ visible": "%@ entregues · %@ visíveis",
   "cancelled": "cancelado",
   "Update %@": "Atualização %@",
-  "peak %d MB": "pico %d MB"
+  "peak %d MB": "pico %d MB",
+  "Discover categories": "Descobrir categorias",
+  "This server is very large. Hide categories you don't use and it will load faster.": "Este servidor é muito grande. Oculta as categorias que não usas e vai carregar mais depressa."
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -9830,7 +9846,9 @@
   "%@ delivered · %@ visible": "%@ sağlandı · %@ görünür",
   "cancelled": "iptal edildi",
   "Update %@": "Güncelleme %@",
-  "peak %d MB": "zirve %d MB"
+  "peak %d MB": "zirve %d MB",
+  "Discover categories": "Kategorileri keşfet",
+  "This server is very large. Hide categories you don't use and it will load faster.": "Bu sunucu çok büyük. Kullanmadığın kategorileri gizle, daha hızlı yüklenir."
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -10921,6 +10939,8 @@
   "%@ delivered · %@ visible": "已提供 %@ · 可见 %@",
   "cancelled": "已取消",
   "Update %@": "更新 %@",
-  "peak %d MB": "峰值 %d MB"
+  "peak %d MB": "峰值 %d MB",
+  "Discover categories": "发现分类",
+  "This server is very large. Hide categories you don't use and it will load faster.": "此服务器非常大。隐藏你不使用的分类，加载会更快。"
  }
 }

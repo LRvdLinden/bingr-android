@@ -599,8 +599,7 @@ object ProfileSync {
         }
     }
 
-    private fun isoNow(): String =
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date())
+    private fun isoNow(): String = Build149Logic.Dates.formatIso(System.currentTimeMillis())
 }
 
 /**

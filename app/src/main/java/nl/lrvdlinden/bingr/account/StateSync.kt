@@ -702,8 +702,8 @@ object StateSync {
 
     // MARK: tijden
 
-    private fun isoFormat() = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply { timeZone = TimeZone.getTimeZone("UTC") }
-    private fun iso(ms: Long): String = isoFormat().format(Date(ms))
+    private fun isoFormat() = Build149Logic.Dates.fmt("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT, TimeZone.getTimeZone("UTC"))
+    private fun iso(ms: Long): String = Build149Logic.Dates.formatIso(ms)  // build 149: geen opmaker per item
 
     /** Tijd als epoch-ms: ISO-8601 (met milliseconden) of een getal (ms, of seconden). */
     private fun time(e: JsonElement?): Long? {
@@ -1901,6 +1901,17 @@ object StateSync {
         // build 147: de bestanden van een niet-actief profiel hier lezen (buiten de main thread); op de main thread alleen
         // nog toepassen (een profiel dat intussen actief werd, leest daar uit het geheugen)
         val pre = if (!activeAtStart) Store.profileData(id) else null
+        // build 149: het metabestand hier opbouwen (buiten de main thread); daar alleen nog wegzetten
+        val newMeta = Meta(
+            present = (setFields.associateWith { f -> present(f).mapValues { it.value.at } } +
+                mapOf("progress" to merged.progress.filter { it.value.value != null }.mapValues { it.value.at },
+                    "history" to merged.history.filter { it.value.value != null }.mapValues { it.value.at })),
+            removed = (setFields.associateWith { f -> (sets[f] ?: emptyMap()).filter { it.value.value == null }.mapValues { it.value.at } } +
+                mapOf("progress" to merged.progress.filter { it.value.value == null }.mapValues { it.value.at },
+                    "history" to merged.history.filter { it.value.value == null }.mapValues { it.value.at })),
+            prefsAt = merged.prefs?.at,
+            pinAt = merged.pin?.at,
+        )
         val stillSame = withContext(Dispatchers.Main) { StartDiagnostics.task("sync_apply") {
             if (snapshot != null && (Store.activeProfileID != id || Store.profileData(id) != snapshot)) return@task false
             if (Store.profiles.any { it.id == id }) applyingChanges {
@@ -1924,16 +1935,7 @@ object StateSync {
             }
             // metabestand bijwerken naar het resultaat, op de main thread samen met het toepassen: een bewuste
             // verwijdering uit Verder kijken (progressCleared, ook main thread) die daarna komt, wordt zo nooit overschreven
-            writeMeta(id, Meta(
-                present = (setFields.associateWith { f -> present(f).mapValues { it.value.at } } +
-                    mapOf("progress" to merged.progress.filter { it.value.value != null }.mapValues { it.value.at },
-                        "history" to merged.history.filter { it.value.value != null }.mapValues { it.value.at })),
-                removed = (setFields.associateWith { f -> (sets[f] ?: emptyMap()).filter { it.value.value == null }.mapValues { it.value.at } } +
-                    mapOf("progress" to merged.progress.filter { it.value.value == null }.mapValues { it.value.at },
-                        "history" to merged.history.filter { it.value.value == null }.mapValues { it.value.at })),
-                prefsAt = merged.prefs?.at,
-                pinAt = merged.pin?.at,
-            ))
+            writeMeta(id, newMeta)
             true
         } }
         if (!stillSame) return false

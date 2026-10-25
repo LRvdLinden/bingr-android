@@ -194,12 +194,22 @@
     if (typeof s === 'number') return s > 1e12 ? s : s * 1000;
     s = String(s).trim();
     if (!s) return null;
+    // build 149: eigen snelle parser (sync, catalogmeta en cache lopen hier in lussen doorheen); alleen bij een vreemd
+    // formaat nog Date.parse
+    var fast = B.b149 && B.b149.dates.parseIso(s);
+    if (fast != null) return fast;
     // fractie op 3 cijfers brengen
     s = s.replace(/\.(\d+)/, function (m, d) { return '.' + (d + '000').slice(0, 3); });
     if (s.length === 10) s += 'T00:00:00Z';
     var t = Date.parse(s);
     if (isNaN(t)) t = Date.parse(s.replace(' ', 'T'));
     return isNaN(t) ? null : t;
+  };
+  /** Build 149: datum in de taal van de app met één Intl-opmaker per taal en opties (js/build149.js); terugval zoals vroeger. */
+  B.fmtDate = function (ms, lang, opts) {
+    if (B.b149) return B.b149.dates.format(ms, lang, opts);
+    var d = new Date(ms);
+    try { return d.toLocaleDateString(lang || undefined, opts); } catch (e) { return d.toDateString(); }
   };
   B.fmtTime = function (ms) { var d = new Date(ms); return B.pad2(d.getHours()) + ':' + B.pad2(d.getMinutes()); };
   B.fmtDur = function (s) {
@@ -399,17 +409,26 @@
     if (j && typeof j === 'object') return Object.keys(j).map(function (k) { return j[k]; });
     return [];
   }
-  function pick(list, keys) {
-    if (!keys) return list;
-    return list.map(function (x) {
-      if (!x || typeof x !== 'object') return x;
+  function pick(list, keys, skip) {
+    // build 149: [skip] = {field, ids}: items van een verborgen categorie niet overnemen, alleen tellen (out.skipped)
+    var out = [], skipped = null;
+    for (var i = 0; i < list.length; i++) {
+      var x = list[i];
+      if (skip && x && typeof x === 'object') {
+        var sv = x[skip.field] == null ? '' : String(x[skip.field]);
+        if (skip.ids[sv] === true) { skipped = skipped || {}; skipped[sv] = (skipped[sv] || 0) + 1; continue; }
+      }
+      if (!keys || !x || typeof x !== 'object') { out.push(x); continue; }
       var o = {};
       for (var k = 0; k < keys.length; k++) { var v = x[keys[k]]; if (v != null && v !== '') o[keys[k]] = v; }
-      return o;
-    });
+      out.push(o);
+    }
+    if (skipped) out.skipped = skipped;
+    return out;
   }
-  function parseHere(text, keys) {
-    var run = function () { try { return pick(jsonItems(JSON.parse(text)), keys); } catch (e) { return null; } };
+  B.pickJSONList = pick;
+  function parseHere(text, keys, skip) {
+    var run = function () { try { return pick(jsonItems(JSON.parse(text)), keys, skip); } catch (e) { return null; } };
     return B.diag && B.diag.task ? B.diag.task('parse', run) : run();
   }
   function worker() {
@@ -423,33 +442,36 @@
         if (!j) return;
         if (m.error) { delete jwJobs[m.id]; clearTimeout(j.timer); j.resolve(null); return; }
         if (m.batch) { for (var i = 0; i < m.batch.length; i++) j.out.push(m.batch[i]); return; }
-        if (m.done) { delete jwJobs[m.id]; clearTimeout(j.timer); j.resolve(j.out); }
+        if (m.done) { delete jwJobs[m.id]; clearTimeout(j.timer); if (m.skipped) j.out.skipped = m.skipped; j.resolve(j.out); }
       };
       jw.onerror = function () {
         // Worker niet te laden of kapot: alles wat nog loopt op de hoofdthread, en voortaan zonder Worker
         jw = false;
-        Object.keys(jwJobs).forEach(function (id) { var j = jwJobs[id]; delete jwJobs[id]; clearTimeout(j.timer); j.resolve(parseHere(j.text, j.keys)); });
+        Object.keys(jwJobs).forEach(function (id) { var j = jwJobs[id]; delete jwJobs[id]; clearTimeout(j.timer); j.resolve(parseHere(j.text, j.keys, j.skip)); });
       };
     } catch (e) { jw = false; return null; }
     return jw;
   }
   /** Tekst → lijst (Xtream-lijst of object met waarden), met alleen [keys] per item (null = alles). null = geen JSON. */
-  B.parseJSONList = function (text, keys) {
+  B.parseJSONList = function (text, keys, skip) {
     if (!text) return Promise.resolve(null);
+    skip = skip && skip.field && skip.ids && Object.keys(skip.ids).length ? skip : null;
     var w = text.length > 200000 ? worker() : null;
-    if (!w) return Promise.resolve(parseHere(text, keys));
+    if (!w) return Promise.resolve(parseHere(text, keys, skip));
     return new Promise(function (resolve) {
       var id = ++jwSeq;
-      var job = jwJobs[id] = { out: [], resolve: resolve, text: text, keys: keys };
-      job.timer = setTimeout(function () { if (jwJobs[id]) { delete jwJobs[id]; resolve(parseHere(text, keys)); } }, 90000);
-      try { w.postMessage({ id: id, text: text, keys: keys || null }); } catch (e) { delete jwJobs[id]; clearTimeout(job.timer); resolve(parseHere(text, keys)); }
+      var job = jwJobs[id] = { out: [], resolve: resolve, text: text, keys: keys, skip: skip };
+      job.timer = setTimeout(function () { if (jwJobs[id]) { delete jwJobs[id]; resolve(parseHere(text, keys, skip)); } }, 90000);
+      try { w.postMessage({ id: id, text: text, keys: keys || null, skipField: skip ? skip.field : null, skip: skip ? skip.ids : null }); }
+      catch (e) { delete jwJobs[id]; clearTimeout(job.timer); resolve(parseHere(text, keys, skip)); }
     });
   };
   /** Build 148: als B.getJSON, maar voor grote lijsten: inlezen in een Worker, lichte objecten met [keys]. */
-  B.getJSONList = function (url, keys, timeout) {
+  B.getJSONList = function (url, keys, timeout, skipP) {
     return B.http(url, { timeout: timeout || 60000, rawText: true }).then(function (r) {
       if (r.status < 200 || r.status >= 300) throw new NetError('http_' + r.status);
-      return B.parseJSONList(r.text, keys).then(function (l) {
+      // build 149: [skipP] = belofte van {field, ids} (verborgen categorieën, bekend zodra de categorieën binnen zijn)
+      return Promise.resolve(skipP || null).then(function (skip) { return B.parseJSONList(r.text, keys, skip); }).then(function (l) {
         if (l == null) throw new NetError('bad_json');
         return l;
       });
@@ -532,8 +554,11 @@
   };
 
   /** Tekst zonder accenten, in kleine letters (zoeken en vergelijken). */
+  var asciiOnly = /^[\x00-\x7f]*$/;
   B.fold = function (s) {
     s = String(s || '').toLowerCase();
+    // build 149: gewone ASCII-tekst (bijna alle titels) zonder normalize
+    if (asciiOnly.test(s)) return s;
     try { s = s.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch (e) { /* oude engine */ }
     return s;
   };

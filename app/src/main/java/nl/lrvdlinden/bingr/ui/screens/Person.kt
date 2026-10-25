@@ -277,7 +277,7 @@ private fun initials(name: String): String =
 private fun bornLine(p: TMDB.Person?): String? {
     p ?: return null
     val date = p.birthday?.let { b ->
-        runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(b) }.getOrNull()
+        runCatching { Build149Logic.Dates.fmt("yyyy-MM-dd").parse(b) }.getOrNull()
             ?.let { DateFormat.getDateInstance(DateFormat.LONG, Localizer.locale).format(it) } ?: b
     }
     val place = p.birthplace?.takeIf { it.isNotBlank() }

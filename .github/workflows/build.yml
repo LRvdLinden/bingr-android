@@ -130,7 +130,13 @@ jobs:
               tools/test/Build148LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b148-test.jar" 2>&1 | grep -v '^warning' || true
             java -Xmx512m -jar "$RUNNER_TEMP/b148-test.jar" | tee "$RUNNER_TEMP/b148-test.txt"; rc10=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 148::$(grep -E '^(geheugen|toewijzen|37k)' "$RUNNER_TEMP/b148-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b148-test.txt")"
-            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ]
+            # build 149: datums zonder opmaker per item, streamend inlezen, verborgen categorieën alleen tellen, Ontdek
+            # categorieën, zoeken op woorden; belastingtest 123k films + 30k series + 12k zenders met 80% verborgen (vóór/na)
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt \
+              tools/test/Build149LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b149-test.jar" 2>&1 | grep -v '^warning' || true
+            java -Xmx1500m -jar "$RUNNER_TEMP/b149-test.jar" | tee "$RUNNER_TEMP/b149-test.txt"; rc11=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 149::$(grep -E '^(geheugen|datums|zoeken)' "$RUNNER_TEMP/b149-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b149-test.txt")"
+            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi
@@ -550,6 +556,9 @@ jobs:
           # 12.000 zenders + 9.000 series: Xtream in stukjes (≤ 250 ms per stuk) en lichte objecten (geheugen vóór/na)
           node tizen/test/build148_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b148.log"
           echo "::notice title=Logica-tests build 148 (Samsung TV)::$(grep -E '^(geheugen|Xtream|sorteren 37k)' "$RUNNER_TEMP/tlogs/b148.log" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/tlogs/b148.log")"
+          # build 149: datums, verborgen categorieën overslaan (Worker), Ontdek categorieën, zoeken; 123k/30k/12k met 80% verborgen
+          node --max-old-space-size=2048 tizen/test/build149_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b149.log"
+          echo "::notice title=Logica-tests build 149 (Samsung TV)::$(grep -E '^(geheugen|datums|zoeken)' "$RUNNER_TEMP/tlogs/b149.log" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/tlogs/b149.log")"
 
       - name: Tizen Studio CLI uit de cache
         id: cache

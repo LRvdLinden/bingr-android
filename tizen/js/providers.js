@@ -208,13 +208,13 @@
     if (j && typeof j === 'object') return Object.keys(j).map(function (k) { return j[k]; });
     return [];
   }
-  Xtream.prototype.list = function (action, keys) {
+  Xtream.prototype.list = function (action, keys, skipP) {
     // build 147 (diagnose): een mislukte lijst blijft leeg (raakt de andere lijsten niet), met een korte foutcode
     // build 148: met [keys] een grote lijst in een Worker inlezen, met alleen die velden (B.getJSONList)
     var self = this;
     self.errors = self.errors || {};
-    var get = keys ? B.getJSONList(this.api(action), keys, 120000) : B.getJSON(this.api(action), null, 120000);
-    return get.then(function (r) { delete self.errors[action]; return items(r); }, function (e) {
+    var get = keys ? B.getJSONList(this.api(action), keys, 120000, skipP) : B.getJSON(this.api(action), null, 120000);
+    return get.then(function (r) { delete self.errors[action]; var l = items(r); if (r && r.skipped) l.skipped = r.skipped; return l; }, function (e) {
       var X7 = B.b147 && B.b147.fetch;
       self.errors[action] = X7 ? X7.errorCode(e && e.name, e && e.message) : 'error';
       return [];
@@ -286,20 +286,44 @@
       .then(function (r) { return [catMap(r[0], other), catMap(r[1], other), catMap(r[2], other)]; });
     var arrived = 0;
     function got(l) { if (++arrived === 3 && hooks.fetched) { try { hooks.fetched(); } catch (e) { /* stil */ } } return l; }
-    function kind(action, keys, ci, fn) {
-      return Promise.all([self.list(action, keys).then(got), cats]).then(function (r) {
+    // build 149: items uit verborgen categorieën (hooks.hidden(naam)) niet inlezen, alleen tellen (lib.hiddenGroups); de
+    // Worker laat ze al weg op category_id zodra de categorieën binnen zijn
+    var X9 = B.b149, hiddenGroups = {};
+    function skipFor(ci) {
+      if (!hooks.hidden) return null;
+      return cats.then(function (c) {
+        var ids = {}, map = c[ci], any = false;
+        Object.keys(map).forEach(function (id) { if (hooks.hidden(map[id])) { ids[id] = true; any = true; } });
+        if (hooks.hidden(other)) { ids[''] = true; any = true; }
+        return any ? { field: 'category_id', ids: ids } : null;
+      });
+    }
+    var tooLarge = false;
+    function kind(action, keys, ci, fn, prefix) {
+      return Promise.all([self.list(action, keys, skipFor(ci)).then(got), cats]).then(function (r) {
         var list = r[0], map = r[1][ci], out = [];
-        return B.chunked(list, function (x) { var o = fn.call(self, x, map, other); if (o) out.push(o); }).then(function () {
+        if (list.skipped) Object.keys(list.skipped).forEach(function (id) {
+          var g = prefix + '|' + (map[id] || other);
+          hiddenGroups[g] = (hiddenGroups[g] || 0) + list.skipped[id];
+        });
+        var n = 0;
+        return B.chunked(list, function (x) {
+          // build 149: geheugengrens (tv): netjes stoppen in plaats van wegvallen
+          if (tooLarge) return;
+          if ((++n & 4095) === 0 && X9 && X9.memory.tooHigh()) { tooLarge = true; return; }
+          var o = fn.call(self, x, map, other); if (o) out.push(o);
+        }).then(function () {
           list.length = 0;
+          if (tooLarge) { out.length = 0; throw new Error(X9.memory.message()); }
           return out;
         });
       });
     }
     return Promise.all([
-      kind('get_live_streams', KEYS_LIVE, 0, self.channelOf),
-      kind('get_vod_streams', KEYS_VOD, 1, self.movieOf),
-      kind('get_series', KEYS_SERIES, 2, self.seriesOf)
-    ]).then(function (r) { return { channels: r[0], movies: r[1], series: r[2], epg: {} }; });
+      kind('get_live_streams', KEYS_LIVE, 0, self.channelOf, 'live'),
+      kind('get_vod_streams', KEYS_VOD, 1, self.movieOf, 'movie'),
+      kind('get_series', KEYS_SERIES, 2, self.seriesOf, 'series')
+    ]).then(function (r) { return { channels: r[0], movies: r[1], series: r[2], epg: {}, hiddenGroups: hiddenGroups }; });
   };
   /** Live-zenders uit get_live_streams (build 97: ook los gebruikt voor de reservebron). */
   Xtream.prototype.mapLive = function (list, lc, other) {
@@ -543,6 +567,8 @@
 
   function xmlDate(s) {
     if (!s) return null;
+    // build 149: zonder regex per programma (B.b149.dates.parseXmltv); terugval hieronder
+    if (B.b149) { var f = B.b149.dates.parseXmltv(s); if (f != null) return f; }
     var m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?\s*([+-]\d{4})?/.exec(String(s).trim());
     if (!m) return null;
     var t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));

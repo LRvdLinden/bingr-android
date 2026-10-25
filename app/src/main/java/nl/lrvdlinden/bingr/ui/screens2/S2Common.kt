@@ -102,7 +102,7 @@ private object S2TimeCache {
 }
 fun s2DateTime(ms: Long): String =
     DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Localizer.locale).format(Date(ms))
-fun s2DateShort(ms: Long): String = SimpleDateFormat("EEE d MMM", Localizer.locale).format(Date(ms))
+fun s2DateShort(ms: Long): String = Build149Logic.Dates.fmt("EEE d MMM", Localizer.locale).format(Date(ms))
 
 fun s2StartOfDay(ms: Long): Long = Calendar.getInstance().apply {
     timeInMillis = ms; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)

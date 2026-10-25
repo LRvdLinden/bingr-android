@@ -29,8 +29,7 @@ object DeviceInfo {
 @Serializable
 data class ServerSession(val token: String, val userID: String? = null, val serverURI: String)
 
-private fun isoUTC(ms: Long): String =
-    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(java.util.Date(ms))
+private fun isoUTC(ms: Long): String = Build149Logic.Dates.formatIsoSeconds(ms)
 
 // MARK: - Jellyfin / Emby ------------------------------------------------------
 
@@ -276,7 +275,11 @@ class StremioClient(val addons: List<Addon>) {
         val catalogs: List<Catalog>,
     ) {
         @Serializable
-        data class Catalog(val type: String, val id: String, val name: String)
+        data class Catalog(
+            val type: String, val id: String, val name: String,
+            /** build 149: catalogus kan zoeken (extra `search`); [searchOnly] = alleen met een zoekterm */
+            val search: Boolean = false, val searchOnly: Boolean = false,
+        )
     }
 
     companion object {
@@ -305,9 +308,12 @@ class StremioClient(val addons: List<Addon>) {
             val catalogs = obj.jList("catalogs").mapNotNull { c ->
                 val t = c.jS("type") ?: return@mapNotNull null
                 val id = c.jS("id") ?: return@mapNotNull null
-                if (c.jList("extra").any { it.jB("isRequired") == true }) return@mapNotNull null
-                if (c.jList("extraRequired").isNotEmpty()) return@mapNotNull null
-                Addon.Catalog(type = t, id = id, name = c.jS("name") ?: id)
+                // build 149: zoekcatalogi bewaren (ook als zoeken verplicht is); andere verplichte extra's niet
+                val extra = c.jList("extra")
+                val search = extra.any { it.jS("name") == "search" } || c.jStrings("extraSupported").contains("search")
+                val required = extra.filter { it.jB("isRequired") == true }.mapNotNull { it.jS("name") } + c.jStrings("extraRequired")
+                if (required.any { it != "search" }) return@mapNotNull null
+                Addon.Catalog(type = t, id = id, name = c.jS("name") ?: id, search = search, searchOnly = "search" in required)
             }
             val base = m.replace("/manifest.json", "")
             return Addon(base = base, name = obj.jS("name") ?: "Addon", resources = resources,
@@ -320,7 +326,7 @@ class StremioClient(val addons: List<Addon>) {
 
     private suspend fun loadLibrary(): Library = coroutineScope {
         val jobs = addons.filter { "catalog" in it.resources }.flatMap { a ->
-            a.catalogs.take(10).filter { it.type == "movie" || it.type == "series" }.map { c ->
+            a.catalogs.filter { !it.searchOnly }.take(10).filter { it.type == "movie" || it.type == "series" }.map { c ->
                 async {
                     val metas = runCatching { Net.json("${a.base}/catalog/${c.type}/${c.id}.json").jList("metas") }
                         .getOrDefault(emptyList())
@@ -347,6 +353,40 @@ class StremioClient(val addons: List<Addon>) {
                         poster = Net.urlValue(m.jS("poster")), group = groupName, imdbID = id,
                         plot = m.jS("description"), rating = rating, remoteID = id))
                 }
+            }
+        }
+        Library(movies = movies, series = series)
+    }
+
+    /**
+     * Build 149: zoeken via de add-on-catalogi met `search` (`/catalog/{type}/{id}/search={q}.json`), hooguit 6 catalogi,
+     * elk met een korte time-out. Zelfde omzetting als [library].
+     */
+    suspend fun search(q: String): Library = coroutineScope {
+        val enc = java.net.URLEncoder.encode(q.trim(), "UTF-8").replace("+", "%20")
+        val jobs = addons.filter { "catalog" in it.resources }.flatMap { a ->
+            a.catalogs.filter { it.search && (it.type == "movie" || it.type == "series") }.map { a to it }
+        }.take(6).map { (a, c) ->
+            async {
+                val metas = runCatching { kotlinx.coroutines.withTimeoutOrNull(6_000) { Net.json("${a.base}/catalog/${c.type}/${c.id}/search=$enc.json").jList("metas") } }
+                    .getOrNull() ?: emptyList()
+                c to metas
+            }
+        }
+        val movies = ArrayList<Movie>(); val series = ArrayList<Series>()
+        val seen = HashSet<String>()
+        val moviesL = L("Movies"); val seriesL = L("Series")
+        for ((cat, metas) in jobs.awaitAll()) {
+            val groupName = "${cat.name} · ${if (cat.type == "movie") moviesL else seriesL}"
+            for (m in metas) {
+                val id = m.jS("id") ?: continue
+                if (!id.startsWith("tt") || !seen.add(cat.type + id)) continue
+                val year = m.jS("releaseInfo")?.take(4)?.toIntOrNull()
+                val rating = m.jS("imdbRating")?.toDoubleOrNull()
+                if (cat.type == "movie") movies.add(Movie(id = "sm$id-${cat.id}", title = m.jS("name") ?: "?", year = year,
+                    poster = Net.urlValue(m.jS("poster")), group = groupName, imdbID = id, rating = rating, plot = m.jS("description")))
+                else series.add(Series(id = "ss$id-${cat.id}", title = m.jS("name") ?: "?", year = year,
+                    poster = Net.urlValue(m.jS("poster")), group = groupName, imdbID = id, plot = m.jS("description"), rating = rating, remoteID = id))
             }
         }
         Library(movies = movies, series = series)

@@ -43,8 +43,11 @@ object AllServersLogic {
     private val trailingCountry = Regex("\\s(?:nl|be|de|uk|us|fr|es|it|pl|tr|pt|en)\\s*$")
 
     /** Accenten weg en kleine letters ("Amélie" → "amelie"). */
+    // build 149: regex één keer, gewone ASCII-tekst zonder Normalizer (over tienduizenden titels)
+    private val marks = Regex("\\p{M}+")
     fun fold(s: String): String =
-        Normalizer.normalize(s, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").lowercase(Locale.ROOT)
+        if (s.all { it.code < 0x80 }) s.lowercase(Locale.ROOT)
+        else marks.replace(Normalizer.normalize(s, Normalizer.Form.NFD), "").lowercase(Locale.ROOT)
 
     /** Jaartal uit een titel ("Dune (2021)", "Dune 2021"), anders null. */
     fun yearIn(title: String): Int? =

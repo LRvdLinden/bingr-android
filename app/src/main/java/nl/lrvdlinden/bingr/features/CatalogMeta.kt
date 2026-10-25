@@ -36,8 +36,8 @@ object CatalogMeta {
 
     // MARK: tijden
 
-    private fun isoFormat() = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply { timeZone = TimeZone.getTimeZone("UTC") }
-    fun iso(ms: Long): String = isoFormat().format(Date(ms))
+    // build 149: geen opmaker per item
+    fun iso(ms: Long): String = Build149Logic.Dates.formatIso(ms)
     fun time(e: JsonElement?): Long? {
         val p = e as? JsonPrimitive ?: return null
         if (p is JsonNull) return null

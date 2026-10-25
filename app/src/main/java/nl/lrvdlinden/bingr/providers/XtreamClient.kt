@@ -26,6 +26,11 @@ class XtreamClient(source: PlaylistSource, val password: String) {
     }
 
     companion object {
+        // build 149: alleen deze velden per item (zelfde als Xtream.KEYS in tizen/js/providers.js)
+        val KEYS_LIVE = listOf("stream_id", "name", "stream_icon", "category_id", "epg_channel_id", "num", "tv_archive", "tv_archive_duration")
+        val KEYS_VOD = listOf("stream_id", "name", "stream_icon", "category_id", "container_extension", "rating", "added", "year")
+        val KEYS_SERIES = listOf("series_id", "name", "year", "releaseDate", "cover", "category_id", "plot", "rating", "last_modified")
+
         val authError: ServiceException
             get() = ServiceException(L("Couldn't sign in to the server. Check the server, username and password."))
 
@@ -126,7 +131,7 @@ class XtreamClient(source: PlaylistSource, val password: String) {
      * Build 148: elke lijst wordt meteen na het ophalen omgezet en de ruwe JSON daarna losgelaten (niet eerst alle zes de
      * ruwe lijsten tegelijk in het geheugen, dan pas omzetten). [onFetched] = alle lijsten zijn binnen (einde van "ophalen").
      */
-    suspend fun library(onFetched: () -> Unit = {}): Library = withContext(Dispatchers.Default) {
+    suspend fun library(onFetched: () -> Unit = {}, hidden: ((String) -> Boolean)? = null): Library = withContext(Dispatchers.Default) {
         coroutineScope {
             val arrived = java.util.concurrent.atomic.AtomicInteger(0)
             fun got() { if (arrived.incrementAndGet() == 3) runCatching { onFetched() } }
@@ -135,11 +140,92 @@ class XtreamClient(source: PlaylistSource, val password: String) {
             val sc = async { categoryMap(list("get_series_categories")) }
             val other = L("Other")
             val liveExt = if (preferHLS) "m3u8" else "ts"
-            val ch = async { val raw = list("get_live_streams"); got(); parseLive(raw, lc.await(), other, liveExt) }
-            val mv = async { val raw = list("get_vod_streams"); got(); parseVod(raw, vc.await(), other) }
-            val se = async { val raw = list("get_series"); got(); parseSeries(raw, sc.await(), other) }
-            Library(channels = ch.await(), movies = mv.await(), series = se.await())
+            // build 149: streamend per item inlezen (alleen de nodige velden, geen JSON-boom van de hele lijst); items uit
+            // verborgen categorieën worden alleen geteld (Library.hiddenGroups) en pas bij weer aanzetten opgehaald
+            val skipL = hidden?.let { Build149Logic.Skip(it) }
+            val skipM = hidden?.let { Build149Logic.Skip(it) }
+            val skipS = hidden?.let { Build149Logic.Skip(it) }
+            val ch = async { val t = listText("get_live_streams"); got(); streamLive(t, lc.await(), other, liveExt, skipL) }
+            val mv = async { val t = listText("get_vod_streams"); got(); streamVod(t, vc.await(), other, skipM) }
+            val se = async { val t = listText("get_series"); got(); streamSeries(t, sc.await(), other, skipS) }
+            val hg = LinkedHashMap<String, Int>()
+            val channels = ch.await(); val movies = mv.await(); val series = se.await()
+            skipL?.counts?.forEach { (g, n) -> hg["live|$g"] = n }
+            skipM?.counts?.forEach { (g, n) -> hg["movie|$g"] = n }
+            skipS?.counts?.forEach { (g, n) -> hg["series|$g"] = n }
+            Library(channels = channels, movies = movies, series = series, hiddenGroups = hg)
         }
+    }
+
+    /** Build 149: ruwe tekst van een lijst (een mislukte lijst = null, met de foutcode in [errors]). */
+    private suspend fun listText(action: String): String? {
+        val u = api(action) ?: return null
+        return try {
+            Net.text(u).also { errors.remove(action) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            errors[action] = Build147Logic.Fetch.errorCode(e.javaClass.simpleName, e.message, (e as? StatusException)?.code)
+            null
+        }
+    }
+
+    private fun stream(text: String?, action: String, keys: List<String>, block: (Build149Logic.Row) -> Unit) {
+        if (text.isNullOrEmpty()) return
+        try {
+            Build149Logic.Stream.forEach(text, keys, MemoryGuard.check, block)
+        } catch (e: Build149Logic.TooLarge) {
+            throw MemoryGuard.tooLarge()
+        } catch (e: IllegalArgumentException) {
+            errors[action] = "bad_json"
+        }
+    }
+
+    private fun streamLive(text: String?, lcMap: Map<String, String>, other: String, liveExt: String, skip: Build149Logic.Skip?): List<Channel> {
+        val out = ArrayList<Channel>()
+        stream(text, "get_live_streams", KEYS_LIVE) { l ->
+            val sid = l["stream_id"] ?: return@stream
+            val group = lcMap[l["category_id"] ?: ""] ?: other
+            if (skip != null && skip.skip(group)) return@stream
+            out += Channel(id = "x$sid", name = l["name"] ?: "Channel", logo = Net.urlValue(l["stream_icon"]), group = group,
+                streamURL = "$server/live/$username/$password/$sid.$liveExt",
+                epgID = l["epg_channel_id"]?.takeIf { it.isNotEmpty() },
+                number = l.int("num"),
+                catchupDays = if (l.int("tv_archive") == 1) (l.int("tv_archive_duration") ?: 0) else 0)
+        }
+        out.trimToSize(); return out
+    }
+
+    private fun streamVod(text: String?, vcMap: Map<String, String>, other: String, skip: Build149Logic.Skip?): List<Movie> {
+        val out = ArrayList<Movie>()
+        stream(text, "get_vod_streams", KEYS_VOD) { v ->
+            val sid = v["stream_id"] ?: return@stream
+            val group = vcMap[v["category_id"] ?: ""] ?: other
+            if (skip != null && skip.skip(group)) return@stream
+            val p = TitleCleaner.parse(v["name"] ?: "")
+            out += Movie(id = "xv$sid", title = p.title, year = v.int("year") ?: p.year, poster = Net.urlValue(v["stream_icon"]),
+                group = group,
+                streamURL = "$server/movie/$username/$password/$sid.${v["container_extension"] ?: "mp4"}",
+                rating = v.double("rating"),
+                addedAt = v.double("added")?.let { (it * 1000).toLong() },
+                xtreamVodID = sid.toIntOrNull())
+        }
+        out.trimToSize(); return out
+    }
+
+    private fun streamSeries(text: String?, scMap: Map<String, String>, other: String, skip: Build149Logic.Skip?): List<Series> {
+        val out = ArrayList<Series>()
+        stream(text, "get_series", KEYS_SERIES) { s ->
+            val sid = s.int("series_id") ?: return@stream
+            val group = scMap[s["category_id"] ?: ""] ?: other
+            if (skip != null && skip.skip(group)) return@stream
+            val p = TitleCleaner.parse(s["name"] ?: "")
+            val y = s.int("year") ?: s["releaseDate"]?.take(4)?.toIntOrNull() ?: p.year
+            out += Series(id = "xs$sid", title = p.title, year = y, poster = Net.urlValue(s["cover"]), group = group,
+                plot = s["plot"], rating = s.double("rating"), xtreamSeriesID = sid,
+                addedAt = s.double("last_modified")?.takeIf { it > 0 }?.let { (it * 1000).toLong() })
+        }
+        out.trimToSize(); return out
     }
 
     /** Categorie-id → naam (zoals [parse] ze gebruikt). */
@@ -233,7 +319,7 @@ class XtreamClient(source: PlaylistSource, val password: String) {
     fun catchupURL(channel: Channel, start: Long, end: Long): String? {
         if (!channel.id.startsWith("x")) return null
         val sid = channel.id.drop(1)
-        val f = SimpleDateFormat("yyyy-MM-dd:HH-mm", Locale.US).apply { timeZone = TimeZone.getDefault() }
+        val f = Build149Logic.Dates.fmt("yyyy-MM-dd:HH-mm")
         val minutes = ((end - start) / 60_000).toInt()
         return "$server/timeshift/$username/$password/$minutes/${f.format(java.util.Date(start))}/$sid.ts"
     }

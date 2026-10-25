@@ -12,7 +12,7 @@
   var h = U.h;
   var X = B.b146, SP = X.support, SC = B.support, DG = B.diag;
 
-  function when(ms) { return ms ? new Date(ms).toLocaleString(B.lang || undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; }
+  function when(ms) { return ms ? B.fmtDate(ms, B.lang || undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; }
   function statusLabel(s) { return L(SP.statusKey(s)); }
   function frow(track, label, sub, fn, cls) {
     var r = h('div.st-row.f' + (cls || ''), [h('div.st-label', [h('div', label), sub ? h('div.dim', sub) : null])]);

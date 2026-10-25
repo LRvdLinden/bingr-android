@@ -794,6 +794,8 @@ fun HomeScreen(filter: Filter) {
                 if (!tilesOn || tilesPlaced) return
                 tilesPlaced = true
                 item(key = "browse") { CategoriesHomeRow() }
+                // build 149: Ontdek categorieën (grote tegels per categorie van de server, logo van de dienst uit TMDB)
+                item(key = "discovercats") { DiscoverCategoriesRow() }
             }
             /** Na elke getoonde rij: tellen vanaf "Nu live" en de categorierij na de vijfde plaatsen. */
             fun LazyListScope.shown(visible: Boolean = true) {

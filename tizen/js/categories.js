@@ -278,6 +278,37 @@
     return S.rowBlock(L('Categories'), tiles, 'cat-row');
   };
 
+  /**
+   * Build 149: rij "Ontdek categorieën" op Home: grote tegels per categorie van de server, bovenin een collage van 3–4
+   * posters, eronder een gekleurde balk met de naam of het logo van de streamingdienst (TMDB). Hooguit 10, de grootste
+   * eerst; Enter opent de categorie. Niet bij een kinderprofiel, behalve als alle categorieën kindercategorieën zijn.
+   */
+  S.discoverCategoriesRow = function () {
+    var X9 = B.b149, lib = Lib.lib;
+    if (!X9 || (!lib.movies.length && !lib.series.length)) return null;
+    var idx = index();
+    var p = B.app && B.app.profile;
+    var cats = idx.server.map(function (x) { return { name: x.name, count: x.m.count('all'), posters: x.m.posters('all', 4), m: x.m }; });
+    var pick = X9.discover.pick(cats, !!(p && p.kids), function (n) { return B.b140.isKidsCategory(n); });
+    if (!pick.length) return null;
+    var logos = X9.discover.logos();
+    var tiles = pick.map(function (c) {
+      var title = B.parseTitle(c.name).title || c.name;
+      var color = X9.discover.colorFor(title);
+      var pk = X9.discover.providerFor(title, logos), logo = pk ? logos[pk] : null;
+      var collage = h('div.dc-collage', c.posters.slice(0, 4).map(function (u) { return U.img(u, 'dc-img'); }));
+      var bar = h('div.dc-bar', { style: { background: 'linear-gradient(180deg, ' + color + ' 0%, ' + rgba(color, 0.8) + ' 100%)' } },
+        logo ? [U.img(logo, 'dc-logo'), h('div.dc-name.dc-small', title)] : [h('div.dc-name', title)]);
+      var t = h('div.dc-tile.f', { style: { background: color } }, [collage, bar]);
+      t.onEnter = function () { U.push(S.categoryPage({ server: c.name }, 'all')); };
+      t._key = 'dc:' + c.name;
+      return t;
+    });
+    // logo's eens per week ophalen; zijn ze er voor het eerst, dan Home de rij laten vernieuwen
+    if (Object.keys(logos).length <= 1) X9.discover.loadLogos().then(function (m) { if (Object.keys(m).length > 1) B.emit('discoverLogos'); });
+    return S.rowBlock(L('Discover categories'), tiles, 'dc-row');
+  };
+
   /** Overzicht openen (pagina in het hoofdscherm, sinds build 86 via het profielmenu en de rij op Home). */
   S.openCategories = function () {
     if (S.goPage) S.goPage('categories');

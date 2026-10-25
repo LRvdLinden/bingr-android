@@ -200,8 +200,11 @@ suspend fun <T> screensSafe(block: suspend () -> T): T? = try {
 }
 
 /** Zoeken zonder accenten/hoofdletters. */
+// build 149: regex één keer, en gewone ASCII-tekst zonder Normalizer
+private val screensMarks = Regex("\\p{M}+")
 fun screensFold(s: String): String =
-    Normalizer.normalize(s, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").lowercase()
+    if (s.all { it.code < 0x80 }) s.lowercase()
+    else screensMarks.replace(Normalizer.normalize(s, Normalizer.Form.NFD), "").lowercase()
 
 /** Titel vergelijken: zonder accenten, leestekens en spaties. */
 fun screensNormTitle(s: String): String = screensFold(s).filter { it.isLetterOrDigit() }

@@ -28,8 +28,11 @@ object Build140Logic {
         private val whole = listOf("kid", "child", "baby", "junior", "nick jr", "z@pp")
         private val prefix = Regex("^\\s*(?:\\|\\s*[a-z]{2,3}\\s*\\||\\[\\s*[a-z]{2,3}\\s*]|\\(\\s*[a-z]{2,3}\\s*\\)|[a-z]{2,3}\\s*(?:\\||:|-|–))\\s*")
 
+        // build 149: regex één keer, gewone ASCII-tekst zonder Normalizer
+        private val marks = Regex("\\p{M}+")
         fun fold(s: String): String =
-            Normalizer.normalize(s, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").lowercase(Locale.ROOT)
+            if (s.all { it.code < 0x80 }) s.lowercase(Locale.ROOT)
+            else marks.replace(Normalizer.normalize(s, Normalizer.Form.NFD), "").lowercase(Locale.ROOT)
 
         /** Kleine letters, accenten weg en het landvoorvoegsel vooraan weg (ook herhaald): "NL | Kinderfilms" → "kinderfilms". */
         fun normalize(name: String): String {

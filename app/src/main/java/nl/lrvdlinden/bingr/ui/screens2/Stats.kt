@@ -96,7 +96,7 @@ private fun statsCount(n: Int, one: String, many: String): String = if (n == 1) 
 
 private fun statsParseDay(s: String?): Calendar? {
     if (s.isNullOrBlank() || s.length < 10) return null
-    val d = runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(s.take(10)) }.getOrNull() ?: return null
+    val d = runCatching { Build149Logic.Dates.fmt("yyyy-MM-dd", Locale.US).parse(s.take(10)) }.getOrNull() ?: return null
     return Calendar.getInstance().apply { time = d }
 }
 
@@ -137,10 +137,10 @@ private fun statsPeriodLabel(period: Account.StatsPeriod, offset: Int, range: Pa
     val text = when (period) {
         Account.StatsPeriod.WEEK -> {
             val sameYear = a.get(Calendar.YEAR) == b.get(Calendar.YEAR)
-            val left = SimpleDateFormat(if (sameYear) "d MMM" else "d MMM yyyy", loc).format(a.time)
-            left + " – " + SimpleDateFormat("d MMM yyyy", loc).format(b.time)
+            val left = Build149Logic.Dates.fmt(if (sameYear) "d MMM" else "d MMM yyyy", loc).format(a.time)
+            left + " – " + Build149Logic.Dates.fmt("d MMM yyyy", loc).format(b.time)
         }
-        Account.StatsPeriod.MONTH -> statsCapitalize(SimpleDateFormat("LLLL yyyy", loc).format(a.time))
+        Account.StatsPeriod.MONTH -> statsCapitalize(Build149Logic.Dates.fmt("LLLL yyyy", loc).format(a.time))
         Account.StatsPeriod.YEAR -> a.get(Calendar.YEAR).toString()
     }
     if (offset != 0) return text
@@ -160,7 +160,7 @@ private data class StatsSlot(val key: String, val date: Long, val movie: Double,
 private fun statsSlots(period: Account.StatsPeriod, range: Pair<Calendar, Calendar>, buckets: List<Account.StatsBucket>): List<StatsSlot> {
     val year = period == Account.StatsPeriod.YEAR
     val byKey = buckets.associateBy { it.key.take(if (year) 7 else 10) }
-    val fmt = SimpleDateFormat(if (year) "yyyy-MM" else "yyyy-MM-dd", Locale.US)
+    val fmt = Build149Logic.Dates.fmt(if (year) "yyyy-MM" else "yyyy-MM-dd", Locale.US)
     val c = range.first.clone() as Calendar
     val out = ArrayList<StatsSlot>()
     while (!c.after(range.second) && out.size < 400) {
@@ -189,16 +189,16 @@ private fun statsNiceMax(maxMinutes: Double): Double {
 
 private fun statsSlotTitle(s: StatsSlot, period: Account.StatsPeriod): String {
     val loc = Localizer.locale
-    return if (period == Account.StatsPeriod.YEAR) statsCapitalize(SimpleDateFormat("LLLL yyyy", loc).format(s.date))
-    else statsCapitalize(SimpleDateFormat("EEEE d MMMM", loc).format(s.date))
+    return if (period == Account.StatsPeriod.YEAR) statsCapitalize(Build149Logic.Dates.fmt("LLLL yyyy", loc).format(s.date))
+    else statsCapitalize(Build149Logic.Dates.fmt("EEEE d MMMM", loc).format(s.date))
 }
 
 /** Labels onder de grafiek: (tekst, aantal staven dat het label beslaat). */
 private fun statsAxisLabels(slots: List<StatsSlot>, period: Account.StatsPeriod): List<Pair<String, Int>> {
     val loc = Localizer.locale
     return when (period) {
-        Account.StatsPeriod.WEEK -> slots.map { statsCapitalize(SimpleDateFormat("EEE", loc).format(it.date)).trimEnd('.').take(3) to 1 }
-        Account.StatsPeriod.YEAR -> slots.map { statsCapitalize(SimpleDateFormat("LLL", loc).format(it.date)).trimEnd('.').take(3) to 1 }
+        Account.StatsPeriod.WEEK -> slots.map { statsCapitalize(Build149Logic.Dates.fmt("EEE", loc).format(it.date)).trimEnd('.').take(3) to 1 }
+        Account.StatsPeriod.YEAR -> slots.map { statsCapitalize(Build149Logic.Dates.fmt("LLL", loc).format(it.date)).trimEnd('.').take(3) to 1 }
         Account.StatsPeriod.MONTH -> slots.indices.step(7).map { i ->
             val day = Calendar.getInstance().apply { timeInMillis = slots[i].date }.get(Calendar.DAY_OF_MONTH)
             day.toString() to minOf(7, slots.size - i)

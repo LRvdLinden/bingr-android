@@ -312,7 +312,7 @@
       return Promise.resolve({ items: B.reminders.list() });
     }, function (r, refresh) {
       var d = new Date(r.start);
-      var row = h('div.st-row.f', [U.icon('bell'), h('div.wl-time', d.toLocaleDateString(B.lang, { weekday: 'short', day: 'numeric', month: 'short' }) + '  ' + B.fmtTime(r.start)),
+      var row = h('div.st-row.f', [U.icon('bell'), h('div.wl-time', B.fmtDate(d.getTime(), B.lang, { weekday: 'short', day: 'numeric', month: 'short' }) + '  ' + B.fmtTime(r.start)),
         h('div.st-label', [h('div', r.title), h('div.dim', r.channelName)])]);
       row.onEnter = function () {
         U.modal({ title: r.title, text: r.channelName + '  ·  ' + B.fmtTime(r.start), buttons: [
@@ -330,7 +330,7 @@
     var day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     var today = new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
     var label = day === today ? L('Today') : day === new Date(today - 12 * 3600000).setHours(0, 0, 0, 0) ? L('Yesterday')
-      : d.toLocaleDateString(B.lang, { weekday: 'short', day: 'numeric', month: 'short' });
+      : B.fmtDate(d.getTime(), B.lang, { weekday: 'short', day: 'numeric', month: 'short' });
     return label + '  ' + B.fmtTime(ms);
   };
   /** Item uit de geschiedenis openen: van de actieve server hier, van een andere (of verwijderde) server via die server. */

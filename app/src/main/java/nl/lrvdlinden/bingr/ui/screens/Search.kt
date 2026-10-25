@@ -145,7 +145,7 @@ private fun categoryHits(q: String, lib: Library): List<GroupHit> {
 
 private fun programTime(ms: Long): String {
     val pattern = android.text.format.DateFormat.getBestDateTimePattern(Localizer.locale, "EEEdMMMHHmm")
-    return SimpleDateFormat(pattern, Localizer.locale).format(Date(ms))
+    return Build149Logic.Dates.fmt(pattern, Localizer.locale).format(Date(ms))
 }
 
 /** Zoeken in de huidige afspeellijst (alles, los van het tabblad) én in alle andere afspeellijsten (= SearchView.swift). */

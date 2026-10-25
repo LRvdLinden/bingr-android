@@ -77,8 +77,7 @@ object Diagnostics {
     val engine: String
         get() = when (Prefs.string("player.engine") ?: "auto") { "vlc" -> "vlc"; "apple" -> "exo"; else -> "auto" }
 
-    fun iso(ms: Long): String =
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(ms))
+    fun iso(ms: Long): String = Build149Logic.Dates.formatIso(ms)  // build 149: geen opmaker per aanroep
 
     // MARK: onderdelen
 
@@ -151,7 +150,7 @@ object Diagnostics {
 
     /**
      * Korte netwerkcheck: Bingr-server (device-auth `ping`) en de eigen IPTV-server (alleen het adres van de server, een
-     * HEAD-aanvraag; niets van de aanvraag of het antwoord wordt bewaard, gelogd of meegestuurd).
+     * kleine GET (build 149; was HEAD); niets van de aanvraag of het antwoord wordt bewaard, gelogd of meegestuurd).
      */
     suspend fun network(): Network {
         val (online, type, vpn) = connection()
@@ -166,9 +165,16 @@ object Diagnostics {
                 val t0 = android.os.SystemClock.elapsedRealtime()
                 providerOk = withContext(Dispatchers.IO) {
                     runCatching {
-                        val req = okhttp3.Request.Builder().url(origin).head().header("User-Agent", Http.USER_AGENT).build()
+                        // build 149: kleine GET in plaats van HEAD (veel IPTV-servers weigeren HEAD); bij Xtream de
+                        // login van player_api.php. Hooguit 4 KB van het antwoord wordt gelezen en meteen weggegooid.
+                        val url = if (src != null && src.kind == PlaylistKind.XTREAM)
+                            Net.url(Net.normalizedServer(src.serverURL) + "/player_api.php",
+                                listOf("username" to src.username, "password" to (Store.secret(src.passwordKey) ?: ""))) ?: origin
+                        else origin
+                        val req = okhttp3.Request.Builder().url(url).get().header("User-Agent", Http.USER_AGENT)
+                            .header("Range", "bytes=0-4095").build()
                         Http.client.newBuilder().callTimeout(6, java.util.concurrent.TimeUnit.SECONDS).build()
-                            .newCall(req).execute().use { true }
+                            .newCall(req).execute().use { r -> runCatching { r.body?.source()?.request(4096) }; true }
                     }.getOrDefault(false)
                 }
                 providerMs = android.os.SystemClock.elapsedRealtime() - t0
@@ -296,12 +302,16 @@ object Diagnostics {
             fun notKids(g: String) = kidsOn && !Build140Logic.Kids.isKidsCategory(g)
             val H = Build148Logic.Hidden
             mapOf(
-                "live" to H.count(raw.channels, lib.channels.size, { it.group }, ::hiddenCat, ::notKids),
-                "movie" to H.count(raw.movies, lib.movies.size, { it.group }, ::hiddenCat, ::notKids),
-                "series" to H.count(raw.series, lib.series.size, { it.group }, ::hiddenCat, ::notKids),
+                // build 149: plus wat niet is ingelezen omdat de categorie verborgen was (geleverd én verborgen)
+                "live" to plusSkipped(H.count(raw.channels, lib.channels.size, { it.group }, ::hiddenCat, ::notKids), raw.hiddenCount("live")),
+                "movie" to plusSkipped(H.count(raw.movies, lib.movies.size, { it.group }, ::hiddenCat, ::notKids), raw.hiddenCount("movie")),
+                "series" to plusSkipped(H.count(raw.series, lib.series.size, { it.group }, ::hiddenCat, ::notKids), raw.hiddenCount("series")),
             )
         }
     }
+
+    private fun plusSkipped(c: Build148Logic.Hidden.Counts, n: Int): Build148Logic.Hidden.Counts =
+        if (n <= 0) c else Build148Logic.Hidden.of(c.delivered + n, c.visible, c.categories + n, c.kids, c.duplicates)
 
     private suspend fun fetchJson(): JsonArray {
         val vis = runCatching { visibility() }.getOrDefault(emptyMap())

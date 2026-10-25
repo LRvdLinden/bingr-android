@@ -197,7 +197,18 @@ data class Library(
     val series: List<Series> = emptyList(),
     /** key = epgID of channel.id */
     val epg: Map<String, List<EPGProgram>> = emptyMap(),
+    /**
+     * Build 149: items uit verborgen categorieën die niet zijn ingelezen (niet in het geheugen en niet in de cache), per
+     * "live|groep", "movie|groep" of "series|groep" het aantal. Gaat zo'n categorie weer aan, dan wordt de server opnieuw
+     * opgehaald ([Playlists]).
+     */
+    val hiddenGroups: Map<String, Int> = emptyMap(),
 ) {
+    /** Build 149: aantal niet ingelezen items van een soort ("live", "movie", "series"). */
+    fun hiddenCount(kind: String): Int { var n = 0; val p = "$kind|"; for ((k, v) in hiddenGroups) if (k.startsWith(p)) n += v; return n }
+    /** Build 149: namen van de niet ingelezen categorieën van een soort. */
+    fun hiddenGroupNames(kind: String): List<String> { val p = "$kind|"; return hiddenGroups.keys.filter { it.startsWith(p) }.map { it.substring(p.length) } }
+
     // Build 56: één keer uitrekenen per bibliotheek (werd bij elke aanroep, ook tijdens het tekenen, over de hele lijst gedaan)
     val channelGroups: List<String> by lazy { channels.map { it.group }.distinct() }
     val movieGroups: List<String> by lazy { movies.map { it.group }.distinct() }

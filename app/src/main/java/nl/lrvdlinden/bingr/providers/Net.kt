@@ -92,36 +92,25 @@ object Net {
     /** Lege tekst → null (tegenhanger van String.urlValue). */
     fun urlValue(s: String?): String? = s?.trim()?.takeIf { it.isNotEmpty() }
 
-    /** ISO-datum met 0–7 decimalen (Jellyfin/Emby gebruiken er 7) → epoch-ms. */
-    fun parseISODate(input: String?): Long? {
-        var s = input?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        val dot = s.indexOf('.')
-        if (dot >= 0) {
-            var end = dot + 1
-            while (end < s.length && s[end].isDigit()) end++
-            s = s.removeRange(dot, end)
-        }
-        if (s.length == 10) s += "T00:00:00"
-        s = when {
-            s.endsWith("Z") -> s.dropLast(1) + "+0000"
-            s.length == 19 -> "$s+0000"
-            s.length == 25 && (s[19] == '+' || s[19] == '-') && s[22] == ':' -> s.substring(0, 22) + s.substring(23)
-            else -> s
-        }
-        return runCatching { SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US).parse(s)?.time }.getOrNull()
-    }
+    /**
+     * ISO-datum met 0–9 decimalen (Jellyfin/Emby gebruiken er 7) → epoch-ms. Build 149: eigen parser (geen
+     * SimpleDateFormat per aanroep; dit loopt over sync, catalogmeta en mediaservers in lussen).
+     */
+    fun parseISODate(input: String?): Long? = Build149Logic.Dates.parseIso(input)
 
     /** "yyyy-MM-dd" (lokale tijd) → epoch-ms */
-    fun parseDay(s: String?): Long? {
-        val d = s?.take(10)?.takeIf { it.length == 10 } ?: return null
-        return runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(d)?.time }.getOrNull()
-    }
+    fun parseDay(s: String?): Long? = Build149Logic.Dates.parseDayLocal(s)
 
     private val marks = Regex("\\p{Mn}+")
     /** Hoofdletter- en accent-ongevoelig (zoals String.folding op iOS). */
-    fun fold(s: String): String = marks.replace(Normalizer.normalize(s, Normalizer.Form.NFD), "").lowercase()
+    // build 149: gewone ASCII-tekst (bijna alle titels) zonder Normalizer en regex (dat liep teken voor teken over
+    // tienduizenden titels)
+    fun fold(s: String): String =
+        if (Build149Logic.Fold.isAscii(s)) Build149Logic.Fold.lowerAscii(s)
+        else marks.replace(Normalizer.normalize(s, Normalizer.Form.NFD), "").lowercase()
     /** Alleen letters en cijfers, gevouwen — voor het vergelijken van titels. */
-    fun normTitle(s: String): String = fold(s).filter { it.isLetterOrDigit() }
+    fun normTitle(s: String): String =
+        if (Build149Logic.Fold.isAscii(s)) Build149Logic.Fold.normAscii(s) else fold(s).filter { it.isLetterOrDigit() }
 }
 
 // MARK: lenient JSON (tegenhanger van Flex / StringOrArray) -----------------------------

@@ -262,7 +262,7 @@ private fun watchDayTitle(day: Long): String {
     return when (day) {
         today -> L("Today")
         yesterday -> L("Yesterday")
-        else -> SimpleDateFormat("EEEE d MMMM", Localizer.locale).format(Date(day))
+        else -> Build149Logic.Dates.fmt("EEEE d MMMM", Localizer.locale).format(Date(day))
     }
 }
 

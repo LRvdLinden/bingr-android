@@ -699,7 +699,7 @@
     if (diff === 0) return L('Today %@', t);
     if (diff === 1) return L('Tomorrow %@', t);
     if (diff === -1) return L('Yesterday %@', t);
-    try { return d.toLocaleDateString(B.lang, { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + t; } catch (e) { return t; }
+    try { return B.fmtDate(d.getTime(), B.lang, { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + t; } catch (e) { return t; }
   };
   /** Evenementen in de bibliotheek, gesorteerd: komend en bezig op begintijd, zonder tijd daarna, verlopen onderaan. */
   P.events = function () {
@@ -897,8 +897,12 @@
       var groups = { movies: [local.movies || []], series: [local.series || []], channels: [local.channels || []] };
       libs.forEach(function (l) {
         [['movies', 'movie', l.lib.movies, 'title', 30], ['series', 'series', l.lib.series, 'title', 30], ['channels', 'channel', l.lib.channels, 'name', 20]].forEach(function (pool) {
-          var hits = [];
-          for (var i = 0; i < pool[2].length && hits.length < pool[4]; i++) {
+          var hits = [], SE = B.b149 && B.b149.search;
+          if (SE) {
+            // build 149: zelfde zoeken als op de eigen server (woorden, ranking, typefout)
+            hits = SE.find(pool[2], q, pool[4], pool[3]);
+            hits.forEach(function (x) { x._src = l.source.id; });
+          } else for (var i = 0; i < pool[2].length && hits.length < pool[4]; i++) {
             var x = pool[2][i];
             if (B.fold(x[pool[3]]).indexOf(f) >= 0) { x._src = l.source.id; hits.push(x); }
           }

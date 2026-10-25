@@ -283,7 +283,7 @@
   /** Korte datum ("17 okt", "Oct 17"; in de app-taal), alleen bij Binnenkort op Bingr; zonder punt achter de maand. */
   function dateLabel(t) {
     if (t.kind !== 'upcoming' || !t.date) return null;
-    try { return new Date(t.date + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' }).replace(/\.$/, ''); } catch (e) { return t.date; }
+    try { return B.fmtDate(new Date(t.date + 'T12:00:00').getTime(), locale(), { day: 'numeric', month: 'short' }).replace(/\.$/, ''); } catch (e) { return t.date; }
   }
   /** Rij, of null als hij leeg is (build 112: zonder bronvermelding eronder; die staat in Instellingen → Over). */
   X.row = function (kind) {
@@ -298,7 +298,7 @@
     var first = L('Not in your playlists');
     if (t && t.date) {
       var d = t.date;
-      try { d = new Date(t.date + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { /* stil */ }
+      try { d = B.fmtDate(new Date(t.date + 'T12:00:00').getTime(), locale(), { day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { /* stil */ }
       first += ' · ' + L('Release date: %@', d).replace('%@', d);
     }
     return [first];

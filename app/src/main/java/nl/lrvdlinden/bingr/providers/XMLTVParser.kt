@@ -37,13 +37,8 @@ object XMLTVParser {
         val upper = now + daysAhead * 86_400_000L
         val programs = HashMap<String, MutableList<EPGProgram>>()
 
-        val fmt = SimpleDateFormat("yyyyMMddHHmmss Z", Locale.US)
-        val fmtNoTZ = SimpleDateFormat("yyyyMMddHHmmss", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
-        fun date(s: String?): Long? {
-            val t = s?.trim() ?: return null
-            return runCatching { fmt.parse(t)?.time }.getOrNull()
-                ?: runCatching { fmtNoTZ.parse(t.take(14))?.time }.getOrNull()
-        }
+        // build 149: eigen parser (geen SimpleDateFormat en geen uitzondering per programma zonder zone)
+        fun date(s: String?): Long? = Build149Logic.Dates.parseXmltv(s)
 
         val stream = gunzipIfNeeded(input)
         try {

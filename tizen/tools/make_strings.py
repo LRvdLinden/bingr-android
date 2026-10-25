@@ -37,6 +37,8 @@ DYNAMIC = ['Search', 'Home', 'Live TV', 'Movies', 'Series', 'My List', 'Settings
            # build 147: platformlaag (B.platform.texts in js/core.js, via een variabele)
            'This kind of server is not supported on Samsung TV yet.',
            'A Samsung TV has one full video player: the tile with sound uses it, the other tiles play muted where the TV can.', 'LG TV',
+           # build 149: melding bij een te grote server (js/build149.js, via B.L)
+           "This server is very large. Hide categories you don't use and it will load faster.", 'Discover categories',
            # build 148: codes van mijlpalen, taken en fasen (js/build148.js, via een variabele)
            'Started', 'Storage loaded', 'Account', 'First screen', 'Intro done', 'Profile picker', 'Profile chosen', 'PIN screen',
            'PIN correct', 'Profile opened', 'Servers loaded', 'Home', 'Catalog', 'Ready', 'Fetching', 'Reading', 'Indexing',

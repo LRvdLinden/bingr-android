@@ -9,6 +9,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
@@ -94,7 +95,11 @@ object Playlists {
         // build 140: categorieën aan/uit (account-set): niet bij elke tik de hele catalogus opnieuw filteren, maar even
         // wachten tot er niet meer getikt wordt, en dan op de achtergrond (ook bij kleine lijsten)
         AppScope.launch {
-            snapshotFlow { Store.hiddenCategories }.drop(1).debounce(450).collect { applyCustomizations(background = true) }
+            snapshotFlow { Store.hiddenCategories }.drop(1).debounce(450).collect {
+                applyCustomizations(background = true)
+                // build 149: een categorie die niet was ingelezen (verborgen tijdens het ophalen) staat weer aan → opnieuw ophalen
+                reloadUnhidden()
+            }
         }
         AppScope.launch {
             snapshotFlow { ParentalControl.unlockedUntil }.drop(1).collect { applyCustomizations() }
@@ -270,6 +275,30 @@ object Playlists {
         }
     }
 
+    /**
+     * Build 149: categorieën die bij het ophalen verborgen waren, zijn niet ingelezen ([Library.hiddenGroups]). Staat er
+     * daarvan weer één aan (of geldt het verbergen niet meer, bijvoorbeeld bij een kinderprofiel), dan de server op de
+     * achtergrond opnieuw ophalen. Andere servers krijgen die categorie bij hun volgende keer bijwerken.
+     */
+    private var reloadJob: Job? = null
+    private fun reloadUnhidden() {
+        val s = source ?: return
+        val raw = rawLibrary
+        if (raw.hiddenGroups.isNotEmpty()) {
+            val skip = hiddenPredicate(s)
+            val back = raw.hiddenGroups.keys.any { !skip(it.substringAfter('|')) }
+            if (back && reloadJob?.isActive != true) reloadJob = AppScope.launch { refresh(s, showSpinner = false) }
+        }
+    }
+
+    /** Build 149: wat bij het ophalen van [s] niet ingelezen hoeft te worden (verborgen categorie, ook via samenvoegen). */
+    fun hiddenPredicate(s: PlaylistSource): (String) -> Boolean {
+        val hidden = Store.hiddenCategoryNames(s.id)
+        if (hidden.isEmpty()) return { false }
+        val merged = Store.customizations[s.id]?.merged ?: emptyMap()
+        return { g -> g in hidden || (merged[g]?.let { it in hidden } == true) }
+    }
+
     /** true = gelukt. */
     suspend fun refresh(s: PlaylistSource, showSpinner: Boolean): Boolean {
         if (Screenshots.isActive) return true
@@ -318,7 +347,9 @@ object Playlists {
         return try {
             fetchFrom(s, quiet, errs, rec).also {
                 UpdateLog.phase(rec, "parse")
-                FetchLog.delivered(s.id, it.channels.size, it.movies.size, it.series.size, errs)
+                // build 149: geleverd = ingelezen + niet ingelezen (verborgen categorieën)
+                FetchLog.delivered(s.id, it.channels.size + it.hiddenCount("live"), it.movies.size + it.hiddenCount("movie"),
+                    it.series.size + it.hiddenCount("series"), errs)
             }
         } catch (e: CancellationException) {
             throw e
@@ -351,7 +382,7 @@ object Playlists {
                 val x = XtreamClient(s, password)
                 x.authenticate()
                 status(L("Fetching live TV, movies and series…"))
-                lib = x.library(onFetched = { UpdateLog.phase(rec, "fetch") })
+                lib = x.library(onFetched = { UpdateLog.phase(rec, "fetch") }, hidden = hiddenPredicate(s))
                 UpdateLog.phase(rec, "parse")
                 errs.putAll(x.kindErrors())
                 val epg = Net.urlValue(s.epgURL) ?: x.xmltvURL
@@ -869,36 +900,46 @@ object Playlists {
         val t = Net.fold(q.trim())
         if (t.length < 2) return SearchResults()
         val lib = library
+        // build 149: Stremio-add-ons met een zoekcatalogus ook laten zoeken (samengevoegd en ontdubbeld met de lokale treffers)
+        val stremio = Store.playlists.filter { it.kind == PlaylistKind.STREMIO }
         val currentID = source?.id
         val others = Store.playlists.filter { it.id != currentID }
         // andere afspeellijsten: zelfde verbergen/kinderslot/leeftijdsgrens als het actieve profiel
         val contexts = others.associate { it.id to context(it) }
         return withContext(Dispatchers.Default) {
-            fun m(s: String) = Net.fold(s).contains(t)
-            // films én series én zenders, uit álle categorieën
+            // build 149: op woorden (volgorde maakt niet uit), genormaliseerd (accenten, leestekens, voorvoegsels), met
+            // ranking (exact, begint met, woordbegin, bevat, één typefout) en vooraf berekende zoeksleutels per lijst
+            val remote = stremio.map { p -> async { runCatching { withTimeoutOrNull(8_000) { StremioClient(addonsFor(p)).search(q) } }.getOrNull()?.let { p to it } } }
+            val S = Build149Logic.Search
             val r = SearchResults(
-                channels = lib.channels.asSequence().filter { m(it.name) }.take(60).toList(),
-                movies = lib.movies.asSequence().filter { m(it.title) }.take(200).toList(),
-                series = lib.series.asSequence().filter { m(it.title) }.take(200).toList(),
+                channels = S.find(lib.channels, q, 60) { it.name },
+                movies = S.find(lib.movies, q, 200) { it.title },
+                series = S.find(lib.series, q, 200) { it.title },
             )
-            if (!allPlaylists) return@withContext r
+            val pending = remote.mapNotNull { it.await() }
+            if (!allPlaylists && pending.isEmpty()) return@withContext r
             // build 129: treffers van de andere servers van het profiel in dezelfde rijen (zelfde filters als het
             // actieve profiel), ontdubbeld zoals in build 128; openen/afspelen via die server, zonder te wisselen
             val ch = ArrayList<List<Channel>>().apply { add(r.channels) }
             val mv = ArrayList<List<Movie>>().apply { add(r.movies) }
             val se = ArrayList<List<Series>>().apply { add(r.series) }
-            for (p in others) {
+            if (allPlaylists) for (p in others) {
                 val ctx = contexts[p.id] ?: continue
                 val olib = AllServers.otherLibrary(p, ctx, allowNetwork = false) ?: continue
-                val c = olib.channels.asSequence().filter { m(it.name) }.take(40).map { it.copy(sourceID = p.id) }.toList()
+                val c = S.find(olib.channels, q, 40) { it.name }.map { it.copy(sourceID = p.id) }
                 // build 141: alleen de gids van deze zenders uit de cache van die server (niet de hele gids)
                 if (c.isNotEmpty()) {
                     val g = epgOf(p, c.mapTo(HashSet()) { CatalogFiles.epgKey(it) })
                     c.forEach { AllServers.remember(it, g[CatalogFiles.epgKey(it)]) }
                 }
                 ch += c
-                mv += olib.movies.asSequence().filter { m(it.title) }.take(120).map { it.copy(sourceID = p.id) }.toList()
-                se += olib.series.asSequence().filter { m(it.title) }.take(120).map { it.copy(sourceID = p.id) }.toList()
+                mv += S.find(olib.movies, q, 120) { it.title }.map { it.copy(sourceID = p.id) }
+                se += S.find(olib.series, q, 120) { it.title }.map { it.copy(sourceID = p.id) }
+            }
+            for ((p, lib2) in pending) {
+                val own = p.id == currentID
+                mv += lib2.movies.map { if (own) it else it.copy(sourceID = p.id) }
+                se += lib2.series.map { if (own) it else it.copy(sourceID = p.id) }
             }
             val X = AllServersLogic
             SearchResults(
@@ -1168,3 +1209,14 @@ data class OtherHit(
 }
 
 data class StremioStream(val title: String, val addon: String, val url: String)
+
+/**
+ * Build 149: geheugengrens tijdens het inlezen van een grote server (vooral tv's: Android TV heeft vaak 192–256 MB heap).
+ * Nadert het geheugen de grens, dan netjes stoppen met een melding in plaats van wegvallen (OOM).
+ */
+object MemoryGuard {
+    private val rt = Runtime.getRuntime()
+    fun used(): Long = rt.totalMemory() - rt.freeMemory()
+    val check: (Int) -> Unit = Build149Logic.Stream.memoryCheck(0.85, { used() }, { rt.maxMemory() }, { System.gc() })
+    fun tooLarge(): ServiceException = ServiceException(L("This server is very large. Hide categories you don't use and it will load faster."))
+}

@@ -69,7 +69,7 @@ data class DiscoverItem(
             val d = releaseDate ?: return null
             val loc = Localizer.locale
             val pattern = android.text.format.DateFormat.getBestDateTimePattern(loc, "dMMM")
-            return SimpleDateFormat(pattern, loc).format(d).trim().removeSuffix(".")
+            return Build149Logic.Dates.fmt(pattern, loc).format(d).trim().removeSuffix(".")
         }
 
     /** Detailpagina voor een titel die niet in je bibliotheek staat (zoals de aanbevelingen in DetailScreen) */
@@ -91,7 +91,7 @@ data class DiscoverItem(
             val n = parts[1].toIntOrNull()?.takeIf { it > 0 } ?: return null
             return n to (parts[0] == "tv")
         }
-        fun dayFormat() = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        fun dayFormat() = Build149Logic.Dates.fmt("yyyy-MM-dd")  // build 149: één per thread
         fun day(d: Date): String = dayFormat().format(d)
     }
 }
