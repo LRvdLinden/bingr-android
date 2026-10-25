@@ -4,6 +4,32 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, 
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.1 · Build 150
+_25 oktober 2026_
+
+### Alle apps en de website
+
+**Verbeterd**
+
+- Categorieën met dezelfde naam worden één categorie, zonder dubbele titels en met de talen als label; aan- en uitzetten geldt voor alle bronnen tegelijk
+
+**Opgelost**
+
+- Taal-, land- en kwaliteitsaanduidingen zoals "| NL |", "MULTI / LINGO", "[EN]" of "4K" verdwijnen overal uit de namen van categorieën, en namen in hoofdletters krijgen nette hoofdletters
+- Ontdek categorieën toont Netflix niet meer twee keer en toont de logo's van streamingdiensten weer
+
+### iOS, iPadOS, tvOS, macOS, Android, Android TV, Samsung TV (Tizen) en LG TV (webOS)
+
+**Verbeterd**
+
+- Bij Over staat nu ook de bronvermelding Streamingdata: JustWatch
+
+### Samsung TV (Tizen) en LG TV (webOS)
+
+**Nieuw**
+
+- Zoeken vindt ook titels in verborgen categorieën en via de zoekcatalogi van Stremio-add-ons
+
 ## Versie 1.0.1 · Build 149
 _25 oktober 2026_
 
