@@ -480,6 +480,8 @@ object Build149Logic {
         fun key(raw: String): String {
             var s = raw
             repeat(3) { val n = prefix.replace(s, ""); if (n == s) return@repeat; s = n }
+            // build 150: dezelfde opschoning als de categorienamen (taal, land, kwaliteit voorin en achterin, elke vorm)
+            s = Build150Logic.CategoryName.strip(s).name.ifEmpty { s }
             if (!Fold.isAscii(s)) s = marks.replace(java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD), "")
             val sb = StringBuilder(s.length)
             var space = true

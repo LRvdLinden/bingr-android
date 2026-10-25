@@ -143,6 +143,16 @@ fun ManageCategoriesScreen(onClose: () -> Unit) {
     fun set(list: List<String>, on: Boolean) = Store.setCategoriesHidden(list.flatMap { keysOf(it) }, hidden = !on)
     fun from(g: String): String? = if (servers.size < 2) null
         else (byName[g] ?: emptyList()).mapNotNull { id -> servers.firstOrNull { it.id == id }?.name }.joinToString(", ")
+    // build 150: één regel per opgeschoonde naam ("| NL | NETFLIX" + "| MULTI | NETFLIX" = "Netflix"); aan/uit zet alle
+    // onderliggende bronnen tegelijk (de sleutels blijven per bron: `server|exacte naam`)
+    val rows = remember(groups) { Build150Logic.Merge.groups(groups) }
+    fun rowOn(r: Build150Logic.Merge.Group) = r.sources.all { isOn(it) }
+    fun rowSubtitle(r: Build150Logic.Merge.Group): String? {
+        val parts = ArrayList<String>(2)
+        if (r.tags.isNotEmpty()) parts += Build150Logic.Merge.chips(r.tags, 4)
+        r.sources.mapNotNull { from(it) }.flatMap { it.split(", ") }.distinct().joinToString(", ").takeIf { it.isNotEmpty() }?.let { parts += it }
+        return parts.filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { null }
+    }
 
     S2Page(L("Categories"), onClose = onClose) {
         item { S2Segments(s2KindOptions, kind) { kind = it; filter = "" } }
@@ -166,16 +176,17 @@ fun ManageCategoriesScreen(onClose: () -> Unit) {
             }
             item { S2Footer(L("Tap a code to turn all its categories on or off at once.")) }
         }
-        item { S2Header(L("Categories (%d)", groups.size)) }
+        item { S2Header(L("Categories (%d)", rows.size)) }
         item {
             Row(Modifier.s2Cell(0, 2).padding(horizontal = 4.dp)) {
                 Box(Modifier.weight(1f)) { S2Row(L("All on"), tint = Theme.red, onClick = { set(groups, true) }) }
                 Box(Modifier.weight(1f)) { S2Row(L("All off"), tint = Theme.red, onClick = { set(groups, false) }) }
             }
         }
-        itemsIndexed(groups) { i, g ->
-            Column(Modifier.s2Cell(i + 1, groups.size + 1)) {
-                S2Toggle(c.renamed[Customization.groupKey(g)] ?: g, isOn(g), subtitle = from(g)) { set(listOf(g), it) }
+        itemsIndexed(rows) { i, r ->
+            Column(Modifier.s2Cell(i + 1, rows.size + 1)) {
+                val title = if (r.sources.size == 1) c.renamed[Customization.groupKey(r.sources[0])] ?: r.name else r.name
+                S2Toggle(title, rowOn(r), subtitle = rowSubtitle(r)) { set(r.sources, it) }
             }
         }
         item { S2Footer(L("Categories that are off don't appear anywhere in the app. Saved for your whole account (all profiles except kids profiles), for all your servers.")) }
@@ -260,7 +271,8 @@ fun ManageScreen(onClose: () -> Unit) {
         }
     }
     val merged = raw.filter { c.merged[it] != null }
-    fun display(g: String) = c.renamed[Customization.groupKey(g)] ?: g
+    // build 150: opgeschoonde naam; de originele naam staat eronder
+    fun display(g: String) = c.renamed[Customization.groupKey(g)] ?: ContentLanguage.categoryTitle(g)
     fun update(change: (Customization) -> Customization) { pid?.let { Store.updateCustomization(it, change) } }
     fun moveGroup(g: String, step: Int) {
         val i = groups.indexOf(g); if (i < 0) return

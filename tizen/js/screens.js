@@ -741,7 +741,7 @@
       var meta = [];
       if (x.year) meta.push(String(x.year));
       if (x.rating) meta.push('★ ' + (Math.round(x.rating * 10) / 10));
-      if (x.group) meta.push(x.group);
+      if (x.group) meta.push(Lib.groupTitle(x.group));
       var metaEl = h('div.hero-meta', meta.join('  ·  '));
       // build 102: IMDb-badge, genre en speelduur uit de metadata (= HeroBanner op tvOS), op de achtergrond
       if (B.parity) setTimeout(function () { B.parity.heroMeta(x, hf.type, metaEl); }, 0);
@@ -836,12 +836,13 @@
         'series': function () { return rowBlock(L('Series'), lib.series.slice(0, 30).map(function (s) { return posterCard(s, 'series'); }), null, seeAll(L('Series'), entries(lib.series, 'series'))); },
         'categories': function () {
           var out = [];
-          var mg = Lib.byGroup('movie'), sg = Lib.byGroup('series');
-          lib.movieGroups.slice(0, 8).forEach(function (g) {
+          // build 150: rijen per opgeschoonde naam samengevoegd en ontdubbeld
+          var MG = Lib.mergedGroups('movie'), SG = Lib.mergedGroups('series'), mg = MG.items, sg = SG.items;
+          MG.names.slice(0, 8).forEach(function (g) {
             var r = rowBlock(g, (mg[g] || []).slice(0, 30).map(function (m) { return posterCard(m, 'movie'); }), null, seeAll(g, entries(mg[g] || [], 'movie')));
             if (r) out.push(r);
           });
-          lib.seriesGroups.slice(0, 6).forEach(function (g) {
+          SG.names.slice(0, 6).forEach(function (g) {
             var r = rowBlock(g, (sg[g] || []).slice(0, 30).map(function (s) { return posterCard(s, 'series'); }), null, seeAll(g, entries(sg[g] || [], 'series')));
             if (r) out.push(r);
           });
@@ -1145,7 +1146,8 @@
       // build 102: Evenementen (PPV/EVENT, op begintijd) en je collecties met zenders (= LiveTVView op tvOS)
       if (B.parity && B.parity.events().length) out.push({ key: '⚡', label: '⚡ ' + L('Events') });
       channelCollections().forEach(function (c) { out.push({ key: '▤' + c.id, label: '▤ ' + c.name }); });
-      lib.channelGroups.forEach(function (g) { out.push({ key: g, label: g }); });
+      // build 150: groepen met dezelfde opgeschoonde naam samen ("NL | SPORT" + "Sport [NL]" = "Sport")
+      Lib.mergedGroups('channel').names.forEach(function (g) { out.push({ key: g, label: g }); });
       return out;
     }
     function channelCollections() {
@@ -1173,7 +1175,7 @@
       }
       var coll = collectionFor(key);
       if (coll) return Lib.collectionItems(coll, 500).filter(function (x) { return x.type === 'channel'; }).map(function (x) { return x.item; });
-      return Lib.byGroup('channel')[key] || [];
+      return Lib.mergedGroups('channel').items[key] || Lib.byGroup('channel')[key] || [];
     }
     var selectSoon = B.debounce(function (key) { if (currentGroup !== key) selectGroup(key); }, 220);
     function renderGroups() {
@@ -1482,7 +1484,8 @@
     var list = [], groupKey = null, grid = null;
     var COLS = 5, CW = 238, CH = 345;
     function items() { return type === 'movie' ? Lib.lib.movies : Lib.lib.series; }
-    function groups() { return type === 'movie' ? Lib.lib.movieGroups : Lib.lib.seriesGroups; }
+    // build 150: groepen per opgeschoonde naam samengevoegd (Lib.mergedGroups)
+    function groups() { return Lib.mergedGroups(type).names; }
     var selectSoon = B.debounce(function (key) { if (groupKey !== key) select(key); }, 220);
     function render() {
       U.clear(groupsEl.track); U.clear(gridBox); grid = null;
@@ -1515,7 +1518,7 @@
       var all = items();
       var coll = String(key).charAt(0) === '▤' ? collectionById(key.slice(1)) : null;
       list = key === '*' ? all : key === '+' ? Lib.recent(all, 60) : coll ? Lib.collectionItems(coll, 2000).filter(function (x) { return x.type === type; }).map(function (x) { return x.item; })
-        : (Lib.byGroup(type)[key] || []);
+        : (Lib.mergedGroups(type).items[key] || Lib.byGroup(type)[key] || []);
       if (B.parity) list = B.parity.sort(list, sort);
       count.textContent = list.length ? '  ' + list.length : '';
       if (!grid) {
@@ -1730,7 +1733,8 @@
     var el = layer('detail', [bg, h('div.dt-shade'), body]);
     var alive = true;
     var episodes = [], season = null, currentEp = null;
-    var stremio = Lib.source && Lib.source.kind === 'Stremio';
+    // build 150: ook een Stremio-titel uit het zoeken via add-ons van een andere bron (x._src)
+    var stremio = (Lib.source && Lib.source.kind === 'Stremio') || !!(x && x._src && (D.sourceById(x._src) || {}).kind === 'Stremio');
 
     // MARK: trailer in de kop (build 82, = Android/iOS en bingr.online/movie/…)
     // Na 1,5 s zonder geluid in de achtergrond (YouTube-embed, youtube-nocookie), pas zichtbaar als hij echt speelt.
@@ -1874,7 +1878,7 @@
       if (x.year) parts.push(String(x.year));
       if (x.rating) parts.push('★ ' + (Math.round(x.rating * 10) / 10));
       if (extra) parts = parts.concat(extra);
-      if (x.group) parts.push(x.group);
+      if (x.group) parts.push(Lib.groupTitle(x.group));
       if (type === 'movie' && B.trakt.isMovieWatched(x)) parts.push('✓ Trakt');
       var ar = B.ageRatings.cached(x.rawTitle || x.title, x.year, type === 'series');
       if (ar && ar.age != null) parts.push(ar.age + '+');
@@ -1908,7 +1912,7 @@
       if (!versions.length) { U.toast(L('No other language version found.')); return; }
       U.choose(L('Other language'), versions.map(function (v, i) {
         var y = v.item.year ? ' (' + v.item.year + ')' : '';
-        return { value: i, label: v.label + '  ·  ' + v.item.title + y + (v.item.group ? '  ·  ' + v.item.group : '') };
+        return { value: i, label: v.label + '  ·  ' + v.item.title + y + (v.item.group ? '  ·  ' + Lib.groupTitle(v.item.group) : '') };
       }), null, function (i) { U.push(S.detail(type, versions[i].item)); });
     }
 
@@ -2668,13 +2672,29 @@
       if (D.sources.length < 2) return '';
       return g.sids.map(function (id) { var s = D.sourceById(id); return s ? s.name : ''; }).filter(Boolean).join(', ');
     }
+    // build 150: één regel per opgeschoonde naam ("| NL | NETFLIX" + "| MULTI | NETFLIX" = "Netflix"); aan/uit zet alle
+    // onderliggende bronnen tegelijk (de sleutels blijven per bron: server|exacte naam)
+    function rowsOf(gs) {
+      var X5 = B.b150;
+      if (!X5) return gs.map(function (g) { return { name: g.name, parts: [g], tags: [] }; });
+      var byName = {};
+      gs.forEach(function (g) { byName[g.name] = g; });
+      return X5.merge.groups(gs.map(function (g) { return g.name; })).map(function (m) {
+        return { name: m.name, parts: m.sources.map(function (n) { return byName[n]; }), tags: m.tags };
+      });
+    }
+    function rowOn(r) { return r.parts.every(isOn); }
     var scr = listScreen(L('Categories'), function () {
-      return allGroups(kind).then(function (gs) { groups = gs; return { items: gs, header: L('Categories (%d)', gs.length) }; });
-    }, function (g, refresh) {
-      var sub = serverNames(g);
-      var val = h('div.st-value', isOn(g) ? L('On') : L('Off'));
-      var r = h('div.st-row.f', [h('div.st-label', [h('div', g.name || '—'), sub ? h('div.dim', sub) : null]), val]);
-      r.onEnter = function () { set([g], !isOn(g), refresh, true); val.textContent = isOn(g) ? L('On') : L('Off'); };
+      return allGroups(kind).then(function (gs) { groups = gs; var rows = rowsOf(gs); return { items: rows, header: L('Categories (%d)', rows.length) }; });
+    }, function (row, refresh) {
+      var subs = [];
+      if (row.tags.length) subs.push(B.b150.merge.chips(row.tags, 4));
+      var sv = row.parts.map(serverNames).filter(Boolean).join(', ');
+      if (sv) subs.push(sv.split(', ').filter(function (x, i, a) { return a.indexOf(x) === i; }).join(', '));
+      var sub = subs.join(' · ');
+      var val = h('div.st-value', rowOn(row) ? L('On') : L('Off'));
+      var r = h('div.st-row.f', [h('div.st-label', [h('div', row.name || '—'), sub ? h('div.dim', sub) : null]), val]);
+      r.onEnter = function () { set(row.parts, !rowOn(row), refresh, true); val.textContent = rowOn(row) ? L('On') : L('Off'); };
       return r;
     }, L('No categories'), function (track, refresh) {
       var kinds = h('div.cat-kinds.fm', [['live', L('Live TV')], ['movies', L('Movies')], ['series', L('Series')]].map(function (k) {

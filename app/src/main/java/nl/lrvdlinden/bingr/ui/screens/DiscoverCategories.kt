@@ -48,7 +48,8 @@ fun DiscoverCategoriesRow() {
     val kids = Store.activeProfile?.kids == true
     val tiles = remember(index, kids) {
         val ok = index.server.filter { it.second.count(Filter.ALL) >= Build149Logic.Discover.MIN_ITEMS && it.second.posters(Filter.ALL).size >= 3 }
-        if (kids && ok.any { !Build140Logic.Kids.isKidsCategory(it.first) }) emptyList()
+        // build 150: index.server is al samengevoegd op de opgeschoonde naam (één tegel "Netflix"); kinderprofiel per bron
+        if (kids && ok.any { (n, m) -> m.sources.ifEmpty { listOf(n) }.any { !Build140Logic.Kids.isKidsCategory(it) } }) emptyList()
         else ok.sortedByDescending { it.second.count(Filter.ALL) }.take(Build149Logic.Discover.MAX)
     }
     if (tiles.isEmpty()) return
@@ -56,9 +57,11 @@ fun DiscoverCategoriesRow() {
     val width = tvs(if (AppState.isTV) 260 else 220)
     MediaRow(L("Discover categories")) {
         items(tiles, key = { "dc|" + it.first }) { (name, m) ->
-            val title = ContentLanguage.displayTitle(name).ifBlank { name }
-            val logo = Build149Logic.Discover.providerFor(title, logos)?.let { logos[it] }
-            DiscoverCategoryTile(title, m.posters(Filter.ALL), logo, Color(Build149Logic.Discover.colorFor(title)), Modifier.width(width)) {
+            val title = ContentLanguage.categoryTitle(name).ifBlank { name }
+            // build 150: logo op de opgeschoonde naam, met de betere alias-tabel
+            val logo = Build150Logic.Logos.providerFor(title, logos)?.let { logos[it] }
+            DiscoverCategoryTile(title, m.posters(Filter.ALL), logo, Color(Build149Logic.Discover.colorFor(title)), Modifier.width(width),
+                chips = Build150Logic.Merge.chips(m.tags, 2)) {
                 ScreensNav.push(ScreenEntry.CategoryPage(CategoryRef(null, name), Filter.ALL))
             }
         }
@@ -66,7 +69,7 @@ fun DiscoverCategoriesRow() {
 }
 
 @Composable
-private fun DiscoverCategoryTile(title: String, posters: List<String>, logo: String?, bar: Color, modifier: Modifier, onClick: () -> Unit) {
+private fun DiscoverCategoryTile(title: String, posters: List<String>, logo: String?, bar: Color, modifier: Modifier, chips: String = "", onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(tvs(10))
     Column(
@@ -91,11 +94,15 @@ private fun DiscoverCategoryTile(title: String, posters: List<String>, logo: Str
                 RemoteImage(logo, Modifier.padding(horizontal = tvs(12), vertical = tvs(8)).height(tvs(38)).width(tvs(38)).clip(RoundedCornerShape(tvs(8))),
                     fit = true, contentDescription = title)
                 Text(title, color = Color.White, fontSize = tsp(17), fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = tvs(60), end = tvs(10)))
+                    modifier = Modifier.padding(start = tvs(60), end = tvs(if (chips.isNotEmpty()) 70 else 10)))
             } else {
                 Text(title, color = Color.White, fontSize = tsp(19), fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = tvs(12)))
+                    modifier = Modifier.padding(start = tvs(12), end = tvs(if (chips.isNotEmpty()) 70 else 12)))
             }
+            // build 150: talen van de samengevoegde bronnen als klein label ("NL · Multi")
+            if (chips.isNotEmpty()) Text(chips, color = Color.White.copy(alpha = 0.8f), fontSize = tsp(11), fontWeight = FontWeight.Bold, maxLines = 1,
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = tvs(10)).clip(RoundedCornerShape(50))
+                    .background(Color.Black.copy(alpha = 0.25f)).padding(horizontal = tvs(7), vertical = tvs(2)))
         }
     }
 }

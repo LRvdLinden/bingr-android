@@ -264,13 +264,19 @@
     if (!/manifest\.json/.test(m)) m = m.replace(/\/+$/, '') + '/manifest.json';
     return getJSON(m, null, 20000).then(function (o) {
       var resources = list(o, 'resources').map(function (r) { return typeof r === 'string' ? r : r && r.name; }).filter(Boolean);
-      var catalogs = list(o, 'catalogs').filter(function (c) {
-        if (!c || !c.type || !c.id) return false;
-        if (list(c, 'extra').some(function (e) { return e && e.isRequired === true; })) return false;
-        return !list(c, 'extraRequired').length;
-      }).map(function (c) { return { type: c.type, id: c.id, name: c.name || c.id }; });
+      // build 150: ook de zoekcatalogi (extra "search", eventueel verplicht) apart, voor zoeken via de add-ons
+      var catalogs = [], searchCatalogs = [];
+      list(o, 'catalogs').forEach(function (c) {
+        if (!c || !c.type || !c.id) return;
+        var extra = list(c, 'extra');
+        var req = extra.filter(function (e) { return e && e.isRequired === true; }).map(function (e) { return e.name; }).concat(list(c, 'extraRequired'));
+        var canSearch = extra.some(function (e) { return e && e.name === 'search'; }) || list(c, 'extraSupported').indexOf('search') >= 0;
+        var entry = { type: c.type, id: c.id, name: c.name || c.id };
+        if (canSearch && req.every(function (n) { return n === 'search'; })) searchCatalogs.push(entry);
+        if (!req.length) catalogs.push(entry);
+      });
       return { base: m.replace('/manifest.json', ''), name: o.name || 'Addon', resources: resources,
-        types: list(o, 'types').map(String), catalogs: catalogs };
+        types: list(o, 'types').map(String), catalogs: catalogs, searchCatalogs: searchCatalogs };
     }, function () { return null; });
   };
   /** Add-ons van een Stremio-bron: account-add-ons (authKey in secrets.password) + eigen URL's (m3uURL), altijd Cinemeta. */
@@ -314,6 +320,42 @@
         });
       });
       return { channels: [], movies: movies, series: series, epg: {} };
+    });
+  };
+  /**
+   * Build 150: zoeken via de zoekcatalogi van de add-ons (= StremioClient.search op Android): hooguit 6 catalogi, elk 6 s.
+   * Zelfde items als library() (alleen IMDb-id's), per soort één keer.
+   */
+  Stremio.prototype.search = function (q) {
+    var enc = encodeURIComponent(String(q || '').trim()), jobs = [];
+    if (!enc) return Promise.resolve({ movies: [], series: [] });
+    this.addons.forEach(function (a) {
+      if (a.resources.indexOf('catalog') < 0) return;
+      (a.searchCatalogs || []).filter(function (c) { return c.type === 'movie' || c.type === 'series'; }).forEach(function (c) { jobs.push({ a: a, c: c }); });
+    });
+    var moviesL = L('Movies'), seriesL = L('Series');
+    return Promise.all(jobs.slice(0, 6).map(function (j) {
+      return getJSON(j.a.base + '/catalog/' + j.c.type + '/' + j.c.id + '/search=' + enc + '.json', null, 6000)
+        .then(function (r) { return { cat: j.c, metas: list(r, 'metas') }; }, function () { return { cat: j.c, metas: [] }; });
+    })).then(function (res) {
+      var movies = [], series = [], seen = {};
+      res.forEach(function (r) {
+        var group = r.cat.name + ' · ' + (r.cat.type === 'movie' ? moviesL : seriesL);
+        r.metas.forEach(function (m) {
+          var id = m && m.id ? String(m.id) : '';
+          if (id.indexOf('tt') !== 0 || seen[r.cat.type + id]) return;
+          seen[r.cat.type + id] = true;
+          var year = m.releaseInfo ? B.int(String(m.releaseInfo).slice(0, 4)) : null;
+          if (r.cat.type === 'movie') {
+            movies.push({ id: 'sm' + id + '-' + r.cat.id, title: m.name || '?', year: year, poster: urlValue(m.poster), group: group,
+              imdbID: id, rating: num(m.imdbRating), plot: m.description || null, stremio: 'movie|' + id });
+          } else {
+            series.push({ id: 'ss' + id + '-' + r.cat.id, title: m.name || '?', year: year, poster: urlValue(m.poster), group: group,
+              imdbID: id, plot: m.description || null, rating: num(m.imdbRating), remoteID: id, episodes: [] });
+          }
+        });
+      });
+      return { movies: movies, series: series };
     });
   };
   Stremio.prototype.episodes = function (series) {

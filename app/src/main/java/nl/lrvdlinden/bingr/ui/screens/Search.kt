@@ -130,15 +130,20 @@ private fun looseFold(s: String): String {
 private fun categoryHits(q: String, lib: Library): List<GroupHit> {
     val t = screensFold(q.trim())
     val out = ArrayList<GroupHit>()
-    val mg = lib.movieGroups.filter { screensFold(it).contains(t) }.take(30).toSet()
-    val sg = lib.seriesGroups.filter { screensFold(it).contains(t) }.take(30).toSet()
+    // build 150: zoeken op de opgeschoonde naam, dezelfde naam (over talen en kwaliteit heen) als één treffer
+    val mg = Build150Logic.Merge.groups(lib.movieGroups).filter { screensFold(it.name).contains(t) }.take(30)
+    val sg = Build150Logic.Merge.groups(lib.seriesGroups).filter { screensFold(it.name).contains(t) }.take(30)
     if (mg.isNotEmpty()) {
-        val by = lib.movies.filter { it.group in mg }.groupBy { it.group }
-        for (g in lib.movieGroups) if (g in mg) out.add(GroupHit(g, by[g].orEmpty().map { DetailTarget.MovieT(it) }))
+        val want = mg.flatMapTo(HashSet()) { it.sources }
+        val by = lib.movies.filter { it.group in want }.groupBy { it.group }
+        for (g in mg) out.add(GroupHit(g.name, Build150Logic.Merge.dedupe(g.sources.flatMap { by[it].orEmpty() }, { it.imdbID }, { it.title }, { it.year })
+            .map { DetailTarget.MovieT(it) }))
     }
     if (sg.isNotEmpty()) {
-        val by = lib.series.filter { it.group in sg }.groupBy { it.group }
-        for (g in lib.seriesGroups) if (g in sg) out.add(GroupHit(g, by[g].orEmpty().map { DetailTarget.SeriesT(it) }))
+        val want = sg.flatMapTo(HashSet()) { it.sources }
+        val by = lib.series.filter { it.group in want }.groupBy { it.group }
+        for (g in sg) out.add(GroupHit(g.name, Build150Logic.Merge.dedupe(g.sources.flatMap { by[it].orEmpty() }, { it.imdbID }, { it.title }, { it.year })
+            .map { DetailTarget.SeriesT(it) }))
     }
     return out.take(30)
 }

@@ -79,7 +79,7 @@ private fun s2LiveGroupTitle(g: String): String = when {
     g == S2_ALL_KEY -> L("All channels")
     g == S2_EVENTS_KEY -> "⚑ " + L("Events")
     g.startsWith(S2_COLLECTION_PREFIX) -> "▣ " + (Collections.byID(g.removePrefix(S2_COLLECTION_PREFIX))?.name ?: "")
-    else -> g
+    else -> ContentLanguage.categoryTitle(g)
 }
 
 /**
@@ -116,9 +116,13 @@ fun LiveTVScreen() {
     // collecties met zenders als groepen
     val visibleCollections = Collections.visible
     val channelCollections = remember(visibleCollections) { visibleCollections.filter { Collections.mayHaveChannels(it) } }
+    // build 150: zendergroepen met dezelfde opgeschoonde naam ("NL | SPORT", "Sport [NL]") samen als één groep
+    val mergedGroups = remember(libKey) {
+        Build150Logic.Merge.groups(lib.channelGroups).associate { it.name to it.sources.toHashSet() }
+    }
     val groups = remember(libKey, events.isNotEmpty(), channelCollections) {
         listOf(S2_ALL_KEY, S2_FAV_KEY, S2_RECENT_KEY) + (if (events.isNotEmpty()) listOf(S2_EVENTS_KEY) else emptyList()) +
-            channelCollections.map { S2_COLLECTION_PREFIX + it.id } + lib.channelGroups
+            channelCollections.map { S2_COLLECTION_PREFIX + it.id } + mergedGroups.keys
     }
     val current = if (group in groups) group else S2_ALL_KEY
     val favorites = Store.favorites
@@ -145,7 +149,7 @@ fun LiveTVScreen() {
             current == S2_ALL_KEY -> lib.channels
             current == S2_EVENTS_KEY -> events.map { it.first }
             current.startsWith(S2_COLLECTION_PREFIX) -> collectionChannels?.takeIf { it.first == current }?.second ?: emptyList()
-            else -> lib.channels.filter { it.group == current }
+            else -> mergedGroups[current]?.let { set -> lib.channels.filter { it.group in set } } ?: lib.channels.filter { it.group == current }
         }
     }
     var collectFor by remember { mutableStateOf<Channel?>(null) }
@@ -473,7 +477,7 @@ private fun S2EventRow(channel: Channel, ev: EventInfo, onClick: () -> Unit, onL
             Text(ev.title, color = if (ev.isExpired) Theme.secondary else Color.White, fontSize = tsp(15), fontWeight = FontWeight.Bold,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(2.dp))
-            Text(ev.start?.let { EventParser.startText(it) } ?: channel.group, color = Theme.secondary, fontSize = tsp(12), maxLines = 1)
+            Text(ev.start?.let { EventParser.startText(it) } ?: ContentLanguage.categoryTitle(channel.group), color = Theme.secondary, fontSize = tsp(12), maxLines = 1)
         }
         if (ev.isLive && !ev.isExpired) {
             Spacer(Modifier.width(8.dp))

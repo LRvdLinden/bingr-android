@@ -131,9 +131,14 @@ class HomeIndex(
             for (m in movieByID.values) { val a = m.addedAt; if (a != null && a >= cutoff) fresh.add(DetailTarget.MovieT(m) to a) }
             for (x in seriesByID.values) { val a = x.addedAt; if (a != null && a >= cutoff) fresh.add(DetailTarget.SeriesT(x) to a) }
             val recentTitles = fresh.sortedByDescending { it.second }.take(30).map { it.first }
+            // build 150: rijen per categorie op de opgeschoonde naam samengevoegd ("| NL | NETFLIX" + "MULTI | Netflix" =
+            // één rij "Netflix"), de inhoud ontdubbeld, de bron in de voorkeurstaal eerst
+            val pref = ContentLanguage.preferredSourceLanguages
+            val mMerged = Build150Logic.Merge.merge(mGroups.map { it.key to it.value }, pref, { it.imdbID }, { it.title }, { it.year })
+            val sMerged = Build150Logic.Merge.merge(sGroups.map { it.key to it.value }, pref, { it.imdbID }, { it.title }, { it.year })
             return HomeIndex(
-                movieGroups = mGroups.map { e -> Pair<String, List<Movie>>(e.key, e.value) },
-                seriesGroups = sGroups.map { e -> Pair<String, List<Series>>(e.key, e.value) },
+                movieGroups = mMerged.map { e -> Pair<String, List<Movie>>(e.name, e.items) },
+                seriesGroups = sMerged.map { e -> Pair<String, List<Series>>(e.name, e.items) },
                 recent = recent, movieByID = movieByID, seriesByID = seriesByID, channelByID = channelByID,
                 movieByIMDb = movieByIMDb, seriesByTitle = seriesByTitle, recentTitles = recentTitles,
             )

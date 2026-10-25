@@ -288,14 +288,15 @@
     function got(l) { if (++arrived === 3 && hooks.fetched) { try { hooks.fetched(); } catch (e) { /* stil */ } } return l; }
     // build 149: items uit verborgen categorieën (hooks.hidden(naam)) niet inlezen, alleen tellen (lib.hiddenGroups); de
     // Worker laat ze al weg op category_id zodra de categorieën binnen zijn
-    var X9 = B.b149, hiddenGroups = {};
+    var X9 = B.b149, hiddenGroups = {}, hiddenIndex = {};
     function skipFor(ci) {
       if (!hooks.hidden) return null;
       return cats.then(function (c) {
         var ids = {}, map = c[ci], any = false;
         Object.keys(map).forEach(function (id) { if (hooks.hidden(map[id])) { ids[id] = true; any = true; } });
         if (hooks.hidden(other)) { ids[''] = true; any = true; }
-        return any ? { field: 'category_id', ids: ids } : null;
+        // build 150: van films en series ook de namen (compacte index: zoeken in verborgen categorieën)
+        return any ? { field: 'category_id', ids: ids, name: ci > 0 ? 'name' : null } : null;
       });
     }
     var tooLarge = false;
@@ -306,6 +307,17 @@
           var g = prefix + '|' + (map[id] || other);
           hiddenGroups[g] = (hiddenGroups[g] || 0) + list.skipped[id];
         });
+        // build 150: compacte zoekindex van wat niet is ingelezen: namen + categorie als nummer (geen objecten per item)
+        if (list.skippedNames && list.skippedNames.length) {
+          var gi = {}, gs = [], gn = new Array(list.skippedCats.length);
+          for (var q = 0; q < list.skippedCats.length; q++) {
+            var cn = map[list.skippedCats[q]] || other;
+            if (gi[cn] == null) { gi[cn] = gs.length; gs.push(cn); }
+            gn[q] = gi[cn];
+          }
+          hiddenIndex[prefix] = { n: list.skippedNames, g: gn, gs: gs };
+          list.skippedNames = null; list.skippedCats = null;
+        }
         var n = 0;
         return B.chunked(list, function (x) {
           // build 149: geheugengrens (tv): netjes stoppen in plaats van wegvallen
@@ -323,7 +335,7 @@
       kind('get_live_streams', KEYS_LIVE, 0, self.channelOf, 'live'),
       kind('get_vod_streams', KEYS_VOD, 1, self.movieOf, 'movie'),
       kind('get_series', KEYS_SERIES, 2, self.seriesOf, 'series')
-    ]).then(function (r) { return { channels: r[0], movies: r[1], series: r[2], epg: {}, hiddenGroups: hiddenGroups }; });
+    ]).then(function (r) { return { channels: r[0], movies: r[1], series: r[2], epg: {}, hiddenGroups: hiddenGroups, hiddenIndex: hiddenIndex }; });
   };
   /** Live-zenders uit get_live_streams (build 97: ook los gebruikt voor de reservebron). */
   Xtream.prototype.mapLive = function (list, lc, other) {

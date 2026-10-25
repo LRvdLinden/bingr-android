@@ -25,7 +25,7 @@
   X.onlyLibrary = function (kind) { return kind === 'streaming'; };
   /** Build 112: bronvermelding van TMDB en JustWatch, één keer in Instellingen → Over (niet meer onder de rijen). */
   X.attribution = function () {
-    return L('Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Availability data: JustWatch.');
+    return L('Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.');
   };
 
   // MARK: id's ("tmdb-movie-123" / "tmdb-tv-123", zelfde als de apps; ook in Mijn lijst)

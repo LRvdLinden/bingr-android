@@ -927,3 +927,7 @@ html.mv-hole .layer.multiview { background: transparent; }
 .dc-name { color: #fff; font-size: 30px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dc-name.dc-small { font-size: 24px; margin-left: 14px; }
 .dc-logo { width: 56px; height: 56px; border-radius: 10px; object-fit: contain; -webkit-flex: 0 0 auto; flex: 0 0 auto; }
+/* build 150: talen van samengevoegde bronnen ("NL · Multi") */
+.dc-chips { margin-left: auto; padding: 3px 10px; border-radius: 14px; background: rgba(0,0,0,0.28); color: rgba(255,255,255,0.85);
+  font-size: 18px; font-weight: 700; white-space: nowrap; -webkit-flex: 0 0 auto; flex: 0 0 auto; }
+.dc-name { min-width: 0; }

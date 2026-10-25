@@ -132,11 +132,18 @@ jobs:
             echo "::notice title=Unit-tests build 148::$(grep -E '^(geheugen|toewijzen|37k)' "$RUNNER_TEMP/b148-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b148-test.txt")"
             # build 149: datums zonder opmaker per item, streamend inlezen, verborgen categorieën alleen tellen, Ontdek
             # categorieën, zoeken op woorden; belastingtest 123k films + 30k series + 12k zenders met 80% verborgen (vóór/na)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt \
+            # (sinds build 150 met Build150Logic.kt: het zoeken gebruikt de opschoning van de categorienamen)
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
               tools/test/Build149LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b149-test.jar" 2>&1 | grep -v '^warning' || true
             java -Xmx1500m -jar "$RUNNER_TEMP/b149-test.jar" | tee "$RUNNER_TEMP/b149-test.txt"; rc11=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 149::$(grep -E '^(geheugen|datums|zoeken)' "$RUNNER_TEMP/b149-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b149-test.txt")"
-            [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
+            # build 150: categorienamen opschonen (taal/land/kwaliteit in elke vorm), samenvoegen en ontdubbelen, logo's
+            # (gedeelde gevallen in tools/test/build150_cases.json, ook voor tizen/test/build150_test.js)
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
+              tools/test/Build150LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b150-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b150-test.jar" tools/test/build150_cases.json | tee "$RUNNER_TEMP/b150-test.txt"; rc12=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 150::$(grep -E '^opschonen' "$RUNNER_TEMP/b150-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b150-test.txt")"
+            [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi
@@ -559,6 +566,9 @@ jobs:
           # build 149: datums, verborgen categorieën overslaan (Worker), Ontdek categorieën, zoeken; 123k/30k/12k met 80% verborgen
           node --max-old-space-size=2048 tizen/test/build149_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b149.log"
           echo "::notice title=Logica-tests build 149 (Samsung TV)::$(grep -E '^(geheugen|datums|zoeken)' "$RUNNER_TEMP/tlogs/b149.log" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/tlogs/b149.log")"
+          # build 150: categorienamen opschonen, samenvoegen en ontdubbelen, logo's (zelfde gevallen als Android)
+          node tizen/test/build150_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b150.log"
+          echo "::notice title=Logica-tests build 150 (Samsung TV)::$(grep -E '^opschonen' "$RUNNER_TEMP/tlogs/b150.log" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/tlogs/b150.log")"
 
       - name: Tizen Studio CLI uit de cache
         id: cache

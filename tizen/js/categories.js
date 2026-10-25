@@ -103,14 +103,33 @@
         }
       }
     }
+    // build 150: categorieën van de server per opgeschoonde naam samen ("| NL | NETFLIX" + "| MULTI / LINGO | NETFLIX" =
+    // één categorie "Netflix"); byName kent de getoonde naam én elke originele naam (oude verwijzingen blijven werken)
+    var X5 = B.b150, rawOf = {}, rawOrder = [];
     function addServer(x, isShow) {
       if (!x.group) return;
-      var m = byName[x.group];
-      if (!m) { m = byName[x.group] = new Members(); server.push({ name: x.group, m: m }); }
-      (isShow ? m.series : m.movies).push(x);
+      var r = rawOf[x.group];
+      if (!r) { r = rawOf[x.group] = { movies: [], series: [] }; rawOrder.push(x.group); }
+      (isShow ? r.series : r.movies).push(x);
     }
     lib.movies.forEach(function (x) { addGenres(x, false); addServer(x, false); });
     lib.series.forEach(function (x) { addGenres(x, true); addServer(x, true); });
+    var groups = X5 ? X5.merge.groups(rawOrder) : rawOrder.map(function (n) { return { key: n, name: n, sources: [n], tags: [] }; });
+    var CL = B.clang, pref = [];
+    try { if (CL) { var a = CL.preferredAudio && CL.preferredAudio(), l = CL.appLanguage && CL.appLanguage(); if (a) pref.push(a); if (l) pref.push(l); } } catch (e) { pref = []; }
+    function idOf(x) { return x.imdbID || x.tmdbID || null; }
+    function titleOf(x) { return x.title; }
+    function yearOf(x) { return x.year; }
+    groups.forEach(function (g) {
+      var m = new Members();
+      var src = g.sources.length > 1 ? X5.merge.preferSources(g.sources, pref) : g.sources;
+      src.forEach(function (n) { m.movies = m.movies.concat(rawOf[n].movies); m.series = m.series.concat(rawOf[n].series); });
+      if (src.length > 1) { m.movies = X5.merge.dedupe(m.movies, idOf, titleOf, yearOf); m.series = X5.merge.dedupe(m.series, idOf, titleOf, yearOf); }
+      m.sources = src; m.tags = g.tags;
+      server.push({ name: g.name, m: m });
+      byName[g.name] = m;
+      src.forEach(function (n) { if (!byName[n]) byName[n] = m; });
+    });
     var idx = { genres: genres, server: server, byName: byName };
     memo = { key: key, idx: idx };
     return idx;
@@ -119,7 +138,9 @@
     var idx = index();
     return ref.genre ? idx.genres[ref.genre] || null : idx.byName[ref.server] || null;
   }
-  function refTitle(ref) { return ref.genre ? L(BY_SLUG[ref.genre].name) : ref.server; }
+  function refTitle(ref) { return ref.genre ? L(BY_SLUG[ref.genre].name) : (B.b150 ? B.b150.cat.display(ref.server) : ref.server); }
+  /** build 150: labels van de samengevoegde bronnen ("NL · Multi"). */
+  function chipsOf(m) { return m && m.tags && m.tags.length && B.b150 ? B.b150.merge.chips(m.tags) : ''; }
   function countText(n) { return n === 1 ? L('1 title') : L('%d titles', n); }
 
   /** Genres van de hele bibliotheek bij TMDB aanvullen (bij een leeftijdsgrens loopt dat al). */
@@ -146,7 +167,7 @@
     });
     return row;
   }
-  function tile(title, count, posters, colors, onEnter) {
+  function tile(title, count, posters, colors, onEnter, chips) {
     var fan = h('div.cat-fan');
     // achterste eerst; de eerste (best beoordeelde) staat vooraan rechts
     for (var i = posters.length - 1; i >= 0; i--) {
@@ -157,7 +178,7 @@
     var t = h('div.cat-tile.f', { style: { background: gradient(colors) } }, [
       fan,
       h('div.cat-shade', { style: { background: 'linear-gradient(90deg, ' + rgba(colors[0], 0.95) + ' 0%, ' + rgba(colors[0], 0.7) + ' 45%, rgba(0,0,0,0) 80%)' } }),
-      h('div.cat-text', [h('div.cat-name', title), h('div.cat-count', countText(count))])
+      h('div.cat-text', [h('div.cat-name', title), h('div.cat-count', countText(count) + (chips ? '  ·  ' + chips : ''))])
     ]);
     t.onEnter = onEnter;
     t._key = 'cat:' + title;
@@ -196,7 +217,7 @@
       var sTiles = [];
       idx.server.forEach(function (s) {
         if (!s.m.count(kind)) return;
-        sTiles.push(tile(s.name, s.m.count(kind), s.m.posters(kind, 3), serverColors(s.name), function () { U.push(S.categoryPage({ server: s.name }, kind)); }));
+        sTiles.push(tile(s.name, s.m.count(kind), s.m.posters(kind, 3), serverColors(s.name), function () { U.push(S.categoryPage({ server: s.name }, kind)); }, chipsOf(s.m)));
       });
       if (sTiles.length) track.appendChild(h('div.cats-sec', [h('div.row-title', L('From your server')), h('div.cats-grid.fm', sTiles)]));
       if (!gTiles.length && !sTiles.length) track.appendChild(h('div.state.dim', L('No titles in this category yet.')));
@@ -289,16 +310,23 @@
     var idx = index();
     var p = B.app && B.app.profile;
     var cats = idx.server.map(function (x) { return { name: x.name, count: x.m.count('all'), posters: x.m.posters('all', 4), m: x.m }; });
-    var pick = X9.discover.pick(cats, !!(p && p.kids), function (n) { return B.b140.isKidsCategory(n); });
+    // build 150: idx.server is al samengevoegd (één tegel "Netflix"); kinderprofiel per bron
+    var pick = X9.discover.pick(cats, !!(p && p.kids), function (n) {
+      var m = idx.byName[n], src = (m && m.sources) || [n];
+      for (var i = 0; i < src.length; i++) if (!B.b140.isKidsCategory(src[i])) return false;
+      return true;
+    });
     if (!pick.length) return null;
     var logos = X9.discover.logos();
     var tiles = pick.map(function (c) {
-      var title = B.parseTitle(c.name).title || c.name;
+      var title = (B.b150 ? B.b150.cat.display(c.name) : B.parseTitle(c.name).title) || c.name;
       var color = X9.discover.colorFor(title);
-      var pk = X9.discover.providerFor(title, logos), logo = pk ? logos[pk] : null;
+      // build 150: logo op de opgeschoonde naam, met de betere alias-tabel
+      var pk = B.b150 ? B.b150.logos.providerFor(title, logos) : X9.discover.providerFor(title, logos), logo = pk ? logos[pk] : null;
+      var chips = chipsOf(c.m);
       var collage = h('div.dc-collage', c.posters.slice(0, 4).map(function (u) { return U.img(u, 'dc-img'); }));
       var bar = h('div.dc-bar', { style: { background: 'linear-gradient(180deg, ' + color + ' 0%, ' + rgba(color, 0.8) + ' 100%)' } },
-        logo ? [U.img(logo, 'dc-logo'), h('div.dc-name.dc-small', title)] : [h('div.dc-name', title)]);
+        (logo ? [U.img(logo, 'dc-logo'), h('div.dc-name.dc-small', title)] : [h('div.dc-name', title)]).concat(chips ? [h('div.dc-chips', chips)] : []));
       var t = h('div.dc-tile.f', { style: { background: color } }, [collage, bar]);
       t.onEnter = function () { U.push(S.categoryPage({ server: c.name }, 'all')); };
       t._key = 'dc:' + c.name;
@@ -347,7 +375,7 @@
     var sort = B.store.get('categories.sort', 'popular');
     var colors = ref.genre ? BY_SLUG[ref.genre].c : serverColors(ref.server);
     var title = h('h1.cp-title', refTitle(ref));
-    var count = h('div.cp-count.dim');
+    var count = h('div.cp-count.dim'), chips = '';
     var controls = h('div.cp-controls');
     var gridBox = h('div.cp-gridbox');
     var el = h('div.layer.catpage', [
@@ -370,7 +398,8 @@
     function draw() {
       members = membersOf(ref);
       list = sortItems(members ? members.items(kind) : [], sort);
-      count.textContent = countText(list.length);
+      chips = chipsOf(members);
+      count.textContent = countText(list.length) + (chips ? '  ·  ' + chips : '');
       drawControls();
       var empty = gridBox.querySelector('.state');
       if (empty) gridBox.removeChild(empty);

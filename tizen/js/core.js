@@ -411,12 +411,17 @@
   }
   function pick(list, keys, skip) {
     // build 149: [skip] = {field, ids}: items van een verborgen categorie niet overnemen, alleen tellen (out.skipped)
-    var out = [], skipped = null;
+    // build 150: [skip.name] = veld met de naam: van overgeslagen items naam + waarde bewaren (compacte zoekindex)
+    var out = [], skipped = null, names = null, ncats = null;
     for (var i = 0; i < list.length; i++) {
       var x = list[i];
       if (skip && x && typeof x === 'object') {
         var sv = x[skip.field] == null ? '' : String(x[skip.field]);
-        if (skip.ids[sv] === true) { skipped = skipped || {}; skipped[sv] = (skipped[sv] || 0) + 1; continue; }
+        if (skip.ids[sv] === true) {
+          skipped = skipped || {}; skipped[sv] = (skipped[sv] || 0) + 1;
+          if (skip.name && x[skip.name] != null) { if (!names) { names = []; ncats = []; } names.push(String(x[skip.name])); ncats.push(sv); }
+          continue;
+        }
       }
       if (!keys || !x || typeof x !== 'object') { out.push(x); continue; }
       var o = {};
@@ -424,6 +429,7 @@
       out.push(o);
     }
     if (skipped) out.skipped = skipped;
+    if (names) { out.skippedNames = names; out.skippedCats = ncats; }
     return out;
   }
   B.pickJSONList = pick;
@@ -442,7 +448,12 @@
         if (!j) return;
         if (m.error) { delete jwJobs[m.id]; clearTimeout(j.timer); j.resolve(null); return; }
         if (m.batch) { for (var i = 0; i < m.batch.length; i++) j.out.push(m.batch[i]); return; }
-        if (m.done) { delete jwJobs[m.id]; clearTimeout(j.timer); if (m.skipped) j.out.skipped = m.skipped; j.resolve(j.out); }
+        if (m.done) {
+          delete jwJobs[m.id]; clearTimeout(j.timer);
+          if (m.skipped) j.out.skipped = m.skipped;
+          if (m.skippedNames) { j.out.skippedNames = m.skippedNames; j.out.skippedCats = m.skippedCats; }
+          j.resolve(j.out);
+        }
       };
       jw.onerror = function () {
         // Worker niet te laden of kapot: alles wat nog loopt op de hoofdthread, en voortaan zonder Worker
@@ -462,7 +473,7 @@
       var id = ++jwSeq;
       var job = jwJobs[id] = { out: [], resolve: resolve, text: text, keys: keys, skip: skip };
       job.timer = setTimeout(function () { if (jwJobs[id]) { delete jwJobs[id]; resolve(parseHere(text, keys, skip)); } }, 90000);
-      try { w.postMessage({ id: id, text: text, keys: keys || null, skipField: skip ? skip.field : null, skip: skip ? skip.ids : null }); }
+      try { w.postMessage({ id: id, text: text, keys: keys || null, skipField: skip ? skip.field : null, skip: skip ? skip.ids : null, skipName: skip && skip.name ? skip.name : null }); }
       catch (e) { delete jwJobs[id]; clearTimeout(job.timer); resolve(parseHere(text, keys, skip)); }
     });
   };

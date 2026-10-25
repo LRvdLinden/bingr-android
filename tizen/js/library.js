@@ -347,6 +347,36 @@
       return m;
     });
   };
+  /**
+   * Build 150: groepen per opgeschoonde naam samen ("| NL | NETFLIX" + "| MULTI / LINGO | NETFLIX" = "Netflix"), voor de
+   * rijen op Home, de groepen bij Films/Series/Live TV en de categorieën. {names, items: naam → lijst (ontdubbeld, bron
+   * in de voorkeurstaal eerst), sources: naam → originele namen, tags: naam → labels}.
+   */
+  Lib.mergedGroups = function (type) {
+    return Lib.memo('merged:' + type, function () {
+      var l = Lib.lib, X5 = B.b150;
+      var raw = (type === 'movie' ? l.movieGroups : type === 'series' ? l.seriesGroups : l.channelGroups) || [];
+      var by = Lib.byGroup(type), out = { names: [], items: {}, sources: {}, tags: {} };
+      var gs = X5 ? X5.merge.groups(raw) : raw.map(function (n) { return { name: n, sources: [n], tags: [] }; });
+      var pref = [];
+      try { if (B.clang) { pref = [B.clang.preferredAudio(), B.clang.appLanguage()].filter(function (x) { return !!x; }); } } catch (e) { pref = []; }
+      gs.forEach(function (g) {
+        var list, src = g.sources;
+        if (src.length === 1) list = by[src[0]] || [];
+        else {
+          src = X5.merge.preferSources(src, pref);
+          list = [];
+          src.forEach(function (s) { list = list.concat(by[s] || []); });
+          if (type !== 'channel') list = X5.merge.dedupe(list, function (x) { return x.imdbID || null; }, function (x) { return x.title; }, function (x) { return x.year; });
+        }
+        if (out.items[g.name]) { out.items[g.name] = out.items[g.name].concat(list); out.sources[g.name] = out.sources[g.name].concat(src); return; }
+        out.names.push(g.name); out.items[g.name] = list; out.sources[g.name] = src; out.tags[g.name] = g.tags || [];
+      });
+      return out;
+    });
+  };
+  /** Build 150: categorienaam zoals de app hem toont ("| NL | NETFLIX" → "Netflix"). */
+  Lib.groupTitle = function (raw) { return B.b150 ? B.b150.cat.display(raw) : raw; };
   function buildIndexes(lib) {
     var l = lib || Lib.lib;
     l.channelGroups = groupsOf(l.channels);

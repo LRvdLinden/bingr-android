@@ -871,14 +871,31 @@
   P.searchCategories = function (q) {
     var f = B.fold(q).trim(), out = [];
     if (f.length < 2) return out;
-    var lib = Lib.lib, mg = Lib.byGroup('movie'), sg = Lib.byGroup('series');
-    lib.movieGroups.forEach(function (g) { if (B.fold(g).indexOf(f) >= 0) out.push({ title: g, entries: (mg[g] || []).map(function (x) { return { type: 'movie', item: x }; }) }); });
-    lib.seriesGroups.forEach(function (g) { if (B.fold(g).indexOf(f) >= 0) out.push({ title: g, entries: (sg[g] || []).map(function (x) { return { type: 'series', item: x }; }) }); });
+    // build 150: op de opgeschoonde naam, dezelfde naam (over talen en kwaliteit heen) als één treffer
+    var MG = Lib.mergedGroups('movie'), SG = Lib.mergedGroups('series');
+    MG.names.forEach(function (g) { if (B.fold(g).indexOf(f) >= 0) out.push({ title: g, entries: (MG.items[g] || []).map(function (x) { return { type: 'movie', item: x }; }) }); });
+    SG.names.forEach(function (g) { if (B.fold(g).indexOf(f) >= 0) out.push({ title: g, entries: (SG.items[g] || []).map(function (x) { return { type: 'series', item: x }; }) }); });
     (S.genreList || []).forEach(function (g) {
       if (B.fold(L(g.name)).indexOf(f) >= 0 || B.fold(g.name).indexOf(f) >= 0) out.push({ title: L(g.name), genre: g.slug });
     });
     return out.slice(0, 30);
   };
+  /** Build 150: treffer in een verborgen categorie; OK = de categorie weer tonen (de server wordt dan opnieuw opgehaald). */
+  function hiddenPill(x) {
+    var group = B.b150 ? B.b150.cat.display(x.group) : x.group;
+    var p = h('div.cat-pill.search-cat.search-hidden-hit.f', [h('span', x.title), h('span.cat-n', '  ·  ' + L('Hidden category') + ' · ' + group)]);
+    p.onEnter = function () {
+      var src = Lib.source;
+      if (!src) return;
+      U.choose(L('Show category “%@”?', group), [{ value: 1, label: L('Show') }, { value: 0, label: L('Cancel') }], null, function (v) {
+        if (v !== 1) return;
+        D.setCategoriesHidden([D.key(src.id, x.group)], false);
+        U.toast(L('Updating…'));
+      });
+    };
+    p._key = 'hid:' + x.type + ':' + x.title + ':' + x.group;
+    return p;
+  }
   function categoryPill(c) {
     var p = h('div.cat-pill.search-cat.f', [h('span', c.title), c.entries ? h('span.cat-n', ' ' + c.entries.length) : null]);
     p.onEnter = function () { if (c.genre) U.push(S.categoryPage({ genre: c.genre }, 'all')); else P.openGrid(c.title, c.entries); };
@@ -919,12 +936,46 @@
     }, function () { return none; });
   };
   /**
+   * Build 150: zoeken via de Stremio-add-ons van de Stremio-bronnen van het profiel (zoekcatalogi, = Android). Treffers
+   * die er al zijn (zelfde titel + jaar of IMDb-id) vallen weg; van een andere bron krijgen ze item._src.
+   */
+  P.searchStremio = function (q, local) {
+    var none = { movies: [], series: [] };
+    var f = B.fold(q).trim(), M = B.media;
+    if (f.length < 2 || !M || !M.stremioFor) return Promise.resolve(none);
+    var cur = Lib.source, srcs = (D.sources || []).filter(function (s) {
+      return s && s.kind === 'Stremio' && (P.othersAllowed() || (cur && String(cur.id).toLowerCase() === String(s.id).toLowerCase()));
+    });
+    if (!srcs.length) return Promise.resolve(none);
+    var SE = B.b149 && B.b149.search, seen = {};
+    function key(x) { return x.imdbID ? 'i' + x.imdbID : 't' + (SE ? SE.key(x.title) : B.fold(x.title)) + '|' + (x.year || ''); }
+    ['movies', 'series'].forEach(function (k) { ((local && local[k]) || []).forEach(function (x) { seen[k + key(x)] = true; }); });
+    return Promise.all(srcs.map(function (s) {
+      var t = new Promise(function (res) { setTimeout(function () { res(none); }, 8000); });
+      var job = M.stremioFor(s).then(function (st) { return st.search(q); }).then(function (r) {
+        var other = !(cur && String(cur.id).toLowerCase() === String(s.id).toLowerCase());
+        if (other) { r.movies.forEach(function (x) { x._src = s.id; }); r.series.forEach(function (x) { x._src = s.id; }); }
+        return r;
+      }, function () { return none; });
+      return Promise.race([job, t]);
+    })).then(function (all) {
+      var out = { movies: [], series: [] };
+      all.forEach(function (r) {
+        ['movies', 'series'].forEach(function (k) {
+          (r[k] || []).forEach(function (x) { var kk = k + key(x); if (seen[kk]) return; seen[kk] = true; out[k].push(x); });
+        });
+      });
+      out.movies = out.movies.slice(0, 40); out.series = out.series.slice(0, 40);
+      return out;
+    }, function () { return none; });
+  };
+  /**
    * Extra rijen onder de zoekresultaten: Personen, Categorieën, Tv-gids, In je andere afspeellijsten.
    * track = de .sy-track; alive() = nog dezelfde zoekopdracht. Geeft een functie die lopend werk stopt.
    */
   P.searchExtras = function (q, track, alive, empty, local) {
     var slots = {};
-    ['people', 'cats', 'progs', 'others'].forEach(function (k) { slots[k] = h('div.search-slot'); });
+    ['people', 'cats', 'progs', 'others', 'hidden'].forEach(function (k) { slots[k] = h('div.search-slot'); });
     // Live TV (zenders en tv-gids) altijd als laatste, na films, series, categorieën en andere afspeellijsten;
     // de focus (omhoog/omlaag) volgt deze volgorde
     var live = null, firstRow = null;
@@ -940,6 +991,8 @@
     track.appendChild(slots.others);
     if (live) track.appendChild(live);
     track.appendChild(slots.progs);
+    // build 150: treffers in verborgen categorieën (compacte index, niet ingelezen) helemaal onderaan
+    track.appendChild(slots.hidden);
     var any = false;
     function put(slot, row) {
       if (!row || !alive()) return;
@@ -947,6 +1000,9 @@
       any = true;
       if (empty && empty.parentNode) empty.parentNode.removeChild(empty);
     }
+    var hid = B.b150 && Lib.raw ? B.b150.hiddenSearch(Lib.raw.hiddenIndex, q, 30) : [];
+    if (hid.length) put(slots.hidden, h('div.row-block.search-hidden', [h('div.row-title', L('In hidden categories')),
+      h('div.row-scroll.sx.fm', { 'data-pad': '70' }, [h('div.row-track', hid.map(hiddenPill))])]));
     var cats = P.searchCategories(q);
     if (cats.length) put(slots.cats, h('div.row-block.search-cats', [h('div.row-title', L('Categories')),
       h('div.row-scroll.sx.fm', { 'data-pad': '70' }, [h('div.row-track', cats.map(categoryPill))])]));
@@ -959,6 +1015,12 @@
       var chans = [];
       hits.forEach(function (x) { if (chans.indexOf(x.ch) < 0) chans.push(x.ch); });
       put(slots.progs, S.rowBlock(L('TV guide'), hits.map(function (x) { return P.programCard(x, chans); }), 'search-progs'));
+    });
+    // build 150: zoeken via de zoekcatalogi van Stremio-add-ons (zoals Android), in dezelfde rijen, ontdubbeld
+    P.searchStremio(q, local).then(function (o) {
+      if (!alive()) return;
+      addTo('movie', o.movies, L('Movies'));
+      addTo('series', o.series, L('Series'));
     });
     // build 129: treffers van de andere servers in dezelfde rijen (Films, Series, Live TV), zonder te wisselen
     if (P.othersAllowed()) {

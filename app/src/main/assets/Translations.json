@@ -1090,7 +1090,11 @@
   "Update %@": "تحديث %@",
   "peak %d MB": "الذروة %d ميغابايت",
   "Discover categories": "اكتشف الفئات",
-  "This server is very large. Hide categories you don't use and it will load faster.": "هذا الخادم كبير جدًا. أخفِ الفئات التي لا تستخدمها وسيتم تحميله بشكل أسرع."
+  "This server is very large. Hide categories you don't use and it will load faster.": "هذا الخادم كبير جدًا. أخفِ الفئات التي لا تستخدمها وسيتم تحميله بشكل أسرع.",
+  "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "بيانات الأفلام والمسلسلات: TMDB. يستخدم هذا التطبيق واجهة TMDB البرمجية لكنه غير معتمد أو مصدّق من TMDB. بيانات البث: JustWatch.",
+  "Hidden category": "فئة مخفية",
+  "In hidden categories": "في الفئات المخفية",
+  "Show category “%@”?": "إظهار الفئة “%@”؟"
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -2183,7 +2187,11 @@
   "Update %@": "Aktualisierung %@",
   "peak %d MB": "Spitze %d MB",
   "Discover categories": "Kategorien entdecken",
-  "This server is very large. Hide categories you don't use and it will load faster.": "Dieser Server ist sehr groß. Blende Kategorien aus, die du nicht nutzt, dann lädt er schneller."
+  "This server is very large. Hide categories you don't use and it will load faster.": "Dieser Server ist sehr groß. Blende Kategorien aus, die du nicht nutzt, dann lädt er schneller.",
+  "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Film- und Seriendaten: TMDB. Diese App verwendet die TMDB-API, wird aber nicht von TMDB unterstützt oder zertifiziert. Streamingdaten: JustWatch.",
+  "Hidden category": "Ausgeblendete Kategorie",
+  "In hidden categories": "In ausgeblendeten Kategorien",
+  "Show category “%@”?": "Kategorie „%@“ einblenden?"
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -3276,7 +3284,11 @@
   "Update %@": "Actualización %@",
   "peak %d MB": "pico %d MB",
   "Discover categories": "Descubre categorías",
-  "This server is very large. Hide categories you don't use and it will load faster.": "Este servidor es muy grande. Oculta las categorías que no uses y cargará más rápido."
+  "This server is very large. Hide categories you don't use and it will load faster.": "Este servidor es muy grande. Oculta las categorías que no uses y cargará más rápido.",
+  "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Datos de películas y series: TMDB. Esta aplicación usa la API de TMDB, pero TMDB no la respalda ni la certifica. Datos de streaming: JustWatch.",
+  "Hidden category": "Categoría oculta",
+  "In hidden categories": "En categorías ocultas",
+  "Show category “%@”?": "¿Mostrar la categoría «%@»?"
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -4369,7 +4381,11 @@
   "Update %@": "Mise à jour %@",
   "peak %d MB": "pic %d Mo",
   "Discover categories": "Découvrir les catégories",
-  "This server is very large. Hide categories you don't use and it will load faster.": "Ce serveur est très volumineux. Masque les catégories que tu n'utilises pas et il se chargera plus vite."
+  "This server is very large. Hide categories you don't use and it will load faster.": "Ce serveur est très volumineux. Masque les catégories que tu n'utilises pas et il se chargera plus vite.",
+  "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Données des films et séries : TMDB. Cette application utilise l’API TMDB mais n’est ni approuvée ni certifiée par TMDB. Données de streaming : JustWatch.",
+  "Hidden category": "Catégorie masquée",
+  "In hidden categories": "Dans les catégories masquées",
+  "Show category “%@”?": "Afficher la catégorie « %@ » ?"
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -5462,7 +5478,11 @@
   "Update %@": "Aggiornamento %@",
   "peak %d MB": "picco %d MB",
   "Discover categories": "Scopri le categorie",
-  "This server is very large. Hide categories you don't use and it will load faster.": "Questo server è molto grande. Nascondi le categorie che non usi e si caricherà più velocemente."
+  "This server is very large. Hide categories you don't use and it will load faster.": "Questo server è molto grande. Nascondi le categorie che non usi e si caricherà più velocemente.",
+  "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Dati di film e serie: TMDB. Questa app usa l’API di TMDB ma non è approvata né certificata da TMDB. Dati di streaming: JustWatch.",
+  "Hidden category": "Categoria nascosta",
+  "In hidden categories": "Nelle categorie nascoste",
+  "Show category “%@”?": "Mostrare la categoria “%@”?"
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -6569,7 +6589,11 @@
   "Update %@": "Bijwerken %@",
   "peak %d MB": "piek %d MB",
   "Discover categories": "Ontdek categorieën",
-  "This server is very large. Hide categories you don't use and it will load faster.": "Deze server is erg groot. Verberg categorieën die je niet gebruikt, dan laadt hij sneller."
+  "This server is very large. Hide categories you don't use and it will load faster.": "Deze server is erg groot. Verberg categorieën die je niet gebruikt, dan laadt hij sneller.",
+  "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Film- en seriegegevens: TMDB. Deze app gebruikt de TMDB-API maar wordt niet door TMDB ondersteund of gecertificeerd. Streamingdata: JustWatch.",
+  "Hidden category": "Verborgen categorie",
+  "In hidden categories": "In verborgen categorieën",
+  "Show category “%@”?": "Categorie ‘%@’ weer tonen?"
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -7662,7 +7686,11 @@
   "Update %@": "Aktualizacja %@",
   "peak %d MB": "szczyt %d MB",
   "Discover categories": "Odkryj kategorie",
-  "This server is very large. Hide categories you don't use and it will load faster.": "Ten serwer jest bardzo duży. Ukryj kategorie, których nie używasz, a będzie się ładować szybciej."
+  "This server is very large. Hide categories you don't use and it will load faster.": "Ten serwer jest bardzo duży. Ukryj kategorie, których nie używasz, a będzie się ładować szybciej.",
+  "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Dane filmów i seriali: TMDB. Ta aplikacja korzysta z API TMDB, ale nie jest wspierana ani certyfikowana przez TMDB. Dane o streamingu: JustWatch.",
+  "Hidden category": "Ukryta kategoria",
+  "In hidden categories": "W ukrytych kategoriach",
+  "Show category “%@”?": "Pokazać kategorię „%@”?"
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -8755,7 +8783,11 @@
   "Update %@": "Atualização %@",
   "peak %d MB": "pico %d MB",
   "Discover categories": "Descobrir categorias",
-  "This server is very large. Hide categories you don't use and it will load faster.": "Este servidor é muito grande. Oculta as categorias que não usas e vai carregar mais depressa."
+  "This server is very large. Hide categories you don't use and it will load faster.": "Este servidor é muito grande. Oculta as categorias que não usas e vai carregar mais depressa.",
+  "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Dados de filmes e séries: TMDB. Esta aplicação utiliza a API do TMDB, mas não é aprovada nem certificada pelo TMDB. Dados de streaming: JustWatch.",
+  "Hidden category": "Categoria oculta",
+  "In hidden categories": "Em categorias ocultas",
+  "Show category “%@”?": "Mostrar a categoria “%@”?"
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -9848,7 +9880,11 @@
   "Update %@": "Güncelleme %@",
   "peak %d MB": "zirve %d MB",
   "Discover categories": "Kategorileri keşfet",
-  "This server is very large. Hide categories you don't use and it will load faster.": "Bu sunucu çok büyük. Kullanmadığın kategorileri gizle, daha hızlı yüklenir."
+  "This server is very large. Hide categories you don't use and it will load faster.": "Bu sunucu çok büyük. Kullanmadığın kategorileri gizle, daha hızlı yüklenir.",
+  "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "Film ve dizi verileri: TMDB. Bu uygulama TMDB API'sini kullanır ancak TMDB tarafından desteklenmez veya onaylanmaz. Yayın verileri: JustWatch.",
+  "Hidden category": "Gizli kategori",
+  "In hidden categories": "Gizli kategorilerde",
+  "Show category “%@”?": "“%@” kategorisi gösterilsin mi?"
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -10941,6 +10977,10 @@
   "Update %@": "更新 %@",
   "peak %d MB": "峰值 %d MB",
   "Discover categories": "发现分类",
-  "This server is very large. Hide categories you don't use and it will load faster.": "此服务器非常大。隐藏你不使用的分类，加载会更快。"
+  "This server is very large. Hide categories you don't use and it will load faster.": "此服务器非常大。隐藏你不使用的分类，加载会更快。",
+  "Movie and series data: TMDB. This app uses the TMDB API but is not endorsed or certified by TMDB. Streaming data: JustWatch.": "影视数据：TMDB。本应用使用 TMDB API，但未获得 TMDB 的认可或认证。流媒体数据：JustWatch。",
+  "Hidden category": "已隐藏的分类",
+  "In hidden categories": "在已隐藏的分类中",
+  "Show category “%@”?": "显示分类“%@”？"
  }
 }

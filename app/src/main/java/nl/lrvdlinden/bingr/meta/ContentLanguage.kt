@@ -281,6 +281,20 @@ object ContentLanguage {
     /** Titel zonder taallabels ("Animal (IT)" → "Animal", "NL | Frozen (2013)" → "Frozen (2013)"). */
     fun displayTitle(raw: String): String = parsed(raw).clean
 
+    /**
+     * Build 150: categorienaam zoals de app hem overal toont: taal, land en kwaliteit weg in elke vorm en volgorde, nette
+     * hoofdletters ("| NL | NETFLIX" → "Netflix", "| MULTI / LINGO | NETFLIX" → "Netflix"). Eén plek: Build150Logic.
+     */
+    fun categoryTitle(raw: String): String = Build150Logic.CategoryName.display(raw)
+
+    /** Build 150: labels die van een categorienaam af gehaald zijn ("NL", "Multi"), voor de chips. */
+    fun categoryTags(raw: String): List<String> = Build150Logic.CategoryName.cached(raw).tags
+
+    /** Build 150: talen voor de bronkeuze bij samengevoegde categorieën (audiotaal, dan app-taal), als code ("NL"). */
+    val preferredSourceLanguages: List<String>
+        get() = listOfNotNull(TrackPreferences.preferredAudio, runCatching { Localizer.locale.language }.getOrNull())
+            .map { it.uppercase() }.filter { it.isNotEmpty() }.distinct()
+
     // MARK: TMDB (original_language) als laatste redmiddel
 
     /** Compose-state: verhoogt als er een TMDB-taal bijkomt (posters tekenen dan opnieuw). */

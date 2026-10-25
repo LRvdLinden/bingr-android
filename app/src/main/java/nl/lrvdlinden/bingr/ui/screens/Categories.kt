@@ -140,8 +140,11 @@ data class CategoryRef(val genre: String?, val server: String?) {
     val title: String get() = genre?.let { Genres.bySlug[it]?.name?.let { n -> L(n) } } ?: server ?: ""
 }
 
-/** De titels in één categorie, met per soort een paar posters voor de collage. */
-class CategoryMembers(val movies: List<Movie>, val series: List<Series>) {
+/**
+ * De titels in één categorie, met per soort een paar posters voor de collage. Build 150: bij een samengevoegde
+ * categorie van de server de originele namen ([sources], `server|exacte naam` blijft per bron) en hun labels ([tags]).
+ */
+class CategoryMembers(val movies: List<Movie>, val series: List<Series>, val sources: List<String> = emptyList(), val tags: List<String> = emptyList()) {
     private val previews = HashMap<Filter, List<String>>()
 
     fun count(f: Filter): Int = when (f) { Filter.ALL -> movies.size + series.size; Filter.MOVIES -> movies.size; Filter.SERIES -> series.size }
@@ -167,9 +170,14 @@ class CategoryTileData(val ref: CategoryRef, val title: String, val members: Cat
     val key: String get() = ref.genre?.let { "g|$it" } ?: ("s|" + (ref.server ?: ""))
 }
 
-class CategoryIndex(val genres: Map<String, CategoryMembers>, val server: List<Pair<String, CategoryMembers>>) {
+class CategoryIndex(
+    val genres: Map<String, CategoryMembers>,
+    val server: List<Pair<String, CategoryMembers>>,
+    /** build 150: originele categorienaam → de samengevoegde categorie (oude verwijzingen blijven werken) */
+    val byRaw: Map<String, CategoryMembers> = emptyMap(),
+) {
     fun members(ref: CategoryRef): CategoryMembers? =
-        ref.genre?.let { genres[it] } ?: ref.server?.let { s -> server.firstOrNull { it.first == s }?.second }
+        ref.genre?.let { genres[it] } ?: ref.server?.let { s -> server.firstOrNull { it.first == s }?.second ?: byRaw[s] }
 
     /** Aantal categorieën in het overzicht (Alles): genres en servercategorieën met minstens één titel. */
     fun visibleCount(): Int = genres.values.count { it.count(Filter.ALL) > 0 } + server.count { it.second.count(Filter.ALL) > 0 }
@@ -187,7 +195,7 @@ class CategoryIndex(val genres: Map<String, CategoryMembers>, val server: List<P
         if (out.size < limit) server.filter { it.second.count(Filter.ALL) > 0 }
             .sortedByDescending { it.second.count(Filter.ALL) }
             .take(limit - out.size)
-            .forEach { (name, m) -> out.add(CategoryTileData(CategoryRef(null, name), ContentLanguage.displayTitle(name), m, Genres.serverColors(name))) }
+            .forEach { (name, m) -> out.add(CategoryTileData(CategoryRef(null, name), ContentLanguage.categoryTitle(name), m, Genres.serverColors(name))) }
         return out
     }
 
@@ -217,8 +225,22 @@ class CategoryIndex(val genres: Map<String, CategoryMembers>, val server: List<P
             val order = LinkedHashSet<String>()
             for (m in lib.movies) { if (m.group.isBlank()) continue; sm.getOrPut(m.group) { ArrayList() }.add(m); order.add(m.group) }
             for (s in lib.series) { if (s.group.isBlank()) continue; ss.getOrPut(s.group) { ArrayList() }.add(s); order.add(s.group) }
-            val server = order.map { it to CategoryMembers(sm[it].orEmpty(), ss[it].orEmpty()) }
-            return CategoryIndex(genres, server)
+            // build 150: dezelfde opgeschoonde naam (over talen, kwaliteit en servers heen) = één categorie, ontdubbeld
+            val pref = ContentLanguage.preferredSourceLanguages
+            val groups = Build150Logic.Merge.groups(order)
+            val server = ArrayList<Pair<String, CategoryMembers>>(groups.size)
+            val byRaw = HashMap<String, CategoryMembers>()
+            for (g in groups) {
+                val src = if (g.sources.size > 1) Build150Logic.Merge.preferSources(g.sources, pref) else g.sources
+                val mv = if (src.size == 1) sm[src[0]].orEmpty()
+                    else Build150Logic.Merge.dedupe(src.flatMap { sm[it].orEmpty() }, { it.imdbID }, { it.title }, { it.year })
+                val se = if (src.size == 1) ss[src[0]].orEmpty()
+                    else Build150Logic.Merge.dedupe(src.flatMap { ss[it].orEmpty() }, { it.imdbID }, { it.title }, { it.year })
+                val m = CategoryMembers(mv, se, src, g.tags)
+                server += g.name to m
+                for (r in src) byRaw[r] = m
+            }
+            return CategoryIndex(genres, server, byRaw)
         }
     }
 }
@@ -348,7 +370,7 @@ fun CategoriesScreen(initial: Filter, asTab: Boolean = false, onClose: () -> Uni
             if (server.isNotEmpty()) {
                 item(key = "h-server", span = { GridItemSpan(maxLineSpan) }) { SectionTitle(L("From your server")) }
                 items(server, key = { "s|" + it.first }) { (name, m) ->
-                    CategoryTile(ContentLanguage.displayTitle(name), m.count(kind), m.posters(kind), Genres.serverColors(name)) {
+                    CategoryTile(ContentLanguage.categoryTitle(name), m.count(kind), m.posters(kind), Genres.serverColors(name), chips = Build150Logic.Merge.chips(m.tags)) {
                         ScreensNav.push(ScreenEntry.CategoryPage(CategoryRef(null, name), kind))
                     }
                 }
@@ -402,7 +424,7 @@ private fun Pill(label: String, selected: Boolean, focus: androidx.compose.ui.fo
 @Composable
 private fun CategoryTile(
     title: String, count: Int, posters: List<String>, colors: List<Color>,
-    modifier: Modifier = Modifier.fillMaxWidth(), compact: Boolean = false, onClick: () -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth(), compact: Boolean = false, chips: String = "", onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(tvs(if (compact) 8 else 10))
@@ -439,7 +461,9 @@ private fun CategoryTile(
                 title, color = Color.White, fontSize = tsp(if (compact) 15 else 17), fontWeight = FontWeight.Black, maxLines = 2,
                 overflow = TextOverflow.Ellipsis, lineHeight = tsp(if (compact) 17 else 19), modifier = Modifier.fillMaxWidth(0.62f)
             )
-            Text(countText(count), color = Color.White.copy(alpha = 0.8f), fontSize = tsp(if (compact) 11 else 12), fontWeight = FontWeight.Medium, maxLines = 1)
+            // build 150: talen van de samengevoegde bronnen als labels ("NL · Multi")
+            Text(countText(count) + (if (chips.isNotEmpty()) "  ·  $chips" else ""), color = Color.White.copy(alpha = 0.8f),
+                fontSize = tsp(if (compact) 11 else 12), fontWeight = FontWeight.Medium, maxLines = 1)
         }
     }
 }
@@ -551,12 +575,14 @@ fun CategoryPageScreen(ref: CategoryRef, initial: Filter, onClose: () -> Unit) {
                             }
                         }
                         Text(
-                            ref.title.let { if (ref.server != null) ContentLanguage.displayTitle(it) else it },
+                            ref.title.let { if (ref.server != null) ContentLanguage.categoryTitle(it) else it },
                             color = Color.White, fontSize = tsp(if (tv) 30 else 26), fontWeight = FontWeight.Black,
                             maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)
                         )
                     }
-                    Text(countText(titles.size), color = Theme.secondary, fontSize = tsp(13), modifier = Modifier.padding(top = 2.dp))
+                    // build 150: talen/servers van de samengevoegde bronnen in de kop ("NL · Multi")
+                    val chips = members?.tags?.let { Build150Logic.Merge.chips(it) }.orEmpty()
+                    Text(countText(titles.size) + (if (chips.isNotEmpty()) "  ·  $chips" else ""), color = Theme.secondary, fontSize = tsp(13), modifier = Modifier.padding(top = 2.dp))
                     Spacer(Modifier.height(tvs(12)))
                     if (available.size > 2) {
                         KindSegments(kind, focus = firstFocus, available = available) { kindState = it }

@@ -258,6 +258,8 @@
   SE.key = function (raw) {
     var s = String(raw == null ? '' : raw);
     for (var r = 0; r < 3; r++) { var n = s.replace(sePrefix, ''); if (n === s) break; s = n; }
+    // build 150: dezelfde opschoning als de categorienamen (js/build150.js), als die geladen is
+    if (B.b150) s = B.b150.cat.strip(s).name || s;
     if (!/^[\x00-\x7f]*$/.test(s)) { try { s = s.normalize('NFD').replace(seMarks, ''); } catch (e) { /* oude engine */ } }
     s = s.toLowerCase();
     var out = '', space = true;

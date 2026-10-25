@@ -349,7 +349,7 @@ private fun MultiviewChannelPicker(channels: List<Channel>, onDismiss: () -> Uni
                             placeholder = c.name.take(3), fit = true)
                         Column(Modifier.weight(1f)) {
                             Text(c.name, color = Color.White, fontSize = tsp(15), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (c.group.isNotEmpty()) Text(c.group, color = Theme.secondary, fontSize = tsp(12), maxLines = 1)
+                            if (c.group.isNotEmpty()) Text(ContentLanguage.categoryTitle(c.group), color = Theme.secondary, fontSize = tsp(12), maxLines = 1)
                         }
                     }
                 }
