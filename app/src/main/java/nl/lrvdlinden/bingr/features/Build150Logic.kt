@@ -17,6 +17,54 @@ import java.util.Locale
  */
 object Build150Logic {
 
+    /**
+     * Build 153: pipe-achtige tekens en stukken tussen pipes (één lijst, gelijk aan de webspeler en Apple; gedeelde
+     * gevallen in tools/test/build150_cases.json, sectie "pipes").
+     * - [normalize]: elk pipe-teken ("┃", "｜", "¦", "‖" …) wordt één `|`.
+     * - [cut]: een stuk tussen twee pipes aan het begin of eind ("|NL|", "┃NL┃", "| MULTI / LINGO |", "|4K|") gaat
+     *   helemaal weg, wat er ook tussen staat (≤ [MAX] tekens), herhaald, ook zonder spaties. Blijft er niets over, dan
+     *   blijft de naam zoals hij was (de aanroeper valt terug op de oude opschoning).
+     */
+    object Pipes {
+        /** Alle pipe-varianten (de eerste is de gewone). */
+        const val CHARS = "|¦│┃｜‖∣丨┆┇┊┋╎╏︱︳⏐⎮▏▕ǀ׀⼁║❘❙❚⎸⎹╽╿"
+        /** Hooguit zoveel tekens tussen twee pipes. */
+        const val MAX = 25
+
+        fun isPipe(c: Char) = CHARS.indexOf(c) >= 0
+
+        fun normalize(s: String): String {
+            var any = false
+            for (c in s) if (c != '|' && isPipe(c)) { any = true; break }
+            if (!any) return s
+            val sb = StringBuilder(s.length)
+            for (c in s) sb.append(if (isPipe(c)) '|' else c)
+            return sb.toString()
+        }
+
+        /** [rest] = de naam zonder de stukken; [front] en [back] = de weggehaalde stukken (zonder pipes, in volgorde). */
+        data class Cut(val rest: String, val front: List<String>, val back: List<String>)
+
+        fun cut(raw: String): Cut {
+            var s = normalize(raw).trim()
+            val front = ArrayList<String>(); val back = ArrayList<String>()
+            while (s.length >= 2 && s[0] == '|') {
+                val j = s.indexOf('|', 1)
+                if (j < 0 || j - 1 > MAX) break
+                front += s.substring(1, j).trim()
+                s = s.substring(j + 1).trim()
+            }
+            while (s.length >= 2 && s[s.length - 1] == '|') {
+                val j = s.lastIndexOf('|', s.length - 2)
+                if (j < 0 || s.length - 2 - j > MAX) break
+                back.add(0, s.substring(j + 1, s.length - 1).trim())
+                s = s.substring(0, j).trim()
+            }
+            if (s.isEmpty() || s.all { isPipe(it) || it.isWhitespace() }) return Cut(normalize(raw).trim(), emptyList(), emptyList())
+            return Cut(s, front, back)
+        }
+    }
+
     object CategoryName {
         /** Scheidingstekens (altijd). `-` en `/` alleen met een spatie ernaast of aan de rand ("Sci-Fi", "AC/DC" blijven). */
         private const val SEPS = "|¦│:–—•·★»«[](){}"
@@ -156,18 +204,28 @@ object Build150Logic {
         data class Clean(val name: String, val tags: List<String>)
 
         /** Alleen weghalen (geen hoofdletters veranderen): voor zoeken en vergelijken. */
+        /** Labels uit een weggehaald stuk tussen pipes ("MULTI / LINGO" → "Multi", "4K" → geen). */
+        private fun blockTags(blocks: List<String>, out: MutableList<String>) {
+            for (b in blocks) for (w in words(b)) kindOf(w.text, true, true)?.let { k -> tagOf(w.text, k)?.let { out += it } }
+        }
+
         fun strip(raw: String): Clean {
-            val s = raw.trim()
+            // build 153: eerst alle pipe-tekens één `|`, dan de stukken tussen pipes aan begin en eind weg
+            val cut = Pipes.cut(raw)
+            val s = cut.rest
             if (s.isEmpty()) return Clean("", emptyList())
             val ws = words(s)
             if (ws.isEmpty()) return Clean(s, emptyList())
             var a = 0; var b = ws.size - 1
             val front = ArrayList<String>(); val back = ArrayList<String>()
+            blockTags(cut.front, front)
             // vooraan
             while (a < b) {
                 val w = ws[a]
                 val sep = gapHasSep(s, if (a == 0) 0 else ws[a - 1].end, w.start) || gapHasSep(s, w.end, ws[a + 1].start)
                 val k = kindOf(w.text, sep, true) ?: break
+                // build 153: "Film | 2024" blijft heel (alleen een getal is geen naam)
+                if (k == Kind.KIND && a + 1 == b && ws[b].text.all { it.isDigit() }) break
                 tagOf(w.text, k)?.let { front += it }
                 a++
             }
@@ -193,6 +251,7 @@ object Build150Logic {
                 if (open > close) { var j = en; while (j < s.length && isSpace(s[j])) j++; if (j < s.length && s[j] == c) en = j + 1 }
                 if (close > open) { var j = st - 1; while (j >= 0 && isSpace(s[j])) j--; if (j >= 0 && s[j] == o) st = j }
             }
+            blockTags(cut.back, back)
             val tags = LinkedHashSet<String>().apply { addAll(front); addAll(back) }.toList()
             return Clean(s.substring(st, en).trim(), tags)
         }
@@ -237,7 +296,7 @@ object Build150Logic {
         /** Naam zoals de app hem toont, plus de labels die eraf gehaald zijn. Leeg of alleen labels → de oorspronkelijke naam. */
         fun clean(raw: String): Clean {
             val st = strip(raw)
-            val n = st.name.ifEmpty { raw.trim() }
+            val n = st.name.ifEmpty { Pipes.normalize(raw).trim() }
             return Clean(tidyCase(n), st.tags)
         }
 

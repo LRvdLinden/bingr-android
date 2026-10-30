@@ -103,7 +103,9 @@ jobs:
             java -jar "$RUNNER_TEMP/b141f-test.jar" | tee "$RUNNER_TEMP/b141f-test.txt"; rc5=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 141 feedback::$(tail -1 "$RUNNER_TEMP/b141f-test.txt")"
             # build 144: Verder kijken (postervolgorde: bibliotheek/catalogmeta, TMDB, bewaard beeld) en verversen na het openen
+            # (sinds build 153 met Build149Logic.kt en Build150Logic.kt: TitleCleaner gebruikt Build150Logic.Pipes)
             kotlinc app/src/main/java/nl/lrvdlinden/bingr/meta/TitleCleaner.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build144Logic.kt \
+              app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
               tools/test/Build144LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b144-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b144-test.jar" | tee "$RUNNER_TEMP/b144-test.txt"; rc6=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 144::$(tail -1 "$RUNNER_TEMP/b144-test.txt")"

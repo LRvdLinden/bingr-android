@@ -173,9 +173,9 @@ private fun S2GuideChannelCell(c: Channel, width: Dp, height: Dp, onClick: () ->
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RemoteImage(c.logo, Modifier.width(tvs(40)).height(tvs(26)), placeholder = c.name.take(3), fit = true)
+        RemoteImage(c.logo, Modifier.width(tvs(40)).height(tvs(26)), placeholder = c.displayName.take(3), fit = true)
         Spacer(Modifier.width(8.dp))
-        Text(c.name, color = if (focused) Color.Black else Color.White, fontSize = tsp(11), fontWeight = FontWeight.SemiBold,
+        Text(c.displayName, color = if (focused) Color.Black else Color.White, fontSize = tsp(11), fontWeight = FontWeight.SemiBold,
             maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
@@ -194,7 +194,7 @@ private fun S2GuideProgramCell(c: Channel, p: EPGProgram, x: Dp, width: Dp, heig
         contentAlignment = Alignment.CenterStart
     ) {
         Column {
-            Text(p.title, color = if (focused) Color.Black else Color.White, fontSize = tsp(12), fontWeight = FontWeight.SemiBold,
+            Text(p.displayTitle, color = if (focused) Color.Black else Color.White, fontSize = tsp(12), fontWeight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${s2Time(p.start)} – ${s2Time(p.end)}", color = if (focused) Color.DarkGray else Theme.secondary,
                 fontSize = tsp(10), maxLines = 1, overflow = TextOverflow.Clip)
@@ -224,7 +224,7 @@ fun GuideSheet(channel: Channel, onDismiss: () -> Unit) {
             val i = list?.indexOfFirst { it.isNow } ?: -1
             if (i > 0) runCatching { state.scrollToItem((i - 1).coerceAtLeast(0)) }
         }
-        S2Page(channel.name, onClose = onDismiss, state = state) {
+        S2Page(channel.displayName, onClose = onDismiss, state = state) {
             if (list == null) {
                 item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Theme.red) } }
             } else if (list.isEmpty()) {
@@ -235,7 +235,7 @@ fun GuideSheet(channel: Channel, onDismiss: () -> Unit) {
                     val n = System.currentTimeMillis()
                     Box(Modifier.s2Cell(i, list.size)) {
                         S2Row(
-                            title = p.title,
+                            title = p.displayTitle,
                             subtitle = p.description,
                             onClick = { selected = p },
                             leading = {
@@ -315,8 +315,8 @@ private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss:
                 if (previewHere && ChannelPreview.channel?.id == channel.id) {
                     ChannelPreviewView(Modifier.widthIn(max = 420.dp))
                 }
-                Text(channel.name, color = Theme.secondary, fontSize = tsp(13), fontWeight = FontWeight.SemiBold)
-                Text(program.title, color = Color.White, fontSize = tsp(24), fontWeight = FontWeight.Bold)
+                Text(channel.displayName, color = Theme.secondary, fontSize = tsp(13), fontWeight = FontWeight.SemiBold)
+                Text(program.displayTitle, color = Color.White, fontSize = tsp(24), fontWeight = FontWeight.Bold)
                 Text("${s2DateTime(program.start)} – ${s2Time(program.end)}", color = Theme.secondary, fontSize = tsp(14))
                 program.description?.takeIf { it.isNotBlank() }?.let {
                     Text(it, color = Color.White.copy(alpha = 0.85f), fontSize = tsp(14))

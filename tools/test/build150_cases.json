@@ -1,5 +1,5 @@
 {
-  "_uitleg": "Build 150: gedeelde gevallen voor tools/test/Build150LogicTest.kt (Android) en tizen/test/build150_test.js (Samsung TV en LG). [ruw, naam, labels]",
+  "_uitleg": "Build 150: gedeelde gevallen voor tools/test/Build150LogicTest.kt (Android) en de webspeler (bingr-website). clean: [ruw, naam, labels]. Build 153: pipe-varianten (┃NL┃, ｜DE｜, ‖NL‖ …) en stukken tussen pipes aan begin of eind; pipes: [teken, na normaliseren]",
   "clean": [
     ["| NL | NETFLIX", "Netflix", ["NL"]],
     ["| MULTI / LINGO | NETFLIX", "Netflix", ["Multi"]],
@@ -47,7 +47,32 @@
     ["", "", []],
     ["Actie & Avontuur", "Actie & Avontuur", []],
     ["EN | Action HEVC", "Action", ["EN"]],
-    ["PL: Netflix · Multi", "Netflix", ["PL", "Multi"]]
+    ["PL: Netflix · Multi", "Netflix", ["PL", "Multi"]],
+    ["┃NL┃ NPO 1", "NPO 1", ["NL"]],
+    ["┃NL┃NPO 1", "NPO 1", ["NL"]],
+    ["|NL| Netflix", "Netflix", ["NL"]],
+    ["┃NL┃ ┃HD┃ RTL 4", "RTL 4", ["NL"]],
+    ["NL┃ Videoland", "Videoland", ["NL"]],
+    ["NL┃NPO 1", "NPO 1", ["NL"]],
+    ["NL ┃ NPO 1", "NPO 1", ["NL"]],
+    ["RTL 4 ┃NL┃", "RTL 4", ["NL"]],
+    ["｜DE｜ Sky Cinema", "Sky Cinema", ["DE"]],
+    ["|ABC 123|", "ABC 123", []],
+    ["|NL|", "NL", []],
+    ["┃NL┃", "NL", []],
+    ["Kids | NL", "Kids", ["NL"]],
+    ["Film | 2024", "Film | 2024", []],
+    ["|NL||HD|Videoland", "Videoland", ["NL"]],
+    ["|NL| |HD| Netflix", "Netflix", ["NL"]],
+    ["|XYZ ABC| Netflix", "Netflix", []],
+    ["|4K| Dune", "Dune", []],
+    ["‖NL‖ Ziggo Sport", "Ziggo Sport", ["NL"]],
+    ["∣EN∣ BBC One", "BBC One", ["EN"]],
+    ["丨NL丨 NPO 2", "NPO 2", ["NL"]],
+    ["NETFLIX ┃ KIDS", "Netflix | Kids", []],
+    ["Netflix ┃NL┃ ┃4K┃", "Netflix", ["NL"]],
+    ["| MULTI / LINGO | ┃NL┃ VIDEOLAND", "Videoland", ["Multi", "NL"]],
+    ["Sci-Fi ¦ NL", "Sci-Fi", ["NL"]]
   ],
   "merge": [
     [["| NL | NETFLIX", "| MULTI / LINGO | NETFLIX", "NL | Videoland", "Netflix 4K"], [["Netflix", 3, "NL · Multi"], ["Videoland", 1, "NL"]]]
@@ -58,7 +83,10 @@
     ["The Office (US)", "the office"],
     ["Dune 4K", "dune"],
     ["IT", "it"],
-    ["Rocky II", "rocky ii"]
+    ["Rocky II", "rocky ii"],
+    ["┃NL┃ The Witcher", "the witcher"],
+    ["｜DE｜ Dark", "dark"],
+    ["NL┃The Office", "the office"]
   ],
   "logos": [
     ["| NL | NETFLIX", "netflix"],
@@ -71,6 +99,41 @@
     ["APPLE TV+", "appletvplus"],
     ["NL | NPO START", "npostart"],
     ["NETFLIX SERIES (NL)", "netflix"],
-    ["Bioscoop", null]
+    ["Bioscoop", null],
+    ["┃NL┃ NETFLIX", "netflix"],
+    ["NL┃ Videoland", "videoland"]
+  ],
+  "pipes": [
+    ["|", "|"],
+    ["¦", "|"],
+    ["│", "|"],
+    ["┃", "|"],
+    ["｜", "|"],
+    ["‖", "|"],
+    ["∣", "|"],
+    ["丨", "|"],
+    ["┆", "|"],
+    ["┇", "|"],
+    ["┊", "|"],
+    ["┋", "|"],
+    ["╎", "|"],
+    ["╏", "|"],
+    ["︱", "|"],
+    ["︳", "|"],
+    ["⏐", "|"],
+    ["⎮", "|"],
+    ["▏", "|"],
+    ["▕", "|"],
+    ["ǀ", "|"],
+    ["׀", "|"],
+    ["⼁", "|"],
+    ["║", "|"],
+    ["❘", "|"],
+    ["❙", "|"],
+    ["❚", "|"],
+    ["⎸", "|"],
+    ["⎹", "|"],
+    ["╽", "|"],
+    ["╿", "|"]
   ]
 }

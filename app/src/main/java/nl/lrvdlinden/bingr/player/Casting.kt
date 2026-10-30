@@ -320,9 +320,9 @@ object Casting {
             else -> MediaMetadata.MEDIA_TYPE_GENERIC
         }
         val md = MediaMetadata(type)
-        md.putString(MediaMetadata.KEY_TITLE, item.subtitle?.takeIf { type == MediaMetadata.MEDIA_TYPE_TV_SHOW } ?: item.title)
+        md.putString(MediaMetadata.KEY_TITLE, item.displaySubtitle?.takeIf { type == MediaMetadata.MEDIA_TYPE_TV_SHOW } ?: item.displayTitle)
         if (type == MediaMetadata.MEDIA_TYPE_TV_SHOW) {
-            md.putString(MediaMetadata.KEY_SERIES_TITLE, item.title)
+            md.putString(MediaMetadata.KEY_SERIES_TITLE, item.displayTitle)
             item.season?.let { md.putInt(MediaMetadata.KEY_SEASON_NUMBER, it) }
             item.episode?.let { md.putInt(MediaMetadata.KEY_EPISODE_NUMBER, it) }
         } else {

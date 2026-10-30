@@ -3,7 +3,7 @@ package nl.lrvdlinden.bingr
 import java.io.File
 
 // Build 150: unit-tests van features/Build150Logic.kt (categorienamen opschonen, samenvoegen, ontdubbelen, logo's) met
-// de gedeelde gevallen uit tools/test/build150_cases.json (dezelfde als tizen/test/build150_test.js), plus zoeken via
+// de gedeelde gevallen uit tools/test/build150_cases.json (dezelfde als de webspeler; build 153: pipes), plus zoeken via
 // Build149Logic.Search.key (zelfde opschoning).
 // Draaien zonder Android:
 //   kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
@@ -69,6 +69,15 @@ fun main(args: Array<String>) {
         val want = (c[1] as List<List<Any?>>).map { Triple(it[0] as String, (it[1] as Double).toInt(), it[2] as String) }
         eq("samenvoegen ${c[0]}", g.map { Triple(it.name, it.sources.size, Build150Logic.Merge.chips(it.tags)) }, want)
     }
+
+    // build 153: elk pipe-teken wordt `|`, en een stuk ertussen aan het begin of eind gaat weg
+    for (c in (cases["pipes"] as? List<List<Any?>>).orEmpty()) {
+        val ch = c[0] as String
+        eq("pipe U+%04X".format(ch[0].code), Build150Logic.Pipes.normalize(ch), c[1])
+        eq("pipe-stuk U+%04X".format(ch[0].code), CN.clean("${ch}NL$ch Netflix").name, "Netflix")
+    }
+    eq("pipes: stuk > 25 tekens blijft", Build150Logic.Pipes.cut("|" + "x".repeat(26) + "| Netflix").front, emptyList<String>())
+    eq("pipes: alleen een stuk → zoals hij was", Build150Logic.Pipes.cut("┃NL┃").rest, "|NL|")
 
     for (c in cases["search"] as List<List<Any?>>) eq("zoeksleutel '${c[0]}'", Build149Logic.Search.key(c[0] as String), c[1])
 

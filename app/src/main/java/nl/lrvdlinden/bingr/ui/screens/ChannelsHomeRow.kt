@@ -72,7 +72,7 @@ fun ChannelsHomeRow(recent: List<Channel>, favorites: List<Channel>) {
 private fun ChannelLogoTile(c: Channel, now: String?, modifier: Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(tvs(10))
-    val name = remember(c.name) { Build151Logic.Channels.name(c.name) }
+    val name = remember(c.name) { c.displayName }
     val label = L("Watch %@ live", name) + if (now.isNullOrBlank()) "" else ", $now"
     Column(modifier.semantics(mergeDescendants = true) { contentDescription = label }) {
         Box(

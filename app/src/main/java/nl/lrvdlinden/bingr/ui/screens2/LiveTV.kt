@@ -277,7 +277,7 @@ fun LiveTVScreen() {
 
     menuFor?.let { c ->
         val fav = Store.isFavorite(pid, c.id)
-        S2ActionDialog(c.name, listOf(
+        S2ActionDialog(c.displayName, listOf(
             S2Action(if (fav) L("Remove from favorites") else L("Add to favorites"), PlusCheck.icon(fav)) {   // plus / vinkje, zoals Mijn lijst (was een ster)
                 Store.toggleFavorite(pid, c.id)
             },
@@ -425,11 +425,11 @@ private fun S2ChannelRow(
         RemoteImage(channel.logo, Modifier.width(tvs(64)).height(tvs(40)).clip(RoundedCornerShape(4.dp))
             .then(if (!AppState.isTV) Modifier.focusLift(1.06f) { ChannelPreview.focus(channel) } else Modifier)
             .then(if (isPreview) Modifier.border(2.dp, Theme.red, RoundedCornerShape(4.dp)) else Modifier),
-            placeholder = channel.name.take(3), fit = true)
+            placeholder = channel.displayName.take(3), fit = true)
         Spacer(Modifier.width(tvs(12)))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(channel.name, color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1,
+                Text(channel.displayName, color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (favorite) {
                     Spacer(Modifier.width(6.dp))
@@ -448,7 +448,7 @@ private fun S2ChannelRow(
             }
             if (next != null) {
                 Spacer(Modifier.height(2.dp))
-                Text(L("Next %@  %@", s2Time(next.start), next.title), color = Theme.secondary, fontSize = tsp(11),
+                Text(L("Next %@  %@", s2Time(next.start), next.displayTitle), color = Theme.secondary, fontSize = tsp(11),
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -471,10 +471,10 @@ private fun S2EventRow(channel: Channel, ev: EventInfo, onClick: () -> Unit, onL
         verticalAlignment = Alignment.CenterVertically
     ) {
         RemoteImage(channel.logo, Modifier.width(tvs(56)).height(tvs(36)).clip(RoundedCornerShape(4.dp)),
-            placeholder = channel.name.take(3), fit = true)
+            placeholder = channel.displayName.take(3), fit = true)
         Spacer(Modifier.width(tvs(12)))
         Column(Modifier.weight(1f)) {
-            Text(ev.title, color = if (ev.isExpired) Theme.secondary else Color.White, fontSize = tsp(15), fontWeight = FontWeight.Bold,
+            Text(ContentLanguage.displayTitle(ev.title), color = if (ev.isExpired) Theme.secondary else Color.White, fontSize = tsp(15), fontWeight = FontWeight.Bold,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(2.dp))
             Text(ev.start?.let { EventParser.startText(it) } ?: ContentLanguage.categoryTitle(channel.group), color = Theme.secondary, fontSize = tsp(12), maxLines = 1)
@@ -503,7 +503,7 @@ fun CatchupOffsetDialog(pid: String, c: Channel, onDismiss: () -> Unit) {
         val state = rememberLazyListState()
         LaunchedEffect(Unit) { runCatching { state.scrollToItem((options.indexOf(cur) - 3).coerceAtLeast(0)) } }
         S2Page(L("Catch-up offset"), onClose = onDismiss, state = state) {
-            item { S2Header(c.name) }
+            item { S2Header(c.displayName) }
             items(options.size) { i ->
                 val m = options[i]
                 Box(Modifier.s2Cell(i, options.size)) {

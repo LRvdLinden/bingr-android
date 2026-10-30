@@ -345,7 +345,7 @@ private fun LoadingOverlay(text: String, source: PlaylistSource?) {
                 val prof = Store.activeProfile
                 if (prof != null) ProfileAvatar(prof, tvs(110)) else AvatarCircle(source, tvs(110))
                 Spacer(Modifier.height(10.dp))
-                Text(prof?.name ?: source.name, color = Theme.secondary, fontSize = tsp(14), maxLines = 1)
+                Text(prof?.displayName ?: source.displayName, color = Theme.secondary, fontSize = tsp(14), maxLines = 1)
             }
             Spacer(Modifier.height(tvs(22)))
         }

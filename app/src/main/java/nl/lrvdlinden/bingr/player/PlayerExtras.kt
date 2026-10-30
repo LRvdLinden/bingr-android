@@ -179,11 +179,11 @@ fun ChannelPreviewView(modifier: Modifier = Modifier) {
         }
         if (!ChannelPreview.playing) {
             RemoteImage(c.logo, Modifier.align(Alignment.Center).fillMaxWidth(0.4f).aspectRatio(16f / 9f),
-                placeholder = c.name.take(3), fit = true)
+                placeholder = c.displayName.take(3), fit = true)
             CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp,
                 modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(16.dp))
         }
-        Text(c.name, color = Color.White, fontSize = tsp(11), fontWeight = FontWeight.SemiBold, maxLines = 1,
+        Text(c.displayName, color = Color.White, fontSize = tsp(11), fontWeight = FontWeight.SemiBold, maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))))

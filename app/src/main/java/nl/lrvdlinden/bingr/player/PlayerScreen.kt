@@ -325,7 +325,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     fun playNext(n: PlayableItem) {
         nextUp = null
         panel = null
-        flash(n.subtitle ?: n.title)
+        flash(n.displaySubtitle ?: n.displayTitle)
         scope.launch { player.stop(); start(n) }
     }
     playNextRef = { n -> playNext(n) }
@@ -682,7 +682,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(tvs(10))
                 ) {
                     Text(L("Next episode in %d s", countdown), color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.Bold)
-                    nextUp?.subtitle?.let { Text(it, color = Theme.secondary, fontSize = tsp(13), maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                    nextUp?.displaySubtitle?.let { Text(it, color = Theme.secondary, fontSize = tsp(13), maxLines = 2, overflow = TextOverflow.Ellipsis) }
                     Row(horizontalArrangement = Arrangement.spacedBy(tvs(10))) {
                         NetflixButton(L("Play now"), Icons.Filled.SkipNext, modifier = Modifier.focusRequester(skipFocus)) {
                             nextUp?.let { playNext(it) }
@@ -743,7 +743,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             BackupSourcesPanel(
                 hits = if (backupFor == player.item.id) backupHits else null,
                 loading = backupLoading,
-                currentServer = Playlists.source?.name,
+                currentServer = Playlists.source?.displayName,
                 onPick = { h -> panel = null; scope.launch { if (!switchTo(h)) flash(L("This stream can't be played right now.")) } },
                 onDismiss = { panel = null },
             )
@@ -793,11 +793,11 @@ private fun PlayerControls(
             ) {
                 if (!isTV) PlayerRoundIcon(Icons.Filled.Close, L("Close"), 24) { onClose() }
                 Column(Modifier.weight(1f).padding(top = if (isTV) 0.dp else 8.dp)) {
-                    // films/series zonder taallabel in de titel (build 59); zendernamen blijven zoals ze zijn
-                    Text(if (player.isLive) player.item.title else ContentLanguage.displayTitle(player.item.title),
+                    // films/series zonder taallabel in de titel (build 59); build 153: zendernamen opgeschoond (┃NL┃ e.d. weg)
+                    Text(player.item.displayTitle,
                         color = Color.White, fontSize = tsp(17), fontWeight = FontWeight.Bold,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    player.item.subtitle?.let {
+                    player.item.displaySubtitle?.let {
                         Text(it, color = Theme.secondary, fontSize = tsp(13), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
@@ -979,11 +979,11 @@ private fun ZapBanner(c: Channel, pending: Boolean) {
             Spacer(Modifier.width(tvs(12)))
         }
         RemoteImage(c.logo, Modifier.width(tvs(64)).height(tvs(40)).clip(RoundedCornerShape(4.dp)),
-            placeholder = c.name.take(3), fit = true)
+            placeholder = c.displayName.take(3), fit = true)
         Spacer(Modifier.width(tvs(12)))
         Column(Modifier.weight(1f, fill = false)) {
-            Text(c.name, color = Color.White, fontSize = tsp(16), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val line = listOfNotNull(now?.let { "${s2Time(it.start)}  ${it.title}" }, c.group.takeIf { it.isNotBlank() }).firstOrNull()
+            Text(c.displayName, color = Color.White, fontSize = tsp(16), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val line = listOfNotNull(now?.let { "${s2Time(it.start)}  ${it.displayTitle}" }, c.group.takeIf { it.isNotBlank() }?.let { ContentLanguage.categoryTitle(it) }).firstOrNull()
             if (line != null) Text(line, color = Theme.secondary, fontSize = tsp(12), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (now != null) {
                 Spacer(Modifier.height(4.dp))

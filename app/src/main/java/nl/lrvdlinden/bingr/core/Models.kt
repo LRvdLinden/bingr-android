@@ -70,6 +70,8 @@ data class ViewerProfile(
     /** Automatische ondertitels (build 59): "off", "whenNeeded" of "always"; null = niet ingesteld */
     val autoSubtitleMode: String? = null,
 ) {
+    /** Build 153: naam zoals getoond (pipe-aanduidingen als "┃NL┃" weg). */
+    val displayName: String get() = ContentLanguage.plainName(name)
     /** Ondertitelstand van dit profiel; een oude aan/uit-keuze (vóór build 59) telt als "always". */
     val subtitleMode: String? get() = autoSubtitleMode ?: if (autoSubtitles == true) TrackPreferences.AUTO_ALWAYS else null
     val kids: Boolean get() = isKids ?: false
@@ -100,6 +102,8 @@ data class PlaylistSource(
     val catchupOffsets: Map<String, Int> = emptyMap(),
 ) {
     val passwordKey: String get() = "playlist.$id.password"
+    /** Build 153: naam zoals getoond (pipe-aanduidingen als "┃NL┃" weg). */
+    val displayName: String get() = ContentLanguage.plainName(name)
 }
 
 @Serializable
@@ -119,7 +123,10 @@ data class Channel(
     val stalkerCmd: String? = null,
     /** Build 128: server van deze zender als die niet de actieve is (null = de actieve server). */
     val sourceID: String? = null,
-)
+) {
+    /** Build 153: naam zoals de app hem toont ("┃NL┃ NPO 1 HD" → "NPO 1"); [name] blijft voor sleutels, id's en afspelen. */
+    val displayName: String get() = ContentLanguage.channelTitle(name)
+}
 
 @Serializable
 data class Movie(
@@ -137,7 +144,10 @@ data class Movie(
     val xtreamVodID: Int? = null,
     /** Build 128: server van deze film als die niet de actieve is (null = de actieve server). */
     val sourceID: String? = null,
-)
+) {
+    /** Build 153: titel zoals de app hem toont (taal- en pipe-aanduidingen weg); [title] blijft voor sleutels en matchen. */
+    val displayTitle: String get() = ContentLanguage.displayTitle(title)
+}
 
 @Serializable
 data class Series(
@@ -158,7 +168,10 @@ data class Series(
     val addedAt: Long? = null,
     /** Build 128: server van deze serie als die niet de actieve is (null = de actieve server). */
     val sourceID: String? = null,
-)
+) {
+    /** Build 153: titel zoals de app hem toont; [title] blijft voor sleutels en matchen. */
+    val displayTitle: String get() = ContentLanguage.displayTitle(title)
+}
 
 @Serializable
 data class Episode(
@@ -171,7 +184,10 @@ data class Episode(
     val still: String? = null,
     val plot: String? = null,
     val durationSeconds: Int? = null,
-)
+) {
+    /** Build 153: titel zoals de app hem toont. */
+    val displayTitle: String get() = ContentLanguage.displayTitle(title)
+}
 
 @Serializable
 data class EPGProgram(
@@ -182,6 +198,8 @@ data class EPGProgram(
     val end: Long,
 ) {
     val id: String get() = "$channelID-${start / 1000}"
+    /** Build 153: titel zoals de app hem toont (taal- en pipe-aanduidingen weg). */
+    val displayTitle: String get() = ContentLanguage.displayTitle(title)
     val isNow: Boolean get() { val n = System.currentTimeMillis(); return start <= n && n < end }
     val progress: Double get() {
         val total = (end - start).toDouble(); if (total <= 0) return 0.0
@@ -252,7 +270,12 @@ data class PlayableItem(
     val seriesID: String? = null,
     /** Build 128: server waarop dit item staat als dat niet de actieve is (afspelen zonder te wisselen) */
     val sourceID: String? = null,
-)
+) {
+    /** Build 153: titel zoals de app hem toont (zender: opgeschoonde zendernaam); [title] blijft voor sleutels. */
+    val displayTitle: String get() = if (type == MediaType.LIVE) ContentLanguage.channelTitle(title) else ContentLanguage.displayTitle(title)
+    /** Build 153: ondertitel zoals getoond (bij catch-up de zendernaam). */
+    val displaySubtitle: String? get() = subtitle?.let { if (type == MediaType.LIVE) ContentLanguage.channelTitle(it) else ContentLanguage.displayTitle(it) }
+}
 
 /** Wat op een detailpagina getoond wordt. */
 sealed class DetailTarget {
@@ -260,6 +283,8 @@ sealed class DetailTarget {
     data class SeriesT(val series: Series) : DetailTarget()
     val id: String get() = when (this) { is MovieT -> movie.id; is SeriesT -> series.id }
     val title: String get() = when (this) { is MovieT -> movie.title; is SeriesT -> series.title }
+    /** Build 153: titel zoals de app hem toont. */
+    val displayTitle: String get() = ContentLanguage.displayTitle(title)
     val poster: String? get() = when (this) { is MovieT -> movie.poster; is SeriesT -> series.poster }
     val group: String get() = when (this) { is MovieT -> movie.group; is SeriesT -> series.group }
     val rating: Double? get() = when (this) { is MovieT -> movie.rating; is SeriesT -> series.rating }
@@ -301,7 +326,10 @@ data class ProgressEntry(
     val playlistID: String? = null,
     /** Van welk kijkprofiel (null = van vóór de profielen → hoort bij het hoofdaccount) */
     val profileID: String? = null,
-)
+) {
+    /** Build 153: titel zoals de app hem toont. */
+    val displayTitle: String get() = ContentLanguage.displayTitle(title)
+}
 
 /** Aanpassingen van de gebruiker op een afspeellijst. */
 @Serializable
@@ -339,7 +367,10 @@ data class ProgramReminder(
     val start: Long,
     /** Van welk profiel (kleine letters); null = hoofdprofiel, of van vóór de herinneringen per profiel */
     val profileID: String? = null,
-)
+) {
+    /** Build 153: zendernaam zoals de app hem toont. */
+    val displayChannelName: String get() = ContentLanguage.channelTitle(channelName)
+}
 
 @Serializable
 data class HistoryEntry(
@@ -355,6 +386,8 @@ data class HistoryEntry(
     val profileID: String? = null,
 ) {
     val id: String get() = "${playlistID ?: "-"}|$itemID"
+    /** Build 153: titel zoals de app hem toont (zender: opgeschoonde zendernaam). */
+    val displayTitle: String get() = if (type == MediaType.LIVE) ContentLanguage.channelTitle(title) else ContentLanguage.displayTitle(title)
 }
 
 /** Zelf toegevoegde netwerkschijf (SMB). Wachtwoord in [Store.secret]. */

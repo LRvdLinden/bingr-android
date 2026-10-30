@@ -89,7 +89,7 @@ fun MultiviewScreen(onClose: () -> Unit) {
     fun beginStream() {
         val o = StreamSession.Owner(
             info = {
-                val names = tiles.map { it.channel.name }
+                val names = tiles.map { it.channel.displayName }
                 StreamSession.Info(
                     (listOf("Multiview") + names.take(4)).joinToString(" · "), "live",
                     tiles.firstOrNull()?.channel?.id ?: "multiview",
@@ -304,7 +304,7 @@ private fun MultiviewTileView(t: MultiviewTile, selected: Boolean, modifier: Mod
                 tint = Color.White, modifier = Modifier.size(tvs(14))
             )
             Spacer(Modifier.width(6.dp))
-            Text(t.channel.name, color = Color.White, fontSize = tsp(12), fontWeight = FontWeight.SemiBold,
+            Text(t.channel.displayName, color = Color.White, fontSize = tsp(12), fontWeight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
@@ -346,9 +346,9 @@ private fun MultiviewChannelPicker(channels: List<Channel>, onDismiss: () -> Uni
                 items(filtered, key = { it.id }) { c ->
                     PlayerSheetItem(onClick = { onPick(c) }) {
                         RemoteImage(c.logo, Modifier.width(tvs(48)).height(tvs(30)).clip(RoundedCornerShape(4.dp)),
-                            placeholder = c.name.take(3), fit = true)
+                            placeholder = c.displayName.take(3), fit = true)
                         Column(Modifier.weight(1f)) {
-                            Text(c.name, color = Color.White, fontSize = tsp(15), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(c.displayName, color = Color.White, fontSize = tsp(15), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (c.group.isNotEmpty()) Text(ContentLanguage.categoryTitle(c.group), color = Theme.secondary, fontSize = tsp(12), maxLines = 1)
                         }
                     }

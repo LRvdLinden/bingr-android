@@ -188,11 +188,11 @@ fun ChannelCard(channel: Channel, now: EPGProgram?, favorite: Boolean = false, m
     Column(modifier.width(tvs(180)).clip(RoundedCornerShape(6.dp)).background(Theme.card)
         .then(if (accent != null) Modifier.border(2.dp, accent, RoundedCornerShape(6.dp)) else Modifier).padding(10.dp)) {
         Box(Modifier.fillMaxWidth().height(tvs(60))) {
-            RemoteImage(channel.logo, Modifier.matchParentSize(), placeholder = channel.name.take(3), fit = true)
+            RemoteImage(channel.logo, Modifier.matchParentSize(), placeholder = channel.displayName.take(3), fit = true)
             if (favorite) Icon(Icons.Default.Star, null, tint = Theme.imdb, modifier = Modifier.align(Alignment.TopEnd).size(14.dp))
         }
         Spacer(Modifier.height(6.dp))
-        Text(channel.name, color = Color.White, fontSize = tsp(13), fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(channel.displayName, color = Color.White, fontSize = tsp(13), fontWeight = FontWeight.SemiBold, maxLines = 1)
         if (now != null) {
             Text(now.title, color = Theme.secondary, fontSize = tsp(11), maxLines = 1)
             Spacer(Modifier.height(4.dp)); ProgressBar(now.progress)

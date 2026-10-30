@@ -25,6 +25,13 @@ object Build151Logic {
         /** Zendernaam zonder taal-, land- en kwaliteitsaanduiding ("NL | NPO 1 HD" → "NPO 1"); hoofdletters blijven. */
         fun name(raw: String): String = Build150Logic.CategoryName.strip(raw).name.ifEmpty { raw.trim() }
 
+        private val memo = java.util.concurrent.ConcurrentHashMap<String, String>()
+        /**
+         * Build 153: zendernaam zoals de app hem overal toont (Live TV, Zenders, tv-gids, speler, favorieten, zoeken):
+         * [name] met cache ("┃NL┃ NPO 1 HD" → "NPO 1"). Afspelen, id's en sleutels blijven de ruwe naam gebruiken.
+         */
+        fun display(raw: String): String = memo[raw] ?: name(raw).also { if (memo.size > 50_000) memo.clear(); memo[raw] = it }
+
         /** Sleutel om dezelfde zender in een andere variant te herkennen ("NPO 1 HD", "NL: NPO 1 FHD" → "npo1"). */
         fun sameKey(raw: String): String = Build150Logic.Merge.key(name(raw)).ifEmpty { raw.trim().lowercase() }
 

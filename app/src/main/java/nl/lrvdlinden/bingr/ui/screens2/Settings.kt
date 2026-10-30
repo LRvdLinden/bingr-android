@@ -395,7 +395,7 @@ fun SettingsScreen() {
             item {
                 S2Section(L("Profiles"), L("Each profile uses the same server, with its own My List, Continue watching, favorites, history and age limit.")) {
                     Store.profiles.forEach { p ->
-                        S2Row(p.name,
+                        S2Row(p.displayName,
                             subtitle = if (Store.isMain(p)) L("Main account")
                                 else p.effectiveAgeLimit?.let { L("Up to %d years", it) } ?: L("Profile"),
                             leading = { ProfileAvatar(p, tvs(34)) },
@@ -644,7 +644,7 @@ fun SettingsScreen() {
                     else L("All servers of the account are available in every profile. Adding, editing and removing servers is done in the main account.")) {
                     Store.playlists.forEach { src ->
                         val active = src.id == source?.id
-                        S2Row(src.name, subtitle = src.kind.title,
+                        S2Row(src.displayName, subtitle = src.kind.title,
                             leading = { AvatarCircle(src, tvs(34)) },
                             onLongClick = { if (isMain) editing = src },
                             onClick = { if (!active) AppState.open(src) },
@@ -714,7 +714,7 @@ fun SettingsScreen() {
             item {
                 S2Section(L("Profile"), if (!isMain) L("The server and all settings are managed in the main account.") else null) {
                     if (profile != null) {
-                        S2Row(profile.name,
+                        S2Row(profile.displayName,
                             subtitle = when {
                                 Store.isMain(profile) -> L("Main account")
                                 profile.effectiveAgeLimit != null -> L("Up to %d years", profile.effectiveAgeLimit ?: 0)

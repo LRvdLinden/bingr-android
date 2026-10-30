@@ -312,7 +312,7 @@ fun ManageScreen(onClose: () -> Unit) {
             item { S2Header(L("Merged")) }
             itemsIndexed(merged) { i, g ->
                 Column(Modifier.s2Cell(i, merged.size)) {
-                    S2Row(g, value = "→ ${c.merged[g] ?: ""}", onClick = { update { it.copy(merged = it.merged - g) } }, trailing = {
+                    S2Row(display(g), value = "→ ${c.merged[g]?.let { display(it) } ?: ""}", onClick = { update { it.copy(merged = it.merged - g) } }, trailing = {
                         Text(L("Undo"), color = Theme.red, fontSize = tsp(14), fontWeight = FontWeight.SemiBold)
                     })
                 }
@@ -391,20 +391,20 @@ private fun S2ChannelsManageScreen(group: String, onClose: () -> Unit) {
         update { it.copy(channelOrder = it.channelOrder + (group to n)) }
     }
 
-    S2Page(group, onClose = onClose) {
+    S2Page(c.renamed[Customization.groupKey(group)] ?: ContentLanguage.categoryTitle(group), onClose = onClose) {
         item { Spacer(Modifier.height(12.dp)) }
         itemsIndexed(channels) { i, ch ->
             val hidden = ch.id in c.hidden
             Column(Modifier.s2Cell(i, channels.size)) {
                 S2Row(
-                    title = c.renamed[ch.id] ?: ch.name,
+                    title = c.renamed[ch.id] ?: ch.displayName,
                     tint = if (hidden) Theme.secondary else Color.White,
                     strike = hidden,
                     onLongClick = { menuFor = ch },
                     onClick = { menuFor = ch },
                     leading = {
                         RemoteImage(ch.logo, Modifier.width(tvs(44)).height(tvs(28)).clip(RoundedCornerShape(4.dp)),
-                            placeholder = ch.name.take(3), fit = true)
+                            placeholder = ch.displayName.take(3), fit = true)
                     },
                     trailing = {
                         if (hidden) Icon(Icons.Default.VisibilityOff, null, tint = Theme.secondary, modifier = Modifier.size(tvs(16)))
@@ -416,8 +416,8 @@ private fun S2ChannelsManageScreen(group: String, onClose: () -> Unit) {
 
     menuFor?.let { ch ->
         val hidden = ch.id in c.hidden
-        S2ActionDialog(c.renamed[ch.id] ?: ch.name, listOf(
-            S2Action(L("Rename"), Icons.Default.Edit) { renaming = ch.id to (c.renamed[ch.id] ?: ch.name) },
+        S2ActionDialog(c.renamed[ch.id] ?: ch.displayName, listOf(
+            S2Action(L("Rename"), Icons.Default.Edit) { renaming = ch.id to (c.renamed[ch.id] ?: ch.displayName) },
             S2Action(if (hidden) L("Show") else L("Hide"), if (hidden) Icons.Default.Visibility else Icons.Default.VisibilityOff) {
                 update { it.copy(hidden = if (hidden) it.hidden - ch.id else it.hidden + ch.id) }
             },

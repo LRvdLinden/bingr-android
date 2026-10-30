@@ -458,7 +458,7 @@ fun RatingPanel(item: PlayableItem, onDone: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(tvs(16))
         ) {
             Text(L("What did you think?"), color = Color.White, fontSize = tsp(22), fontWeight = FontWeight.Bold)
-            Text(item.title + (item.subtitle?.let { " · $it" } ?: ""), color = Theme.secondary, maxLines = 2,
+            Text(item.displayTitle + (item.displaySubtitle?.let { " · $it" } ?: ""), color = Theme.secondary, maxLines = 2,
                 textAlign = TextAlign.Center, fontSize = tsp(14))
             Row(horizontalArrangement = Arrangement.spacedBy(tvs(4))) {
                 for (n in 1..10) {
@@ -556,9 +556,9 @@ fun BackupSourcesPanel(
                     item {
                         PlayerSheetItem(onClick = { onPick(h) }) {
                             Column(Modifier.weight(1f)) {
-                                Text(h.source.name, color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1,
+                                Text(h.source.displayName, color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1,
                                     overflow = TextOverflow.Ellipsis)
-                                Text(h.name, color = Theme.secondary, fontSize = tsp(12), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(ContentLanguage.displayTitle(h.name), color = Theme.secondary, fontSize = tsp(12), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }

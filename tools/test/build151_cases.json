@@ -1,5 +1,5 @@
 {
-  "_uitleg": "Build 151: gedeelde gevallen voor tools/test/Build151LogicTest.kt (Android) en tizen/test/build151_test.js (Samsung TV en LG). names: [ruw, naam, sleutel]. pick: zenders {id: [naam, heeft logo, kinderzender]}, preferred/groups met id's, kids = kinderprofiel (alleen kinderzenders), want = id's in volgorde. dedupe: twee servers (A = actief, B) met overlappende titels; mode titles (taal, dan actieve server), recent (Verder kijken: nieuwste voortgang) of channels (opgeschoonde zendernaam); want = k's in volgorde.",
+  "_uitleg": "Build 151: gedeelde gevallen voor tools/test/Build151LogicTest.kt (Android) en tizen/test/build151_test.js (Samsung TV en LG). names: [ruw, naam, sleutel] (build 153: ook pipe-varianten als ┃NL┃ en ｜DE｜). pick: zenders {id: [naam, heeft logo, kinderzender]}, preferred/groups met id's, kids = kinderprofiel (alleen kinderzenders), want = id's in volgorde. dedupe: twee servers (A = actief, B) met overlappende titels; mode titles (taal, dan actieve server), recent (Verder kijken: nieuwste voortgang) of channels (opgeschoonde zendernaam); want = k's in volgorde.",
   "names": [
     [
       "NL | NPO 1 HD",
@@ -60,6 +60,36 @@
       "",
       "",
       ""
+    ],
+    [
+      "┃NL┃ NPO 1 HD",
+      "NPO 1",
+      "npo1"
+    ],
+    [
+      "NL┃NPO 1 FHD",
+      "NPO 1",
+      "npo1"
+    ],
+    [
+      "RTL 4 ┃NL┃",
+      "RTL 4",
+      "rtl4"
+    ],
+    [
+      "｜DE｜ Sky Cinema HD",
+      "Sky Cinema",
+      "skycinema"
+    ],
+    [
+      "┃NL┃ ┃HD┃ RTL 4",
+      "RTL 4",
+      "rtl4"
+    ],
+    [
+      "┃NL┃",
+      "NL",
+      "nl"
     ]
   ],
   "pick": [

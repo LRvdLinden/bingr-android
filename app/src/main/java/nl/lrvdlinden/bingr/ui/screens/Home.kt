@@ -617,7 +617,7 @@ fun ResumeDialog(choice: ResumeChoice, onDismiss: () -> Unit) {
         })
         choice.detail?.let { d -> add(S2Action(L("More info"), Icons.Outlined.Info) { ScreensNav.detail(d) }) }
     }
-    S2ActionDialog("${choice.title} · ${L("%d%% watched", pct)}", actions, onDismiss = onDismiss)
+    S2ActionDialog("${ContentLanguage.displayTitle(choice.title)} · ${L("%d%% watched", pct)}", actions, onDismiss = onDismiss)
 }
 
 /** Rij "Verder kijken": tik = kiezen (hervatten/opnieuw/meer info), lang indrukken = verwijderen. */
@@ -637,7 +637,7 @@ fun ContinueRow(items: List<ContinueItem>, index: HomeIndex) {
     }
     choice?.let { ResumeDialog(it) { choice = null } }
     removing?.let { c ->
-        S2ActionDialog(c.title, listOf(
+        S2ActionDialog(ContentLanguage.displayTitle(c.title), listOf(
             S2Action(L("Remove from Continue watching"), Icons.Default.Close, destructive = true) { removeFromContinue(c) }
         ), onDismiss = { removing = null })
     }
@@ -1057,7 +1057,7 @@ private fun ExternalPoster(item: DiscoverItem, pid: String?) {
     )
     if (menu && pid != null) {
         val inList = Store.inMyList(pid, item.id)
-        S2ActionDialog(item.title, listOf(
+        S2ActionDialog(ContentLanguage.displayTitle(item.title), listOf(
             S2Action(L("More info"), Icons.Outlined.Info) { openDetail(item.target) },
             S2Action(if (inList) L("Remove from My List") else L("Add to My List"), PlusCheck.icon(inList)) {
                 Store.setMyList(pid, item.id, !inList)
@@ -1097,7 +1097,7 @@ private fun MoviePoster(m: Movie, pid: String?) {
             }
             add(S2Action(L("Add to collection…"), Icons.AutoMirrored.Filled.PlaylistAdd) { collect = true })
         }
-        S2ActionDialog(m.title, actions, onDismiss = { menu = false })
+        S2ActionDialog(ContentLanguage.displayTitle(m.title), actions, onDismiss = { menu = false })
     }
     if (collect) AddToCollectionDialog(Collections.ref(DetailTarget.MovieT(m)), m.title, m.poster) { collect = false }
 }
@@ -1262,7 +1262,7 @@ fun HeroBanner(target: DetailTarget, onPlay: () -> Unit, onInfo: () -> Unit, pla
                     .clip(shape)
                     .border(1.dp, Color.White.copy(alpha = 0.12f), shape)
             ) {
-                RemoteImage(poster, Modifier.matchParentSize(), placeholder = target.title)
+                RemoteImage(poster, Modifier.matchParentSize(), placeholder = target.displayTitle)
             }
             Box(
                 Modifier.matchParentSize().background(
@@ -1312,7 +1312,7 @@ fun HeroBanner(target: DetailTarget, onPlay: () -> Unit, onInfo: () -> Unit, pla
                     .clip(shape)
                     .border(1.dp, Color.White.copy(alpha = 0.12f), shape)
             ) {
-                RemoteImage(poster, Modifier.matchParentSize(), placeholder = target.title)
+                RemoteImage(poster, Modifier.matchParentSize(), placeholder = target.displayTitle)
                 Box(Modifier.matchParentSize().background(Brush.verticalGradient(0.5f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.85f))))
                 Column(
                     Modifier.align(Alignment.BottomCenter).padding(16.dp),

@@ -413,7 +413,7 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit, initialQuery: String? = nu
                             RemoteImage(
                                 h.channel.logo,
                                 Modifier.width(tvs(56)).height(tvs(36)).clip(RoundedCornerShape(4.dp)),
-                                placeholder = h.channel.name.take(3), fit = true
+                                placeholder = h.channel.displayName.take(3), fit = true
                             )
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -422,11 +422,11 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit, initialQuery: String? = nu
                                     } else if (h.p.end < System.currentTimeMillis()) {
                                         Icon(Icons.Default.History, null, tint = Theme.secondary, modifier = Modifier.size(tvs(12)))
                                     }
-                                    Text(h.p.title, color = Color.White, fontSize = tsp(14), fontWeight = FontWeight.SemiBold,
+                                    Text(h.p.displayTitle, color = Color.White, fontSize = tsp(14), fontWeight = FontWeight.SemiBold,
                                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                                 Text(
-                                    "${h.channel.name} · ${programTime(h.p.start)}", color = Theme.secondary, fontSize = tsp(11),
+                                    "${h.channel.displayName} · ${programTime(h.p.start)}", color = Theme.secondary, fontSize = tsp(11),
                                     maxLines = 1, overflow = TextOverflow.Ellipsis
                                 )
                             }

@@ -3,6 +3,7 @@ package nl.lrvdlinden.bingr
 // Build 144: unit-tests van features/Build144Logic.kt (Verder kijken: welke poster; automatisch verversen pas na het
 // openen). Draaien zonder Android:
 //   kotlinc app/src/main/java/nl/lrvdlinden/bingr/meta/TitleCleaner.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build144Logic.kt \
+//     app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
 //     tools/test/Build144LogicTest.kt -include-runtime -d /tmp/b144.jar
 //   java -jar /tmp/b144.jar
 // De workflow Build doet dit vóór het bouwen van de APK; een fout laat de build mislukken.

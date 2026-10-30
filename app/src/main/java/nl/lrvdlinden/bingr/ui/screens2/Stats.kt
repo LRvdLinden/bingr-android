@@ -321,7 +321,7 @@ fun StatsScreen(onClose: () -> Unit) {
             Column(Modifier.s2Cell(i, rows)) {
                 if (i > 0) S2Divider()
                 S2Row(
-                    title = t.title.ifBlank { "—" },
+                    title = ContentLanguage.shownTitle(t.title, live).ifBlank { "—" },
                     subtitle = detailText(t),
                     value = statsTime(t.minutes),
                     onClick = open(t),
@@ -332,7 +332,7 @@ fun StatsScreen(onClose: () -> Unit) {
                             Spacer(Modifier.width(tvs(8)))
                             RemoteImage(posters[id.take(1) + ":" + t.itemKey + t.title],
                                 Modifier.width(tvs(if (live) 56 else 40)).height(tvs(if (live) 36 else 60)).clip(RoundedCornerShape(4.dp)),
-                                placeholder = t.title.take(2), fit = live)
+                                placeholder = ContentLanguage.shownTitle(t.title, live).take(2), fit = live)
                         }
                     }
                 )

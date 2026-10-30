@@ -316,7 +316,7 @@ fun WatchLogScreen(onClose: () -> Unit) {
                         if (i > 0) S2Divider()
                         val target = remember(e) { watchTarget(e) }
                         S2Row(
-                            title = e.title.ifBlank { "—" },
+                            title = ContentLanguage.displayTitle(e.title).ifBlank { "—" },
                             subtitle = listOf(e.profileName, deviceNameWithLabel(e.deviceName, e.platform)).filter { it.isNotBlank() }.joinToString(" · "),
                             onClick = target?.let { t -> { detail = t } },
                             leading = {

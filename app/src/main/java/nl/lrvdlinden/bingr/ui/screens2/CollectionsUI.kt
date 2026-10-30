@@ -185,7 +185,7 @@ fun CollectionRow(c: BingrCollection, only: String? = null) {
             is CollectionEntry.M -> Collections.ref(DetailTarget.MovieT(e.movie))
             is CollectionEntry.S -> Collections.ref(DetailTarget.SeriesT(e.series))
         }
-        val title = when (e) { is CollectionEntry.C -> e.channel.name; is CollectionEntry.M -> e.movie.title; is CollectionEntry.S -> e.series.title }
+        val title = when (e) { is CollectionEntry.C -> e.channel.displayName; is CollectionEntry.M -> e.movie.displayTitle; is CollectionEntry.S -> e.series.displayTitle }
         S2ActionDialog(title, listOf(
             S2Action(L("Remove from collection") + " · " + c.name, Icons.Default.Close, destructive = true) { Collections.toggle(c, ref) },
         ), onDismiss = { menuFor = null })
@@ -390,7 +390,7 @@ fun CollectionEditScreen(existing: BingrCollection?, onClose: () -> Unit, initia
                         }
                         items.forEach { r ->
                             val e = byRef[r]
-                            val title = when (e) { is CollectionEntry.C -> e.channel.name; is CollectionEntry.M -> e.movie.title; is CollectionEntry.S -> e.series.title; null -> r.id }
+                            val title = when (e) { is CollectionEntry.C -> e.channel.displayName; is CollectionEntry.M -> e.movie.displayTitle; is CollectionEntry.S -> e.series.displayTitle; null -> r.id }
                             S2Row(title, subtitle = when (r.type) { BingrCollection.CHANNEL -> L("Live TV"); BingrCollection.MOVIE -> L("Movies"); else -> L("Series") },
                                 tint = if (e == null) Theme.secondary else Color.White,
                                 onClick = {}, trailing = {
@@ -404,7 +404,7 @@ fun CollectionEditScreen(existing: BingrCollection?, onClose: () -> Unit, initia
             if (smart && preview.isNotEmpty()) item {
                 S2Section(L("%d titles", preview.size)) {
                     preview.take(12).forEach { e ->
-                        val t = when (e) { is CollectionEntry.C -> e.channel.name; is CollectionEntry.M -> e.movie.title; is CollectionEntry.S -> e.series.title }
+                        val t = when (e) { is CollectionEntry.C -> e.channel.displayName; is CollectionEntry.M -> e.movie.displayTitle; is CollectionEntry.S -> e.series.displayTitle }
                         S2Row(t, tint = Theme.secondary)
                     }
                 }

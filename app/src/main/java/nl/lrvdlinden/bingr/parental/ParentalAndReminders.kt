@@ -427,10 +427,12 @@ object Reminders {
 
     /** Titel voor melding/banner: met de profielnaam als het account meer profielen heeft ("Voor Emma: Journaal"). */
     fun displayTitle(r: ProgramReminder): String {
-        if (Store.profiles.size <= 1) return r.title
-        val id = owner(r) ?: Store.mainProfileID ?: return r.title
+        // build 153: programmatitel zonder taal- en pipe-aanduidingen
+        val t = ContentLanguage.displayTitle(r.title)
+        if (Store.profiles.size <= 1) return t
+        val id = owner(r) ?: Store.mainProfileID ?: return t
         val name = Store.profiles.firstOrNull { it.id.equals(id, ignoreCase = true) }?.name?.trim().orEmpty()
-        return if (name.isEmpty()) r.title else L("For %@: %@", name, r.title)
+        return if (name.isEmpty()) t else L("For %@: %@", name, t)
     }
 
     /**
@@ -566,7 +568,7 @@ object Reminders {
         if (Push.active) return
         // met de profielnaam (ook voor een profiel dat nu niet actief is); de herinnering zelf heeft de nieuwste naam
         val title = Store.reminders.firstOrNull { it.id == id }?.let { displayTitle(it) } ?: intent.getStringExtra(EXTRA_TITLE) ?: ""
-        val channelName = intent.getStringExtra(EXTRA_CHANNEL_NAME) ?: ""
+        val channelName = ContentLanguage.channelTitle(intent.getStringExtra(EXTRA_CHANNEL_NAME) ?: "")
         ensureChannel(ctx)
         // tik: zender openen met profielcontrole, net als een herinnering via push (bingr://live, PushNav)
         val owner = Store.reminders.firstOrNull { it.id == id }?.let { owner(it) } ?: profileFromID(id)

@@ -16,7 +16,8 @@ object TitleCleaner {
     private val spaces = Regex("[ \\t\\u00A0]+")
 
     fun parse(raw: String): Parsed {
-        var s = raw
+        // build 153: pipe-tekens één `|`, stukken tussen pipes aan begin en eind weg ("┃NL┃ Dune", "Dune |4K|")
+        var s = Build150Logic.Pipes.cut(raw).rest
         // landcodes/labels vooraan weg (eventueel meerdere)
         repeat(2) { s = prefix.replace(s, "") }
 

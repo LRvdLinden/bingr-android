@@ -95,14 +95,14 @@ fun HistoryScreen(onClose: () -> Unit) {
                 Column(Modifier.s2Cell(i, list.size)) {
                     val live = e.type == MediaType.LIVE
                     S2Row(
-                        title = e.title,
+                        title = e.displayTitle,
                         subtitle = e.subtitle,
                         onLongClick = { menuFor = e },
                         onClick = { open(e) },
                         leading = {
                             RemoteImage(e.artwork,
                                 Modifier.width(tvs(if (live) 56 else 40)).height(tvs(if (live) 36 else 60)).clip(RoundedCornerShape(4.dp)),
-                                placeholder = e.title.take(2), fit = live)
+                                placeholder = e.displayTitle.take(2), fit = live)
                         },
                         trailing = {
                             Column(horizontalAlignment = Alignment.End) {
@@ -126,7 +126,7 @@ fun HistoryScreen(onClose: () -> Unit) {
     }
 
     menuFor?.let { e ->
-        S2ActionDialog(e.title, listOf(
+        S2ActionDialog(e.displayTitle, listOf(
             S2Action(L("Remove from history"), Icons.Default.Delete, destructive = true) { Store.removeHistory(e) }
         ), onDismiss = { menuFor = null })
     }

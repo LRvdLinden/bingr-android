@@ -244,7 +244,7 @@ fun SourceCheckScreen(onClose: () -> Unit) {
         if (r == null) {
             item {
                 S2Section {
-                    S2Row(status, subtitle = src.name, leading = {
+                    S2Row(status, subtitle = src.displayName, leading = {
                         CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(tvs(20)))
                     })
                 }

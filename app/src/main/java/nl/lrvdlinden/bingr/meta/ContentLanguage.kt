@@ -186,7 +186,8 @@ object ContentLanguage {
     private val yearOrQuality = Regex("^(?:19\\d{2}|20\\d{2}|4K|UHD|FHD|HD|SD|HDR|HEVC|1080P|720P|2160P|DV|ATMOS)$", RegexOption.IGNORE_CASE)
 
     private fun parseTitle(raw: String): Parsed {
-        var s = raw
+        // build 153: alle pipe-tekens ("┃", "｜" …) eerst één `|`
+        var s = Build150Logic.Pipes.normalize(raw)
         var info: Info? = null
         // vooraan: max. 3 labels ("4K | NL | Titel"); taal weghalen, andere labels laten staan
         var kept = ""
@@ -230,8 +231,15 @@ object ContentLanguage {
             if (cm != null && cc != null) { info = merge(info, Info(code = cc)); s = s.substring(0, cm.range.first); continue }
             break
         }
-        val clean = (s + tail).trim().trim('-', '|', ':', '–').trim()
-        return Parsed(info, clean.ifEmpty { raw.trim() })
+        var clean = (s + tail).trim()
+        // build 153: wat er aan het begin of eind nog tussen twee pipes staat ("|4K|", "┃ABC┃"), gaat helemaal weg
+        val cut = Build150Logic.Pipes.cut(clean)
+        if (cut.front.isNotEmpty() || cut.back.isNotEmpty()) {
+            for (b in cut.front + cut.back) token(b)?.let { info = merge(info, it) }
+            clean = cut.rest
+        }
+        clean = clean.trim().trim('-', '|', ':', '–').trim()
+        return Parsed(info, clean.ifEmpty { Build150Logic.Pipes.normalize(raw).trim() })
     }
 
     private fun parseGroup(group: String): Info? {
@@ -286,6 +294,15 @@ object ContentLanguage {
      * hoofdletters ("| NL | NETFLIX" → "Netflix", "| MULTI / LINGO | NETFLIX" → "Netflix"). Eén plek: Build150Logic.
      */
     fun categoryTitle(raw: String): String = Build150Logic.CategoryName.display(raw)
+
+    /** Build 153: zendernaam zoals de app hem toont ("┃NL┃ NPO 1 HD" → "NPO 1"); afspelen en id's gebruiken de ruwe naam. */
+    fun channelTitle(raw: String): String = Build151Logic.Channels.display(raw)
+
+    /** Build 153: alleen de pipe-aanduidingen weg (server- en profielnamen: "┃NL┃ Mijn server" → "Mijn server"). */
+    fun plainName(raw: String): String = Build150Logic.Pipes.cut(raw).rest
+
+    /** Build 153: getoonde titel van iets dat een zender ([live]) of een film/serie/aflevering kan zijn. */
+    fun shownTitle(raw: String, live: Boolean): String = if (live) channelTitle(raw) else displayTitle(raw)
 
     /** Build 150: labels die van een categorienaam af gehaald zijn ("NL", "Multi"), voor de chips. */
     fun categoryTags(raw: String): List<String> = Build150Logic.CategoryName.cached(raw).tags
