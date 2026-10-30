@@ -156,6 +156,9 @@ object Playlists {
             if (cached != null) {
                 StartDiagnostics.task("apply") { setRaw(cached) }
                 StartDiagnostics.mark("servers_loaded")
+                // build 152: intussen (vorige keer afgesloten vóór het opnieuw ophalen, of op een ander apparaat) een
+                // overgeslagen categorie weer aangezet → die server(s) nu opnieuw ophalen, ook na een herstart
+                reloadUnhidden()
                 // build 141: eerst het scherm (de lijst uit de cache, gefilterd en met de rijen), pas daarna het netwerk.
                 // Build 145: met een bewaarde lijst wordt bij het openen NIETS vanzelf opgehaald (ook niet na 45 s zoals in
                 // build 144, en geen vernieuwtermijn meer). Na het kiezen van een profiel: de vraag "Servers bijwerken?",
@@ -281,14 +284,38 @@ object Playlists {
      * achtergrond opnieuw ophalen. Andere servers krijgen die categorie bij hun volgende keer bijwerken.
      */
     private var reloadJob: Job? = null
+    private var reloadOthersJob: Job? = null
     private fun reloadUnhidden() {
-        val s = source ?: return
+        if (Screenshots.isActive || StressMode.isActive) return
+        val s = source
         val raw = rawLibrary
-        if (raw.hiddenGroups.isNotEmpty()) {
-            val skip = hiddenPredicate(s)
-            val back = raw.hiddenGroups.keys.any { !skip(it.substringAfter('|')) }
+        if (s != null && raw.hiddenGroups.isNotEmpty()) {
+            val back = Build152Logic.HiddenCategories.comeBack(raw.hiddenGroups.keys, hiddenPredicate(s))
             if (back && reloadJob?.isActive != true) reloadJob = AppScope.launch { refresh(s, showSpinner = false) }
         }
+        // build 152: ook de andere servers (tot build 151 pas bij hun volgende keer bijwerken, soms pas na uren of nooit):
+        // welke categorieën daar overgeslagen zijn staat klein in Prefs ([rememberSkipped]), zonder hun catalogus te lezen
+        val others = Store.playlists.filter { p -> !p.id.equals(s?.id, ignoreCase = true) }
+            .filter { p -> Build152Logic.HiddenCategories.comeBack(skippedOf(p), hiddenPredicate(p)) }
+        if (others.isNotEmpty() && reloadOthersJob?.isActive != true) reloadOthersJob = AppScope.launch {
+            var any = false
+            for (p in others) {
+                if (Store.playlists.none { it.id == p.id }) continue
+                if (refreshOther(p)) any = true
+            }
+            if (any) AllServers.catalogsRefreshed()
+        }
+    }
+
+    /** Build 152: overgeslagen categorieën ("live|naam" e.d.) van de laatst bewaarde catalogus van [p] (klein, in Prefs). */
+    private fun skippedKey(p: PlaylistSource) = "skipped152." + p.id.lowercase(java.util.Locale.ROOT)
+    private val skippedSer = ListSerializer(String.serializer())
+    fun skippedOf(p: PlaylistSource): List<String> =
+        Prefs.string(skippedKey(p))?.let { runCatching { Http.json.decodeFromString(skippedSer, it) }.getOrNull() } ?: emptyList()
+    private fun rememberSkipped(p: PlaylistSource, lib: Library) {
+        val k = skippedKey(p)
+        if (lib.hiddenGroups.isEmpty()) { if (Prefs.has(k)) Prefs.remove(k) }
+        else Prefs.put(k, Http.json.encodeToString(skippedSer, lib.hiddenGroups.keys.toList()))
     }
 
     /** Build 149: wat bij het ophalen van [s] niet ingelezen hoeft te worden (verborgen categorie, ook via samenvoegen). */
@@ -1146,6 +1173,7 @@ object Playlists {
         val ok = withContext(Dispatchers.IO) {
             runCatching { synchronized(cacheWriteLock) { CatalogFiles.write(lib, cachePaths(p), Http.json); cacheFile(p).delete() } }.isSuccess
         }
+        if (ok) rememberSkipped(p, lib)
         if (ok && notify) withContext(Dispatchers.Main) { catalogVersion++ }
     }
 
@@ -1157,6 +1185,7 @@ object Playlists {
                     CatalogFiles.write(lib, cachePaths(p), Http.json)
                     cacheFile(p).delete()
                 }
+                rememberSkipped(p, lib)
                 // build 130: pas als het bestand er staat (nieuwe tijd), zodat de achtergrond de nieuwe cache leest
                 if (notify) withContext(Dispatchers.Main) { catalogVersion++ }
             }

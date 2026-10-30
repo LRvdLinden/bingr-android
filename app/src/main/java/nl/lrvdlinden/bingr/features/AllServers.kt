@@ -59,6 +59,12 @@ object AllServers {
     @Volatile private var epg: Map<String, List<EPGProgram>> = emptyMap()
     /** Server bestaat, maar het item staat niet (meer) in zijn catalogus (metaKey). */
     @Volatile private var absent: Set<String> = emptySet()
+    /**
+     * Build 152: staat wel op zijn server, maar het filter van het profiel verbergt hem (verborgen categorie, kinderslot,
+     * leeftijd), of hij zit in een categorie die bij het inlezen is overgeslagen (build 149). Niet "weg": geen tegel uit de
+     * meta, niet zoeken op andere servers en geen remap.
+     */
+    @Volatile private var filteredOut: Set<String> = emptySet()
     /** Laatste zoekpoging per sleutel (metaKey → tijd), zodat de achtergrond niet steeds opnieuw zoekt. */
     private val tried = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private const val RETRY = 6 * 3_600_000L
@@ -71,7 +77,7 @@ object AllServers {
     private val X = AllServersLogic
 
     fun wipe() {
-        found = emptyMap(); absent = emptySet(); tried.clear(); notice = null; smart = emptyMap(); smartTried.clear(); libCache.clear()
+        found = emptyMap(); absent = emptySet(); filteredOut = emptySet(); tried.clear(); notice = null; smart = emptyMap(); smartTried.clear(); libCache.clear()
         synchronized(libOrder) { libOrder.clear() }
         scans.clear(); smartDone = null
         synchronized(seenChannels) { seenChannels.clear(); seenEpg.clear() }
@@ -377,7 +383,7 @@ object AllServers {
 
     /** Build 130: uitkomst van één server in [refresh], zolang zijn cache, de filters en de verwijzingen gelijk blijven. */
     private class Scan(val sig: String, val found: Map<String, Any>, val epg: Map<String, List<EPGProgram>>,
-                       val absent: Set<String>, val needs: List<Ref>)
+                       val absent: Set<String>, val needs: List<Ref>, val filtered: Set<String> = emptySet())
     private val scans = java.util.concurrent.ConcurrentHashMap<String, Scan>()
     private fun refSig(r: Ref) = "${r.key}\u0003${r.field}\u0003${r.kind}\u0003${r.title}"
 
@@ -405,7 +411,7 @@ object AllServers {
             (activeRefs() + if (m) otherProfileRefs() else emptyList()) to m
         }
         if (refs.isEmpty()) {
-            if (found.isNotEmpty() || absent.isNotEmpty()) { found = emptyMap(); absent = emptySet(); withContext(Dispatchers.Main) { version++ } }
+            if (found.isNotEmpty() || absent.isNotEmpty()) { found = emptyMap(); absent = emptySet(); filteredOut = emptySet(); withContext(Dispatchers.Main) { version++ } }
             if (migrating) withContext(Dispatchers.Main) { Prefs.put(MIGRATED, true) }
             return@withLock
         }
@@ -413,6 +419,7 @@ object AllServers {
         val newFound = HashMap<String, Any>()
         val newEpg = HashMap<String, List<EPGProgram>>()
         val newAbsent = HashSet<String>()
+        val newFiltered = HashSet<String>()
         val needs = ArrayList<Ref>()
         var complete = true
         val servers = Store.playlists.toList()
@@ -428,12 +435,14 @@ object AllServers {
             val prev = scans[pk]
             if (prev != null && prev.sig == sig && stamp != 0L) {
                 newFound.putAll(prev.found); newEpg.putAll(prev.epg); newAbsent.addAll(prev.absent); needs.addAll(prev.needs)
+                newFiltered.addAll(prev.filtered)
                 continue
             }
             val sFound = HashMap<String, Any>()
             val sEpg = HashMap<String, List<EPGProgram>>()
             val sAbsent = HashSet<String>()
             val sNeeds = ArrayList<Ref>()
+            val sFiltered = HashSet<String>()
             // geen cache: Playlists.catalogOf haalt hem hooguit eens per 6 uur stil op, met een time-out
             val lib = filtered(p, allowNetwork = false) ?: run {
                 waitForIdle()
@@ -444,11 +453,39 @@ object AllServers {
                 // build 141: catalogus (nu) niet te lezen: wat we van deze server al wisten blijven tonen. Tot build 140 viel
                 // het dan weg, en verdwenen titels van die server uit Mijn lijst tot de volgende geslaagde ronde.
                 val pre = "$pk|"
-                prev?.let { newFound.putAll(it.found); newEpg.putAll(it.epg); newAbsent.addAll(it.absent) }
+                prev?.let { newFound.putAll(it.found); newEpg.putAll(it.epg); newAbsent.addAll(it.absent); newFiltered.addAll(it.filtered) }
                     ?: run { newFound.putAll(found.filterKeys { it.startsWith(pre) }); newEpg.putAll(epg.filterKeys { it.startsWith(pre) }) }
                 continue
             }
             // build 141: het doorlopen van de verwijzingen (en de meta) op de achtergrond, niet op de main thread
+            // build 152: de ruwe catalogus (pas als er iets ontbreekt, één keer per server): wat het filter verbergt of wat
+            // bij het inlezen is overgeslagen, is niet weg (tot build 151 telde dat als "weg": tegel uit de meta, zoeken op
+            // andere servers en een remap voor het hele account)
+            var rawRead = false
+            var raw: Library? = null
+            var rawSkipped = false
+            // alleen de id's (per soort, pas als nodig), geen volledige index van de ruwe catalogus
+            val rawIds = HashMap<String, Set<String>>()
+            suspend fun inRaw(kind: String?, id: String): Boolean? {
+                if (!rawRead) {
+                    rawRead = true
+                    raw = if (active) withContext(Dispatchers.Main) { Playlists.rawLibrary }
+                        else runCatching { Playlists.catalogOf(p, allowNetwork = false) }.getOrNull()
+                    rawSkipped = raw?.hiddenGroups?.isNotEmpty() == true
+                }
+                val rl = raw?.takeIf { !it.isEmpty } ?: return if (rawSkipped) false else null
+                fun ids(k: String): Set<String> = rawIds.getOrPut(k) {
+                    when (k) {
+                        "channel" -> rl.channels.mapTo(HashSet()) { it.id }
+                        "movie" -> rl.movies.mapTo(HashSet()) { it.id }
+                        else -> rl.series.mapTo(HashSet()) { it.id }
+                    }
+                }
+                return when (kind) {
+                    "channel", "movie", "series" -> id in ids(kind ?: "")
+                    else -> id in ids("movie") || id in ids("series") || id in ids("channel")
+                }
+            }
             withContext(Dispatchers.Default) {
             val ix = Ix(lib)
             for (r in list) {
@@ -468,6 +505,10 @@ object AllServers {
                     if (r.field == Field.CONTINUE || r.field == Field.HISTORY) {
                         // voortgang/geschiedenis zonder item in de catalogus (bijv. aflevering): alleen als we weten wat het is
                         if (CatalogMeta.wanted(r.key) == null) continue
+                    }
+                    val inR = inRaw(r.kind, id)
+                    if (Build152Logic.HiddenCategories.presence(false, inR, rawSkipped) != Build152Logic.HiddenCategories.Presence.GONE) {
+                        sFiltered += mk; continue
                     }
                     sAbsent += mk; sNeeds += r
                 } else if (!active) sFound[mk] = when (item) {
@@ -490,8 +531,8 @@ object AllServers {
             }
             // stamp opnieuw lezen: alleen bewaren als de cache intussen niet veranderd is
             val after = if (active) System.identityHashCode(Playlists.library).toLong() else withContext(Dispatchers.IO) { Playlists.cacheStamp(p) }
-            if (after == stamp) scans[pk] = Scan(sig, sFound, sEpg, sAbsent, sNeeds)
-            newFound.putAll(sFound); newEpg.putAll(sEpg); newAbsent.addAll(sAbsent); needs.addAll(sNeeds)
+            if (after == stamp) scans[pk] = Scan(sig, sFound, sEpg, sAbsent, sNeeds, sFiltered)
+            newFound.putAll(sFound); newEpg.putAll(sEpg); newAbsent.addAll(sAbsent); needs.addAll(sNeeds); newFiltered.addAll(sFiltered)
         }
         // verwijzingen naar een server die er niet meer is (tombstone of onbekend)
         for ((sid, list) in byServer) {
@@ -499,8 +540,8 @@ object AllServers {
             needs += list
         }
         // alleen opnieuw tekenen als er echt iets anders is
-        val changed = newFound != found || newAbsent != absent || newEpg.keys != epg.keys
-        found = newFound; absent = newAbsent; epg = newEpg
+        val changed = newFound != found || newAbsent != absent || newEpg.keys != epg.keys || newFiltered != filteredOut
+        found = newFound; absent = newAbsent; epg = newEpg; filteredOut = newFiltered
         withContext(Dispatchers.Main) {
             if (changed) version++
             if (migrating && complete) Prefs.put(MIGRATED, true)
@@ -602,6 +643,8 @@ object AllServers {
     private fun stub(key: String, kind: String): Boolean {
         val sid = X.serverOf(key) ?: return false
         if (isActive(sid) || server(sid) == null || Store.activeProfile?.kids == true) return false
+        // build 152: verborgen door het filter (bijv. een verborgen categorie): geen tegel uit de meta
+        if (X.metaKey(key) in filteredOut) return false
         if (CatalogMeta.kind(key) != kind || CatalogMeta.title(key).isNullOrBlank()) return false
         stubs += X.metaKey(key)
         return true

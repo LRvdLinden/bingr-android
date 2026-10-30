@@ -138,9 +138,10 @@ fun ManageCategoriesScreen(onClose: () -> Unit) {
         val idx = Build140Logic.CatMarks.index(hiddenNow)
         byName.entries.filter { (g, ids) -> ids.any { idx[it.lowercase()]?.contains(g) == true } }.mapTo(HashSet()) { it.key }
     }
-    fun keysOf(g: String) = (byName[g] ?: emptyList()).map { Store.key(it, g) }
     fun isOn(g: String) = g !in offSet
-    fun set(list: List<String>, on: Boolean) = Store.setCategoriesHidden(list.flatMap { keysOf(it) }, hidden = !on)
+    // build 152: sleutels altijd per bron en server met de exacte ruwe naam (nooit de opgeschoonde naam van de regel)
+    fun set(list: List<String>, on: Boolean) =
+        Store.setCategoriesHidden(Build152Logic.HiddenCategories.keysFor(list) { byName[it] ?: emptyList() }, hidden = !on)
     fun from(g: String): String? = if (servers.size < 2) null
         else (byName[g] ?: emptyList()).mapNotNull { id -> servers.firstOrNull { it.id == id }?.name }.joinToString(", ")
     // build 150: één regel per opgeschoonde naam ("| NL | NETFLIX" + "| MULTI | NETFLIX" = "Netflix"); aan/uit zet alle

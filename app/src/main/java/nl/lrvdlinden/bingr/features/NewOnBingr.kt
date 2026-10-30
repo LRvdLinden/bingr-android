@@ -149,10 +149,20 @@ object FirstSeen {
         val k = sid.lowercase(Locale.ROOT)
         val f = file(sid)
         val known = mem[k] ?: if (f.exists()) runCatching { Http.json.decodeFromString(ser, f.readText()) }.getOrNull() else null
-        val ids = ArrayList<String>(raw.movies.size + raw.series.size)
-        raw.movies.forEach { ids += "m:" + it.id }
-        raw.series.forEach { ids += "s:" + it.id }
-        val n = Build140Logic.Picks.firstSeen(known, ids, System.currentTimeMillis())
+        // build 152: (id, categorie), zodat een categorie die bij de vorige keer was overgeslagen (verborgen, build 149) en nu
+        // weer aan staat niet in één keer als "nieuw" in Nieuw op Bingr komt; zolang er categorieën overgeslagen zijn,
+        // blijven de bekende id's daaruit bewaard (tot build 151 vielen ze weg en kwamen ze later als nieuw terug)
+        val items = ArrayList<Pair<String, String>>(raw.movies.size + raw.series.size)
+        raw.movies.forEach { items += ("m:" + it.id) to ("movie|" + it.group) }
+        raw.series.forEach { items += ("s:" + it.id) to ("series|" + it.group) }
+        val sk = File(f.parentFile, k + ".skipped.json")
+        val skipSer = kotlinx.serialization.builtins.ListSerializer(String.serializer())
+        val wasSkipped = if (sk.exists()) runCatching { Http.json.decodeFromString(skipSer, sk.readText()) }.getOrNull()?.toHashSet() ?: hashSetOf() else hashSetOf()
+        val nowSkipped = raw.hiddenGroups.keys.filter { it.startsWith("movie|") || it.startsWith("series|") }
+        val n = Build152Logic.HiddenCategories.firstSeen(known, items, System.currentTimeMillis(), wasSkipped, nowSkipped.isNotEmpty())
+        runCatching {
+            if (nowSkipped.isEmpty()) { if (sk.exists()) sk.delete() } else sk.writeText(Http.json.encodeToString(skipSer, nowSkipped.sorted()))
+        }
         mem[k] = n
         version[k] = stamp
         if (n != known) runCatching {
