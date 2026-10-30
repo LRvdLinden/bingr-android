@@ -842,7 +842,8 @@ fun HomeScreen(filter: Filter) {
                         if (list.isNotEmpty()) item(key = "d|streaming") { LabeledTargetRow(L("New on Bingr"), rememberDeduped(list, HomeDedupe::targets)) }
                         shown(list.isNotEmpty())
                     }
-                    "upcoming" -> if (filter == Filter.ALL) {
+                    // build 152: ook "nowplaying" (Nu in de bioscoop), zelfde rij en focus als Binnenkort; leeg/geen netwerk = geen rij
+                    "upcoming", "nowplaying" -> if (filter == Filter.ALL) {
                         val kind = DiscoverKind.of(key)
                         val list = kind?.let { discover[it] }.orEmpty()
                         if (kind != null && list.isNotEmpty()) item(key = "d|$key") { DiscoverRow(kind, list, pid) }

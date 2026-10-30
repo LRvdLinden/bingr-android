@@ -24,10 +24,16 @@ import java.util.Locale
 // (TMDB, JustWatch) staat in Instellingen → Over in plaats van onder de rijen. 12 uur bewaard; netwerk en koppelen op de achtergrond. Zelfde sleutels als iOS/web.
 
 enum class DiscoverKind(val key: String) {
-    UPCOMING("upcoming"), STREAMING("streaming");
+    UPCOMING("upcoming"), STREAMING("streaming"),
+    /** Build 152: "Nu in de bioscoop" (TMDB /movie/now_playing in de regio van de app-taal; geen IMDb: geen API, scrapen mag niet) */
+    CINEMA("nowplaying");
 
     /** Getoonde naam (build 112: "Binnenkort op Bingr" / "Nieuw op Bingr"); de sleutels blijven upcoming/streaming */
-    val title: String get() = if (this == UPCOMING) L("Coming soon to Bingr") else L("New on Bingr")
+    val title: String get() = when (this) {
+        UPCOMING -> L("Coming soon to Bingr")
+        CINEMA -> L("Now in cinemas")
+        STREAMING -> L("New on Bingr")
+    }
     /** Build 112: "Nieuw op Bingr" alleen met titels uit de eigen bibliotheek (meteen afspeelbaar) */
     val onlyLibrary: Boolean get() = this == STREAMING
 
@@ -233,8 +239,10 @@ object DiscoverStore {
             mq += listOf("with_genres" to "16|10751", "certification_country" to "US", "certification.lte" to "PG")
             tq += "with_genres" to "10762|16|10751"
         }
+        if (kind == DiscoverKind.CINEMA) return cinema(lang, reg, kids, d(-60), today)
         val moviePath: String
         when (kind) {
+            DiscoverKind.CINEMA -> return emptyList()
             DiscoverKind.UPCOMING -> {
                 if (kids) {
                     moviePath = "/discover/movie"
@@ -268,6 +276,37 @@ object DiscoverStore {
         val top = out.take(40)
         // Binnenkort: de 40 populairste, op datum (eerst wat het eerst uitkomt)
         return if (upcoming) top.sortedWith(compareBy({ it.date ?: "" }, { it.title })) else top
+    }
+
+    /**
+     * Build 152: Nu in de bioscoop: TMDB `/movie/now_playing` (regio van de app-taal), alleen films met poster, populairste
+     * eerst, max. 20 ([Build152Logic.Cinema]). Kinderprofiel: animatie/familie t/m PG die de afgelopen 60 dagen in de
+     * bioscoop uitkwamen.
+     */
+    private suspend fun cinema(lang: String, reg: String, kids: Boolean, from: String, today: String): List<DiscoverItem> {
+        val path: String
+        val q = mutableListOf("language" to lang, "region" to reg, "page" to "1")
+        if (kids) {
+            path = "/discover/movie"
+            q += listOf("include_adult" to "false", "sort_by" to "popularity.desc", "with_genres" to "16|10751",
+                "certification_country" to "US", "certification.lte" to "PG", "with_release_type" to "3",
+                "release_date.gte" to from, "release_date.lte" to today)
+        } else path = "/movie/now_playing"
+        val r = TMDB.request(path, q) ?: return emptyList()
+        val raw = r.jList("results").mapNotNull { i ->
+            val id = i.jI("id") ?: return@mapNotNull null
+            val t = i.jS("title") ?: i.jS("name") ?: return@mapNotNull null
+            val pop = i.jS("popularity")?.toDoubleOrNull() ?: 0.0
+            Triple(Build152Logic.Cinema.Item(id, t, i.jS("poster_path")?.takeIf { it.isNotEmpty() }, pop, i.jB("adult") == true), i, t)
+        }
+        val byID = raw.associateBy { it.first.id }
+        return Build152Logic.Cinema.pick(raw.map { it.first }).mapNotNull { c ->
+            val (_, i, t) = byID[c.id] ?: return@mapNotNull null
+            val o = i.jS("original_title")
+            DiscoverItem(tmdbID = c.id, isShow = false, title = t, originalTitle = o?.takeIf { it != t },
+                date = i.jS("release_date")?.takeIf { it.isNotEmpty() }, posterPath = c.poster,
+                overview = i.jS("overview")?.takeIf { it.isNotEmpty() }, kind = DiscoverKind.CINEMA.key)
+        }
     }
 
     /**

@@ -423,9 +423,10 @@ object HomeLayouts {
 
     /**
      * Vaste rij-sleutels in de standaardvolgorde. Build 111: "upcoming" (Binnenkort) en "streaming" (Nieuw op
-     * streamingdiensten), TMDB; standaard aan, na "recent" (zelfde sleutels als iOS/tvOS/macOS en web).
+     * streamingdiensten), TMDB; standaard aan, na "recent" (zelfde sleutels als iOS/tvOS/macOS en web). Build 152:
+     * "nowplaying" (Nu in de bioscoop, TMDB; zelfde sleutel als de webspeler) na "upcoming"; een platform dat hem niet kent, slaat hem over.
      */
-    val fixedKeys = listOf("continue", "mylist", "top10", "foryou", "recent", "upcoming", "streaming", "live", CATEGORY_TILES, "movies", "series", "categories")
+    val fixedKeys = listOf("continue", "mylist", "top10", "foryou", "recent", "upcoming", "nowplaying", "streaming", "live", CATEGORY_TILES, "movies", "series", "categories")
 
     fun title(key: String): String = when (key) {
         "continue" -> L("Continue watching")
@@ -434,6 +435,7 @@ object HomeLayouts {
         "foryou" -> L("For you")
         "recent" -> L("Recently added")
         "upcoming" -> L("Coming soon to Bingr")   // build 112: was "Binnenkort"
+        "nowplaying" -> L("Now in cinemas")      // build 152: TMDB now_playing (sleutel gelijk aan de webspeler)
         "streaming" -> L("New on Bingr")          // build 112: was "Nieuw op streamingdiensten"
         "live" -> L("Live TV")
         "movies" -> L("Movies")
