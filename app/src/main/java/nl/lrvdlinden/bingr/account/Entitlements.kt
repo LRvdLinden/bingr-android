@@ -27,6 +27,13 @@ object Entitlements {
         val trakt: Boolean,
         val multiServer: Boolean,
         val themes: Boolean,
+        /** Build 157: Verder kijken, kinderprofielen en OpenSubtitles horen bij Lifetime. */
+        val continueWatching: Boolean = !plan.equals("free", true),
+        val kidsProfiles: Boolean = !plan.equals("free", true),
+        val openSubtitles: Boolean = !plan.equals("free", true),
+        /** Build 157: standaardlimieten van beide abonnementen (`plans`) voor de vergelijking. */
+        val freePlan: Build157Logic.Plans.Limits = Build157Logic.Plans.FREE,
+        val lifetimePlan: Build157Logic.Plans.Limits = Build157Logic.Plans.LIFETIME,
         val upgradeUrl: String,
         val upgradeLink: Boolean,
         val price: String,
@@ -37,6 +44,8 @@ object Entitlements {
 
     enum class Feature(val key: String) {
         STATS("stats"), NOW_WATCHING("now_watching"), TRAKT("trakt"), MULTI_SERVER("multi_server"), THEMES("themes"),
+        CONTINUE_WATCHING(Build157Logic.CONTINUE_WATCHING), KIDS_PROFILES(Build157Logic.KIDS_PROFILES),
+        OPENSUBTITLES(Build157Logic.OPENSUBTITLES),
         STREAMS("streams"), DEVICES("devices");
 
         companion object {
@@ -46,7 +55,7 @@ object Entitlements {
                     "watch_stats", "statistics" -> STATS
                     "servers" -> MULTI_SERVER
                     "theme", "accent", "accent_color" -> THEMES
-                    else -> null
+                    else -> Build157Logic.Flags.key(k)?.let { b -> entries.firstOrNull { it.key == b } }
                 }
         }
     }
@@ -55,13 +64,17 @@ object Entitlements {
     const val DEFAULT_PRICE = "€ 4,99"
     const val DEFAULT_PRICE_EN = "€4.99"
 
-    /** Limieten van de abonnementen voor de vergelijking (de server is leidend voor je eigen plan). */
+    /** Limieten van de abonnementen voor de vergelijking als de server geen `plans` geeft (build 157: Gratis 2 apparaten). */
     // gelijktijdige kijkers: Bingr-telling op de server, los van de limiet van de IPTV-provider
-    const val FREE_STREAMS = 1
-    const val FREE_DEVICES = 8
-    const val FREE_SERVERS = 1
-    const val LIFETIME_STREAMS = 3
-    const val LIFETIME_DEVICES = 15
+    val FREE_STREAMS get() = Build157Logic.Plans.FREE.streams
+    val FREE_DEVICES get() = Build157Logic.Plans.FREE.devices
+    val FREE_SERVERS get() = Build157Logic.Plans.FREE.servers ?: 1
+    val LIFETIME_STREAMS get() = Build157Logic.Plans.LIFETIME.streams
+    val LIFETIME_DEVICES get() = Build157Logic.Plans.LIFETIME.devices
+
+    /** Standaardlimieten voor de vergelijking: `plans` van de server, anders de vaste waarden. */
+    val freePlan: Build157Logic.Plans.Limits get() = current?.freePlan ?: Build157Logic.Plans.FREE
+    val lifetimePlan: Build157Logic.Plans.Limits get() = current?.lifetimePlan ?: Build157Logic.Plans.LIFETIME
 
     /** Huidig abonnement; null = onbekend (gedraagt zich als Lifetime). */
     var current by mutableStateOf<Info?>(null)
@@ -84,6 +97,12 @@ object Entitlements {
     val nowWatching: Boolean get() = current?.nowWatching ?: true
     val trakt: Boolean get() = current?.trakt ?: true
     val themes: Boolean get() = current?.themes ?: true
+    /** Build 157: rij Verder kijken (de voortgang wordt altijd bewaard en gesynct). */
+    val continueWatching: Boolean get() = current?.continueWatching ?: true
+    /** Build 157: kinderprofielen maken of instellen (bestaande blijven altijd gefilterd). */
+    val kidsProfiles: Boolean get() = current?.kidsProfiles ?: true
+    /** Build 157: OpenSubtitles zoeken en downloaden (een bestaande koppeling blijft bewaard). */
+    val openSubtitles: Boolean get() = current?.openSubtitles ?: true
     val upgradeUrl: String get() = current?.upgradeUrl ?: DEFAULT_URL
     val upgradeLink: Boolean get() = current?.upgradeLink ?: true
 
@@ -105,6 +124,9 @@ object Entitlements {
         Feature.TRAKT -> trakt
         Feature.THEMES -> themes
         Feature.MULTI_SERVER -> current?.multiServer ?: true
+        Feature.CONTINUE_WATCHING -> continueWatching
+        Feature.KIDS_PROFILES -> kidsProfiles
+        Feature.OPENSUBTITLES -> openSubtitles
         Feature.STREAMS, Feature.DEVICES -> !isFree
     }
 
@@ -139,7 +161,13 @@ object Entitlements {
         val limits = o["limits"] as? JsonObject
         val features = o["features"] as? JsonObject
         val upgrade = o["upgrade"] as? JsonObject
-        fun feature(k: String): Boolean = features.jB(k) ?: !free
+        fun feature(k: String): Boolean = Build157Logic.Flags.feature(plan, features.jB(k))
+        val plans = o["plans"] as? JsonObject
+        fun planLimits(name: String, fallback: Build157Logic.Plans.Limits): Build157Logic.Plans.Limits {
+            val p = plans?.get(name) as? JsonObject
+            return Build157Logic.Plans.limits(fallback, p != null, p.jI("streams"), p.jI("devices"),
+                p?.containsKey("servers") == true, p.jI("servers"))
+        }
         val servers = if (limits?.containsKey("servers") == true) limits.jI("servers") else (if (free) FREE_SERVERS else null)
         return Info(
             plan = plan,
@@ -151,6 +179,11 @@ object Entitlements {
             trakt = feature("trakt"),
             multiServer = feature("multi_server"),
             themes = feature("themes"),
+            continueWatching = feature(Build157Logic.CONTINUE_WATCHING),
+            kidsProfiles = feature(Build157Logic.KIDS_PROFILES),
+            openSubtitles = feature(Build157Logic.OPENSUBTITLES),
+            freePlan = planLimits("free", Build157Logic.Plans.FREE),
+            lifetimePlan = planLimits("lifetime", Build157Logic.Plans.LIFETIME),
             upgradeUrl = upgrade.jS("url")?.takeIf { it.startsWith("https://") } ?: DEFAULT_URL,
             upgradeLink = upgrade.jB("link") ?: true,
             price = upgrade.jS("price")?.takeIf { it.isNotBlank() } ?: DEFAULT_PRICE,
@@ -175,6 +208,7 @@ object Entitlements {
         val c = current ?: Info(
             plan = "free", streams = FREE_STREAMS, devices = FREE_DEVICES, servers = FREE_SERVERS,
             stats = true, nowWatching = true, trakt = true, multiServer = true, themes = true,
+            continueWatching = true, kidsProfiles = true, openSubtitles = true,
             upgradeUrl = DEFAULT_URL, upgradeLink = true, price = DEFAULT_PRICE, priceEn = DEFAULT_PRICE_EN,
         )
         current = when (Feature.from(feature)) {
@@ -183,6 +217,9 @@ object Entitlements {
             Feature.TRAKT -> c.copy(plan = "free", trakt = false)
             Feature.MULTI_SERVER -> c.copy(plan = "free", multiServer = false)
             Feature.THEMES -> c.copy(plan = "free", themes = false)
+            Feature.CONTINUE_WATCHING -> c.copy(plan = "free", continueWatching = false)
+            Feature.KIDS_PROFILES -> c.copy(plan = "free", kidsProfiles = false)
+            Feature.OPENSUBTITLES -> c.copy(plan = "free", openSubtitles = false)
             else -> c.copy(plan = "free")
         }
         launchFetch(force = true)

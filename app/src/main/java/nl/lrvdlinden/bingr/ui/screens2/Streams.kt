@@ -181,7 +181,7 @@ fun StreamLimitScreen(info: Account.StreamList, onRetry: () -> Unit, onClose: ()
                         color = Theme.secondary, fontSize = tsp(15), textAlign = TextAlign.Center)
                     // build 88: Gratis → met Lifetime meer schermen tegelijk
                     if (data.isFree) {
-                        Text(L("Upgrade to Lifetime to watch on up to %d screens at the same time.", Entitlements.LIFETIME_STREAMS) +
+                        Text(L("Upgrade to Lifetime to watch on up to %d screens at the same time.", Entitlements.lifetimePlan.streams) +
                             " " + L("How many you can watch at once also depends on your IPTV provider."),
                             color = Color.White, fontSize = tsp(14), textAlign = TextAlign.Center)
                     }

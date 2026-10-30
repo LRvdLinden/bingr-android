@@ -230,7 +230,8 @@ fun SettingsScreen() {
         }
     }
 
-    LaunchedEffect(Unit) { runCatching { OpenSubtitles.refreshUser() } }
+    // build 157: OpenSubtitles hoort bij Lifetime; bij Gratis de koppeling niet gebruiken (wel bewaren)
+    LaunchedEffect(Entitlements.openSubtitles) { if (Entitlements.openSubtitles) runCatching { OpenSubtitles.refreshUser() } }
     /** Wie kijkt er nu (alleen hoofdprofiel), elke 30 s bijgewerkt. */
     var watching by remember { mutableStateOf<Account.StreamList?>(null) }
     LaunchedEffect(Account.isSignedIn, Store.canManage, sub, Entitlements.nowWatching) {
@@ -630,7 +631,10 @@ fun SettingsScreen() {
                             Store.updateActivePreferences { it.copy(subtitleLanguage = v) }
                         }
                     }
-                    S2Row("OpenSubtitles", value = if (OpenSubtitles.isLoggedIn) OpenSubtitles.username ?: L("On") else L("Off"),
+                    if (!Entitlements.openSubtitles) {
+                        S2Row("OpenSubtitles", value = L("Off"), onClick = { Upgrade.show(Entitlements.Feature.OPENSUBTITLES) },
+                            trailing = { LifetimeBadge() })
+                    } else S2Row("OpenSubtitles", value = if (OpenSubtitles.isLoggedIn) OpenSubtitles.username ?: L("On") else L("Off"),
                         onClick = { MyBingrNav.settingsTab = SettingsTab.CONNECTIONS })
                 }
             }
@@ -830,8 +834,15 @@ fun SettingsScreen() {
             }
             // MARK: OpenSubtitles (inloggen; de taal staat onder Taal en ondertitels)
             item {
-                S2Section("OpenSubtitles") {
-                    if (OpenSubtitles.isLoggedIn) {
+                S2Section("OpenSubtitles", if (!Entitlements.openSubtitles && OpenSubtitles.isLoggedIn)
+                    L("Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.") else null) {
+                    if (!Entitlements.openSubtitles) {
+                        // build 157 (Gratis): slotje; een bestaande koppeling blijft bewaard maar wordt niet gebruikt
+                        S2Row(if (OpenSubtitles.isLoggedIn) L("Signed in as") else L("Sign in to OpenSubtitles"),
+                            icon = Icons.Default.Subtitles,
+                            value = if (OpenSubtitles.isLoggedIn) OpenSubtitles.username ?: "" else null,
+                            onClick = { Upgrade.show(Entitlements.Feature.OPENSUBTITLES) }, trailing = { LifetimeBadge() })
+                    } else if (OpenSubtitles.isLoggedIn) {
                         S2Row(L("Signed in as"), value = OpenSubtitles.username ?: "")
                         OpenSubtitles.remainingDownloads?.let { S2Row(L("Downloads left today"), value = "$it") }
                         if (isMain) {
@@ -913,7 +924,7 @@ fun SettingsScreen() {
             setup = null
             when (focus) {
                 "trakt" -> if (Secrets.traktReady && !Trakt.isLoggedIn && Entitlements.trakt) showTraktLogin = true
-                "opensubtitles" -> if (Secrets.openSubtitlesReady && !OpenSubtitles.isLoggedIn) showOSLogin = true
+                "opensubtitles" -> if (Secrets.openSubtitlesReady && !OpenSubtitles.isLoggedIn && Entitlements.openSubtitles) showOSLogin = true
             }
         }
     }
@@ -1037,7 +1048,9 @@ private fun S2MyBingrHeader() {
             if (Trakt.isLoggedIn) S2TraktStatus()
         }
 
-        if (cont.isNotEmpty()) {
+        // build 157: Gratis = slotje (de voortgang wordt wel bewaard)
+        if (cont.isNotEmpty() && !Entitlements.continueWatching) LockedContinueRow()
+        else if (cont.isNotEmpty()) {
             MediaRow(L("Continue watching")) {
                 items(cont) { c ->
                     ContinueCard(

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
@@ -638,7 +639,12 @@ fun ResumeDialog(choice: ResumeChoice, onDismiss: () -> Unit) {
 /** Rij "Verder kijken": tik = kiezen (hervatten/opnieuw/meer info), lang indrukken = verwijderen. */
 @Composable
 fun ContinueRow(items: List<ContinueItem>, index: HomeIndex) {
-    if (items.isEmpty()) return
+    // build 157: Verder kijken hoort bij Lifetime; Gratis ziet een slotje (de voortgang wordt wel bewaard en gesynct)
+    when (Build157Logic.Continue.row(items.isNotEmpty(), Entitlements.continueWatching)) {
+        Build157Logic.Continue.Row.HIDDEN -> return
+        Build157Logic.Continue.Row.LOCKED -> { LockedContinueRow(); return }
+        Build157Logic.Continue.Row.SHOWN -> Unit
+    }
     var choice by remember { mutableStateOf<ResumeChoice?>(null) }
     var removing by remember { mutableStateOf<ContinueItem?>(null) }
     val keys = rememberKeys(items) { "${it.sourceID ?: ""}|${it.id}" }
@@ -655,6 +661,32 @@ fun ContinueRow(items: List<ContinueItem>, index: HomeIndex) {
         S2ActionDialog(ContentLanguage.displayTitle(c.title), listOf(
             S2Action(L("Remove from Continue watching"), Icons.Default.Close, destructive = true) { removeFromContinue(c) }
         ), onDismiss = { removing = null })
+    }
+}
+
+/** Build 157 (Gratis): rij Verder kijken met een slotje; tik = de vergelijking (en bij `upgrade.link` de upgradeknop). */
+@Composable
+fun LockedContinueRow() {
+    MediaRow(L("Continue watching")) {
+        item(key = "continue-locked") {
+            Row(
+                Modifier.width(Theme.posterWidth * 2.4f)
+                    .focusLift { Upgrade.show(Entitlements.Feature.CONTINUE_WATCHING) }
+                    .clip(RoundedCornerShape(10.dp)).background(Theme.card)
+                    .padding(horizontal = tvs(14), vertical = tvs(16)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(tvs(40)).clip(CircleShape).background(Theme.elevated), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Lock, null, tint = Color.White, modifier = Modifier.size(tvs(20)))
+                }
+                Spacer(Modifier.width(tvs(12)))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(tvs(6))) {
+                    LifetimeBadge()
+                    Text(L("Continue watching is part of Bingr Lifetime. Your progress is still saved."),
+                        color = Theme.secondary, fontSize = tsp(12), maxLines = 3, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
     }
 }
 

@@ -262,8 +262,11 @@ fun OpenSubtitlesPanel(player: PlayerController, onDismiss: () -> Unit) {
     val checkIcon: @Composable () -> Unit = { Icon(Icons.Filled.Check, null, tint = Theme.red) }
     val signInHint = L("Sign in to OpenSubtitles under My Bingr → OpenSubtitles to download subtitles.")
 
-    LaunchedEffect(Unit) { runCatching { OpenSubtitles.refreshUser() }; userVersion++ }
-    LaunchedEffect(language) {
+    // build 157: OpenSubtitles hoort bij Lifetime; zonder de vlag niets zoeken of downloaden (de koppeling blijft bewaard)
+    val allowed = Entitlements.openSubtitles
+    LaunchedEffect(allowed) { if (allowed) runCatching { OpenSubtitles.refreshUser() }; userVersion++ }
+    LaunchedEffect(language, allowed) {
+        if (!allowed) { loading = false; error = Upgrade.reason(Entitlements.Feature.OPENSUBTITLES); results = emptyList(); return@LaunchedEffect }
         loading = true; error = null; results = emptyList()
         val it = player.item
         try {
@@ -286,6 +289,7 @@ fun OpenSubtitlesPanel(player: PlayerController, onDismiss: () -> Unit) {
     }
 
     fun load(s: OpenSubtitles.Subtitle) {
+        if (!Entitlements.openSubtitles) { Upgrade.show(Entitlements.Feature.OPENSUBTITLES); return }
         if (!OpenSubtitles.isLoggedIn) { error = signInHint; return }
         if (downloading != null) return
         downloading = s.id

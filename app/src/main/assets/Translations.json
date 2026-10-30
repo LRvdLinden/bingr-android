@@ -1096,7 +1096,14 @@
   "Hidden category": "فئة مخفية",
   "In hidden categories": "في الفئات المخفية",
   "Show category “%@”?": "إظهار الفئة “%@”؟",
-  "Watch %@ live": "شاهد %@ مباشرة"
+  "Watch %@ live": "شاهد %@ مباشرة",
+  "Continue watching is part of Bingr Lifetime. Your progress is still saved.": "متابعة المشاهدة جزء من Bingr Lifetime. يظل تقدّمك محفوظًا.",
+  "Kids profiles are part of Bingr Lifetime. Existing kids profiles stay protected.": "ملفات الأطفال جزء من Bingr Lifetime. تبقى ملفات الأطفال الحالية محمية.",
+  "OpenSubtitles subtitles are part of Bingr Lifetime. Subtitles in the stream itself stay free.": "ترجمات OpenSubtitles جزء من Bingr Lifetime. تبقى الترجمات الموجودة في البث نفسه مجانية.",
+  "Kids profiles": "ملفات الأطفال",
+  "OpenSubtitles subtitles": "ترجمات OpenSubtitles",
+  "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "ملفات الأطفال جزء من Bingr Lifetime. يبقى ملف الطفل هذا محميًا؛ ويمكن عرض إعداداته فقط.",
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "يُحتفظ باتصالك بـ OpenSubtitles، لكنه لا يُستخدم إلا مع Bingr Lifetime."
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -2195,7 +2202,14 @@
   "Hidden category": "Ausgeblendete Kategorie",
   "In hidden categories": "In ausgeblendeten Kategorien",
   "Show category “%@”?": "Kategorie „%@“ einblenden?",
-  "Watch %@ live": "%@ live ansehen"
+  "Watch %@ live": "%@ live ansehen",
+  "Continue watching is part of Bingr Lifetime. Your progress is still saved.": "Weiterschauen gehört zu Bingr Lifetime. Dein Fortschritt wird trotzdem gespeichert.",
+  "Kids profiles are part of Bingr Lifetime. Existing kids profiles stay protected.": "Kinderprofile gehören zu Bingr Lifetime. Bestehende Kinderprofile bleiben geschützt.",
+  "OpenSubtitles subtitles are part of Bingr Lifetime. Subtitles in the stream itself stay free.": "Untertitel von OpenSubtitles gehören zu Bingr Lifetime. Untertitel im Stream selbst bleiben kostenlos.",
+  "Kids profiles": "Kinderprofile",
+  "OpenSubtitles subtitles": "OpenSubtitles-Untertitel",
+  "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Kinderprofile gehören zu Bingr Lifetime. Dieses Kinderprofil bleibt geschützt; seine Einstellungen können nur angesehen werden.",
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Deine OpenSubtitles-Verbindung bleibt gespeichert, wird aber nur mit Bingr Lifetime verwendet."
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -3294,7 +3308,14 @@
   "Hidden category": "Categoría oculta",
   "In hidden categories": "En categorías ocultas",
   "Show category “%@”?": "¿Mostrar la categoría «%@»?",
-  "Watch %@ live": "Ver %@ en directo"
+  "Watch %@ live": "Ver %@ en directo",
+  "Continue watching is part of Bingr Lifetime. Your progress is still saved.": "Seguir viendo forma parte de Bingr Lifetime. Tu progreso se sigue guardando.",
+  "Kids profiles are part of Bingr Lifetime. Existing kids profiles stay protected.": "Los perfiles infantiles forman parte de Bingr Lifetime. Los perfiles infantiles existentes siguen protegidos.",
+  "OpenSubtitles subtitles are part of Bingr Lifetime. Subtitles in the stream itself stay free.": "Los subtítulos de OpenSubtitles forman parte de Bingr Lifetime. Los subtítulos del propio stream siguen siendo gratis.",
+  "Kids profiles": "Perfiles infantiles",
+  "OpenSubtitles subtitles": "Subtítulos de OpenSubtitles",
+  "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Los perfiles infantiles forman parte de Bingr Lifetime. Este perfil infantil sigue protegido; sus ajustes solo se pueden ver.",
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Tu conexión con OpenSubtitles se conserva, pero solo se usa con Bingr Lifetime."
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -4393,7 +4414,14 @@
   "Hidden category": "Catégorie masquée",
   "In hidden categories": "Dans les catégories masquées",
   "Show category “%@”?": "Afficher la catégorie « %@ » ?",
-  "Watch %@ live": "Regarder %@ en direct"
+  "Watch %@ live": "Regarder %@ en direct",
+  "Continue watching is part of Bingr Lifetime. Your progress is still saved.": "Reprendre la lecture fait partie de Bingr Lifetime. Ta progression est quand même enregistrée.",
+  "Kids profiles are part of Bingr Lifetime. Existing kids profiles stay protected.": "Les profils enfants font partie de Bingr Lifetime. Les profils enfants existants restent protégés.",
+  "OpenSubtitles subtitles are part of Bingr Lifetime. Subtitles in the stream itself stay free.": "Les sous-titres OpenSubtitles font partie de Bingr Lifetime. Les sous-titres du flux restent gratuits.",
+  "Kids profiles": "Profils enfants",
+  "OpenSubtitles subtitles": "Sous-titres OpenSubtitles",
+  "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Les profils enfants font partie de Bingr Lifetime. Ce profil enfant reste protégé ; ses réglages sont uniquement consultables.",
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Ta connexion OpenSubtitles est conservée, mais n'est utilisée qu'avec Bingr Lifetime."
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -5492,7 +5520,14 @@
   "Hidden category": "Categoria nascosta",
   "In hidden categories": "Nelle categorie nascoste",
   "Show category “%@”?": "Mostrare la categoria “%@”?",
-  "Watch %@ live": "Guarda %@ in diretta"
+  "Watch %@ live": "Guarda %@ in diretta",
+  "Continue watching is part of Bingr Lifetime. Your progress is still saved.": "Continua a guardare fa parte di Bingr Lifetime. I tuoi progressi vengono comunque salvati.",
+  "Kids profiles are part of Bingr Lifetime. Existing kids profiles stay protected.": "I profili bambini fanno parte di Bingr Lifetime. I profili bambini esistenti restano protetti.",
+  "OpenSubtitles subtitles are part of Bingr Lifetime. Subtitles in the stream itself stay free.": "I sottotitoli di OpenSubtitles fanno parte di Bingr Lifetime. I sottotitoli dello stream restano gratuiti.",
+  "Kids profiles": "Profili bambini",
+  "OpenSubtitles subtitles": "Sottotitoli OpenSubtitles",
+  "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "I profili bambini fanno parte di Bingr Lifetime. Questo profilo bambini resta protetto; le sue impostazioni sono solo visualizzabili.",
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Il tuo collegamento a OpenSubtitles viene conservato, ma è usato solo con Bingr Lifetime."
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -6605,7 +6640,14 @@
   "Hidden category": "Verborgen categorie",
   "In hidden categories": "In verborgen categorieën",
   "Show category “%@”?": "Categorie ‘%@’ weer tonen?",
-  "Watch %@ live": "%@ live kijken"
+  "Watch %@ live": "%@ live kijken",
+  "Continue watching is part of Bingr Lifetime. Your progress is still saved.": "Verder kijken hoort bij Bingr Lifetime. Je voortgang wordt wel bewaard.",
+  "Kids profiles are part of Bingr Lifetime. Existing kids profiles stay protected.": "Kinderprofielen horen bij Bingr Lifetime. Bestaande kinderprofielen blijven beschermd.",
+  "OpenSubtitles subtitles are part of Bingr Lifetime. Subtitles in the stream itself stay free.": "Ondertitels via OpenSubtitles horen bij Bingr Lifetime. Ondertitels uit de stream zelf blijven gratis.",
+  "Kids profiles": "Kinderprofielen",
+  "OpenSubtitles subtitles": "OpenSubtitles-ondertitels",
+  "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Kinderprofielen horen bij Bingr Lifetime. Dit kinderprofiel blijft beschermd; de instellingen zijn alleen te bekijken.",
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Je OpenSubtitles-koppeling blijft bewaard, maar wordt alleen gebruikt met Bingr Lifetime."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -7704,7 +7746,14 @@
   "Hidden category": "Ukryta kategoria",
   "In hidden categories": "W ukrytych kategoriach",
   "Show category “%@”?": "Pokazać kategorię „%@”?",
-  "Watch %@ live": "Oglądaj %@ na żywo"
+  "Watch %@ live": "Oglądaj %@ na żywo",
+  "Continue watching is part of Bingr Lifetime. Your progress is still saved.": "Oglądaj dalej jest częścią Bingr Lifetime. Twój postęp jest nadal zapisywany.",
+  "Kids profiles are part of Bingr Lifetime. Existing kids profiles stay protected.": "Profile dziecięce są częścią Bingr Lifetime. Istniejące profile dziecięce pozostają chronione.",
+  "OpenSubtitles subtitles are part of Bingr Lifetime. Subtitles in the stream itself stay free.": "Napisy z OpenSubtitles są częścią Bingr Lifetime. Napisy w samym strumieniu pozostają bezpłatne.",
+  "Kids profiles": "Profile dziecięce",
+  "OpenSubtitles subtitles": "Napisy z OpenSubtitles",
+  "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Profile dziecięce są częścią Bingr Lifetime. Ten profil dziecięcy pozostaje chroniony; jego ustawienia można tylko przeglądać.",
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Twoje połączenie z OpenSubtitles zostaje zachowane, ale jest używane tylko z Bingr Lifetime."
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -8803,7 +8852,14 @@
   "Hidden category": "Categoria oculta",
   "In hidden categories": "Em categorias ocultas",
   "Show category “%@”?": "Mostrar a categoria “%@”?",
-  "Watch %@ live": "Ver %@ em direto"
+  "Watch %@ live": "Ver %@ em direto",
+  "Continue watching is part of Bingr Lifetime. Your progress is still saved.": "Continuar a ver faz parte do Bingr Lifetime. O teu progresso continua a ser guardado.",
+  "Kids profiles are part of Bingr Lifetime. Existing kids profiles stay protected.": "Os perfis infantis fazem parte do Bingr Lifetime. Os perfis infantis existentes continuam protegidos.",
+  "OpenSubtitles subtitles are part of Bingr Lifetime. Subtitles in the stream itself stay free.": "As legendas do OpenSubtitles fazem parte do Bingr Lifetime. As legendas da própria stream continuam grátis.",
+  "Kids profiles": "Perfis infantis",
+  "OpenSubtitles subtitles": "Legendas do OpenSubtitles",
+  "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Os perfis infantis fazem parte do Bingr Lifetime. Este perfil infantil continua protegido; as definições só podem ser vistas.",
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "A tua ligação ao OpenSubtitles é mantida, mas só é usada com o Bingr Lifetime."
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -9902,7 +9958,14 @@
   "Hidden category": "Gizli kategori",
   "In hidden categories": "Gizli kategorilerde",
   "Show category “%@”?": "“%@” kategorisi gösterilsin mi?",
-  "Watch %@ live": "%@ canlı izle"
+  "Watch %@ live": "%@ canlı izle",
+  "Continue watching is part of Bingr Lifetime. Your progress is still saved.": "İzlemeye devam et, Bingr Lifetime'a dahildir. İlerlemen yine de kaydedilir.",
+  "Kids profiles are part of Bingr Lifetime. Existing kids profiles stay protected.": "Çocuk profilleri Bingr Lifetime'a dahildir. Mevcut çocuk profilleri korunmaya devam eder.",
+  "OpenSubtitles subtitles are part of Bingr Lifetime. Subtitles in the stream itself stay free.": "OpenSubtitles altyazıları Bingr Lifetime'a dahildir. Yayının kendi altyazıları ücretsiz kalır.",
+  "Kids profiles": "Çocuk profilleri",
+  "OpenSubtitles subtitles": "OpenSubtitles altyazıları",
+  "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Çocuk profilleri Bingr Lifetime'a dahildir. Bu çocuk profili korunmaya devam eder; ayarları yalnızca görüntülenebilir.",
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "OpenSubtitles bağlantın korunur, ancak yalnızca Bingr Lifetime ile kullanılır."
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -11001,6 +11064,13 @@
   "Hidden category": "已隐藏的分类",
   "In hidden categories": "在已隐藏的分类中",
   "Show category “%@”?": "显示分类“%@”？",
-  "Watch %@ live": "直播观看 %@"
+  "Watch %@ live": "直播观看 %@",
+  "Continue watching is part of Bingr Lifetime. Your progress is still saved.": "继续观看属于 Bingr Lifetime。你的进度仍会保存。",
+  "Kids profiles are part of Bingr Lifetime. Existing kids profiles stay protected.": "儿童资料属于 Bingr Lifetime。现有的儿童资料仍受保护。",
+  "OpenSubtitles subtitles are part of Bingr Lifetime. Subtitles in the stream itself stay free.": "OpenSubtitles 字幕属于 Bingr Lifetime。流中自带的字幕仍然免费。",
+  "Kids profiles": "儿童资料",
+  "OpenSubtitles subtitles": "OpenSubtitles 字幕",
+  "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "儿童资料属于 Bingr Lifetime。此儿童资料仍受保护；其设置只能查看。",
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "你的 OpenSubtitles 连接会保留，但只在 Bingr Lifetime 中使用。"
  }
 }

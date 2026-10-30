@@ -882,7 +882,10 @@ private fun PlayerControls(
                         }
                     }
                     buttons.add(Triple(Icons.Filled.Subtitles, L("Audio & subtitles")) { onPanel(PlayerPanel.AUDIO_SUBS) })
-                    if (!live) buttons.add(Triple(Icons.Filled.ClosedCaption, "OpenSubtitles") { onPanel(PlayerPanel.OPENSUBS) })
+                    if (!live) buttons.add(Triple(Icons.Filled.ClosedCaption, "OpenSubtitles") {
+                        // build 157: OpenSubtitles hoort bij Lifetime (Gratis: slotje met de vergelijking)
+                        Upgrade.gate(Entitlements.Feature.OPENSUBTITLES) { onPanel(PlayerPanel.OPENSUBS) }
+                    })
                     if (hasSources) buttons.add(Triple(Icons.Filled.VideoLibrary, L("Sources")) { onPanel(PlayerPanel.SOURCES) })
                     if (live && Playlists.library.channels.isNotEmpty()) buttons.add(Triple(Icons.Filled.GridView, "Multiview") { onMultiview() })
                     // build 52: andere bron (live) en intro/aftiteling markeren (afleveringen)

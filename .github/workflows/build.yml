@@ -169,7 +169,13 @@ jobs:
               tools/test/Build154LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b154-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b154-test.jar" "$RUNNER_TEMP/watched_keys_cases.json" | tee "$RUNNER_TEMP/b154-test.txt"; rc15=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 154::$(grep -E '^gedeelde' "$RUNNER_TEMP/b154-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b154-test.txt")"
-            [ $rc15 -eq 0 ] && [ $rc14 -eq 0 ] && [ $rc13 -eq 0 ] && [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
+            # build 157: Gratis en Lifetime aangepast (vlaggen continue_watching / kids_profiles / opensubtitles, oude server
+            # zonder vlag = volgt het abonnement, vergelijking Gratis 1/2/1, bestaand kinderprofiel blijft gefilterd)
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build157Logic.kt \
+              tools/test/Build157LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b157-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b157-test.jar" | tee "$RUNNER_TEMP/b157-test.txt"; rc16=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 157::$(tail -1 "$RUNNER_TEMP/b157-test.txt")"
+            [ $rc16 -eq 0 ] && [ $rc15 -eq 0 ] && [ $rc14 -eq 0 ] && [ $rc13 -eq 0 ] && [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi

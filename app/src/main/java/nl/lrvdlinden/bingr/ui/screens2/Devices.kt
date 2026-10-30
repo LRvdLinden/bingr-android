@@ -381,7 +381,7 @@ fun TooManyDevicesScreen(info: Account.DeviceLimit) {
                         color = Theme.secondary, fontSize = tsp(15), textAlign = TextAlign.Center)
                     // build 88: Gratis → met Lifetime meer apparaten
                     if (info.isFree) {
-                        Text(L("Or upgrade to Lifetime to use Bingr on up to %d devices.", Entitlements.LIFETIME_DEVICES),
+                        Text(L("Or upgrade to Lifetime to use Bingr on up to %d devices.", Entitlements.lifetimePlan.devices),
                             color = Color.White, fontSize = tsp(14), textAlign = TextAlign.Center)
                     }
                 }

@@ -742,6 +742,11 @@ fun ProfileEditScreen(existing: ViewerProfile?, onClose: () -> Unit) {
     // pincode: het hoofdaccount voor elk profiel, anders alleen voor het eigen profiel
     val canPIN = existing != null && (canAdmin || existing.id == Store.activeProfileID)
     val hasPIN = existing != null && ParentalControl.hasPIN(existing)
+    // build 157: kinderprofielen horen bij Lifetime. Gratis: geen nieuw kinderprofiel (slotje); een bestaand kinderprofiel
+    // blijft gefilterd en zijn instellingen zijn alleen te lezen. Verwijderen mag altijd.
+    val kidsAllowed = Entitlements.kidsProfiles
+    val storedKids = existing?.kids ?: false
+    val kidsReadOnly = !Build157Logic.Kids.editable(kidsAllowed) && storedKids
 
     BackHandler(enabled = !confirmDelete) { onClose() }
     val firstFocus = rememberInitialFocus()
@@ -752,8 +757,9 @@ fun ProfileEditScreen(existing: ViewerProfile?, onClose: () -> Unit) {
         val base = existing ?: ViewerProfile(name = n, avatar = avatar)
         val p = base.copy(
             name = n, avatar = avatar,
-            ageLimit = if (canAdmin) (if (ageLimit == 0) null else ageLimit) else base.ageLimit,
-            isKids = if (canAdmin) (if (isKids) true else null) else base.isKids,
+            ageLimit = if (canAdmin) Build157Logic.Kids.savedAgeLimit(kidsAllowed, storedKids, if (ageLimit == 0) null else ageLimit, base.ageLimit)
+                else base.ageLimit,
+            isKids = if (canAdmin) (if (Build157Logic.Kids.savedKids(kidsAllowed, isKids, storedKids)) true else null) else base.isKids,
         )
         Store.upsertProfile(p)
         if (!(photo contentEquals originalPhoto)) Store.setPhoto(p.id, photo)
@@ -888,7 +894,11 @@ fun ProfileEditScreen(existing: ViewerProfile?, onClose: () -> Unit) {
                 if (canAdmin) {
                     Column {
                         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Theme.card)) {
-                            S2Toggle(L("Kids profile"), isKids, enabled = !locked) { v ->
+                            if (Build157Logic.Kids.showsLock(kidsAllowed)) {
+                                // build 157 (Gratis): slotje met de vergelijking; een bestaand kinderprofiel blijft er een
+                                S2Row(L("Kids profile"), value = if (storedKids) L("On") else L("Off"),
+                                    onClick = { Upgrade.show(Entitlements.Feature.KIDS_PROFILES) }, trailing = { LifetimeBadge() })
+                            } else S2Toggle(L("Kids profile"), isKids, enabled = !locked) { v ->
                                 isKids = v
                                 if (v && (ageLimit == 0 || ageLimit > 12)) ageLimit = 12
                                 // kinderprofiel zonder eigen foto: meteen een vrolijk figuurtje
@@ -896,7 +906,11 @@ fun ProfileEditScreen(existing: ViewerProfile?, onClose: () -> Unit) {
                                     avatar = avatar.copy(symbol = PlaylistAvatar.illustrations.random())
                                 }
                             }
-                            S2Dropdown(L("Age limit for this profile"),
+                            if (kidsReadOnly) {
+                                // build 157 (Gratis): de leeftijd van een bestaand kinderprofiel alleen lezen
+                                S2Row(L("Age limit for this profile"),
+                                    value = existing?.ageLimit?.let { L("Up to %d years", it) } ?: L("None"))
+                            } else S2Dropdown(L("Age limit for this profile"),
                                 listOf(0 to L("None")) + ParentalControl.ageChoices.map { it to L("Up to %d years", it) },
                                 ageLimit, enabled = !locked) { ageLimit = it }
                             if (locked) S2Row(L("Unlock with PIN"), icon = Icons.Default.LockOpen, onClick = { askUnlock = true })
@@ -905,6 +919,10 @@ fun ProfileEditScreen(existing: ViewerProfile?, onClose: () -> Unit) {
                             (if (Store.parental.enabled) L("Titles above this age (IMDb rating) and adult groups are hidden on this profile. With the PIN you can still watch them.")
                             else L("Set a PIN on the main account and turn on “Lock adult content with this PIN” (My Bingr → PIN code) to protect the age limit."))
                         Text(footer, color = Theme.secondary, fontSize = tsp(12), modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp))
+                        if (kidsReadOnly) {
+                            Text(L("Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed."),
+                                color = Theme.secondary, fontSize = tsp(12), modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp))
+                        }
                     }
                 }
 

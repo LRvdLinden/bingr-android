@@ -94,9 +94,13 @@ object Upgrade {
         Entitlements.Feature.TRAKT -> L("Trakt is part of Bingr Lifetime.")
         Entitlements.Feature.MULTI_SERVER -> L("More servers are part of Bingr Lifetime. Your current servers keep working.")
         Entitlements.Feature.THEMES -> L("Accent colors are part of Bingr Lifetime.")
-        Entitlements.Feature.STREAMS -> L("With Bingr Lifetime you can watch on up to %d screens at the same time.", Entitlements.LIFETIME_STREAMS) +
+        // build 157
+        Entitlements.Feature.CONTINUE_WATCHING -> L("Continue watching is part of Bingr Lifetime. Your progress is still saved.")
+        Entitlements.Feature.KIDS_PROFILES -> L("Kids profiles are part of Bingr Lifetime. Existing kids profiles stay protected.")
+        Entitlements.Feature.OPENSUBTITLES -> L("OpenSubtitles subtitles are part of Bingr Lifetime. Subtitles in the stream itself stay free.")
+        Entitlements.Feature.STREAMS -> L("With Bingr Lifetime you can watch on up to %d screens at the same time.", Entitlements.lifetimePlan.streams) +
             " " + L("How many you can watch at once also depends on your IPTV provider.")
-        Entitlements.Feature.DEVICES -> L("With Bingr Lifetime you can use up to %d devices.", Entitlements.LIFETIME_DEVICES)
+        Entitlements.Feature.DEVICES -> L("With Bingr Lifetime you can use up to %d devices.", Entitlements.lifetimePlan.devices)
         null -> L("Get more out of Bingr with a one-time upgrade.")
     }
 }
@@ -209,25 +213,32 @@ private fun UpgradeQR(modifier: Modifier = Modifier) {
     }
 }
 
-/** Vergelijking Gratis ↔ Lifetime (je eigen limieten komen van de server). */
+/**
+ * Vergelijking Gratis ↔ Lifetime: altijd de standaardlimieten van beide abonnementen (`plans` van de server, build 128),
+ * nooit de eigen limieten uit het beheer; zonder `plans` Gratis 1/2/1 en Lifetime tot 3/15/onbeperkt (build 157).
+ */
 @Composable
 private fun PlanComparison() {
     val c = Entitlements.current
-    val freeStreams = c?.takeIf { it.isFree }?.streams ?: Entitlements.FREE_STREAMS
-    val freeDevices = c?.takeIf { it.isFree }?.devices ?: Entitlements.FREE_DEVICES
-    val freeServers = c?.takeIf { it.isFree }?.servers ?: Entitlements.FREE_SERVERS
-    // build 128: de echte waarden van de server als je Lifetime hebt; "tot 3" schermen (hangt ook af van de IPTV-aanbieder)
-    val lifeStreams = c?.takeIf { !it.isFree }?.streams ?: Entitlements.LIFETIME_STREAMS
-    val lifeDevices = c?.takeIf { !it.isFree }?.devices ?: Entitlements.LIFETIME_DEVICES
+    val free = Entitlements.freePlan
+    val life = Entitlements.lifetimePlan
+    // "tot 3" schermen (hangt ook af van de IPTV-aanbieder)
     val yes = "✓"; val no = "—"
     val rows = listOf(
-        Triple(L("Streams at the same time"), "$freeStreams", L("up to %d", lifeStreams)),
-        Triple(L("Devices"), "$freeDevices", "$lifeDevices"),
-        Triple(L("Servers"), "$freeServers", L("Unlimited")),
+        Triple(L("Streams at the same time"), "${free.streams}", L("up to %d", life.streams)),
+        Triple(L("Devices"), "${free.devices}", "${life.devices}"),
+        Triple(L("Servers"), free.servers?.toString() ?: L("Unlimited"), life.servers?.toString() ?: L("Unlimited")),
+        // build 157: onder beide
+        Triple(L("Profiles"), yes, yes),
+        Triple(L("My List"), yes, yes),
         Triple(L("Statistics"), no, yes),
         Triple(L("Watching now"), no, yes),
         Triple("Trakt", no, yes),
         Triple(L("Accent colors"), no, yes),
+        // build 157: nieuw onder Lifetime
+        Triple(L("Continue watching"), no, yes),
+        Triple(L("Kids profiles"), no, yes),
+        Triple(L("OpenSubtitles subtitles"), no, yes),
     )
     val current = when {
         c == null -> null

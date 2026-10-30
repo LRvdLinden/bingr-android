@@ -790,7 +790,8 @@ class PlayerController(item: PlayableItem) {
                 if (embedded.id != engine.currentSubtitle) engine.selectSubtitle(embedded)
                 notice = L("Subtitles: %@", TrackPreferences.name(want))
                 Casting.subtitlesChanged(this)
-            } else if (!isLive && OpenSubtitles.isLoggedIn) {
+            } else if (!isLive && Build157Logic.Subs.usable(Entitlements.openSubtitles, OpenSubtitles.isLoggedIn)) {
+                // build 157: OpenSubtitles hoort bij Lifetime; ondertitels uit de stream (hierboven) blijven gratis
                 fetchOpenSubtitles(want)
             }
             return
