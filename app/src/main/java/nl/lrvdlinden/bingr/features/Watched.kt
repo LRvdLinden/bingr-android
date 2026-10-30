@@ -56,22 +56,36 @@ object Watched {
 
     private val traktOn: Boolean get() = Trakt.profileAllowed && Trakt.isLoggedIn
 
+    /**
+     * Lokaal gezien? Over alle kandidaatsleutels (id-sleutel en inhoudssleutels, titel met jaar ±1) wint de nieuwste
+     * gebeurtenis: een toevoeging (in `watched`) = gezien, een verwijdering (`removed.watched`) = niet gezien. Een sleutel in
+     * de set waarvan de tijd nog niet vastligt, is net hier toegevoegd (= de nieuwste).
+     */
+    private fun localDecide(cands: List<String>): Boolean {
+        val lw = Store.localWatched
+        var any = false
+        for (k in cands) if (k in lw) { any = true; break }
+        if (!any) return false
+        val (present, removed) = StateSync.watchedEvents(Store.activeProfileID)
+        if (removed.isEmpty()) return true
+        val wm = HashMap<String, Long>()
+        for (k in cands) if (k in lw) wm[k] = present[k] ?: Long.MAX_VALUE
+        return W.latest(wm, removed, cands)
+    }
+
     fun isWatched(m: Movie, imdb: String?): Boolean {
-        val local = Store.localWatched
-        if (m.id in local) return true
         val keys = movieLookup(m, imdb)
-        for (k in keys) if (k in local) return true
+        if (localDecide(listOf(m.id) + keys)) return true
         if (traktOn) { val t = Trakt.watchedKeys; if (t.isNotEmpty()) for (k in keys) if (k in t) return true }
         return false
     }
 
     fun isWatched(e: Episode, imdb: String?): Boolean {
-        if (Store.isEpisodeWatched(e)) return true
-        val s = series(e.seriesID) ?: return false
+        val own = listOf(e.id, Store.episodeKey(e.seriesID, e.season, e.number))
+        val s = series(e.seriesID) ?: return localDecide(own)
         val forms = showForms(s, imdb)
-        val local = Store.localWatched
         val se = "${e.season}-${e.number}"
-        for (f in forms) if ("w:e:$f|$se" in local) return true
+        if (localDecide(own + forms.map { "w:e:$it|$se" })) return true
         if (traktOn) { val t = Trakt.showEpisodes; for (f in forms) if (t[f]?.contains(se) == true) return true }
         return false
     }
@@ -98,8 +112,7 @@ object Watched {
 
     fun isSeriesWatched(s: Series, imdb: String? = Trakt.imdb(s)): Boolean {
         val forms = showForms(s, imdb)
-        val local = Store.localWatched
-        for (f in forms) if ("w:s:$f" in local) return true
+        if (localDecide(forms.map { "w:s:$it" })) return true
         if (traktOn) {
             val aired = Trakt.aired; val t = Trakt.showEpisodes
             for (f in forms) { val a = aired[f] ?: continue; if (a > 0 && (t[f]?.count { !it.startsWith("0-") } ?: 0) >= a) return true }
@@ -109,9 +122,7 @@ object Watched {
 
     /** Aflevering van een andere server (Verder kijken): op titel/jaar/tmdb van de serie. */
     fun isEpisodeWatched(showTitle: String, year: Int?, tmdb: String?, season: Int, episode: Int): Boolean {
-        val local = Store.localWatched
-        for (k in W.lookupKeys("w:e:", shown(showTitle), year, tmdb, null, "|$season-$episode")) if (k in local) return true
-        return false
+        return localDecide(W.lookupKeys("w:e:", shown(showTitle), year, tmdb, null, "|$season-$episode"))
     }
 
     // MARK: schrijven

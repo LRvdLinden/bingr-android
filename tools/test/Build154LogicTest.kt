@@ -78,6 +78,12 @@ fun main(args: Array<String>) {
         val stored = (c["stored"] as List<String>).toSet()
         eq("lezen $idx ${c["title"]} ${c["year"]}", W.movieWatched(stored, s(c["title"])!!, i(c["year"]), s(c["tmdb"]), s(c["imdb"])), c["watched"]); n++
     }
+    for ((idx, c) in (cases["latest"] as List<Map<String, Any?>>? ?: emptyList()).withIndex()) {
+        val wm = (c["watched"] as Map<String, Any?>).mapValues { (it.value as Double).toLong() }
+        val rm = (c["removed"] as Map<String, Any?>).mapValues { (it.value as Double).toLong() }
+        val cand = W.lookupKeys("w:m:", s(c["title"])!!, i(c["year"]), s(c["tmdb"]), s(c["imdb"]))
+        eq("nieuwste wint $idx", W.latest(wm, rm, cand), c["result"]); n++
+    }
     println("gedeelde gevallen: $n")
 
     // aflevering lezen (show-jaar ±1) en serie gezien

@@ -22,22 +22,32 @@ object Build154Logic {
     object WatchKeys {
         private val trailingYear = Regex("\\s*[\\(\\[]\\s*(?:19|20)\\d{2}\\s*[\\)\\]]\\s*$")
 
-        /** Titel-normalisatie (contract stap 2–4) op een al opgeschoonde weergavetitel; een jaartal tussen haakjes achteraan gaat eraf. */
+        private fun keep(cp: Int): Boolean = when (Character.getType(cp)) {
+            Character.UPPERCASE_LETTER.toInt(), Character.LOWERCASE_LETTER.toInt(), Character.TITLECASE_LETTER.toInt(),
+            Character.MODIFIER_LETTER.toInt(), Character.OTHER_LETTER.toInt(),
+            Character.DECIMAL_DIGIT_NUMBER.toInt(), Character.LETTER_NUMBER.toInt(), Character.OTHER_NUMBER.toInt() -> true
+            else -> false
+        }
+
+        /**
+         * Titel-normalisatie (contract, exact): op een al opgeschoonde weergavetitel (een jaartal tussen haakjes achteraan
+         * gaat eraf) NFKD, dan alle tekens van categorie Mn weg (ook dakuten: が → か), dan lowercase (Locale.ROOT),
+         * `&` → `and` en `+` → `plus`, dan alleen tekens van categorie L* en N* houden.
+         */
         fun norm(title: String): String {
-            val s0 = trailingYear.replace(title, "")
-            val d = Normalizer.normalize(s0, Normalizer.Form.NFKD)
-            val sb = StringBuilder(d.length)
+            val d = Normalizer.normalize(trailingYear.replace(title, ""), Normalizer.Form.NFKD)
+            val noMn = StringBuilder(d.length)
             var i = 0
             while (i < d.length) {
-                val cp = d.codePointAt(i)
-                i += Character.charCount(cp)
-                val t = Character.getType(cp)
-                if (t == Character.NON_SPACING_MARK.toInt() || t == Character.COMBINING_SPACING_MARK.toInt() || t == Character.ENCLOSING_MARK.toInt()) continue
-                when {
-                    cp == '&'.code -> sb.append("and")
-                    cp == '+'.code -> sb.append("plus")
-                    Character.isLetterOrDigit(cp) -> sb.append(String(Character.toChars(cp)).lowercase(Locale.ROOT))
-                }
+                val cp = d.codePointAt(i); i += Character.charCount(cp)
+                if (Character.getType(cp) != Character.NON_SPACING_MARK.toInt()) noMn.appendCodePoint(cp)
+            }
+            val low = noMn.toString().lowercase(Locale.ROOT).replace("&", "and").replace("+", "plus")
+            val sb = StringBuilder(low.length)
+            i = 0
+            while (i < low.length) {
+                val cp = low.codePointAt(i); i += Character.charCount(cp)
+                if (keep(cp)) sb.appendCodePoint(cp)
             }
             return sb.toString()
         }
@@ -90,6 +100,20 @@ object Build154Logic {
                 } else out += "${prefix}t:$n|0$suffix"
             }
             return out
+        }
+
+        /**
+         * Nieuwste gebeurtenis wint, over alle kandidaatsleutels van het item (id-sleutel en inhoudssleutels, titel met jaar
+         * ±1): gezien als de nieuwste tijd een toevoeging is ([watched]: sleutel → at), niet gezien als het een verwijdering is
+         * ([removed]: sleutel → at). Een sleutel in de set zonder bekende tijd telt als toevoeging op tijd 0.
+         */
+        fun latest(watched: Map<String, Long>, removed: Map<String, Long>, candidates: Collection<String>): Boolean {
+            var add = -1L; var rem = -1L
+            for (k in candidates) {
+                watched[k]?.let { if (it > add) add = it }
+                removed[k]?.let { if (it > rem) rem = it }
+            }
+            return add >= 0 && add >= rem
         }
 
         fun movieWatched(stored: Set<String>, title: String, year: Int?, tmdb: String?, imdb: String?, ownKey: String? = null): Boolean {

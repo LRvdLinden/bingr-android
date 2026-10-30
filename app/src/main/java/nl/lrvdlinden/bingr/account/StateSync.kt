@@ -456,6 +456,13 @@ object StateSync {
         return readMeta(pid).present["watched"] ?: emptyMap()
     }
 
+    /** Build 154: (toegevoegd, verwijderd) per sleutel van `watched`, voor "nieuwste gebeurtenis wint" bij het lezen. */
+    fun watchedEvents(id: String?): Pair<Map<String, Long>, Map<String, Long>> {
+        val pid = id ?: return emptyMap<String, Long>() to emptyMap()
+        val m = readMeta(pid)
+        return (m.present["watched"] ?: emptyMap()) to (m.removed["watched"] ?: emptyMap())
+    }
+
     /**
      * Build 154: nieuwe inhoudssleutels (migratie) krijgen dezelfde `at` als de id-sleutel waar ze bij horen. Vóór het
      * schrijven in [Store] aanroepen; [recordLocal] laat een bekende `at` dan staan.
