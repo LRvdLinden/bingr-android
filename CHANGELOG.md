@@ -4,6 +4,54 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.2 · Build 152
+_30 oktober 2026_
+
+### Alle apps en de website
+
+**Nieuw**
+
+- Nieuwe rij Nu in de bioscoop op Home: de populairste films die nu in de bioscoop draaien, meteen af te spelen als ze op je server staan
+
+### iOS, iPadOS, tvOS, macOS, Android en Android TV
+
+**Opgelost**
+
+- Een verborgen categorie die je weer aanzet, komt nu altijd terug: ook op je andere servers, na een herstart van de app en als er op dat moment servers werden bijgewerkt
+
+### Android en Android TV
+
+**Opgelost**
+
+- Verborgen categorieën blijven ook in Mijn lijst, Verder kijken en de rij Zenders verborgen, en titels daaruit worden niet meer naar een andere server verhuisd
+- Nieuw op Bingr loopt niet meer vol met titels uit een categorie die je weer aanzet
+
+### Windows, Website en Server
+
+**Opgelost**
+
+- Servers laden weer in de webspeler, en lukt het niet, dan zie je een duidelijke melding in plaats van http_502
+
+### Website en Server
+
+**Verbeterd**
+
+- Samsung TV en LG-tv worden niet meer ondersteund en staan niet meer op de website, de supportsite en de statuspagina
+
+### Server
+
+**Nieuw**
+
+- De nieuwsbrief heeft de secties Top 10 deze week en Populair, met IMDb-score; een klik opent de titel in Bingr
+
+**Verbeterd**
+
+- Nieuwsbrief overzichtelijker: per onderwerp maximaal 6 titels in rijen van 3, alle covers even groot met titel, jaar, genre en score eronder, de Top 10 doorlopend genummerd en geen titel meer twee keer in dezelfde mail
+
+**Opgelost**
+
+- De statuspagina meldt geen onterechte storing meer bij Apple
+
 ## Versie 1.0.1 · Build 151
 _25 oktober 2026_
 
