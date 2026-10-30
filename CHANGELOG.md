@@ -1,6 +1,6 @@
-# Changelog · Android en Samsung TV
+# Changelog · Android en Android TV
 
-Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV, Fire TV en Samsung TV (Tizen). iPhone, iPad, Apple TV en Mac: [iptv-ios-appletv](https://github.com/LRvdLinden/iptv-ios-appletv/blob/main/CHANGELOG.md) · alles: [bingr.online/changelog](https://bingr.online/changelog/).
+Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV en Fire TV. iPhone, iPad, Apple TV en Mac: [iptv-ios-appletv](https://github.com/LRvdLinden/iptv-ios-appletv/blob/main/CHANGELOG.md) · alles: [bingr.online/changelog](https://bingr.online/changelog/).
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
@@ -31,17 +31,11 @@ _25 oktober 2026_
 - Taal-, land- en kwaliteitsaanduidingen zoals "| NL |", "MULTI / LINGO", "[EN]" of "4K" verdwijnen overal uit de namen van categorieën, en namen in hoofdletters krijgen nette hoofdletters
 - Ontdek categorieën toont Netflix niet meer twee keer en toont de logo's van streamingdiensten weer
 
-### iOS, iPadOS, tvOS, macOS, Android, Android TV, Samsung TV (Tizen) en LG TV (webOS)
+### iOS, iPadOS, tvOS, macOS, Android en Android TV
 
 **Verbeterd**
 
 - Bij Over staat nu ook de bronvermelding Streamingdata: JustWatch
-
-### Samsung TV (Tizen) en LG TV (webOS)
-
-**Nieuw**
-
-- Zoeken vindt ook titels in verborgen categorieën en via de zoekcatalogi van Stremio-add-ons
 
 ## Versie 1.0.1 · Build 149
 _25 oktober 2026_
@@ -55,30 +49,25 @@ _25 oktober 2026_
 **Verbeterd**
 
 - Zoeken vindt meer: losse woorden in elke volgorde, zonder accenten en voorvoegsels en met een kleine typefout
+- Zoeken doorzoekt ook de catalogi van Stremio-add-ons
 
 **Opgelost**
 
 - Geen haperingen meer bij sync toepassen en bewaren: datums worden niet meer per item opnieuw opgemaakt
 
-### iOS, iPadOS, tvOS, Android, Android TV, Samsung TV (Tizen) en LG TV (webOS)
+### iOS, iPadOS, tvOS, Android en Android TV
 
 **Opgelost**
 
 - Een heel grote server stopt netjes met een melding in plaats van de app te laten wegvallen
 
-### iOS, iPadOS, tvOS, macOS, Android, Android TV, Windows en Website
-
-**Verbeterd**
-
-- Zoeken doorzoekt ook de catalogi van Stremio-add-ons
-
-### iOS, iPadOS, tvOS, macOS, Android, Android TV, Samsung TV (Tizen) en LG TV (webOS)
+### iOS, iPadOS, tvOS, macOS, Android en Android TV
 
 **Opgelost**
 
 - Diagnose: de bereikbaarheid van je eigen server en de fase toepassen worden goed gemeten
 
-### Android, Android TV, Samsung TV (Tizen), Windows, LG TV (webOS) en Website
+### Android, Android TV, Windows en Website
 
 **Verbeterd**
 
@@ -94,7 +83,7 @@ _25 oktober 2026_
 - Een heel grote catalogus wordt in kleine stukjes ingelezen en toegepast, zodat de app blijft reageren en minder geheugen gebruikt
 - Diagnose in de taal van de app, met de langste hapering, het bijwerken per server, geleverd naast zichtbaar en haperingen tijdens het afspelen
 
-### iOS, iPadOS, tvOS, macOS, Android, Android TV, Samsung TV (Tizen) en LG TV (webOS)
+### iOS, iPadOS, tvOS, macOS, Android en Android TV
 
 **Opgelost**
 
@@ -115,18 +104,9 @@ _24 oktober 2026_
 **Verbeterd**
 
 - De startdiagnose toont bovenaan of de start goed, traag of vastgelopen was, met app-tijd los van wachten op jou en de vorige start
-- Een diagnose naar support bevat altijd de startdiagnose van deze en de vorige start
-
-### iOS, iPadOS, tvOS, macOS, Android, Android TV, Samsung TV (Tizen), Windows en Website
-
-**Nieuw**
-
-- Een LG-tv staat in je apparatenlijst en bij Wie kijkt er nu als LG TV
-
-**Verbeterd**
-
 - Bij vastlopen legt de diagnose vast welke taak het was en of de app op de voorgrond stond
 - De diagnose toont per server of zenders, films en series geleverd zijn, leeg waren, mislukten of allemaal verborgen zijn, plus de soort verbinding en de opslag als één totaal
+- Een diagnose naar support bevat altijd de startdiagnose van deze en de vorige start
 
 **Opgelost**
 
@@ -139,10 +119,6 @@ _24 oktober 2026_
 - Statuspagina: een mislukte build geeft niet meer meteen een grote storing; alleen de echte build telt, en pas na twee mislukte builds op rij (of na 2 uur) is het een storing
 
 ### Server
-
-**Nieuw**
-
-- De server kent de LG TV-app (webOS)
 
 **Verbeterd**
 
@@ -203,7 +179,7 @@ _24 oktober 2026_
 - Geen automatisch verversen op tijd meer: de vernieuwtermijn (elke dag, week enz.) is vervallen; je kiest zelf wanneer, of vernieuwt handmatig
 - Bijwerken gaat één server tegelijk op de achtergrond, de open server eerst, en nooit tijdens het afspelen
 
-### tvOS, Android TV en Samsung TV (Tizen)
+### tvOS en Android TV
 
 **Verbeterd**
 
@@ -222,13 +198,8 @@ _23 oktober 2026_
 
 **Verbeterd**
 
-- Profiel kiezen en het pincodescherm laden niets meer op de achtergrond
-
-### Android, Android TV en Samsung TV (Tizen)
-
-**Verbeterd**
-
 - Openen gaat sneller: met een bewaarde lijst wordt bij het openen niets opgehaald, verversen gebeurt pas later en één server tegelijk
+- Profiel kiezen en het pincodescherm laden niets meer op de achtergrond
 - Verversen gebeurt nooit tijdens het kijken, in de profielkeuze of op het pincodescherm
 
 **Opgelost**
@@ -267,14 +238,9 @@ _23 oktober 2026_
 **Verbeterd**
 
 - Bij het openen ververst eerst alleen de open server; je andere servers volgen later op de achtergrond
-- Casten naar een Chromecast is beter afgeschermd: alleen wat je cast is bereikbaar, met een nieuwe sleutel per sessie
-
-### iOS, iPadOS, tvOS, macOS, Android, Android TV en Samsung TV (Tizen)
-
-**Verbeterd**
-
 - Kinderslot uitzetten, de pincode wijzigen en een vergrendelde groep ontgrendelen vragen nu de huidige pincode
 - Na 5 foute pincodes geldt een oplopende wachttijd
+- Casten naar een Chromecast is beter afgeschermd: alleen wat je cast is bereikbaar, met een nieuwe sleutel per sessie
 - Inloggegevens van je servers en je accountsessie worden versleuteld bewaard (sleutelhanger op Apple)
 - Verbindingen met Bingr en de eigen diensten gaan altijd via HTTPS
 
@@ -309,7 +275,7 @@ _23 oktober 2026_
 ## Versie 1.0.1 · Build 140
 _23 oktober 2026_
 
-### iOS, iPadOS, tvOS, macOS, Android, Android TV, Samsung TV (Tizen) en Website
+### iOS, iPadOS, tvOS, macOS, Android, Android TV en Website
 
 **Nieuw**
 
