@@ -640,7 +640,7 @@ private fun CategoryPoster(t: DetailTarget) {
                 val watched = Playables.isWatched(t.movie, imdb)
                 add(S2Action(if (watched) L("Mark as unwatched") else L("Mark as watched"),
                     if (watched) Icons.Default.VisibilityOff else Icons.Default.CheckCircle) {
-                    Store.setLocalWatched(t.movie.id, !watched)
+                    Watched.setWatched(t.movie, imdb, !watched)
                     AppScope.launch { screensSafe { Trakt.setWatched(Playables.movie(t.movie, imdb), !watched) } }
                 })
             }

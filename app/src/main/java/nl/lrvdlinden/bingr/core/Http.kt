@@ -32,7 +32,8 @@ object Http {
         }
         .build()
 
-    data class Response(val code: Int, val body: String, val bytes: ByteArray? = null) {
+    /** [retryAfter] (build 154): `Retry-After` in seconden (bij een 429), null = niet meegegeven. */
+    data class Response(val code: Int, val body: String, val bytes: ByteArray? = null, val retryAfter: Long? = null) {
         val ok: Boolean get() = code in 200..299
     }
 
@@ -55,7 +56,7 @@ object Http {
         }
         client.newCall(b.build()).execute().use { r ->
             if (raw) { val bytes = r.body?.bytes() ?: ByteArray(0); Response(r.code, "", bytes) }
-            else Response(r.code, r.body?.string() ?: "")
+            else Response(r.code, r.body?.string() ?: "", retryAfter = r.header("Retry-After")?.trim()?.toLongOrNull())
         }
     }
 

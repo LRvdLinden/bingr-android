@@ -823,6 +823,22 @@ object Store {
     }
 
     /**
+     * Build 154: sleutels (id-sleutels en inhoudssleutels `w:m:`/`w:e:`/`w:s:`) in één keer toevoegen of weghalen.
+     * Weghalen gaat via de bestaande account-sync met dezelfde tijd naar `removed.watched`. [notify] = false: de aanroeper
+     * meldt de wijziging zelf (migratie met dezelfde `at`).
+     */
+    fun updateWatched(add: Collection<String>, remove: Collection<String>, notify: Boolean = true): Boolean {
+        var n = localWatched
+        if (remove.isNotEmpty()) n = n - remove.toSet()
+        if (add.isNotEmpty()) n = n + add
+        if (n == localWatched) return false
+        localWatched = n
+        pwrite("watched", localWatched)
+        if (notify) StateSync.profileDataChanged(activeProfileID)
+        return true
+    }
+
+    /**
      * Sleutel voor "aflevering bekeken" per serie (seizoen-aflevering), zodat het vinkje en "X GEZIEN" ook kloppen
      * als de afleveringen pas later geladen worden. Geldt per profiel, ook zonder Trakt.
      */

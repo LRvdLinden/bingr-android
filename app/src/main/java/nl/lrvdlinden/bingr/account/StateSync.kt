@@ -450,6 +450,32 @@ object StateSync {
         AppScope.launch { quietly { lock.withLock { names.forEach { Account.deleteState(it) } } } }
     }
 
+    /** Build 154: wanneer de sleutels van `watched` (lokaal) toegevoegd zijn (voor de migratie en de grootte-grens). */
+    fun watchedAt(id: String?): Map<String, Long> {
+        val pid = id ?: return emptyMap()
+        return readMeta(pid).present["watched"] ?: emptyMap()
+    }
+
+    /**
+     * Build 154: nieuwe inhoudssleutels (migratie) krijgen dezelfde `at` als de id-sleutel waar ze bij horen. Vóór het
+     * schrijven in [Store] aanroepen; [recordLocal] laat een bekende `at` dan staan.
+     */
+    fun seedWatchedAt(id: String?, ats: Map<String, Long>): Set<String> {
+        val pid = id ?: return emptySet()
+        if (ats.isEmpty()) return emptySet()
+        val accepted = HashSet<String>()
+        synchronized(metaLock) {
+            val m = readMeta(pid)
+            val p = (m.present["watched"] ?: emptyMap()).toMutableMap()
+            val r = (m.removed["watched"] ?: emptyMap()).toMutableMap()
+            var changed = false
+            // een latere bewuste verwijdering (uitgevinkt op een ander apparaat) wint: die sleutel niet terugzetten
+            for ((k, at) in ats) if (k !in p && (r[k] ?: 0L) < at) { p[k] = at; r.remove(k); changed = true; accepted += k }
+            if (changed) writeMeta(pid, m.copy(present = m.present + ("watched" to p), removed = m.removed + ("watched" to r)))
+        }
+        return accepted
+    }
+
     /** Trakt-tokens zijn net ververst: meteen (zonder wachten) naar het account. */
     fun traktRefreshed() {
         bumpLocal(CONNECTIONS)

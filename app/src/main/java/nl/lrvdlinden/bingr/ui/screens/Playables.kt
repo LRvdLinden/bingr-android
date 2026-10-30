@@ -14,7 +14,7 @@ object Playables {
         return PlayableItem(
             id = m.id, title = m.title, subtitle = m.year?.toString(), url = m.streamURL, type = MediaType.MOVIE,
             imdbID = imdb, artwork = m.poster, stalkerCmd = m.stalkerCmd, resumeAt = resume(m.id, imdb), stremio = stremio,
-            sourceID = m.sourceID,
+            sourceID = m.sourceID, tmdbID = Watched.tmdb(m), year = m.year,
         )
     }
 
@@ -25,7 +25,7 @@ object Playables {
             subtitle = L("S%d:E%d · %@", e.season, e.number, cleanEpisodeTitle(e)),
             url = e.streamURL, type = MediaType.EPISODE, imdbID = imdb, season = e.season, episode = e.number,
             artwork = e.still ?: s.poster, resumeAt = resume(e.id, null), stremio = stremio,
-            seriesID = s.id, sourceID = s.sourceID,
+            seriesID = s.id, sourceID = s.sourceID, tmdbID = Watched.tmdb(s), year = s.year,
         )
     }
 
@@ -37,33 +37,28 @@ object Playables {
     fun resume(id: String, imdb: String?): Double =
         Store.progress[id]?.fraction ?: runCatching { Trakt.playbackProgress(imdb) }.getOrNull() ?: 0.0
 
-    fun isWatched(m: Movie, imdb: String?): Boolean = Trakt.isWatched(imdb) || m.id in Store.localWatched
+    /** Build 154: Trakt (inhoudssleutels) of lokaal (id-sleutel of een inhoudssleutel, dus ook van een andere server). */
+    fun isWatched(m: Movie, imdb: String?): Boolean = Watched.isWatched(m, imdb)
 
-    /** Trakt, of lokaal (per profiel) via aflevering-id of seizoen-aflevering-sleutel. */
-    fun isWatched(e: Episode, imdb: String?): Boolean =
-        Trakt.isWatched(imdb, e.season, e.number) || Store.isEpisodeWatched(e)
+    /** Trakt, of lokaal (per profiel) via aflevering-id, seizoen-aflevering-sleutel of inhoudssleutel van de serie. */
+    fun isWatched(e: Episode, imdb: String?): Boolean = Watched.isWatched(e, imdb)
+
+    /** Build 154: serie helemaal gezien (`w:s:` in de set, of alle uitgezonden afleveringen gezien op Trakt). */
+    fun isWatched(s: Series): Boolean = Watched.isSeriesWatched(s)
 
     /**
      * Aantal bekeken afleveringen van een serie voor het label "N BEKEKEN" op de poster (build 75): de vereniging van
-     * Trakt (alleen hoofdaccount) en wat dit profiel in Bingr afvinkte/uitkeek (seizoen-aflevering-sleutels en
-     * aflevering-id's). Eerder werd het maximum van die bronnen genomen, waardoor de teller te laag uitviel als een
-     * deel op Trakt en een deel alleen in Bingr bekeken was.
+     * Trakt (alleen hoofdaccount) en wat dit profiel in Bingr afvinkte/uitkeek (seizoen-aflevering-sleutels,
+     * aflevering-id's en sinds build 154 de inhoudssleutels `w:e:`, ook van een andere server).
      */
-    fun watchedEpisodeCount(s: Series, imdb: String? = Trakt.imdb(s)): Int {
-        val lw = Store.localWatched
-        val trakt = imdb?.let { Trakt.watchedEpisodes[it] }.orEmpty()
-        val prefix = "ep:${s.id}|"
-        var set: MutableSet<String>? = null
-        for (k in lw) if (k.startsWith(prefix)) {
-            val x = set ?: HashSet(trakt).also { set = it }
-            x.add(k.substring(prefix.length))
-        }
-        if (s.episodes.isNotEmpty() && lw.isNotEmpty()) for (e in s.episodes) if (e.id in lw) {
-            val x = set ?: HashSet(trakt).also { set = it }
-            x.add("${e.season}-${e.number}")
-        }
-        return set?.size ?: trakt.size
-    }
+    fun watchedEpisodeCount(s: Series, imdb: String? = Trakt.imdb(s)): Int = Watched.episodeSet(s, imdb).size
+
+    /** Build 154: waarde voor [PosterCard.watchedEpisodes] als de serie helemaal gezien is (vinkje). */
+    const val SERIES_WATCHED = Int.MAX_VALUE
+
+    /** Voor een seriekaart: [SERIES_WATCHED] als `w:s:` erin staat, anders het aantal bekeken afleveringen. */
+    fun seriesCardCount(s: Series, imdb: String? = Trakt.imdb(s)): Int =
+        if (Watched.isSeriesWatched(s, imdb)) SERIES_WATCHED else watchedEpisodeCount(s, imdb)
 
     fun cleanEpisodeTitle(e: Episode): String {
         val parts = e.title.split(" - ")

@@ -383,7 +383,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
     fun toggleWatchedMovie() {
         val m = (target as? DetailTarget.MovieT)?.movie ?: return
         val w = isWatchedTitle
-        Store.setLocalWatched(m.id, !w)
+        Watched.setWatched(m, imdb, !w)
         AppScope.launch { screensSafe { Trakt.setWatched(Playables.movie(m, imdb), !w) } }
     }
 
@@ -711,8 +711,10 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                             val all = list.all { Playables.isWatched(it, imdb) }
                             Box(
                                 Modifier.size(tvs(40)).focusLift(1.12f) {
-                                    list.forEach { Store.setEpisodeWatched(it, !all) }
-                                    if (imdb != null) AppScope.launch { screensSafe { Trakt.setWatched(imdb, list, !all) } }
+                                    Watched.setWatched(list, imdb, !all, episodes)
+                                    (target as? DetailTarget.SeriesT)?.series?.let { ser ->
+                                        AppScope.launch { screensSafe { Trakt.setWatched(ser, imdb, list, !all) } }
+                                    }
                                 },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -1201,7 +1203,7 @@ private fun EpisodeCard(
                 *(if (onDownload != null && download == null) arrayOf(S2Action(L("Download"), Icons.Default.Download) { onDownload() }) else emptyArray()),
                 S2Action(if (watched) L("Mark as unwatched") else L("Mark as watched"),
                     if (watched) Icons.Default.VisibilityOff else Icons.Default.CheckCircle) {
-                    Store.setEpisodeWatched(e, !watched)
+                    Watched.setWatched(listOf(e), imdb, !watched)
                     AppScope.launch { screensSafe { Trakt.setWatched(Playables.episode(e, s, imdb), !watched) } }
                 },
             ), onDismiss = { menu = false })

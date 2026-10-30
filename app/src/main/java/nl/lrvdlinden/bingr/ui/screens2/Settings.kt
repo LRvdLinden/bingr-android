@@ -1058,7 +1058,7 @@ private fun S2MyBingrHeader() {
                     val watched = (t as? DetailTarget.MovieT)?.let { Playables.isWatched(it.movie, Trakt.imdb(it.movie)) } ?: false
                     PosterCard(t.title, t.poster, modifier = Modifier.focusLift { ScreensNav.detail(t) },
                         watched = watched, progress = progress[t.id]?.fraction,
-                        watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.watchedEpisodeCount(it.series) } ?: 0)
+                        watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.seriesCardCount(it.series) } ?: 0)
                 }
             }
         }

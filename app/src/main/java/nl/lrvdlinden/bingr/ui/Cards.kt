@@ -64,7 +64,9 @@ fun PosterCard(
         val shown = ContentLanguage.displayTitle(title)
         RemoteImage(poster, Modifier.matchParentSize(), placeholder = shown, contentDescription = shown)
         if (accent != null) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(tvs(4)).background(accent))
-        if (watched) {
+        // build 154: serie helemaal gezien (`w:s:`) → vinkje in plaats van "N BEKEKEN"
+        val seriesDone = watchedEpisodes == Playables.SERIES_WATCHED
+        if (watched || seriesDone) {
             Box(Modifier.align(Alignment.TopEnd).padding(6.dp).size(tvs(20)).clip(CircleShape).background(Theme.red),
                 contentAlignment = Alignment.Center) { Icon(Icons.Default.Check, null, tint = Theme.onAccent, modifier = Modifier.size(tvs(13))) }
         }
@@ -76,13 +78,13 @@ fun PosterCard(
             }
         }
         if (language != null) LanguageStrip(language, Modifier.align(Alignment.BottomCenter))
-        if ((badge != null && badgeTopStart) || watchedEpisodes > 0) {
+        if ((badge != null && badgeTopStart) || (watchedEpisodes > 0 && !seriesDone)) {
             Column(
                 Modifier.align(Alignment.TopStart).padding(start = 6.dp, top = 6.dp + topStartInset + (if (accent != null) tvs(4) else 0.dp)),
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 if (badge != null && badgeTopStart) PosterLabel(badge)
-                if (watchedEpisodes > 0) PosterLabel(L("%d WATCHED", watchedEpisodes))
+                if (watchedEpisodes > 0 && !seriesDone) PosterLabel(L("%d WATCHED", watchedEpisodes))
             }
         }
         if (badge != null && !badgeTopStart) {

@@ -168,7 +168,11 @@ object HomeIndexCache {
 fun rememberHomeIndex(lib: Library): HomeIndex {
     val libKey = System.identityHashCode(lib)
     var index by remember(libKey) { mutableStateOf(HomeIndexCache.peek(lib) ?: HomeIndex()) }
-    LaunchedEffect(libKey) { index = HomeIndexCache.get(lib) }
+    LaunchedEffect(libKey) {
+        index = HomeIndexCache.get(lib)
+        // build 154: eenmalig de inhoudssleutels van "gezien" bij de bestaande id-sleutels zetten, en de grootte-grens
+        Watched.migrateIfNeeded(); Watched.pruneIfNeeded()
+    }
     return index
 }
 
@@ -367,10 +371,11 @@ private class HomeModel(val filter: Filter) {
             val out = ArrayList<DetailTarget>()
             val seen = HashSet<String>(seeds.map { keyOf(it) })
             fun watched(t: DetailTarget): Boolean = when (t) {
+                // build 154: ook gezien via een inhoudssleutel (andere server) of Trakt
                 is DetailTarget.MovieT -> progress[t.id] != null || t.movie.id in localWatched ||
-                    (useTrakt && Trakt.isWatched(Trakt.imdb(t.movie)))
+                    Playables.isWatched(t.movie, if (useTrakt) Trakt.imdb(t.movie) else null)
                 is DetailTarget.SeriesT -> Store.localWatchedCount(t.series.id) > 0 ||
-                    (useTrakt && Playables.watchedEpisodeCount(t.series) > 0)
+                    Playables.watchedEpisodeCount(t.series) > 0
             }
             fun add(t: DetailTarget) {
                 if (filter == Filter.MOVIES && t.isSeries) return
@@ -482,6 +487,13 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
             if (item == null && Store.activeProfile?.kids == true) continue
             val kind = CatalogMeta.kind(full)
             val isMovie = item is Movie || (item == null && kind == "movie")
+            // build 154: gezien (ook op een andere server) valt uit Verder kijken
+            if (item is Movie && Playables.isWatched(item, Trakt.imdb(item))) continue
+            val cep = if (kind == "episode") CatalogMeta.episode(full) else null
+            if (cep?.seriesTitle != null) {
+                val sm = cep.series?.let { CatalogMeta.item(it) }
+                if (Watched.isEpisodeWatched(cep.seriesTitle, sm.jI("y"), sm.jS("tmdb"), cep.season, cep.episode)) continue
+            }
             if (filter == Filter.MOVIES && !isMovie) continue
             if (filter == Filter.SERIES && isMovie) continue
             val left = max(0.0, e.position / max(e.fraction, 0.01) - e.position)
@@ -502,6 +514,9 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
         }
         val isMovie = key in index.movieByID
         if (!isMovie && e.title !in index.seriesTitles) continue
+        // build 154: gezien (ook op een andere server of op Trakt) valt uit Verder kijken
+        if (isMovie) { val m = index.movieByID[key]; if (m != null && Playables.isWatched(m, Trakt.imdb(m))) continue }
+        else if (key in Store.localWatched) continue
         if (filter == Filter.MOVIES && !isMovie) continue
         if (filter == Filter.SERIES && isMovie) continue
         val left = max(0.0, e.position / max(e.fraction, 0.01) - e.position)
@@ -1003,7 +1018,7 @@ private fun SeriesPoster(s: Series) {
         s.title, s.poster,
         modifier = Modifier.focusLift(onLongClick = { collect = true }) { openDetail(DetailTarget.SeriesT(s)) },
         language = languageLabel(s),
-        watchedEpisodes = Playables.watchedEpisodeCount(s)
+        watchedEpisodes = Playables.seriesCardCount(s)
     )
     if (collect) AddToCollectionDialog(Collections.ref(DetailTarget.SeriesT(s)), s.title, s.poster) { collect = false }
 }
@@ -1085,7 +1100,7 @@ private fun MoviePoster(m: Movie, pid: String?) {
             add(S2Action(L("Play"), Icons.Default.PlayArrow) { homePlay(DetailTarget.MovieT(m)) })
             add(S2Action(if (watched) L("Mark as unwatched") else L("Mark as watched"),
                 if (watched) Icons.Default.VisibilityOff else Icons.Default.CheckCircle) {
-                Store.setLocalWatched(m.id, !watched)
+                Watched.setWatched(m, imdb, !watched)
                 AppScope.launch { screensSafe { Trakt.setWatched(Playables.movie(m, imdb), !watched) } }
             })
             if (pid != null) {
@@ -1131,7 +1146,7 @@ private fun ForYouRow(filter: Filter, all: List<DetailTarget>, popular: Boolean 
                 badge = if (t.isSeries) L("SERIES") else L("MOVIE"),
                 language = languageLabel(t),
                 badgeTopStart = true,
-                watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.watchedEpisodeCount(it.series) } ?: 0
+                watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.seriesCardCount(it.series) } ?: 0
             )
         }
     }
@@ -1153,7 +1168,7 @@ private fun LabeledTargetRow(title: String, items: List<DetailTarget>) {
                 badge = if (t.isSeries) L("SERIES") else L("MOVIE"),
                 language = languageLabel(t),
                 badgeTopStart = true,
-                watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.watchedEpisodeCount(it.series) } ?: 0
+                watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.seriesCardCount(it.series) } ?: 0
             )
         }
     }
@@ -1181,7 +1196,7 @@ private fun Top10SeriesRow(title: String, all: List<Series>) {
     MediaRow(title, onSeeAll = { openCategory(title, all.map { DetailTarget.SeriesT(it) }) }) {
         itemsIndexed(all.take(10)) { i, s ->
             Box(Modifier.focusLift { openDetail(DetailTarget.SeriesT(s)) }) {
-                Top10Card(i + 1, s.title, s.poster, language = languageLabel(s), watchedEpisodes = Playables.watchedEpisodeCount(s))
+                Top10Card(i + 1, s.title, s.poster, language = languageLabel(s), watchedEpisodes = Playables.seriesCardCount(s))
             }
         }
     }

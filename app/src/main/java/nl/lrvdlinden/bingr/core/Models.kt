@@ -144,6 +144,8 @@ data class Movie(
     val xtreamVodID: Int? = null,
     /** Build 128: server van deze film als die niet de actieve is (null = de actieve server). */
     val sourceID: String? = null,
+    /** Build 154: TMDB-id van de server (Xtream `tmdb`/`tmdb_id`), voor de inhoudssleutels van "gezien" en Trakt. */
+    val tmdbID: String? = null,
 ) {
     /** Build 153: titel zoals de app hem toont (taal- en pipe-aanduidingen weg); [title] blijft voor sleutels en matchen. */
     val displayTitle: String get() = ContentLanguage.displayTitle(title)
@@ -168,6 +170,8 @@ data class Series(
     val addedAt: Long? = null,
     /** Build 128: server van deze serie als die niet de actieve is (null = de actieve server). */
     val sourceID: String? = null,
+    /** Build 154: TMDB-id van de server (Xtream `tmdb`/`tmdb_id`). */
+    val tmdbID: String? = null,
 ) {
     /** Build 153: titel zoals de app hem toont; [title] blijft voor sleutels en matchen. */
     val displayTitle: String get() = ContentLanguage.displayTitle(title)
@@ -270,6 +274,9 @@ data class PlayableItem(
     val seriesID: String? = null,
     /** Build 128: server waarop dit item staat als dat niet de actieve is (afspelen zonder te wisselen) */
     val sourceID: String? = null,
+    /** Build 154: TMDB-id (film of serie) en jaar, voor de inhoudssleutels van "gezien" en `ids` naar Trakt */
+    val tmdbID: String? = null,
+    val year: Int? = null,
 ) {
     /** Build 153: titel zoals de app hem toont (zender: opgeschoonde zendernaam); [title] blijft voor sleutels. */
     val displayTitle: String get() = if (type == MediaType.LIVE) ContentLanguage.channelTitle(title) else ContentLanguage.displayTitle(title)

@@ -543,6 +543,8 @@ class PlayerController(item: PlayableItem) {
         backgroundResume = if (isLive) 0.0 else position.takeIf { it > 0.005 } ?: item.resumeAt
         pauseWhenReady = !isLive && engine.state == EngineState.PAUSED
         saveProgress()
+        // build 154: naar de achtergrond = scrobble-stop met de huidige positie (bij terugkeer start hij opnieuw)
+        if (!isPreview && !isLive) { scrobble(Trakt.Scrobble.STOP, position); didScrobbleStart = false }
         timer?.cancel(); timer = null
         runCatching { engine.stop() }
         isPlaying = false
@@ -689,15 +691,12 @@ class PlayerController(item: PlayableItem) {
         val it = item
         if (isPreview || it.type == MediaType.LIVE || it.channelID != null || it.id.contains("-cu-") || duration <= 60) return
         // gezien: bijna uitgekeken, of alleen de aftiteling nog over — per profiel, ook zonder Trakt
-        val left = duration - currentTime
-        val inCredits = creditsStart?.let { c -> c > 60 && currentTime >= c } == true
-        if (position >= 0.85 || (duration > 600 && left < 180 && position > 0.7) || inCredits) {
+        // build 154: één grens (Build154Logic.Threshold); de inhoudssleutels gelden op alle servers, en Trakt krijgt
+        // het via de blijvende wachtrij (als de scrobble-stop het niet al als gezien telde)
+        if (Build154Logic.Threshold.watched(position, duration, currentTime, creditsStart)) {
             Store.clearProgress(it.id)
-            Store.setLocalWatched(it.id, true)
-            val s = it.season; val e = it.episode
-            if (it.type == MediaType.EPISODE && s != null && e != null) {
-                seriesID(it)?.let { sid -> Store.setLocalWatched(Store.episodeKey(sid, s, e), true) }
-            }
+            val fresh = Watched.markPlayed(it, if (it.type == MediaType.EPISODE) seriesID(it) else null)
+            if (fresh) Trakt.markedWatched(it)
         } else if (position > 0.02) {
             Store.setProgress(
                 it.id,

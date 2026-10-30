@@ -149,7 +149,7 @@ fun CategoryScreen(target: CategoryTarget, onClose: () -> Unit) {
 @Composable
 internal fun CategoryCell(t: DetailTarget, modifier: Modifier) {
     val watched = (t as? DetailTarget.MovieT)?.let { Playables.isWatched(it.movie, Trakt.imdb(it.movie)) } ?: false
-    val watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.watchedEpisodeCount(it.series) } ?: 0
+    val watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.seriesCardCount(it.series) } ?: 0
     val rating = categoryRating(t)
     Column(modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(tvs(6)))) {

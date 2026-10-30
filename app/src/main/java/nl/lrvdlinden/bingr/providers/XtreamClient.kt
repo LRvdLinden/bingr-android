@@ -28,8 +28,8 @@ class XtreamClient(source: PlaylistSource, val password: String) {
     companion object {
         // build 149: alleen deze velden per item (zelfde als Xtream.KEYS in tizen/js/providers.js)
         val KEYS_LIVE = listOf("stream_id", "name", "stream_icon", "category_id", "epg_channel_id", "num", "tv_archive", "tv_archive_duration")
-        val KEYS_VOD = listOf("stream_id", "name", "stream_icon", "category_id", "container_extension", "rating", "added", "year")
-        val KEYS_SERIES = listOf("series_id", "name", "year", "releaseDate", "cover", "category_id", "plot", "rating", "last_modified")
+        val KEYS_VOD = listOf("stream_id", "name", "stream_icon", "category_id", "container_extension", "rating", "added", "year", "tmdb", "tmdb_id")
+        val KEYS_SERIES = listOf("series_id", "name", "year", "releaseDate", "cover", "category_id", "plot", "rating", "last_modified", "tmdb", "tmdb_id")
 
         val authError: ServiceException
             get() = ServiceException(L("Couldn't sign in to the server. Check the server, username and password."))
@@ -208,7 +208,7 @@ class XtreamClient(source: PlaylistSource, val password: String) {
                 streamURL = "$server/movie/$username/$password/$sid.${v["container_extension"] ?: "mp4"}",
                 rating = v.double("rating"),
                 addedAt = v.double("added")?.let { (it * 1000).toLong() },
-                xtreamVodID = sid.toIntOrNull())
+                xtreamVodID = sid.toIntOrNull(), tmdbID = tmdbOf(v["tmdb"], v["tmdb_id"]))
         }
         out.trimToSize(); return out
     }
@@ -223,9 +223,19 @@ class XtreamClient(source: PlaylistSource, val password: String) {
             val y = s.int("year") ?: s["releaseDate"]?.take(4)?.toIntOrNull() ?: p.year
             out += Series(id = "xs$sid", title = p.title, year = y, poster = Net.urlValue(s["cover"]), group = group,
                 plot = s["plot"], rating = s.double("rating"), xtreamSeriesID = sid,
-                addedAt = s.double("last_modified")?.takeIf { it > 0 }?.let { (it * 1000).toLong() })
+                addedAt = s.double("last_modified")?.takeIf { it > 0 }?.let { (it * 1000).toLong() },
+                tmdbID = tmdbOf(s["tmdb"], s["tmdb_id"]))
         }
         out.trimToSize(); return out
+    }
+
+    /** Build 154: TMDB-id uit `tmdb`/`tmdb_id` (getal of tekst); "0", leeg of geen getal = onbekend. */
+    private fun tmdbOf(a: String?, b: String?): String? {
+        for (v in listOf(a, b)) {
+            val t = v?.trim()?.removeSuffix(".0") ?: continue
+            if (t.isNotEmpty() && t != "0" && t.all { it.isDigit() }) return t.trimStart('0').ifEmpty { null }
+        }
+        return null
     }
 
     /** Categorie-id → naam (zoals [parse] ze gebruikt). */
@@ -264,7 +274,7 @@ class XtreamClient(source: PlaylistSource, val password: String) {
                 streamURL = "$server/movie/$username/$password/$sid.${v.jS("container_extension") ?: "mp4"}",
                 rating = v.jD("rating"),
                 addedAt = v.jD("added")?.let { (it * 1000).toLong() },
-                xtreamVodID = sid.toIntOrNull())
+                xtreamVodID = sid.toIntOrNull(), tmdbID = tmdbOf(v.jS("tmdb"), v.jS("tmdb_id")))
         }
 
     private fun parseSeries(list: List<JsonElement>, scMap: Map<String, String>, other: String): List<Series> =
@@ -275,7 +285,8 @@ class XtreamClient(source: PlaylistSource, val password: String) {
             Series(id = "xs$sid", title = p.title, year = y, poster = Net.urlValue(s.jS("cover")),
                 group = scMap[s.jS("category_id") ?: ""] ?: other,
                 plot = s.jS("plot"), rating = s.jD("rating"), xtreamSeriesID = sid,
-                addedAt = s.jD("last_modified")?.takeIf { it > 0 }?.let { (it * 1000).toLong() })
+                addedAt = s.jD("last_modified")?.takeIf { it > 0 }?.let { (it * 1000).toLong() },
+                tmdbID = tmdbOf(s.jS("tmdb"), s.jS("tmdb_id")))
         }
 
     suspend fun episodes(series: Series): List<Episode> {

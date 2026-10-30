@@ -372,7 +372,7 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit, initialQuery: String? = nu
                                 modifier = Modifier.focusLift { ScreensNav.detail(DetailTarget.SeriesT(s)) },
                                 accent = accent,
                                 language = languageLabel(s),
-                                watchedEpisodes = Playables.watchedEpisodeCount(s)
+                                watchedEpisodes = Playables.seriesCardCount(s)
                             )
                         }
                     }

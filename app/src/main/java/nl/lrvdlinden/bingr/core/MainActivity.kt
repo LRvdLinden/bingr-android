@@ -76,9 +76,16 @@ class MainActivity : ComponentActivity() {
         Downloads.resumeIfQueued()
         // build 75: terug in de app → Trakt-vinkjes bijwerken (wat je intussen elders keek), zoals iOS bij "active".
         // Zonder force: eerst /sync/last_activities, dus goedkoop als er niets veranderd is.
-        if (AppState.stage == AppState.Stage.MAIN && Trakt.isLoggedIn) AppScope.launch { runCatching { Trakt.refresh() } }
+        // build 154: ook de wachtrij opnieuw, en elke 15 minuten ophalen zolang de app open is
+        if (AppState.stage == AppState.Stage.MAIN && Trakt.isLoggedIn) Trakt.onForeground()
         // build 145: geen automatisch verversen meer na terugkeer uit de achtergrond (de vernieuwtermijn is weg; de
         // gebruiker kiest zelf, zie "Servers laden bij openen")
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // build 154: niet elke 15 minuten ophalen op de achtergrond
+        Trakt.onBackground()
     }
 
     override fun onDestroy() {
