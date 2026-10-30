@@ -456,6 +456,24 @@ object StateSync {
         return readMeta(pid).present["watched"] ?: emptyMap()
     }
 
+    /**
+     * Build 154: opnieuw als gezien gemarkeerd: alle sleutels van het item krijgen een nieuwe tijd (altijd na een eerdere
+     * verwijdering van die sleutel), ook als ze al in de set stonden; daarna naar het account.
+     */
+    fun restampWatched(id: String?, keys: Collection<String>) {
+        val pid = id ?: return
+        if (keys.isEmpty()) return
+        val now = System.currentTimeMillis()
+        synchronized(metaLock) {
+            val m = readMeta(pid)
+            val p = (m.present["watched"] ?: emptyMap()).toMutableMap()
+            val r = (m.removed["watched"] ?: emptyMap()).toMutableMap()
+            for (k in keys) { p[k] = Build140Logic.Stamp.after(maxOf(now, p[k] ?: 0L), r[k]); r.remove(k) }
+            writeMeta(pid, m.copy(present = m.present + ("watched" to p), removed = m.removed + ("watched" to r)))
+        }
+        profileDataChanged(pid)
+    }
+
     /** Build 154: (toegevoegd, verwijderd) per sleutel van `watched`, voor "nieuwste gebeurtenis wint" bij het lezen. */
     fun watchedEvents(id: String?): Pair<Map<String, Long>, Map<String, Long>> {
         val pid = id ?: return emptyMap<String, Long>() to emptyMap()

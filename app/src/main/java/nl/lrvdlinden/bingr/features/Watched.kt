@@ -127,10 +127,17 @@ object Watched {
 
     // MARK: schrijven
 
+    /** Als gezien schrijven: alle sleutels in de set en met een nieuwe tijd (ook bij opnieuw markeren), daarna sync. */
+    private fun markKeys(keys: Collection<String>) {
+        if (keys.isEmpty()) return
+        Store.updateWatched(keys, emptyList(), notify = false)
+        StateSync.restampWatched(Store.activeProfileID, keys)
+    }
+
     fun setWatched(m: Movie, imdb: String?, watched: Boolean) {
         val i = imdb ?: m.imdbID
         val own = listOf(m.id) + W.movieKeys(shown(m.title), m.year, tmdb(m), i)
-        if (watched) Store.updateWatched(own, emptyList())
+        if (watched) markKeys(own)
         else {
             val look = movieLookup(m, i) + W.lookupKeys("w:m:", shown(m.title), m.year, tmdb(m), i)
             Store.updateWatched(emptyList(), W.removalKeys(Store.localWatched, own, look))
@@ -157,7 +164,7 @@ object Watched {
                 if (s != null) for (f in showForms(s, imdb)) "w:e:$f|${e.season}-${e.number}".let { if (it in local) remove += it }
             }
         }
-        Store.updateWatched(add, remove)
+        if (watched) markKeys(add) else Store.updateWatched(emptyList(), remove)
         if (s != null) updateSeries(s, imdb, all?.size)
     }
 
@@ -172,7 +179,9 @@ object Watched {
             if (seriesID != null) keys += Store.episodeKey(seriesID, s, ep)
             keys += W.episodeKeys(shown(ser?.title ?: item.title), ser?.year ?: item.year, ser?.let { tmdb(it) } ?: item.tmdbID,
                 item.imdbID ?: ser?.imdbID, s, ep)
-            Store.updateWatched(keys, emptyList())
+            // tijdens het kijken wordt dit elke paar seconden aangeroepen: alleen schrijven als er een sleutel ontbreekt
+            if (keys.all { it in Store.localWatched }) return false
+            markKeys(keys)
             if (ser != null) updateSeries(ser, item.imdbID, null)
             return !before
         }
@@ -180,7 +189,8 @@ object Watched {
         val m = Playlists.library.movies.firstOrNull { it.id == item.id }
         val keys = listOf(item.id) + W.movieKeys(shown(m?.title ?: item.title), m?.year ?: item.year ?: item.subtitle?.trim()?.toIntOrNull(),
             m?.let { tmdb(it) } ?: item.tmdbID, item.imdbID ?: m?.imdbID)
-        Store.updateWatched(keys, emptyList())
+        if (keys.all { it in Store.localWatched }) return false
+        markKeys(keys)
         return !before
     }
 
@@ -196,7 +206,7 @@ object Watched {
         // specials (seizoen 0) tellen niet mee voor aired_episodes
         val done = episodeSet(s, i).count { !it.startsWith("0-") } >= aired
         val own = W.showKeys(shown(s.title), s.year, tmdb(s), i)
-        if (done) Store.updateWatched(own, emptyList())
+        if (done) markKeys(own)
         else {
             val local = Store.localWatched
             Store.updateWatched(emptyList(), W.removalKeys(local, emptyList(), own + forms.map { "w:s:$it" }))

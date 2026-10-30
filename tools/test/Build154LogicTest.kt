@@ -85,6 +85,8 @@ fun main(args: Array<String>) {
         eq("nieuwste wint $idx", W.latest(wm, rm, cand), c["result"]); n++
     }
     println("gedeelde gevallen: $n")
+    ok("nieuwste wint: bij gelijke tijd telt de toevoeging", W.latest(mapOf("w:m:tmdb:1" to 500L), mapOf("w:m:t:x|0" to 500L), listOf("w:m:tmdb:1", "w:m:t:x|0")))
+    ok("nieuwste wint: opnieuw gemarkeerd (nieuwe tijd) is gezien", W.latest(mapOf("w:m:tmdb:1" to 600L, "w:m:t:x|0" to 600L), mapOf("w:m:t:x|0" to 500L), listOf("w:m:tmdb:1", "w:m:t:x|0")))
 
     // aflevering lezen (show-jaar ±1) en serie gezien
     val got = W.episodeKeys("Game of Thrones", 2011, null, null, 1, 2).toSet()
