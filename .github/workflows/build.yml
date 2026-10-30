@@ -138,19 +138,27 @@ jobs:
             java -Xmx1500m -jar "$RUNNER_TEMP/b149-test.jar" | tee "$RUNNER_TEMP/b149-test.txt"; rc11=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 149::$(grep -E '^(geheugen|datums|zoeken)' "$RUNNER_TEMP/b149-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b149-test.txt")"
             # build 150: categorienamen opschonen (taal/land/kwaliteit in elke vorm), samenvoegen en ontdubbelen, logo's
-            # (gedeelde gevallen in tools/test/build150_cases.json, ook voor tizen/test/build150_test.js)
+            # (gedeelde gevallen in tools/test/build150_cases.json)
             kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
               tools/test/Build150LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b150-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b150-test.jar" tools/test/build150_cases.json | tee "$RUNNER_TEMP/b150-test.txt"; rc12=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 150::$(grep -E '^opschonen' "$RUNNER_TEMP/b150-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b150-test.txt")"
             # build 151: rij "Zenders" op Home (recent/favorieten eerst, aangevuld uit de grootste categorieën, ontdubbeld)
-            # (gedeelde gevallen in tools/test/build151_cases.json, ook voor tizen/test/build151_test.js)
+            # (gedeelde gevallen in tools/test/build151_cases.json)
             kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
               app/src/main/java/nl/lrvdlinden/bingr/features/Build151Logic.kt \
               tools/test/Build151LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b151-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b151-test.jar" tools/test/build151_cases.json | tee "$RUNNER_TEMP/b151-test.txt"; rc13=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 151::$(grep -E '^kiezen' "$RUNNER_TEMP/b151-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b151-test.txt")"
-            [ $rc13 -eq 0 ] && [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
+            # build 152: verborgen categorieën (samengevoegd verbergen/tonen met de ruwe sleutels, sync Apple/Android/web, oude
+            # sleutels, overslaan en terugkomen ook op andere servers, verborgen ≠ weg, eerst gezien) en Nu in de bioscoop
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/AllServersLogic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build140Logic.kt \
+              app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
+              app/src/main/java/nl/lrvdlinden/bingr/features/Build152Logic.kt \
+              tools/test/Build152LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b152-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b152-test.jar" | tee "$RUNNER_TEMP/b152-test.txt"; rc14=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 152::$(tail -1 "$RUNNER_TEMP/b152-test.txt")"
+            [ $rc14 -eq 0 ] && [ $rc13 -eq 0 ] && [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi
@@ -511,209 +519,3 @@ jobs:
           cd /tmp/logs && git init -q -b ci-logs && git add -A
           git -c user.name=github-actions -c user.email=actions@github.com commit -qm "CI-log $(cat status.txt)"
           git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs
-
-  # Samsung Tizen TV: .wgt uit tizen/ (zelfde versie en buildnummer als de APK)
-  tizen:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (v5.1.0)
-
-      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      # oude Samsung-tv's (Tizen 4.0 = Chromium M56): geen nieuwere JS-syntax, API's of CSS in de app
-      # build 97: pipefail (een fout van check_compat ging verloren in `| tee`) en een mislukte npm-installatie laat de job falen;
-      # terser komt mee voor de bundel van package.sh (NODE_PATH via GITHUB_ENV)
-      - name: Compatibiliteit met oude tv's controleren
-        shell: bash
-        run: |
-          set -eo pipefail
-          mkdir -p "$RUNNER_TEMP/tlogs" "$RUNNER_TEMP/compat"
-          if ! (cd "$RUNNER_TEMP/compat" && npm init -y >/dev/null && npm i --no-save --no-audit --no-fund acorn@8.14.0 acorn-walk@8.3.4 terser@5.36.0 > "$RUNNER_TEMP/tlogs/npm.log" 2>&1); then
-            tail -30 "$RUNNER_TEMP/tlogs/npm.log" || true
-            echo "::error::acorn/terser niet te installeren; de compatibiliteitscontrole kan niet draaien" | tee "$RUNNER_TEMP/tlogs/compat.log"
-            exit 1
-          fi
-          echo "NODE_PATH=$RUNNER_TEMP/compat/node_modules" >> "$GITHUB_ENV"
-          NODE_PATH="$RUNNER_TEMP/compat/node_modules" node tizen/tools/check_compat.js 2>&1 | tee "$RUNNER_TEMP/tlogs/compat.log"
-
-      # build 129: logica van "één lijst over alle servers" (samenvoegen, slimme collecties, geschiedenis) zonder tv
-      - name: Logica-tests (Samsung TV)
-        shell: bash
-        run: |
-          set -eo pipefail
-          node tizen/test/allservers_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/logic.log"
-          echo "::notice title=Logica-tests Samsung TV::$(tail -1 "$RUNNER_TEMP/tlogs/logic.log")"
-          # build 140: categorieën per account, kinderfilter, ouderpoort, Voor jou/Nieuw op Bingr/uitgelicht, vernieuwen, Mijn lijst
-          node tizen/test/build140_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b140.log"
-          echo "::notice title=Logica-tests build 140 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b140.log")"
-          # build 141: beveiliging (pincode-limiet, vaste hosts, kluis voor gevoelige waarden)
-          node tizen/test/build141_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b141.log"
-          echo "::notice title=Logica-tests build 141 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b141.log")"
-          # build 144: Verder kijken (postervolgorde, TMDB-posters bewaard op de tv) en verversen pas na het openen
-          node tizen/test/build144_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b144.log"
-          echo "::notice title=Logica-tests build 144 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b144.log")"
-          # build 145: servers laden bij openen (Vragen / Altijd / Nooit) en de vraag "Servers bijwerken?"
-          node tizen/test/build145_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b145.log"
-          echo "::notice title=Logica-tests build 145 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b145.log")"
-          # build 146: pincode als hash (WebCrypto en pure JS, testvectoren), keuzelogica, profielen samenvoegen, support en diagnose
-          node tizen/test/build146_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b146.log"
-          echo "::notice title=Logica-tests build 146 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b146.log")"
-          # build 147: starttijden, goed/traag/vastgelopen, detector voor lange taken, vorige start, ophalen per soort, opslag,
-          # verbinding, en 10.000 films + 1.000 zenders en de PBKDF2-terugval in stukjes (elk stuk ≤ 250 ms)
-          node tizen/test/build147_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b147.log"
-          echo "::notice title=Logica-tests build 147 (Samsung TV)::$(tail -1 "$RUNNER_TEMP/tlogs/b147.log")"
-          # build 148: codes, bijwerken in fasen, geleverd/zichtbaar, haperingen, merge sort in stukken, en 37.000 films +
-          # 12.000 zenders + 9.000 series: Xtream in stukjes (≤ 250 ms per stuk) en lichte objecten (geheugen vóór/na)
-          node tizen/test/build148_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b148.log"
-          echo "::notice title=Logica-tests build 148 (Samsung TV)::$(grep -E '^(geheugen|Xtream|sorteren 37k)' "$RUNNER_TEMP/tlogs/b148.log" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/tlogs/b148.log")"
-          # build 149: datums, verborgen categorieën overslaan (Worker), Ontdek categorieën, zoeken; 123k/30k/12k met 80% verborgen
-          node --max-old-space-size=2048 tizen/test/build149_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b149.log"
-          echo "::notice title=Logica-tests build 149 (Samsung TV)::$(grep -E '^(geheugen|datums|zoeken)' "$RUNNER_TEMP/tlogs/b149.log" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/tlogs/b149.log")"
-          # build 150: categorienamen opschonen, samenvoegen en ontdubbelen, logo's (zelfde gevallen als Android)
-          node tizen/test/build150_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b150.log"
-          echo "::notice title=Logica-tests build 150 (Samsung TV)::$(grep -E '^opschonen' "$RUNNER_TEMP/tlogs/b150.log" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/tlogs/b150.log")"
-          # build 151: rij "Zenders" op Home (zelfde gevallen als Android)
-          node tizen/test/build151_test.js 2>&1 | tee "$RUNNER_TEMP/tlogs/b151.log"
-          echo "::notice title=Logica-tests build 151 (Samsung TV)::$(grep -E '^kiezen' "$RUNNER_TEMP/tlogs/b151.log" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/tlogs/b151.log")"
-
-      - name: Tizen Studio CLI uit de cache
-        id: cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ~/tizen-studio
-          key: tizen-studio-web-cli-v1
-
-      - name: Tizen Studio CLI installeren
-        if: steps.cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        run: |
-          set -e
-          mkdir -p "$RUNNER_TEMP/tlogs"
-          exec > >(tee -a "$RUNNER_TEMP/tlogs/download.log") 2>&1
-          for v in 6.1 6.0 5.6 5.5; do
-            url="https://download.tizen.org/sdk/Installer/tizen-studio_$v/web-cli_Tizen_Studio_${v}_ubuntu-64.bin"
-            if curl -fsSL --retry 2 -o "$RUNNER_TEMP/web-cli.bin" "$url"; then echo "Tizen Studio $v gedownload"; break; fi
-            rm -f "$RUNNER_TEMP/web-cli.bin"
-          done
-          test -s "$RUNNER_TEMP/web-cli.bin"
-          chmod +x "$RUNNER_TEMP/web-cli.bin"
-          mkdir -p "$RUNNER_TEMP/tlogs"
-          # half geïnstalleerd niet laten staan: anders bewaart de cache een kapotte map en wordt er nooit opnieuw geïnstalleerd
-          "$RUNNER_TEMP/web-cli.bin" --accept-license "$HOME/tizen-studio" > "$RUNNER_TEMP/tlogs/install.log" 2>&1 || { tail -40 "$RUNNER_TEMP/tlogs/install.log"; rm -rf "$HOME/tizen-studio"; exit 1; }
-          test -x "$HOME/tizen-studio/tools/ide/bin/tizen" || { echo "tizen-CLI ontbreekt na installatie"; rm -rf "$HOME/tizen-studio"; exit 1; }
-          tail -5 "$RUNNER_TEMP/tlogs/install.log"
-
-      - name: Ondertekenprofiel klaarzetten
-        id: sign
-        continue-on-error: true
-        env:
-          AUTHOR_P12: ${{ secrets.TIZEN_AUTHOR_P12_BASE64 }}
-          AUTHOR_PW: ${{ secrets.TIZEN_AUTHOR_PASSWORD }}
-          DIST_P12: ${{ secrets.TIZEN_DISTRIBUTOR_P12_BASE64 }}
-          DIST_PW: ${{ secrets.TIZEN_DISTRIBUTOR_PASSWORD }}
-        run: |
-          set -e
-          mkdir -p "$RUNNER_TEMP/tlogs"
-          exec > >(tee -a "$RUNNER_TEMP/tlogs/sign.log") 2>&1
-          ls "$HOME/tizen-studio" "$HOME/tizen-studio/tools/ide/bin" 2>&1 | head -40 || true
-          T="$HOME/tizen-studio/tools/ide/bin/tizen"
-          test -x "$T"
-          "$T" version || true
-          KS="$RUNNER_TEMP/keys"; mkdir -p "$KS"
-          # pad voor de security-profielen instellen (bestaat nog niet op een schone runner)
-          mkdir -p "$HOME/tizen-studio-data/profile"
-          [ -f "$HOME/tizen-studio-data/profile/profiles.xml" ] || printf '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n<profiles active="" version="3.1"/>\n' > "$HOME/tizen-studio-data/profile/profiles.xml"
-          "$T" cli-config "default.profiles.path=$HOME/tizen-studio-data/profile/profiles.xml" || true
-          "$T" cli-config -l || true
-          if [ -n "$AUTHOR_P12" ] && [ -n "$DIST_P12" ]; then
-            echo "$AUTHOR_P12" | base64 -d > "$KS/author.p12"
-            echo "$DIST_P12" | base64 -d > "$KS/distributor.p12"
-            "$T" security-profiles add -n bingr -a "$KS/author.p12" -p "$AUTHOR_PW" -d "$KS/distributor.p12" -dp "$DIST_PW"
-            APW="$AUTHOR_PW"; DPW="$DIST_PW"; KIND=samsung
-            echo "::notice::Tizen-app wordt ondertekend met het Samsung-certificaat uit de secrets"
-          else
-            # geen Samsung-certificaat: tijdelijk eigen auteurscertificaat met de standaard Tizen-distributeur
-            APW="ci-$(openssl rand -hex 12)"; DPW="tizenpkcs12passfordsigner"; KIND=tizen
-            "$T" certificate -a BingrCI -p "$APW" -c NL -ct Bingr -o Bingr -n "Bingr CI" -f bingr-ci
-            AUTHOR=$(find "$HOME/tizen-studio-data" -name 'bingr-ci.p12' | head -1)
-            "$T" security-profiles add -n bingr -a "$AUTHOR" -p "$APW"
-            echo "::warning::Secrets TIZEN_AUTHOR_P12_BASE64 / TIZEN_DISTRIBUTOR_P12_BASE64 ontbreken: de .wgt krijgt een tijdelijk test-certificaat en installeert niet op een Samsung-tv. Zie tizen/README.md."
-          fi
-          # zonder sleutelbos (headless runner) wachtwoorden direct in profiles.xml zetten
-          PROFILES=$(find "$HOME/tizen-studio-data" -name profiles.xml | head -1)
-          python3 - "$PROFILES" "$APW" "$DPW" <<'PY'
-          import re, sys
-          p, apw, dpw = sys.argv[1:4]
-          s = open(p, encoding='utf-8').read()
-          def fix(m):
-              item = m.group(0)
-              if 'key=""' in item:
-                  return item
-              pw = apw if 'distributor="0"' in item else dpw
-              return re.sub(r'password="[^"]*"', 'password="%s"' % pw, item)
-          s = re.sub(r'<profileitem\b[^>]*/>', fix, s)
-          open(p, 'w', encoding='utf-8').write(s)
-          PY
-          sed -E 's/password="[^"]*"/password="***"/g' "$PROFILES" || true
-          "$T" security-profiles list || true
-          echo "TIZEN_CLI=$T" >> "$GITHUB_ENV"
-          echo "TIZEN_PROFILE=bingr" >> "$GITHUB_ENV"
-          echo "SIGN_KIND=$KIND" >> "$GITHUB_ENV"
-
-      - name: .wgt bouwen
-        shell: bash
-        run: |
-          set -eo pipefail
-          mkdir -p "$RUNNER_TEMP/tlogs"
-          tizen/tools/package.sh "$RUNNER_TEMP/out" 2>&1 | tee "$RUNNER_TEMP/tlogs/package.log"
-          # build 97: ook de bundel in het pakket (js/bingr.min.js, js/boot.js, js/strings/) moet op Chromium M56 draaien
-          node tizen/tools/check_compat.js "$RUNNER_TEMP/out/app" 2>&1 | tee -a "$RUNNER_TEMP/tlogs/compat.log"
-          V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
-          mkdir -p dist
-          if [ -f "$RUNNER_TEMP/out/Bingr-$V-build$B.wgt" ]; then
-            if [ "${SIGN_KIND:-}" = "samsung" ]; then
-              cp "$RUNNER_TEMP/out/Bingr-$V-build$B.wgt" dist/
-            else
-              cp "$RUNNER_TEMP/out/Bingr-$V-build$B.wgt" "dist/Bingr-$V-build$B-testsigned.wgt"
-            fi
-          else
-            cp "$RUNNER_TEMP/out/"*.wgt dist/
-          fi
-          ls -la dist
-          echo "SIGN_KIND=${SIGN_KIND:-unsigned}" > dist/signing.txt
-
-      # zoals de APK: naar de privé repo bingr-inbox met BINGR_INBOX_TOKEN (H3)
-      - name: Samsung TV-pakket versleuteld aanleveren voor beheer.bingr.online
-        if: success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        env:
-          TOKEN: ${{ secrets.BINGR_INBOX_TOKEN }}
-          BINGR_INBOX_REPO: LRvdLinden/bingr-inbox
-        run: |
-          set -euo pipefail
-          V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
-          KIND=$(grep -o 'SIGN_KIND=.*' dist/signing.txt | cut -d= -f2 || true)
-          [ "$KIND" = "samsung" ] || echo "::notice::Samsung TV: .wgt ondertekend als '$KIND' (geen Samsung-certificaat)."
-          awk -v b="Build $B" '/^## /{f=($0 ~ (b "$"))?1:0; next} f && !/^_.*_$/' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
-          [ -s "$RUNNER_TEMP/notes.md" ] || echo "Bingr $V, build $B." > "$RUNNER_TEMP/notes.md"
-          TOKEN=$(printf '%s' "$TOKEN" | tr -d '[:space:]')
-          [ -n "$TOKEN" ] || { echo "::warning::Secret BINGR_INBOX_TOKEN ontbreekt: .wgt niet aangeleverd (zie README.md van bingr-beheer, H3)."; exit 0; }
-          rm -rf "$RUNNER_TEMP/beheer"
-          GIT_TERMINAL_PROMPT=0 git clone -q --depth 1 https://github.com/LRvdLinden/bingr-beheer.git "$RUNNER_TEMP/beheer" 2>/dev/null \
-            || { echo "::error::bingr-beheer niet op te halen."; exit 1; }
-          w=$(ls dist/*.wgt | head -1)
-          TOKEN="$TOKEN" "$RUNNER_TEMP/beheer/tools/seal_build.sh" tizen "$w" "$V" "$B" "$RUNNER_TEMP/notes.md"
-
-      # build 97: niet bij pull requests
-      - name: Tizen-log op branch ci-logs-tizen zetten
-        if: always() && github.event_name != 'pull_request'
-        run: |
-          set +e
-          mkdir -p /tmp/tlogs; cp "$RUNNER_TEMP"/tlogs/*.log /tmp/tlogs/ 2>/dev/null; cp dist/signing.txt /tmp/tlogs/ 2>/dev/null
-          echo "${{ job.status }} $(git rev-parse --short HEAD)" > /tmp/tlogs/status.txt
-          cd /tmp/tlogs && git init -q -b ci-logs-tizen && git add -A
-          git -c user.name=github-actions -c user.email=actions@github.com commit -qm "Tizen-log $(cat status.txt)"
-          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs-tizen

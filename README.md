@@ -9,11 +9,11 @@ De versie voor iPhone, iPad, Apple TV en Mac staat in [iptv-ios-appletv](https:/
 
 Wat er nieuw is per build: [CHANGELOG.md](CHANGELOG.md) · [bingr.online/changelog](https://bingr.online/changelog/?p=android)
 
-## Samsung TV (Tizen)
+## Downloaden
 
-Bingr draait ook op **Samsung-smart-tv's** (2018 en nieuwer, Tizen). De tv-app staat in [`tizen/`](tizen/) en heeft dezelfde Netflix-look en dezelfde functies als de Android TV-app; meer uitleg in [tizen/README.md](tizen/README.md).
+Downloaden en installeren (ook op Android TV, Google TV en Fire TV): zie [bingr.online](https://bingr.online/#download) en de [hulppagina](https://support.bingr.online/hulp/installeren/).
 
-Downloaden en installeren (ook op Android TV, Google TV, Fire TV en Samsung TV): zie [bingr.online](https://bingr.online/#download) en de [hulppagina](https://support.bingr.online/hulp/installeren/).
+Samsung TV (Tizen) wordt sinds build 152 niet meer ondersteund; de oude tv-app (`tizen/`) staat nog in de git-geschiedenis.
 
 ## Screenshots
 
@@ -87,7 +87,7 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
 
 **Gids & beheer**
 - **Tv-gids als raster** met nu-lijn, programma-details, **terugkijken** en **herinneringen** (melding)
-- **Pushmeldingen** (telefoon en tablet, Android 13+ na toestemming): nieuwe versie (tik = wat er nieuw is in die build), herinneringen voor programma's (tik = zender openen) en berichten van Bingr; aan/uit in *Instellingen → Meldingen*. Niet op Android TV, Google TV, Fire TV en Samsung TV: daar blijven herinneringen in de app
+- **Pushmeldingen** (telefoon en tablet, Android 13+ na toestemming): nieuwe versie (tik = wat er nieuw is in die build), herinneringen voor programma's (tik = zender openen) en berichten van Bingr; aan/uit in *Instellingen → Meldingen*. Niet op Android TV, Google TV en Fire TV: daar blijven herinneringen in de app
 - **Live TV** met favorieten, recent en alle groepen, en **zoeken door álle zenders** (naam, nummer, groep en wat er nu speelt)
 - **Live-voorbeeld**: in Live TV en de gids speelt de zender met focus na een seconde klein en zonder geluid (op een telefoon met mobiele data uit)
 - **Evenementen**: PPV- en evenementzenders in een eigen groep, op begintijd, met de wedstrijd, de lokale begintijd en **LIVE**
