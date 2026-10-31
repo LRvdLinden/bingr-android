@@ -171,8 +171,9 @@ fun rememberHomeIndex(lib: Library): HomeIndex {
     var index by remember(libKey) { mutableStateOf(HomeIndexCache.peek(lib) ?: HomeIndex()) }
     LaunchedEffect(libKey) {
         index = HomeIndexCache.get(lib)
-        // build 154: eenmalig de inhoudssleutels van "gezien" bij de bestaande id-sleutels zetten, en de grootte-grens
-        Watched.migrateIfNeeded(); Watched.pruneIfNeeded()
+        // build 154: eenmalig de inhoudssleutels van "gezien" bij de bestaande id-sleutels zetten (de grootte-grens zit
+        // sinds build 158 in StateSync)
+        Watched.migrateIfNeeded()
     }
     return index
 }

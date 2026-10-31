@@ -175,7 +175,12 @@ jobs:
               tools/test/Build157LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b157-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b157-test.jar" | tee "$RUNNER_TEMP/b157-test.txt"; rc16=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 157::$(tail -1 "$RUNNER_TEMP/b157-test.txt")"
-            [ $rc16 -eq 0 ] && [ $rc15 -eq 0 ] && [ $rc14 -eq 0 ] && [ $rc13 -eq 0 ] && [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
+            # build 158: grote Prefs-waarden naar bestanden (cacheDir/filesDir) met migratie, grens van 1 MB voor profile.<id>
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build158Logic.kt \
+              tools/test/Build158LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b158-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b158-test.jar" | tee "$RUNNER_TEMP/b158-test.txt"; rc17=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 158::$(grep -E '^(groottes|section)' "$RUNNER_TEMP/b158-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b158-test.txt")"
+            [ $rc17 -eq 0 ] && [ $rc16 -eq 0 ] && [ $rc15 -eq 0 ] && [ $rc14 -eq 0 ] && [ $rc13 -eq 0 ] && [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi

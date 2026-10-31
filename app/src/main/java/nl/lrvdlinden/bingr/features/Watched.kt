@@ -280,19 +280,7 @@ object Watched {
 
     // MARK: grootte
 
-    /**
-     * De section `profile.<id>` mag hooguit 1 MB zijn: daarboven vallen eerst de titelsleutels van films weg die ook een
-     * tmdb- of imdb-sleutel hebben (zelfde `at` = zelfde item), de oudste eerst.
-     */
-    fun pruneIfNeeded() {
-        val local = Store.localWatched
-        if (local.size < 8_000) return
-        val pid = Store.activeProfileID ?: return
-        val ats = StateSync.watchedAt(pid)
-        val entries = local.associateWith { ats[it] }
-        val idAts = HashSet<Long>()
-        for ((k, at) in entries) if (at != null && (k.startsWith("w:m:tmdb:") || k.startsWith("w:m:imdb:"))) idAts += at
-        val pruned = W.prune(entries, maxBytes = 1_000_000, overhead = 200_000) { k -> entries[k]?.let { it in idAts } == true }
-        if (pruned.size < entries.size) Store.updateWatched(emptyList(), entries.keys - pruned.keys)
-    }
+    // Build 158: de grens van 1 MB voor `profile.<id>` zit nu in StateSync (capSection, bij het samenvoegen): de sleutels
+    // vallen daar helemaal weg. Hier werden ze uit de set gehaald, waardoor de sync er een verwijdering van maakte; die
+    // vinkte het item uit (nieuwste gebeurtenis over alle sleutels wint) en bleef 90 dagen in `removed.watched` staan.
 }

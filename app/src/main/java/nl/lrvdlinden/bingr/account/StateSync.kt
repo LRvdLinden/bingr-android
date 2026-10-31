@@ -1704,6 +1704,28 @@ object StateSync {
         else -> local
     }
 
+    /**
+     * Build 158: de section `profile.<id>` hooguit [Build158Logic.SectionCap.MAX_SECTION] tekens (contract build 154, de
+     * server weigert boven 1 MiB). Eerst vallen titelsleutels van films met een tmdb- of imdb-sleutel weg, de oudste eerst,
+     * en wel helemaal (geen verwijdering in `removed.watched`: die zou het item op alle apparaten uitvinken en 90 dagen
+     * blijven staan). Geeft de stand en de grootte (tekens, zoals `JSON.stringify` op de server) terug.
+     */
+    private fun capSection(base: JsonObject?, s: PState): Pair<PState, Int> {
+        var cur = s
+        var size = profileJson(base, cur).toString().length
+        repeat(3) {
+            if (size <= Build158Logic.SectionCap.MAX_SECTION) return cur to size
+            val w = cur.sets["watched"] ?: return cur to size
+            val present = HashMap<String, Long>()
+            for ((k, v) in w) if (v.value != null) present[k] = v.at
+            val drop = Build158Logic.SectionCap.drop(present, size)
+            if (drop.isEmpty()) return cur to size
+            cur = cur.copy(sets = cur.sets + ("watched" to (w - drop)))
+            size = profileJson(base, cur).toString().length
+        }
+        return cur to size
+    }
+
     /** Opschonen: oude verwijderingen weg, en de maximale lengtes (20 recente zenders, 300 voortgang, 500 geschiedenis). */
     private fun normalize(s: PState): PState {
         val cutoff = System.currentTimeMillis() - REMOVED_DAYS * 24 * 3_600_000L
@@ -1932,10 +1954,12 @@ object StateSync {
         // van vóór build 44 (tijd -1) en de server heeft niets: nu stempelen
         val now = System.currentTimeMillis()
         // build 128: verhuisde items (remap-regels uit catalogmeta) naar hun nieuwe sleutel, met dezelfde tijd
-        val merged = normalize(applyRemap(merged0.copy(
+        val normalized = normalize(applyRemap(merged0.copy(
             prefs = merged0.prefs?.let { if (it.at < 0) it.copy(at = now) else it },
             pin = merged0.pin?.let { if (it.at < 0) it.copy(at = now) else it },
         ), CatalogMeta.rulesNow()))
+        // build 158: hooguit 1 MB (contract build 154), ook lokaal: wat wegvalt, valt hier en in het metabestand weg
+        val (merged, sectionChars) = capSection(base, normalized)
 
         // lokaal toepassen
         val sets = merged.sets
@@ -1997,6 +2021,11 @@ object StateSync {
         if (srv == null && empty) return true
         if (srv == merged) return true
         val json = profileJson(base, merged)
+        // build 158: nog steeds te groot (de server geeft dan 413): niet steeds opnieuw 1 MB versturen
+        if (sectionChars > Build158Logic.SectionCap.MAX_SECTION) {
+            android.util.Log.w("BingrSync", "profile section too large (${sectionChars / 1024} KB), not uploaded")
+            return false
+        }
         var ok = Account.putState(name, json) != null
         // andere schrijfwijze van hetzelfde profiel-id (iOS: hoofdletters) ook bijwerken, zodat elk platform alles ziet
         for (other in sections.map { it.first }.filter { it != name }) {
