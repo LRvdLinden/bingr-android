@@ -4,6 +4,19 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.3 · Build 158
+_31 oktober 2026_
+
+### Android en Android TV
+
+**Verbeterd**
+
+- Snellere start en minder haperingen op tv's met weinig geheugen: grote caches staan nu in aparte bestanden
+
+**Opgelost**
+
+- Films werden soms uitgevinkt als de lijst met gezien heel groot werd
+
 ## Versie 1.0.3 · Build 157
 _30 oktober 2026_
 
