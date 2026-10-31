@@ -1,0 +1,7 @@
+start 07:49:33
+apparaat: sdk_gphone64_x86_64, API 34, ABI's x86_64,arm64-v8a
+::notice title=Rooktest release (phone)::update over de oude APK geïnstalleerd (adb install -r: Success)
+::notice title=Rooktest release (phone)::update: geïnstalleerd en gestart, na 30 s actief, geen crash (gestart in 1087 ms)
+::notice title=Rooktest release (phone)::verse installatie: Success
+::notice title=Rooktest release (phone)::vers: geïnstalleerd en gestart, na 30 s actief, geen crash (gestart in 1628 ms)
+einde 07:51:50, fouten: 0
