@@ -541,6 +541,10 @@ fun SettingsScreen() {
                     }
                 }
             }
+            // build 161: onderaan een kaart naar lrvdlinden.app (alleen telefoon en tablet, niet op Android TV / Fire TV)
+            if (!AppState.isTV) {
+                item { S2MoreAppsSection() }
+            }
           }
 
           SettingsTab.PLAYBACK -> {

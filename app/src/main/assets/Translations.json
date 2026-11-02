@@ -1103,7 +1103,11 @@
   "Kids profiles": "ملفات الأطفال",
   "OpenSubtitles subtitles": "ترجمات OpenSubtitles",
   "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "ملفات الأطفال جزء من Bingr Lifetime. يبقى ملف الطفل هذا محميًا؛ ويمكن عرض إعداداته فقط.",
-  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "يُحتفظ باتصالك بـ OpenSubtitles، لكنه لا يُستخدم إلا مع Bingr Lifetime."
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "يُحتفظ باتصالك بـ OpenSubtitles، لكنه لا يُستخدم إلا مع Bingr Lifetime.",
+  "Discover": "اكتشف",
+  "More apps from the developer": "المزيد من تطبيقات المطوّر",
+  "Apps for iPhone, iPad, Apple TV and Homey": "تطبيقات لـ iPhone وiPad وApple TV وHomey",
+  "View (more apps)": "عرض"
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -2209,7 +2213,11 @@
   "Kids profiles": "Kinderprofile",
   "OpenSubtitles subtitles": "OpenSubtitles-Untertitel",
   "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Kinderprofile gehören zu Bingr Lifetime. Dieses Kinderprofil bleibt geschützt; seine Einstellungen können nur angesehen werden.",
-  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Deine OpenSubtitles-Verbindung bleibt gespeichert, wird aber nur mit Bingr Lifetime verwendet."
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Deine OpenSubtitles-Verbindung bleibt gespeichert, wird aber nur mit Bingr Lifetime verwendet.",
+  "Discover": "Entdecken",
+  "More apps from the developer": "Weitere Apps des Entwicklers",
+  "Apps for iPhone, iPad, Apple TV and Homey": "Apps für iPhone, iPad, Apple TV und Homey",
+  "View (more apps)": "Ansehen"
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -3315,7 +3323,11 @@
   "Kids profiles": "Perfiles infantiles",
   "OpenSubtitles subtitles": "Subtítulos de OpenSubtitles",
   "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Los perfiles infantiles forman parte de Bingr Lifetime. Este perfil infantil sigue protegido; sus ajustes solo se pueden ver.",
-  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Tu conexión con OpenSubtitles se conserva, pero solo se usa con Bingr Lifetime."
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Tu conexión con OpenSubtitles se conserva, pero solo se usa con Bingr Lifetime.",
+  "Discover": "Descubrir",
+  "More apps from the developer": "Más apps del desarrollador",
+  "Apps for iPhone, iPad, Apple TV and Homey": "Apps para iPhone, iPad, Apple TV y Homey",
+  "View (more apps)": "Ver"
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -4421,7 +4433,11 @@
   "Kids profiles": "Profils enfants",
   "OpenSubtitles subtitles": "Sous-titres OpenSubtitles",
   "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Les profils enfants font partie de Bingr Lifetime. Ce profil enfant reste protégé ; ses réglages sont uniquement consultables.",
-  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Ta connexion OpenSubtitles est conservée, mais n'est utilisée qu'avec Bingr Lifetime."
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Ta connexion OpenSubtitles est conservée, mais n'est utilisée qu'avec Bingr Lifetime.",
+  "Discover": "Découvrir",
+  "More apps from the developer": "Plus d’apps du développeur",
+  "Apps for iPhone, iPad, Apple TV and Homey": "Apps pour iPhone, iPad, Apple TV et Homey",
+  "View (more apps)": "Voir"
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -5527,7 +5543,11 @@
   "Kids profiles": "Profili bambini",
   "OpenSubtitles subtitles": "Sottotitoli OpenSubtitles",
   "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "I profili bambini fanno parte di Bingr Lifetime. Questo profilo bambini resta protetto; le sue impostazioni sono solo visualizzabili.",
-  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Il tuo collegamento a OpenSubtitles viene conservato, ma è usato solo con Bingr Lifetime."
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Il tuo collegamento a OpenSubtitles viene conservato, ma è usato solo con Bingr Lifetime.",
+  "Discover": "Scopri",
+  "More apps from the developer": "Altre app dello sviluppatore",
+  "Apps for iPhone, iPad, Apple TV and Homey": "App per iPhone, iPad, Apple TV e Homey",
+  "View (more apps)": "Vedi"
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -6647,7 +6667,11 @@
   "Kids profiles": "Kinderprofielen",
   "OpenSubtitles subtitles": "OpenSubtitles-ondertitels",
   "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Kinderprofielen horen bij Bingr Lifetime. Dit kinderprofiel blijft beschermd; de instellingen zijn alleen te bekijken.",
-  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Je OpenSubtitles-koppeling blijft bewaard, maar wordt alleen gebruikt met Bingr Lifetime."
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Je OpenSubtitles-koppeling blijft bewaard, maar wordt alleen gebruikt met Bingr Lifetime.",
+  "Discover": "Ontdekken",
+  "More apps from the developer": "Meer apps van de ontwikkelaar",
+  "Apps for iPhone, iPad, Apple TV and Homey": "Apps voor iPhone, iPad, Apple TV en Homey",
+  "View (more apps)": "Bekijk"
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -7753,7 +7777,11 @@
   "Kids profiles": "Profile dziecięce",
   "OpenSubtitles subtitles": "Napisy z OpenSubtitles",
   "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Profile dziecięce są częścią Bingr Lifetime. Ten profil dziecięcy pozostaje chroniony; jego ustawienia można tylko przeglądać.",
-  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Twoje połączenie z OpenSubtitles zostaje zachowane, ale jest używane tylko z Bingr Lifetime."
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "Twoje połączenie z OpenSubtitles zostaje zachowane, ale jest używane tylko z Bingr Lifetime.",
+  "Discover": "Odkrywaj",
+  "More apps from the developer": "Więcej aplikacji od twórcy",
+  "Apps for iPhone, iPad, Apple TV and Homey": "Aplikacje na iPhone’a, iPada, Apple TV i Homey",
+  "View (more apps)": "Zobacz"
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -8859,7 +8887,11 @@
   "Kids profiles": "Perfis infantis",
   "OpenSubtitles subtitles": "Legendas do OpenSubtitles",
   "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Os perfis infantis fazem parte do Bingr Lifetime. Este perfil infantil continua protegido; as definições só podem ser vistas.",
-  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "A tua ligação ao OpenSubtitles é mantida, mas só é usada com o Bingr Lifetime."
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "A tua ligação ao OpenSubtitles é mantida, mas só é usada com o Bingr Lifetime.",
+  "Discover": "Descobrir",
+  "More apps from the developer": "Mais apps do programador",
+  "Apps for iPhone, iPad, Apple TV and Homey": "Apps para iPhone, iPad, Apple TV e Homey",
+  "View (more apps)": "Ver"
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -9965,7 +9997,11 @@
   "Kids profiles": "Çocuk profilleri",
   "OpenSubtitles subtitles": "OpenSubtitles altyazıları",
   "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "Çocuk profilleri Bingr Lifetime'a dahildir. Bu çocuk profili korunmaya devam eder; ayarları yalnızca görüntülenebilir.",
-  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "OpenSubtitles bağlantın korunur, ancak yalnızca Bingr Lifetime ile kullanılır."
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "OpenSubtitles bağlantın korunur, ancak yalnızca Bingr Lifetime ile kullanılır.",
+  "Discover": "Keşfet",
+  "More apps from the developer": "Geliştiricinin diğer uygulamaları",
+  "Apps for iPhone, iPad, Apple TV and Homey": "iPhone, iPad, Apple TV ve Homey için uygulamalar",
+  "View (more apps)": "Göster"
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -11071,6 +11107,10 @@
   "Kids profiles": "儿童资料",
   "OpenSubtitles subtitles": "OpenSubtitles 字幕",
   "Kids profiles are part of Bingr Lifetime. This kids profile stays protected; its settings can only be viewed.": "儿童资料属于 Bingr Lifetime。此儿童资料仍受保护；其设置只能查看。",
-  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "你的 OpenSubtitles 连接会保留，但只在 Bingr Lifetime 中使用。"
+  "Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.": "你的 OpenSubtitles 连接会保留，但只在 Bingr Lifetime 中使用。",
+  "Discover": "发现",
+  "More apps from the developer": "开发者的更多 App",
+  "Apps for iPhone, iPad, Apple TV and Homey": "适用于 iPhone、iPad、Apple TV 和 Homey 的 App",
+  "View (more apps)": "查看"
  }
 }
