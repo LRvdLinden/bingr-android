@@ -4,6 +4,15 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.4 · Build 161
+_2 november 2026_
+
+### iOS, iPadOS, macOS, Android, Windows en Website
+
+**Nieuw**
+
+- Onderaan in Instellingen staat nu de kaart Meer apps van de ontwikkelaar, die lrvdlinden.app opent
+
 ## Versie 1.0.3 · Build 158
 _31 oktober 2026_
 
