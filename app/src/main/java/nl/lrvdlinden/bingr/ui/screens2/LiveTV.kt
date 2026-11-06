@@ -202,9 +202,12 @@ fun LiveTVScreen() {
             verticalAlignment = Alignment.CenterVertically) {
             Text(L("Live TV"), color = Color.White, fontSize = tsp(if (tv) 22 else 26), fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f).padding(start = 4.dp))
-            S2LiveHeaderButton(if (gridMode) L("List") else L("TV guide"),
-                if (gridMode) Icons.AutoMirrored.Filled.List else Icons.Default.CalendarViewDay) { gridMode = !gridMode }
-            Spacer(Modifier.width(tvs(8)))
+            // build 166: in de tv-gids op de tv staat Lijst rechts in de regel van de gids (niet dubbel hier)
+            if (!(tv && gridMode)) {
+                S2LiveHeaderButton(if (gridMode) L("List") else L("TV guide"),
+                    if (gridMode) Icons.AutoMirrored.Filled.List else Icons.Default.CalendarViewDay) { gridMode = !gridMode }
+                Spacer(Modifier.width(tvs(8)))
+            }
             S2LiveHeaderButton("Multiview", Icons.Default.GridView, enabled = lib.channels.isNotEmpty()) {
                 AppState.openMultiview(visible.take(1), visible)
             }
@@ -234,7 +237,8 @@ fun LiveTVScreen() {
         }
 
         if (tv && gridMode) {
-            // build 164: dagbalk en zenderkolommen met live beeld op de NU-kaart
+            // build 164: dagbalk en zenderkolommen met live beeld op de NU-kaart; build 166: over de hele breedte, de
+            // categorieën in het menu van de knop Categorie (de zijkolom alleen nog in de lijstweergave)
             GuideTV(visible, query = filter, onQuery = { filter = it }, groupTitle = s2LiveGroupTitle(current),
                 onGroups = { groupPicker = true }, onList = { gridMode = false }, onPlay = { play(it) })
         } else if (tv) {

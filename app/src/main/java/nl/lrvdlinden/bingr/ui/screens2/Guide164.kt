@@ -29,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -58,6 +59,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -120,6 +123,22 @@ private fun guideDay(list: List<EPGProgram>, offset: Int, now: Long): Pair<List<
     return day to i
 }
 
+/**
+ * Build 166: dagen in de dagbalk/dagkiezer: alleen dagen waarop de zenders van [sample] programma's hebben (vandaag altijd;
+ * gisteren en eerder alleen met terugkijken). Pure logica: Build166Logic.GuideDays.
+ */
+private fun guideAvailableDays(sample: List<Channel>, now: Long): List<Int> {
+    val lists = sample.map { it to guidePrograms(it) }
+    val candidates = Build164Logic.Days.offsets(sample.maxOfOrNull { it.catchupDays } ?: 0)
+    val bounds = candidates.associateWith { Build164Logic.Days.start(now, it) to Build164Logic.Days.end(now, it) }
+    return Build166Logic.GuideDays.available(candidates, lists,
+        hasGuide = { (_, l), o ->
+            val (a, b) = bounds.getValue(o)
+            !Build164Logic.Index.window(l, a, b, { it.start }, { it.end }).isEmpty()
+        },
+        catchupDays = { it.first.catchupDays })
+}
+
 /** Zenderlogo van de server op een donker vlak met een dunne rand; zonder (werkend) logo de opgeschoonde zendernaam. */
 @Composable
 fun GuideLogo(c: Channel, modifier: Modifier, fontSize: TextUnit = 11.sp, radius: Dp = 6.dp) {
@@ -139,7 +158,7 @@ fun GuideLogo(c: Channel, modifier: Modifier, fontSize: TextUnit = 11.sp, radius
 
 /** Stilstaand beeld van de zender (max. 30 min oud), anders het logo groot op een donker vlak. */
 @Composable
-private fun GuideStill(c: Channel, now: Long, modifier: Modifier, logoFraction: Float = 0.42f) {
+private fun GuideStill(c: Channel, now: Long, modifier: Modifier, logoFraction: Float = 0.42f, framed: Boolean = true) {
     val v = ChannelStills.version
     val key = guideStillKey(c)
     val f = remember(key, v, now / 60_000L) { ChannelStills.usable(key, now) }
@@ -152,8 +171,25 @@ private fun GuideStill(c: Channel, now: Long, modifier: Modifier, logoFraction: 
                     .diskCachePolicy(CachePolicy.DISABLED).build()
             }
             AsyncImage(model = req, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize())
-        } else {
+        } else if (framed) {
             GuideLogo(c, Modifier.fillMaxWidth(logoFraction).aspectRatio(16f / 9f), fontSize = 14.sp)
+        } else {
+            GuideBareLogo(c, Modifier.fillMaxWidth(logoFraction).aspectRatio(16f / 9f))
+        }
+    }
+}
+
+/** Build 166: zenderlogo zonder vlak of rand (gecentreerd op de donkere NU-kaart); zonder logo de opgeschoonde naam. */
+@Composable
+private fun GuideBareLogo(c: Channel, modifier: Modifier) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        var failed by remember(c.logo) { mutableStateOf(c.logo.isNullOrBlank()) }
+        if (failed) {
+            Text(c.displayName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2,
+                overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        } else {
+            AsyncImage(model = c.logo, contentDescription = c.displayName, contentScale = ContentScale.Fit,
+                onError = { failed = true }, modifier = Modifier.fillMaxSize())
         }
     }
 }
@@ -180,12 +216,12 @@ private fun GuideLiveSurface(modifier: Modifier) {
 
 /** Beeld van de zender: live als het voorbeeld van deze zender draait, anders het stilstaande beeld of het logo. */
 @Composable
-private fun GuidePicture(c: Channel, now: Long, modifier: Modifier, live: Boolean, logoFraction: Float = 0.42f) {
+private fun GuidePicture(c: Channel, now: Long, modifier: Modifier, live: Boolean, logoFraction: Float = 0.42f, framed: Boolean = true) {
     val here = live && ChannelPreview.channel?.id == c.id && ChannelPreview.player != null
     Box(modifier.background(G_BOX)) {
         if (here) GuideLiveSurface(Modifier.matchParentSize())
         // tot het eerste beeld er is: het stilstaande beeld of het logo eroverheen
-        if (!here || !ChannelPreview.playing) GuideStill(c, now, Modifier.matchParentSize(), logoFraction)
+        if (!here || !ChannelPreview.playing) GuideStill(c, now, Modifier.matchParentSize(), logoFraction, framed)
     }
 }
 
@@ -204,7 +240,7 @@ private fun GuideRoundButton(icon: androidx.compose.ui.graphics.vector.ImageVect
     }
 }
 
-/** Dag kiezen (telefoon): gisteren t/m 7 dagen vooruit, verder terug alleen met terugkijken. */
+/** Dag kiezen (telefoon): alleen dagen met gids-info (build 166); gisteren en eerder alleen met terugkijken. */
 @Composable
 private fun GuideDayDialog(offsets: List<Int>, current: Int, now: Long, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
     S2ActionDialog(L("Choose a day"), offsets.map { o ->
@@ -239,6 +275,10 @@ fun GuidePhone(
     var dayPicker by remember { mutableStateOf(false) }
     var searchOpen by rememberSaveable { mutableStateOf(query.isNotEmpty()) }
     var program by remember { mutableStateOf<Pair<Channel, EPGProgram>?>(null) }
+    // build 166: alleen dagen met gids-info voor de gekozen zender (vandaag altijd)
+    val phoneDays = remember(sel?.id, Playlists.library.epg, AllServers.version, now / 3_600_000L) {
+        sel?.let { guideAvailableDays(listOf(it), now) } ?: listOf(0)
+    }
 
     // voorbeeld van de gekozen zender (vanzelf op wifi; op mobiel netwerk pas na een tik, zie Build164Logic.Preview)
     // (ook weer na terugkomen uit de speler: die stopt het voorbeeld)
@@ -305,13 +345,12 @@ fun GuidePhone(
         Row(Modifier.fillMaxSize()) {
             GuidePhoneRail(channels, sel) { selID = it.id }
             Box(Modifier.width(1.dp).fillMaxHeight().background(G_LINE))
-            GuidePhoneList(sel, all, dayOffset, now) { p -> program = sel to p }
+            GuidePhoneList(sel, all, Build166Logic.GuideDays.keep(dayOffset, phoneDays), now) { p -> program = sel to p }
         }
     }
 
     if (dayPicker && sel != null) {
-        val offsets = Build164Logic.Days.offsets(sel.catchupDays)
-        GuideDayDialog(offsets, dayOffset, now, onPick = { dayOffset = it; dayPicker = false }, onDismiss = { dayPicker = false })
+        GuideDayDialog(phoneDays, Build166Logic.GuideDays.keep(dayOffset, phoneDays), now, onPick = { dayOffset = it; dayPicker = false }, onDismiss = { dayPicker = false })
     }
     program?.let { (c, p) -> ProgramSheet(c, p, onDismiss = { program = null }, fromGuide = true) }
 }
@@ -442,9 +481,12 @@ private fun GuidePhoneRow(c: Channel, p: EPGProgram, now: Long, onClick: () -> U
 // MARK: Android TV
 
 /**
- * Tv-gids op Android TV: dagbalk bovenaan en zenderkolommen (±5 in beeld, horizontaal scrollen; lazy, dus nooit honderden
- * kolommen tegelijk). Per kolom: logo, 2 eerdere programma's, de NU-kaart met beeld en 4 latere. Focus op een NU-kaart:
- * na ±1 s speelt daar de zender live zonder geluid; OK = volledig scherm. OK op een ander programma = het programmablad.
+ * Tv-gids op Android TV (build 166: over de hele breedte, geen zijkolom). Eén regel bovenaan: Categorie (menu met Alle
+ * zenders, Favorieten, Recent, Evenementen en de categorieën van de server), Zoeken (opent het zenderzoekveld), de dagpillen
+ * (alleen dagen met gids-info) en rechts Lijst. Daaronder zenderkolommen (±6 in beeld, horizontaal scrollen; lazy, dus nooit
+ * honderden kolommen tegelijk). Per kolom: compacte kop met logo, 2 eerdere programma's, de NU-kaart met beeld en 4 latere.
+ * Focus op een NU-kaart: na ±1 s speelt daar de zender live zonder geluid; OK = volledig scherm. OK op een ander programma =
+ * het programmablad.
  */
 @Composable
 fun GuideTV(
@@ -461,45 +503,63 @@ fun GuideTV(
     LaunchedEffect(Unit) { while (true) { delay(30_000); now = System.currentTimeMillis() } }
     var dayOffset by rememberSaveable { mutableIntStateOf(0) }
     var program by remember { mutableStateOf<Pair<Channel, EPGProgram>?>(null) }
+    var searchOpen by rememberSaveable { mutableStateOf(query.isNotEmpty()) }
+    val searchFocus = remember { FocusRequester() }
     DisposableEffect(Unit) { onDispose { ChannelPreview.stop() } }
     val rowState = rememberLazyListState()
-    // verder terug dan gisteren alleen als een zender in beeld terugkijken heeft (max. de terugkijkdagen)
-    val maxCatchup by remember(channels) {
-        derivedStateOf {
-            rowState.layoutInfo.visibleItemsInfo.maxOfOrNull { channels.getOrNull(it.index)?.catchupDays ?: 0 } ?: 0
-        }
+    // build 166: alleen dagen met gids-info; steekproef = de zenders in beeld plus de eerste uit de lijst (max. 50)
+    val inView by remember { derivedStateOf { rowState.layoutInfo.visibleItemsInfo.map { it.index } } }
+    val offsets = remember(channels, inView, Playlists.library.epg, AllServers.version, now / 3_600_000L) {
+        val idx = Build166Logic.GuideDays.sample(channels.size, inView)
+        guideAvailableDays(idx.map { channels[it] }, now)
     }
-    val offsets = Build164Logic.Days.offsets(maxCatchup)
-    val day = Build164Logic.Days.clamp(dayOffset, offsets)
+    val day = Build166Logic.GuideDays.keep(dayOffset, offsets)
     val keys = remember(channels) {
         val seen = HashMap<String, Int>()
         channels.map { c -> val n = seen.merge(c.id, 1, Int::plus)!!; if (n == 1) c.id else "${c.id}#$n" }
     }
+    // ±6 kolommen in beeld (1920 breed: ±270 pt per kolom), de rest horizontaal scrollen
+    val screenW = LocalConfiguration.current.screenWidthDp
+    val colW = ((screenW - 2 * 36 - 5 * 12) / 6.3f).coerceIn(118f, 220f).dp
 
-    Column(Modifier.fillMaxSize().background(Color.Black).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 36.dp),
+    Column(Modifier.fillMaxSize().background(Color.Black).padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 36.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            // build 165: lijst (de bestaande wisselknop), groep kiezen en zoeken, ook in de gids
-            S2LiveHeaderButton(L("List"), Icons.AutoMirrored.Filled.List, onClick = onList)
-            S2LiveHeaderButton(if (query.isNotEmpty()) L("All channels") else groupTitle, Icons.Default.FilterList, onClick = onGroups)
-            S2TextField(query, onQuery, L("Search channel"), modifier = Modifier.width(240.dp), plain = false,
-                leading = { Icon(Icons.Default.Search, null, tint = Theme.secondary) },
-                trailing = {
-                    if (query.isNotEmpty()) S2IconButton(Icons.Default.Close, L("Clear search"), tint = Theme.secondary, size = 18.dp) { onQuery("") }
-                })
-            Box(Modifier.width(1.dp).height(24.dp).background(G_LINE))
-            offsets.forEach { o ->
-                var focused by remember { mutableStateOf(false) }
-                val on = o == day
-                Text(guideDayLabel(o, now), fontSize = 14.sp, maxLines = 1,
-                    fontWeight = if (on) FontWeight.ExtraBold else FontWeight.Medium,
-                    color = if (on || focused) Color.Black else Theme.secondary,
-                    modifier = Modifier.onFocusChanged { focused = it.isFocused }
-                        .focusLift(1.08f) { dayOffset = o }
-                        .clip(RoundedCornerShape(50))
-                        .background(if (on) Color.White else if (focused) Color(0xFFE6E6E6) else Color(0xFF1C1C1C))
-                        .padding(horizontal = 16.dp, vertical = 8.dp))
+            // Categorie: de gekozen naam met ▾; opent het menu met alle groepen
+            S2LiveHeaderButton((if (query.isNotEmpty()) L("All channels") else groupTitle) + " ▾", Icons.Default.FilterList,
+                onClick = onGroups)
+            // Zoeken: opent het bestaande zenderzoekveld
+            S2LiveHeaderButton(L("Search"), Icons.Default.Search) {
+                if (searchOpen && query.isEmpty()) searchOpen = false else searchOpen = true
             }
+            if (searchOpen) {
+                LaunchedEffect(Unit) { runCatching { searchFocus.requestFocus() } }
+                S2TextField(query, onQuery, L("Search channel"), modifier = Modifier.width(240.dp).focusRequester(searchFocus), plain = false,
+                    leading = { Icon(Icons.Default.Search, null, tint = Theme.secondary) },
+                    trailing = {
+                        S2IconButton(Icons.Default.Close, L("Clear search"), tint = Theme.secondary, size = 18.dp) {
+                            onQuery(""); searchOpen = false
+                        }
+                    })
+            }
+            Box(Modifier.width(1.dp).height(24.dp).background(G_LINE))
+            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()).padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                offsets.forEach { o ->
+                    var focused by remember { mutableStateOf(false) }
+                    val on = o == day
+                    Text(guideDayLabel(o, now), fontSize = 14.sp, maxLines = 1,
+                        fontWeight = if (on) FontWeight.ExtraBold else FontWeight.Medium,
+                        color = if (on || focused) Color.Black else Theme.secondary,
+                        modifier = Modifier.onFocusChanged { focused = it.isFocused }
+                            .focusLift(1.08f) { dayOffset = o }
+                            .clip(RoundedCornerShape(50))
+                            .background(if (on) Color.White else if (focused) Color(0xFFE6E6E6) else Color(0xFF1C1C1C))
+                            .padding(horizontal = 16.dp, vertical = 8.dp))
+                }
+            }
+            // Lijst: de bestaande wisselknop naar de zenderlijst (met de zijkolom met categorieën)
+            S2LiveHeaderButton(L("List"), Icons.AutoMirrored.Filled.ViewList, onClick = onList)
         }
         if (channels.isEmpty()) {
             Text(if (query.isNotEmpty()) L("No channels found.") else L("No channels."), color = Theme.secondary,
@@ -507,10 +567,10 @@ fun GuideTV(
             return@Column
         }
         LazyRow(Modifier.fillMaxSize(), state = rowState, contentPadding = PaddingValues(horizontal = 36.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(channels.size, key = { keys[it] }, contentType = { "col" }) { i ->
                 val c = channels[i]
-                GuideTVColumn(c, day, now, onPlay = { onPlay(c) }, onProgram = { p -> program = c to p })
+                GuideTVColumn(c, day, now, colW, onPlay = { onPlay(c) }, onProgram = { p -> program = c to p })
             }
         }
     }
@@ -518,15 +578,14 @@ fun GuideTV(
 }
 
 @Composable
-private fun GuideTVColumn(c: Channel, dayOffset: Int, now: Long, onPlay: () -> Unit, onProgram: (EPGProgram) -> Unit) {
+private fun GuideTVColumn(c: Channel, dayOffset: Int, now: Long, width: Dp, onPlay: () -> Unit, onProgram: (EPGProgram) -> Unit) {
     val all = remember(c.id, Playlists.library.epg, AllServers.version) { guidePrograms(c) }
     val anchorT = Build164Logic.Days.anchor(now, dayOffset)
     val col = remember(all, dayOffset, now / 60_000L) { Build164Logic.Index.column(all, anchorT, { it.start }, { it.end }) }
     val today = dayOffset == 0
-    Column(Modifier.width(168.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Box(Modifier.fillMaxWidth().height(42.dp).clip(RoundedCornerShape(10.dp)).background(Theme.card), contentAlignment = Alignment.Center) {
-            GuideLogo(c, Modifier.width(64.dp).height(32.dp), fontSize = 11.sp)
-        }
+    Column(Modifier.width(width), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // build 166: compacte kop (±56 pt): logo op een donker vlak met een dunne rand, of de opgeschoonde naam
+        GuideLogo(c, Modifier.fillMaxWidth().height(30.dp).padding(bottom = 2.dp), fontSize = 11.sp, radius = 6.dp)
         col.before.forEach { idx -> GuideTVLine(all[idx], dim = true) { onProgram(all[idx]) } }
         val anchor = if (col.anchor >= 0) all[col.anchor] else null
         GuideTVNowCard(c, anchor, now, live = today && anchor != null,
@@ -552,6 +611,8 @@ private fun GuideTVLine(p: EPGProgram, dim: Boolean, onClick: () -> Unit) {
 private fun GuideTVNowCard(c: Channel, p: EPGProgram?, now: Long, live: Boolean, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(12.dp)
+    // build 166: het beeld vult de bovenkant van rand tot rand (16:9), geen kader in een kader; focus = de standaard
+    // tv-lift en schaduw (focusLift)
     Column(Modifier.fillMaxWidth()
         .onFocusChanged {
             val was = focused
@@ -559,11 +620,10 @@ private fun GuideTVNowCard(c: Channel, p: EPGProgram?, now: Long, live: Boolean,
             // ±1 s na de focus speelt de zender live (ChannelPreview wacht zelf tot de focus stilstaat); weg = stoppen
             if (live) { if (it.isFocused) ChannelPreview.focus(c) else if (was) ChannelPreview.blur(c) }
         }
-        .focusLift(1.06f, onClick = onClick)
-        .clip(shape).background(Color(0xFF1C1C1C))
-        .then(if (focused) Modifier.border(3.dp, Color.White, shape) else Modifier)) {
+        .focusLift(1.08f, onClick = onClick)
+        .clip(shape).background(if (focused) Color(0xFF262626) else Color(0xFF161616))) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
-            GuidePicture(c, now, Modifier.matchParentSize(), live = live && focused)
+            GuidePicture(c, now, Modifier.matchParentSize(), live = live && focused, logoFraction = 0.5f, framed = false)
             if (live) GuideBadge(L("LIVE"), Modifier.align(Alignment.TopStart).padding(6.dp), size = 9.sp)
             GuideStillAge(c, now, focused && live)
         }
