@@ -266,12 +266,13 @@ fun GuideSheet(channel: Channel, onDismiss: () -> Unit) {
 
 /** Details van een programma: kijken, terugkijken of herinnering zetten. */
 @Composable
-fun ProgramSheet(channel: Channel, program: EPGProgram, onDismiss: () -> Unit) {
-    S2ProgramSheetImpl(channel, program, onDismiss, onPlayed = onDismiss)
+fun ProgramSheet(channel: Channel, program: EPGProgram, onDismiss: () -> Unit, fromGuide: Boolean = false) {
+    S2ProgramSheetImpl(channel, program, onDismiss, onPlayed = onDismiss, fromGuide = fromGuide)
 }
 
 @Composable
-private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss: () -> Unit, onPlayed: () -> Unit) {
+private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss: () -> Unit, onPlayed: () -> Unit,
+                               fromGuide: Boolean = false) {
     val now = System.currentTimeMillis()
     val rid = s2ReminderID(channel, program)
     val canCatchup = program.end < now && channel.catchupDays > 0 &&
@@ -284,7 +285,8 @@ private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss:
         if (channel.catchupDays > 0) Playlists.catchupURL(channel.id, program.start, program.end, channel.sourceID) else null
     }
     // live-voorbeeld van deze zender in het programmavenster (build 51); eigen voorbeeld na sluiten weer weg
-    val previewHere = program.isNow
+    // build 164: vanuit de nieuwe gids heeft die zelf het live beeld (vak of NU-kaart): het blad laat het voorbeeld met rust
+    val previewHere = program.isNow && !fromGuide
     LaunchedEffect(channel.id, previewHere) { if (previewHere) ChannelPreview.focus(channel) }
     androidx.compose.runtime.DisposableEffect(channel.id) {
         onDispose { if (previewHere && !AppState.isTV) ChannelPreview.stop() }

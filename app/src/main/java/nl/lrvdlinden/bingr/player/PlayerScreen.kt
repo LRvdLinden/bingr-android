@@ -380,6 +380,19 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         }
         start(item)
     }
+    // build 164: stilstaand beeld voor de tv-gids: elke minuut een kleine momentopname van de live zender (alleen ExoPlayer)
+    LaunchedEffect(player) {
+        delay(8_000)
+        while (true) {
+            val itm = player.item
+            val cid = itm.channelID
+            val eng = player.engine
+            if (itm.type == MediaType.LIVE && cid != null && !itm.id.contains("-cu-") && eng is ExoEngine && eng.isPlaying) {
+                ChannelStills.capture(eng.view, Build164Logic.Stills.key(itm.sourceID ?: Playlists.source?.id, cid))
+            }
+            delay(Build164Logic.Stills.EVERY_MS)
+        }
+    }
     DisposableEffect(player) {
         val obs = LifecycleEventObserver { _, e ->
             // app naar de achtergrond zonder beeld-in-beeld of Chromecast (bijv. TV-thuisknop): de stream echt stoppen,

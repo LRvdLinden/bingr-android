@@ -1211,6 +1211,8 @@ object Account {
         checkLocked(r)
         if (!r.ok || r.json == null) throw generic()
         return r.json.jList("entries").mapNotNull { e ->
+            // build 164: het live voorbeeld in de gids telt mee voor de limiet, maar is geen "kijken"
+            if (e.jS("kind") == Build164Logic.Preview.STREAM_KIND) return@mapNotNull null
             val start = Net.parseISODate(e.jS("started_at")) ?: return@mapNotNull null
             val platform = e.jS("platform") ?: ""
             WatchEntry(

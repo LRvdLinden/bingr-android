@@ -70,14 +70,25 @@ object ChannelPreview {
     var playing by mutableStateOf(false); private set
     private var pending: String? = null
     private var job: Job? = null
+    /** Build 164: zonder geluid tot je op het luidsprekertje tikt (telefoon); bij elke nieuwe zender weer zonder. */
+    var muted by mutableStateOf(true); private set
+    /** Build 164: wanneer het voorbeeld op de streamlimiet stuitte (dan even niet opnieuw, geen foutmelding). */
+    private var blockedAt: Long? = null
+    /** Build 164: het voorbeeld telt mee voor de streamlimiet (stream_start met soort "preview", niet voor statistieken). */
+    private var streamOwner: StreamSession.Owner? = null
+    /** Build 164: het beeld waarin het voorbeeld nu speelt (voor de momentopname van het stilstaande beeld). */
+    var view: PlayerView? = null
+    private var stillJob: Job? = null
 
     private var observing = false
 
     /** Deze zender kreeg focus (of is gekozen): na ~1 s het voorbeeld starten. */
-    fun focus(c: Channel) {
+    fun focus(c: Channel, tapped: Boolean = false) {
         // screenshotmodus (alleen de screenshot-build): beeld uit de demo in plaats van een stream
         if (Screenshots.isActive) { channel = c; playing = true; return }
-        if (!PlayerSettings.previewAllowed() || AppState.playing != null) return
+        if (!PlayerSettings.previewAllowed(tapped = tapped) || AppState.playing != null) return
+        // build 164: net op de streamlimiet gestuit: geen nieuw voorbeeld (het stilstaande beeld of logo blijft)
+        if (!Build164Logic.Preview.mayTry(blockedAt, System.currentTimeMillis())) return
         // naar de achtergrond (ook vanuit de gids): voorbeeld stoppen, zodat de providerverbinding niet open blijft
         if (!observing) {
             observing = true
@@ -111,6 +122,10 @@ object ChannelPreview {
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(ctx, http)))
             .build().apply {
                 volume = 0f
+                // build 164: zonder ondertitels
+                trackSelectionParameters = trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    .build()
                 // klein voorbeeld: laagste kwaliteit (minder netwerk en decoderwerk, sneller beeld)
                 trackSelectionParameters = trackSelectionParameters.buildUpon()
                     .setMaxVideoSize(854, 480)
@@ -120,6 +135,7 @@ object ChannelPreview {
                 addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
                     override fun onPlayerError(error: PlaybackException) { playing = false }
+                    override fun onRenderedFirstFrame() { scheduleStills() }
                 })
             }
     }
@@ -130,19 +146,67 @@ object ChannelPreview {
         if (channel?.id == c.id && p.playbackState != Player.STATE_IDLE) return
         channel = c
         playing = false
+        muted = true
         p.stop()
+        beginStream(c)
         val lower = url.lowercase(Locale.ROOT)
         val b = MediaItem.Builder().setUri(url)
         if (lower.contains(".m3u8")) b.setMimeType(MimeTypes.APPLICATION_M3U8)
         p.setMediaItem(b.build())
-        p.volume = 0f
+        p.volume = if (muted) 0f else 1f
         p.prepare()
         p.playWhenReady = true
+    }
+
+    /** Build 164: geluid aan/uit (alleen op verzoek; standaard zonder geluid). */
+    fun mute(m: Boolean) {
+        muted = m
+        player?.volume = if (m) 0f else 1f
+    }
+
+    /** Build 164: de focus ging weg van deze zender: dat beeld stoppen (een andere zender met focus speelt door). */
+    fun blur(c: Channel) {
+        if (pending == c.id || channel?.id == c.id) stop()
+    }
+
+    /**
+     * Build 164: het voorbeeld telt mee als stream van dit apparaat (dezelfde route als gewoon afspelen: stream_start,
+     * ping, stop). Soort "preview": de server telt het niet in de statistieken. Limiet bereikt = stoppen, zonder melding.
+     */
+    private fun beginStream(c: Channel) {
+        streamOwner?.let { StreamSession.end(it) }
+        val o = StreamSession.Owner(
+            info = { StreamSession.Info(c.name, Build164Logic.Preview.STREAM_KIND, c.id) },
+            onBlocked = { _ ->
+                AppScope.launch {
+                    blockedAt = System.currentTimeMillis()
+                    if (channel?.id == c.id) stop()
+                }
+            },
+        )
+        streamOwner = o
+        StreamSession.begin(o)
+    }
+
+    /** Build 164: momentopnames voor het stilstaande beeld (na 3 s, daarna elke minuut zolang het voorbeeld speelt). */
+    private fun scheduleStills() {
+        val c = channel ?: return
+        stillJob?.cancel()
+        stillJob = AppScope.launch {
+            delay(Build164Logic.Stills.FIRST_MS)
+            while (channel?.id == c.id) {
+                if (playing) ChannelStills.capture(view, Build164Logic.Stills.key(c.sourceID ?: Playlists.source?.id, c.id))
+                delay(Build164Logic.Stills.EVERY_MS)
+            }
+        }
     }
 
     /** Voorbeeld stoppen en de speler vrijgeven (decoder vrij voor de echte speler). */
     fun stop() {
         job?.cancel(); job = null
+        stillJob?.cancel(); stillJob = null
+        streamOwner?.let { StreamSession.end(it) }; streamOwner = null
+        muted = true
         pending = null
         channel = null
         playing = false

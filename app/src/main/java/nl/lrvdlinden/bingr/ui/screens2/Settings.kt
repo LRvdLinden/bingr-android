@@ -211,7 +211,7 @@ fun SettingsScreen() {
     // build 145: "Servers laden bij openen" (per apparaat, niet gesynct); vervangt de vernieuwtermijn
     var loadMode by remember { mutableStateOf(Playlists.loadOnOpen) }
     var zapDelay by remember { mutableIntStateOf(PlayerSettings.zapDelay) }
-    var channelPreview by remember { mutableStateOf(PlayerSettings.channelPreview) }
+    var livePreview by remember { mutableStateOf(PlayerSettings.livePreview) }
     var matchFrameRate by remember { mutableStateOf(PlayerSettings.matchFrameRate) }
     // build 52
     var deinterlace by remember { mutableStateOf(PlayerSettings.deinterlace) }
@@ -564,7 +564,10 @@ fun SettingsScreen() {
                     S2Dropdown(L("Zap delay"), PlayerSettings.zapDelayOptions, zapDelay) {
                         zapDelay = it; PlayerSettings.zapDelay = it
                     }
-                    S2Toggle(L("Channel preview"), channelPreview) { channelPreview = it; PlayerSettings.channelPreview = it }
+                    // build 164: Altijd / Alleen wifi / Nooit (vervangt de schakelaar Zendervoorbeeld)
+                    S2Dropdown(L("Live preview in the guide"), PlayerSettings.livePreviewOptions, livePreview) {
+                        livePreview = it; PlayerSettings.livePreview = it
+                    }
                     if (AppState.isTV) {
                         S2Toggle(L("Match frame rate"), matchFrameRate) { matchFrameRate = it; PlayerSettings.matchFrameRate = it }
                     } else {

@@ -1107,7 +1107,14 @@
   "Discover": "اكتشف",
   "More apps from the developer": "المزيد من تطبيقات المطوّر",
   "Apps for iPhone, iPad, Apple TV and Homey": "تطبيقات لـ iPhone وiPad وApple TV وHomey",
-  "View (more apps)": "عرض"
+  "View (more apps)": "عرض",
+  "Live preview in the guide": "معاينة مباشرة في الدليل",
+  "Wi-Fi only": "عبر Wi-Fi فقط",
+  "Never": "أبدًا",
+  "Tap to watch live": "اضغط للمشاهدة مباشرة",
+  "Choose a day": "اختر يومًا",
+  "Tomorrow": "غدًا",
+  "Playing without sound": "يُعرض دون صوت"
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -2217,7 +2224,14 @@
   "Discover": "Entdecken",
   "More apps from the developer": "Weitere Apps des Entwicklers",
   "Apps for iPhone, iPad, Apple TV and Homey": "Apps für iPhone, iPad, Apple TV und Homey",
-  "View (more apps)": "Ansehen"
+  "View (more apps)": "Ansehen",
+  "Live preview in the guide": "Live-Vorschau im Programmführer",
+  "Wi-Fi only": "Nur WLAN",
+  "Never": "Nie",
+  "Tap to watch live": "Tippen, um live zu sehen",
+  "Choose a day": "Tag wählen",
+  "Tomorrow": "Morgen",
+  "Playing without sound": "Läuft ohne Ton"
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -3327,7 +3341,14 @@
   "Discover": "Descubrir",
   "More apps from the developer": "Más apps del desarrollador",
   "Apps for iPhone, iPad, Apple TV and Homey": "Apps para iPhone, iPad, Apple TV y Homey",
-  "View (more apps)": "Ver"
+  "View (more apps)": "Ver",
+  "Live preview in the guide": "Vista previa en directo en la guía",
+  "Wi-Fi only": "Solo wifi",
+  "Never": "Nunca",
+  "Tap to watch live": "Toca para ver en directo",
+  "Choose a day": "Elegir un día",
+  "Tomorrow": "Mañana",
+  "Playing without sound": "Sin sonido"
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -4437,7 +4458,14 @@
   "Discover": "Découvrir",
   "More apps from the developer": "Plus d’apps du développeur",
   "Apps for iPhone, iPad, Apple TV and Homey": "Apps pour iPhone, iPad, Apple TV et Homey",
-  "View (more apps)": "Voir"
+  "View (more apps)": "Voir",
+  "Live preview in the guide": "Aperçu en direct dans le guide",
+  "Wi-Fi only": "Wi-Fi uniquement",
+  "Never": "Jamais",
+  "Tap to watch live": "Touchez pour regarder en direct",
+  "Choose a day": "Choisir un jour",
+  "Tomorrow": "Demain",
+  "Playing without sound": "Lecture sans son"
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -5547,7 +5575,14 @@
   "Discover": "Scopri",
   "More apps from the developer": "Altre app dello sviluppatore",
   "Apps for iPhone, iPad, Apple TV and Homey": "App per iPhone, iPad, Apple TV e Homey",
-  "View (more apps)": "Vedi"
+  "View (more apps)": "Vedi",
+  "Live preview in the guide": "Anteprima live nella guida",
+  "Wi-Fi only": "Solo Wi-Fi",
+  "Never": "Mai",
+  "Tap to watch live": "Tocca per guardare in diretta",
+  "Choose a day": "Scegli un giorno",
+  "Tomorrow": "Domani",
+  "Playing without sound": "In riproduzione senza audio"
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -6671,7 +6706,14 @@
   "Discover": "Ontdekken",
   "More apps from the developer": "Meer apps van de ontwikkelaar",
   "Apps for iPhone, iPad, Apple TV and Homey": "Apps voor iPhone, iPad, Apple TV en Homey",
-  "View (more apps)": "Bekijk"
+  "View (more apps)": "Bekijk",
+  "Live preview in the guide": "Live voorbeeld in de gids",
+  "Wi-Fi only": "Alleen wifi",
+  "Never": "Nooit",
+  "Tap to watch live": "Tik om live te kijken",
+  "Choose a day": "Kies een dag",
+  "Tomorrow": "Morgen",
+  "Playing without sound": "Speelt zonder geluid"
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -7781,7 +7823,14 @@
   "Discover": "Odkrywaj",
   "More apps from the developer": "Więcej aplikacji od twórcy",
   "Apps for iPhone, iPad, Apple TV and Homey": "Aplikacje na iPhone’a, iPada, Apple TV i Homey",
-  "View (more apps)": "Zobacz"
+  "View (more apps)": "Zobacz",
+  "Live preview in the guide": "Podgląd na żywo w przewodniku",
+  "Wi-Fi only": "Tylko Wi-Fi",
+  "Never": "Nigdy",
+  "Tap to watch live": "Dotknij, aby oglądać na żywo",
+  "Choose a day": "Wybierz dzień",
+  "Tomorrow": "Jutro",
+  "Playing without sound": "Odtwarzanie bez dźwięku"
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -8891,7 +8940,14 @@
   "Discover": "Descobrir",
   "More apps from the developer": "Mais apps do programador",
   "Apps for iPhone, iPad, Apple TV and Homey": "Apps para iPhone, iPad, Apple TV e Homey",
-  "View (more apps)": "Ver"
+  "View (more apps)": "Ver",
+  "Live preview in the guide": "Pré-visualização em direto no guia",
+  "Wi-Fi only": "Apenas Wi-Fi",
+  "Never": "Nunca",
+  "Tap to watch live": "Toque para ver em direto",
+  "Choose a day": "Escolher um dia",
+  "Tomorrow": "Amanhã",
+  "Playing without sound": "A reproduzir sem som"
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -10001,7 +10057,14 @@
   "Discover": "Keşfet",
   "More apps from the developer": "Geliştiricinin diğer uygulamaları",
   "Apps for iPhone, iPad, Apple TV and Homey": "iPhone, iPad, Apple TV ve Homey için uygulamalar",
-  "View (more apps)": "Göster"
+  "View (more apps)": "Göster",
+  "Live preview in the guide": "Rehberde canlı önizleme",
+  "Wi-Fi only": "Yalnızca Wi-Fi",
+  "Never": "Asla",
+  "Tap to watch live": "Canlı izlemek için dokunun",
+  "Choose a day": "Bir gün seçin",
+  "Tomorrow": "Yarın",
+  "Playing without sound": "Sessiz oynatılıyor"
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -11111,6 +11174,13 @@
   "Discover": "发现",
   "More apps from the developer": "开发者的更多 App",
   "Apps for iPhone, iPad, Apple TV and Homey": "适用于 iPhone、iPad、Apple TV 和 Homey 的 App",
-  "View (more apps)": "查看"
+  "View (more apps)": "查看",
+  "Live preview in the guide": "节目指南中的直播预览",
+  "Wi-Fi only": "仅限 Wi-Fi",
+  "Never": "从不",
+  "Tap to watch live": "轻点观看直播",
+  "Choose a day": "选择日期",
+  "Tomorrow": "明天",
+  "Playing without sound": "静音播放中"
  }
 }

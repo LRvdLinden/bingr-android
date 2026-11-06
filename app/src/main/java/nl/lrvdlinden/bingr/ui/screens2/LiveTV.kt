@@ -188,7 +188,10 @@ fun LiveTVScreen() {
     fun pickGroup(g: String) { group = g; filter = "" }
 
     val tv = AppState.isTV
-    Column(Modifier.fillMaxSize().background(Theme.bg).then(if (tv) Modifier else Modifier.statusBarsPadding())) {
+    // build 164: tv-gids op de telefoon in NL-Ziet-stijl (live vak, zenderstrook, programmalijst) over het hele scherm
+    if (gridMode && !tv) {
+        GuidePhone(visible, query = filter, onQuery = { filter = it }, onBack = { gridMode = false }, onPlay = { play(it) })
+    } else Column(Modifier.fillMaxSize().background(Theme.bg).then(if (tv) Modifier else Modifier.statusBarsPadding())) {
         // kop: titel + tv-gids/lijst + multiview
         Row(Modifier.fillMaxWidth().padding(horizontal = Theme.edge - 4.dp, vertical = tvs(8)),
             verticalAlignment = Alignment.CenterVertically) {
@@ -225,7 +228,10 @@ fun LiveTVScreen() {
             }
         }
 
-        if (tv) {
+        if (tv && gridMode) {
+            // build 164: dagbalk en zenderkolommen met live beeld op de NU-kaart
+            GuideTV(visible, onBack = { gridMode = false }, onPlay = { play(it) })
+        } else if (tv) {
             Row(Modifier.fillMaxSize().padding(start = Theme.edge)) {
                 LazyColumn(Modifier.width(280.dp).fillMaxHeight(), contentPadding = PaddingValues(vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {

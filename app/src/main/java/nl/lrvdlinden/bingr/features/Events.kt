@@ -188,13 +188,31 @@ object PlayerSettings {
         get() = Prefs.bool("player.channelPreview", true)
         set(v) = Prefs.put("player.channelPreview", v)
 
-    /** Voorbeeld nu tonen: instelling aan, en op een telefoon niet via een netwerk met datalimiet. */
-    fun previewAllowed(ctx: Context = AppState.appContext): Boolean {
-        if (!channelPreview) return false
-        if (AppState.isTV) return true
-        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
-        return !runCatching { cm.isActiveNetworkMetered }.getOrDefault(false)
+    /**
+     * Build 164: "Live voorbeeld in de gids" (Altijd / Alleen wifi / Nooit, standaard Alleen wifi). Zonder eigen waarde
+     * volgt hij de oude schakelaar "Zendervoorbeeld"; die blijft meegeschreven (aan = niet Nooit) voor de sync.
+     */
+    var livePreview: Build164Logic.Preview.Mode
+        get() = Build164Logic.Preview.parse(Prefs.string("player.livePreview"), Prefs.bool("player.channelPreview", true))
+        set(v) { Prefs.put("player.livePreview", v.raw); Prefs.put("player.channelPreview", v != Build164Logic.Preview.Mode.NEVER) }
+    val livePreviewOptions: List<Pair<Build164Logic.Preview.Mode, String>> get() = listOf(
+        Build164Logic.Preview.Mode.ALWAYS to L("Always"),
+        Build164Logic.Preview.Mode.WIFI to L("Wi-Fi only"),
+        Build164Logic.Preview.Mode.NEVER to L("Never"),
+    )
+
+    private fun metered(ctx: Context): Boolean {
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        return runCatching { cm.isActiveNetworkMetered }.getOrDefault(false)
     }
+
+    /** Wanneer het live voorbeeld start: vanzelf, pas na een tik (mobiel netwerk bij Alleen wifi) of nooit. */
+    fun previewStart(ctx: Context = AppState.appContext): Build164Logic.Preview.Start =
+        Build164Logic.Preview.start(livePreview, AppState.isTV, !AppState.isTV && metered(ctx))
+
+    /** Voorbeeld nu tonen: instelling aan, en op een telefoon bij Alleen wifi niet via een netwerk met datalimiet. */
+    fun previewAllowed(ctx: Context = AppState.appContext, tapped: Boolean = false): Boolean =
+        Build164Logic.Preview.mayStart(previewStart(ctx), tapped)
 
     var matchFrameRate: Boolean
         get() = Prefs.bool("player.matchFrameRate", true)
