@@ -103,7 +103,11 @@ fun LiveTVScreen() {
     val libKey = System.identityHashCode(lib)
     val pid = Playlists.source?.id ?: ""
     var group by rememberSaveable { mutableStateOf(S2_ALL_KEY) }
-    var gridMode by rememberSaveable { mutableStateOf(Screenshots.isActive && Screenshots.screen == "guide") }
+    // build 165: Live TV opent altijd in de tv-gids (ook na een herstart of een eerdere keuze voor de lijst). De knop
+    // Lijst/Tv-gids wisselt alleen zolang je in Live TV bent: bewust geen rememberSaveable (die bewaart de keuze per
+    // tabblad), dus terug naar dit tabblad = weer de gids. Draaien maakt de activity niet opnieuw (configChanges).
+    var gridMode by remember { mutableStateOf(!(Screenshots.isActive && Screenshots.screen == "live")) }
+    var groupPicker by remember { mutableStateOf(false) }
     var filter by rememberSaveable { mutableStateOf("") }
     var guideFor by remember { mutableStateOf<Channel?>(null) }
     var program by remember { mutableStateOf<Pair<Channel, EPGProgram>?>(null) }
@@ -190,7 +194,8 @@ fun LiveTVScreen() {
     val tv = AppState.isTV
     // build 164: tv-gids op de telefoon in NL-Ziet-stijl (live vak, zenderstrook, programmalijst) over het hele scherm
     if (gridMode && !tv) {
-        GuidePhone(visible, query = filter, onQuery = { filter = it }, onBack = { gridMode = false }, onPlay = { play(it) })
+        GuidePhone(visible, query = filter, onQuery = { filter = it }, groupTitle = s2LiveGroupTitle(current),
+            onGroups = { groupPicker = true }, onList = { gridMode = false }, onPlay = { play(it) })
     } else Column(Modifier.fillMaxSize().background(Theme.bg).then(if (tv) Modifier else Modifier.statusBarsPadding())) {
         // kop: titel + tv-gids/lijst + multiview
         Row(Modifier.fillMaxWidth().padding(horizontal = Theme.edge - 4.dp, vertical = tvs(8)),
@@ -230,7 +235,8 @@ fun LiveTVScreen() {
 
         if (tv && gridMode) {
             // build 164: dagbalk en zenderkolommen met live beeld op de NU-kaart
-            GuideTV(visible, onBack = { gridMode = false }, onPlay = { play(it) })
+            GuideTV(visible, query = filter, onQuery = { filter = it }, groupTitle = s2LiveGroupTitle(current),
+                onGroups = { groupPicker = true }, onList = { gridMode = false }, onPlay = { play(it) })
         } else if (tv) {
             Row(Modifier.fillMaxSize().padding(start = Theme.edge)) {
                 LazyColumn(Modifier.width(280.dp).fillMaxHeight(), contentPadding = PaddingValues(vertical = 12.dp),
@@ -296,11 +302,19 @@ fun LiveTVScreen() {
     collectFor?.let { c -> AddToCollectionDialog(Collections.ref(c), c.name, c.logo) { collectFor = null } }
     offsetFor?.let { c -> CatchupOffsetDialog(pid, c) { offsetFor = null } }
     guideFor?.let { c -> GuideSheet(c, onDismiss = { guideFor = null }) }
+    // build 165: groep/categorie kiezen vanuit de tv-gids (zelfde groepen als in de lijst)
+    if (groupPicker) {
+        S2ActionDialog(L("Categories"), groups.map { g ->
+            S2Action(s2LiveGroupTitle(g) + if (g == current && !searching) "  ✓" else "", primary = g == current && !searching) {
+                pickGroup(g); groupPicker = false
+            }
+        }, onDismiss = { groupPicker = false })
+    }
     program?.let { (c, p) -> ProgramSheet(c, p, onDismiss = { program = null }) }
 }
 
 @Composable
-private fun S2LiveHeaderButton(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean = true,
+internal fun S2LiveHeaderButton(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean = true,
                              onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val light = focused && AppState.isTV
