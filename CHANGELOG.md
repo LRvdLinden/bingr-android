@@ -4,6 +4,21 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.5 · Build 165
+_6 november 2026_
+
+### iOS, iPadOS, tvOS, macOS, Android en Android TV
+
+**Verbeterd**
+
+- Live tv opent nu altijd in de tv-gids; met de bestaande knop wissel je naar de lijst, zolang je in Live tv bent
+
+### Android en Android TV
+
+**Verbeterd**
+
+- In de tv-gids kun je nu ook een categorie kiezen en zoeken
+
 ## Versie 1.0.5 · Build 164
 _6 november 2026_
 
