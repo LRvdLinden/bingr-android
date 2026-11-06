@@ -1242,7 +1242,7 @@ private fun S2NavRow(
 
 /** H1: "Account verwijderen" bevestigen met het huidige wachtwoord (alleen in het geheugen van deze dialoog). */
 @Composable
-private fun S2DeleteAccountDialog(onDismiss: () -> Unit, onDelete: (String) -> Unit) {
+fun S2DeleteAccountDialog(onDismiss: () -> Unit, onDelete: (String) -> Unit) {
     var password by remember { mutableStateOf("") }
     val fr = remember { FocusRequester() }
     AlertDialog(

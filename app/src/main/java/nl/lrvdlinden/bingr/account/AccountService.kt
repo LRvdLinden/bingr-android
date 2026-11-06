@@ -1137,6 +1137,8 @@ object Account {
     sealed class StreamStart {
         data object Ok : StreamStart()
         data class Limit(val list: StreamList) : StreamStart()
+        /** Build 167: 403 activation_required (na de overgangsdatum, account niet Lifetime). */
+        data object ActivationRequired : StreamStart()
         /** Netwerkfout of geen sessie: gewoon afspelen. */
         data object Failed : StreamStart()
     }
@@ -1161,7 +1163,7 @@ object Account {
     }
 
     /**
-     * stream_start; 403 stream_limit = [StreamStart.Limit].
+     * stream_start; 403 stream_limit = [StreamStart.Limit]; build 167: 403 activation_required = [StreamStart.ActivationRequired].
      * Build 68 (statistieken): bij een aflevering ook `series_id` en `series_title`, en altijd `tz` (tijdzone van het apparaat).
      */
     suspend fun streamStart(
@@ -1176,6 +1178,8 @@ object Account {
             if (!seriesTitle.isNullOrBlank()) put("series_title", seriesTitle.take(200))
             put("tz", timeZoneId())
         }) ?: return StreamStart.Failed
+        // build 167: eerst activation_required (ook een 403), dan pas de streamlimiet
+        if (Build167Logic.Access.isActivationRequired(r.code, r.json.jS("error") ?: r.errorCode)) return StreamStart.ActivationRequired
         if (r.code == 403 && (r.errorCode == "stream_limit" || r.json.jObj?.containsKey("streams") == true)) {
             return StreamStart.Limit(StreamList(r.json.jI("limit") ?: DEFAULT_STREAM_LIMIT, parseStreams(r.json.jList("streams")), r.json.jS("plan")))
         }

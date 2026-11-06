@@ -38,6 +38,10 @@ object Entitlements {
         val upgradeLink: Boolean,
         val price: String,
         val priceEn: String,
+        /** Build 167: "full" of "activate" (ontbreekt = "full", oudere server). */
+        val access: String = Build167Logic.FULL,
+        /** Build 167: blok `lifetime_only` (alleen als de server het aan heeft staan). */
+        val lifetimeOnly: Build167Logic.LifetimeOnly? = null,
     ) {
         val isFree: Boolean get() = plan == "free"
     }
@@ -106,6 +110,15 @@ object Entitlements {
     val upgradeUrl: String get() = current?.upgradeUrl ?: DEFAULT_URL
     val upgradeLink: Boolean get() = current?.upgradeLink ?: true
 
+    /** Build 167: "full" of "activate"; onbekend (geen cache, oudere server) = "full". */
+    val access: String get() = Build167Logic.Access.parse(current?.access)
+    /** Build 167: `lifetime_only` (null = uit of oudere server). */
+    val lifetimeOnly: Build167Logic.LifetimeOnly? get() = current?.lifetimeOnly
+    /** Build 167: eigen kortingscode (alleen gratis account, ongebruikt en nog geldig); Android mag hem tonen. */
+    val lifetimeCode: String? get() = Build167Logic.Notice.visibleCode(lifetimeOnly, System.currentTimeMillis())
+    /** Build 167: betaalpagina met `?code=` als er een eigen code is. */
+    val upgradeUrlWithCode: String get() = Build167Logic.Links.upgradeUrl(upgradeUrl, lifetimeCode)
+
     /** Prijs in de taal van de app ("€ 4,99" in het Nederlands, anders "€4.99"). */
     val price: String
         get() = if (Localizer.language.startsWith("nl")) current?.price ?: DEFAULT_PRICE else current?.priceEn ?: DEFAULT_PRICE_EN
@@ -143,6 +156,7 @@ object Entitlements {
     fun signedOut() {
         owner = null; current = null; lastFetch = 0L
         job?.cancel(); job = null
+        Activation.cleared()
     }
 
     private fun parseStored(s: String): Info? = runCatching { parse(Http.json.parseToJsonElement(s)) }.getOrNull()
@@ -168,6 +182,13 @@ object Entitlements {
             return Build157Logic.Plans.limits(fallback, p != null, p.jI("streams"), p.jI("devices"),
                 p?.containsKey("servers") == true, p.jI("servers"))
         }
+        // build 167: alleen Lifetime (contract docs/ACCOUNT.md in iptv-ios-appletv)
+        val lo = o["lifetime_only"] as? JsonObject
+        val lifetimeOnly = Build167Logic.Notice.parse(
+            present = lo != null, enabled = lo.jB("enabled"), announced = lo.jB("announced"), cutoverAt = lo.jS("cutover_at"),
+            code = lo.jS("code"), codeValidUntil = lo.jS("code_valid_until"), discountPct = lo.jI("discount_pct"),
+            trialUntil = lo.jS("trial_until"), parseTime = { Net.parseISODate(it) },
+        )
         val servers = if (limits?.containsKey("servers") == true) limits.jI("servers") else (if (free) FREE_SERVERS else null)
         return Info(
             plan = plan,
@@ -188,6 +209,8 @@ object Entitlements {
             upgradeLink = upgrade.jB("link") ?: true,
             price = upgrade.jS("price")?.takeIf { it.isNotBlank() } ?: DEFAULT_PRICE,
             priceEn = upgrade.jS("price_en")?.takeIf { it.isNotBlank() } ?: DEFAULT_PRICE_EN,
+            access = Build167Logic.Access.parse(o.jS("access")),
+            lifetimeOnly = lifetimeOnly,
         )
     }
 
@@ -200,6 +223,8 @@ object Entitlements {
         lastFetch = System.currentTimeMillis()
         save(j!!)
         if (wasFree == true && !info.isFree) Upgrade.upgraded()
+        // build 167: de server geeft weer volledige toegang (gekocht, proefperiode) → het blok van stream_start vervalt
+        if (Build167Logic.Access.parse(info.access) == Build167Logic.FULL) Activation.cleared()
         return true
     }
 

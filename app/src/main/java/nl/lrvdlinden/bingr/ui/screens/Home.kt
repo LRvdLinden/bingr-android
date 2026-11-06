@@ -804,6 +804,8 @@ fun HomeScreen(filter: Filter) {
         if (out != discover) discover = out.toMap()
     }
 
+    // build 167: wanneer de aankondigingskaart is weggeklikt (per account)
+    val lifetimeDismissed = remember(Account.userId, Activation.dismissTick) { Activation.dismissedAt() }
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         LazyColumn(
             state = listState,
@@ -833,6 +835,11 @@ fun HomeScreen(filter: Filter) {
                 } else {
                     Spacer(Modifier.then(if (tv) Modifier else Modifier.statusBarsPadding()).height(tvs(90)))
                 }
+            }
+
+            // build 167: aankondiging "Bingr wordt Lifetime op …" met de eigen code (alleen gratis accounts, vóór de overgang)
+            if (Activation.showNotice(lifetimeDismissed)) {
+                item(key = "lifetime-notice") { LifetimeNoticeCard() }
             }
 
             // build 86: rij "Categorieën" (tegels) op zijn standaardplek (in de indeling direct na "live"): precies vijf

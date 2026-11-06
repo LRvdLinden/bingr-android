@@ -81,8 +81,10 @@ object Upgrade {
     /** Telefoon/tablet: bingr.online/upgrade in de browser; lukt dat niet, dan de QR-code. */
     fun openInBrowser(ctx: Context) {
         // build 141: het adres komt van de server; alleen http(s) naar de browser, anders de QR-code
-        if (!Build141Logic.TrustedHosts.isWebURL(Entitlements.upgradeUrl)) { forceQR = true; return }
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(Entitlements.upgradeUrl))
+        // build 167: met de eigen kortingscode (?code=) als die er is
+        val url = Entitlements.upgradeUrlWithCode
+        if (!Build141Logic.TrustedHosts.isWebURL(url)) { forceQR = true; return }
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
             .addCategory(Intent.CATEGORY_BROWSABLE)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (runCatching { ctx.startActivity(intent) }.isFailure) forceQR = true
@@ -101,7 +103,10 @@ object Upgrade {
         Entitlements.Feature.STREAMS -> L("With Bingr Lifetime you can watch on up to %d screens at the same time.", Entitlements.lifetimePlan.streams) +
             " " + L("How many you can watch at once also depends on your IPTV provider.")
         Entitlements.Feature.DEVICES -> L("With Bingr Lifetime you can use up to %d devices.", Entitlements.lifetimePlan.devices)
-        null -> L("Get more out of Bingr with a one-time upgrade.")
+        // build 167: tijdens de aankondiging
+        null -> Entitlements.lifetimeOnly?.cutoverAt?.takeIf { Entitlements.isFree && it > System.currentTimeMillis() }
+            ?.let { L("Bingr is going Lifetime on %@", Activation.day(it)) + " " + L("Your servers, lists, profiles and settings stay saved.") }
+            ?: L("Get more out of Bingr with a one-time upgrade.")
     }
 }
 
@@ -188,6 +193,8 @@ fun UpgradeDialogHost() {
                         if (showQR) UpgradeQR()
                     }
                     Text(L("%@ one-time", Entitlements.price), color = Color.White, fontSize = tsp(18), fontWeight = FontWeight.Bold)
+                    // build 167: eigen kortingscode (vult zich op bingr.online vanzelf in)
+                    if (link) LifetimeCodeBox(Modifier.fillMaxWidth())
                     Text(L("Pay once, keep it forever. No subscription."), color = Theme.secondary, fontSize = tsp(12), textAlign = TextAlign.Center)
                     if (link && !tv && !Upgrade.forceQR) {
                         NetflixButton(L("Upgrade on bingr.online"), Icons.Default.OpenInBrowser, kind = NetflixKind.ACCENT,
@@ -205,8 +212,10 @@ fun UpgradeDialogHost() {
 @Composable
 private fun UpgradeQR(modifier: Modifier = Modifier) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(tvs(8))) {
-        QrCodeImage(Entitlements.upgradeUrl, tvs(150))
-        Text(Entitlements.upgradeUrl.removePrefix("https://").removeSuffix("/"), color = Color.White, fontSize = tsp(15),
+        // build 167: met de eigen kortingscode (?code=)
+        val url = Entitlements.upgradeUrlWithCode
+        QrCodeImage(url, tvs(150))
+        Text(Build167Logic.Links.display(url), color = Color.White, fontSize = tsp(15),
             fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
         Text(L("Scan the QR code with your phone's camera to upgrade on bingr.online."), color = Theme.secondary,
             fontSize = tsp(12), textAlign = TextAlign.Center)
@@ -249,7 +258,9 @@ private fun PlanComparison() {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Theme.card)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = tvs(8)), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1.6f))
-            listOf(L("Free"), L("Lifetime")).forEachIndexed { i, t ->
+            // build 167: tijdens de aankondiging "Gratis (tot 7 december 2026)"
+            val freeTitle = Entitlements.lifetimeOnly?.cutoverAt?.let { L("Free (until %@)", Activation.day(it)) } ?: L("Free")
+            listOf(freeTitle, L("Lifetime")).forEachIndexed { i, t ->
                 Text(t, color = if (i == 1) Theme.imdb else Color.White, fontSize = tsp(13), fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             }

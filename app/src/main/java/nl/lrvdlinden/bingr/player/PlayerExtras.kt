@@ -183,6 +183,13 @@ object ChannelPreview {
                     if (channel?.id == c.id) stop()
                 }
             },
+            // build 167: activation_required → voorbeeld stoppen (zonder melding; het activatiescherm komt erover)
+            onActivation = {
+                AppScope.launch {
+                    blockedAt = System.currentTimeMillis()
+                    if (channel?.id == c.id) stop()
+                }
+            },
         )
         streamOwner = o
         StreamSession.begin(o)

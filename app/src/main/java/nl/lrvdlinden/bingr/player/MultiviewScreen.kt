@@ -100,6 +100,11 @@ fun MultiviewScreen(onClose: () -> Unit) {
                 tiles.forEach { it.controller.stop() }
                 streamLimit = l
             },
+            // build 167: activation_required → stoppen; het scherm Activeer Lifetime sluit multiview
+            onActivation = {
+                streamOwner = null
+                tiles.forEach { it.controller.stop() }
+            },
         )
         streamOwner = o
         StreamSession.begin(o)

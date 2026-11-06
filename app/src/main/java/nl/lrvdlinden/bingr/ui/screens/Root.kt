@@ -64,7 +64,11 @@ fun BingrRoot() {
     Box(Modifier.fillMaxSize().background(Theme.bg)) {
         // register_device gaf device_limit → "Too many devices" over alles heen
         val limit = Account.deviceLimit?.takeIf { Account.isSignedIn }
-        val covered = AppState.playing != null || AppState.showMultiview || limit != null
+        // build 167: alleen Lifetime: na de overgangsdatum (access "activate" of stream_start 403 activation_required)
+        // het scherm Activeer Lifetime over alles heen (na "Too many devices"; niet op splash en inloggen)
+        val activate = limit == null && Activation.required &&
+            (AppState.stage == AppState.Stage.PICKER || AppState.stage == AppState.Stage.MAIN)
+        val covered = AppState.playing != null || AppState.showMultiview || limit != null || activate
         Box(Modifier.fillMaxSize().blockFocus(covered)) {
             Crossfade(targetState = AppState.stage, animationSpec = tween(450), label = "stage") { stage ->
                 when (stage) {
@@ -77,20 +81,23 @@ fun BingrRoot() {
         }
         // herinnering die nu begint (van elk profiel, met de profielnaam), zoals de banner op Apple TV; onder de speler
         val due = Reminders.due
-        if (due != null && limit == null && AppState.stage != AppState.Stage.SPLASH) {
+        if (due != null && limit == null && !activate && AppState.stage != AppState.Stage.SPLASH) {
             key(due.id) { ReminderBanner(due) }
         }
         if (AppState.showMultiview) {
-            FullLayer(Modifier.blockFocus(AppState.playing != null || limit != null)) {
+            FullLayer(Modifier.blockFocus(AppState.playing != null || limit != null || activate)) {
                 MultiviewScreen(onClose = { AppState.showMultiview = false })
             }
         }
         val item = AppState.playing
         if (item != null) {
-            FullLayer(Modifier.blockFocus(limit != null)) { PlayerScreen(item = item, onClose = { AppState.playing = null }) }
+            FullLayer(Modifier.blockFocus(limit != null || activate)) { PlayerScreen(item = item, onClose = { AppState.playing = null }) }
         }
         if (limit != null) {
             FullLayer { TooManyDevicesScreen(limit) }
+        }
+        if (activate) {
+            FullLayer { ActivateLifetimeScreen() }
         }
         // beheerberichten komen als pushmelding (docs/PUSH.md in iptv-ios-appletv); de in-app mededelingen van build 62 zijn weg.
         // In het hoofdscherm: één keer uitleg + toestemming voor meldingen (Android 13+), daarna een tik op een melding afhandelen
@@ -115,6 +122,9 @@ fun BingrRoot() {
         }
         LaunchedEffect(limit != null) {
             if (limit != null) { AppState.playing = null; AppState.showMultiview = false }
+        }
+        LaunchedEffect(activate) {
+            if (activate) { AppState.playing = null; AppState.showMultiview = false; Upgrade.close() }
         }
         // build 88: upgraden naar Lifetime (boven alles, ook boven de speler en "Too many devices")
         UpgradeDialogHost()

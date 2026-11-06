@@ -20,7 +20,8 @@ object StreamSession {
         val seriesId: String? = null, val seriesTitle: String? = null,
     )
 
-    class Owner(val info: () -> Info, val onBlocked: (Account.StreamList) -> Unit)
+    /** [onActivation] (build 167): stream_start gaf 403 activation_required; afspelen stoppen (het scherm Activeer Lifetime komt erover). */
+    class Owner(val info: () -> Info, val onBlocked: (Account.StreamList) -> Unit, val onActivation: () -> Unit = {})
 
     private var owner: Owner? = null
     /** Op de achtergrond gezet: stream_stop is al verstuurd. */
@@ -71,6 +72,12 @@ object StreamSession {
             owner = null
             pingJob?.cancel(); pingJob = null
             o.onBlocked(r.list)
+        }
+        if (r is Account.StreamStart.ActivationRequired && owner === o) {
+            owner = null
+            pingJob?.cancel(); pingJob = null
+            o.onActivation()
+            Activation.streamBlocked()
         }
     }
 

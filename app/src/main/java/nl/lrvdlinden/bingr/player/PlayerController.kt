@@ -593,7 +593,8 @@ class PlayerController(item: PlayableItem) {
         endStream()
         streamItemID = item.id
         streamLimit = null
-        val o = StreamSession.Owner(info = { streamInfo() }, onBlocked = { l -> blockedByLimit(l) })
+        val o = StreamSession.Owner(info = { streamInfo() }, onBlocked = { l -> blockedByLimit(l) },
+            onActivation = { blockedByActivation() })
         streamOwner = o
         StreamSession.begin(o)
     }
@@ -636,6 +637,16 @@ class PlayerController(item: PlayableItem) {
         runCatching { engine.stop() }
         isPlaying = false; isBuffering = false; reconnecting = false
         streamLimit = l
+    }
+
+    /** Build 167: 403 activation_required: afspelen stoppen; het scherm Activeer Lifetime komt over alles heen. */
+    private fun blockedByActivation() {
+        streamOwner = null
+        streamItemID = null
+        saveProgress()
+        timer?.cancel(); timer = null
+        runCatching { engine.stop() }
+        isPlaying = false; isBuffering = false; reconnecting = false
     }
 
     /** "Close" of "Try again" op het scherm "Too many people are watching". */

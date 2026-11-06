@@ -190,7 +190,13 @@ jobs:
               tools/test/Build166LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b166-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b166-test.jar" | tee "$RUNNER_TEMP/b166-test.txt"; rc19=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 166::$(grep -E '^dagbalk' "$RUNNER_TEMP/b166-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b166-test.txt")"
-            [ $rc19 -eq 0 ] && [ $rc18 -eq 0 ] && [ $rc17 -eq 0 ] && [ $rc16 -eq 0 ] && [ $rc15 -eq 0 ] && [ $rc14 -eq 0 ] && [ $rc13 -eq 0 ] && [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
+            # build 167: alleen Lifetime (access, lifetime_only, aankondigingskaart, link met ?code=, datums, knoppen)
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
+              app/src/main/java/nl/lrvdlinden/bingr/features/Build167Logic.kt \
+              tools/test/Build167LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b167-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b167-test.jar" | tee "$RUNNER_TEMP/b167-test.txt"; rc20=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 167::$(grep -E '^lifetime' "$RUNNER_TEMP/b167-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b167-test.txt")"
+            [ $rc20 -eq 0 ] && [ $rc19 -eq 0 ] && [ $rc18 -eq 0 ] && [ $rc17 -eq 0 ] && [ $rc16 -eq 0 ] && [ $rc15 -eq 0 ] && [ $rc14 -eq 0 ] && [ $rc13 -eq 0 ] && [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi
