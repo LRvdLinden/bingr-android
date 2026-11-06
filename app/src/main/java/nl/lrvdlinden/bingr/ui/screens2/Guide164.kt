@@ -3,7 +3,6 @@ package nl.lrvdlinden.bingr
 import android.content.res.Configuration
 import android.view.LayoutInflater
 import android.view.View
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -29,11 +28,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Notifications
@@ -225,10 +225,12 @@ fun GuidePhone(
     channels: List<Channel>,
     query: String,
     onQuery: (String) -> Unit,
-    onBack: () -> Unit,
+    groupTitle: String,
+    onGroups: () -> Unit,
+    onList: () -> Unit,
     onPlay: (Channel) -> Unit,
 ) {
-    BackHandler(onBack = onBack)
+    // build 165: de gids is de startweergave van Live TV; terug werkt dus als op elk tabblad (geen BackHandler meer)
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(30_000); now = System.currentTimeMillis() } }
     var selID by rememberSaveable { mutableStateOf<String?>(null) }
@@ -254,12 +256,16 @@ fun GuidePhone(
     }
 
     Column(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding()) {
-        // kop: terug, titel, zoeken en dag kiezen
-        Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 4.dp),
+        // kop: titel + groep, lijst (build 165: de bestaande wisselknop), groep kiezen, zoeken en dag kiezen
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            S2IconButton(Icons.AutoMirrored.Filled.ArrowBack, L("Back"), size = 22.dp, onClick = onBack)
-            Text(L("TV guide"), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier.weight(1f).padding(start = 6.dp))
+            Column(Modifier.weight(1f)) {
+                Text(L("TV guide"), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                Text(if (query.isNotEmpty()) L("All channels") else groupTitle, color = Theme.secondary, fontSize = 12.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            S2LiveHeaderButton(L("List"), Icons.AutoMirrored.Filled.List, onClick = onList)
+            S2IconButton(Icons.Default.FilterList, L("Categories"), size = 20.dp, onClick = onGroups)
             S2IconButton(Icons.Default.Search, L("Search"), size = 20.dp) {
                 searchOpen = !searchOpen; if (!searchOpen) onQuery("")
             }
@@ -441,8 +447,16 @@ private fun GuidePhoneRow(c: Channel, p: EPGProgram, now: Long, onClick: () -> U
  * na ±1 s speelt daar de zender live zonder geluid; OK = volledig scherm. OK op een ander programma = het programmablad.
  */
 @Composable
-fun GuideTV(channels: List<Channel>, onBack: () -> Unit, onPlay: (Channel) -> Unit) {
-    BackHandler(onBack = onBack)
+fun GuideTV(
+    channels: List<Channel>,
+    query: String,
+    onQuery: (String) -> Unit,
+    groupTitle: String,
+    onGroups: () -> Unit,
+    onList: () -> Unit,
+    onPlay: (Channel) -> Unit,
+) {
+    // build 165: de gids is de startweergave van Live TV; terug werkt dus als op elk tabblad (geen BackHandler meer)
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(30_000); now = System.currentTimeMillis() } }
     var dayOffset by rememberSaveable { mutableIntStateOf(0) }
@@ -465,6 +479,15 @@ fun GuideTV(channels: List<Channel>, onBack: () -> Unit, onPlay: (Channel) -> Un
     Column(Modifier.fillMaxSize().background(Color.Black).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 36.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // build 165: lijst (de bestaande wisselknop), groep kiezen en zoeken, ook in de gids
+            S2LiveHeaderButton(L("List"), Icons.AutoMirrored.Filled.List, onClick = onList)
+            S2LiveHeaderButton(if (query.isNotEmpty()) L("All channels") else groupTitle, Icons.Default.FilterList, onClick = onGroups)
+            S2TextField(query, onQuery, L("Search channel"), modifier = Modifier.width(240.dp), plain = false,
+                leading = { Icon(Icons.Default.Search, null, tint = Theme.secondary) },
+                trailing = {
+                    if (query.isNotEmpty()) S2IconButton(Icons.Default.Close, L("Clear search"), tint = Theme.secondary, size = 18.dp) { onQuery("") }
+                })
+            Box(Modifier.width(1.dp).height(24.dp).background(G_LINE))
             offsets.forEach { o ->
                 var focused by remember { mutableStateOf(false) }
                 val on = o == day
@@ -479,7 +502,8 @@ fun GuideTV(channels: List<Channel>, onBack: () -> Unit, onPlay: (Channel) -> Un
             }
         }
         if (channels.isEmpty()) {
-            Text(L("No channels."), color = Theme.secondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 40.dp))
+            Text(if (query.isNotEmpty()) L("No channels found.") else L("No channels."), color = Theme.secondary,
+                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 40.dp))
             return@Column
         }
         LazyRow(Modifier.fillMaxSize(), state = rowState, contentPadding = PaddingValues(horizontal = 36.dp, vertical = 6.dp),
