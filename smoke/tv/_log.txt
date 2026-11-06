@@ -1,0 +1,7 @@
+start 23:18:40
+apparaat: AOSP TV on x86, API 33, ABI's x86,armeabi-v7a,armeabi
+::notice title=Rooktest release (tv)::update over de oude APK geïnstalleerd (adb install -r: Success)
+::notice title=Rooktest release (tv)::update: geïnstalleerd en gestart, na 30 s actief, geen crash (gestart in 683 ms)
+::notice title=Rooktest release (tv)::verse installatie: Success
+::notice title=Rooktest release (tv)::vers: geïnstalleerd en gestart, na 30 s actief, geen crash (gestart in 637 ms)
+einde 23:21:01, fouten: 0
