@@ -1130,7 +1130,12 @@
   "Your account hasn't been activated yet.": "لم يتم تفعيل حسابك بعد.",
   "Your personal code for %d%% off": "رمزك الشخصي لخصم %d%%",
   "Your personal discount code": "رمز الخصم الشخصي الخاص بك",
-  "Your servers, lists, profiles and settings stay saved.": "ستبقى خوادمك وقوائمك وملفاتك الشخصية وإعداداتك محفوظة."
+  "Your servers, lists, profiles and settings stay saved.": "ستبقى خوادمك وقوائمك وملفاتك الشخصية وإعداداتك محفوظة.",
+  "Buy Bingr Lifetime first, then create your account with the same email address.": "اشترِ Bingr Lifetime أولًا، ثم أنشئ حسابك بعنوان البريد الإلكتروني نفسه.",
+  "Buy Lifetime": "اشترِ Lifetime",
+  "Scan the QR code with your phone's camera to buy Lifetime on bingr.online.": "امسح رمز QR بكاميرا هاتفك لشراء Lifetime على bingr.online.",
+  "I already have an account": "لدي حساب بالفعل",
+  "Already paid? Sign in with the account you created on bingr.online.": "هل دفعت بالفعل؟ سجّل الدخول بالحساب الذي أنشأته على bingr.online."
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -2263,7 +2268,12 @@
   "Your account hasn't been activated yet.": "Dein Konto ist noch nicht aktiviert.",
   "Your personal code for %d%% off": "Dein persönlicher Code für %d%% Rabatt",
   "Your personal discount code": "Dein persönlicher Rabattcode",
-  "Your servers, lists, profiles and settings stay saved.": "Deine Server, Listen, Profile und Einstellungen bleiben gespeichert."
+  "Your servers, lists, profiles and settings stay saved.": "Deine Server, Listen, Profile und Einstellungen bleiben gespeichert.",
+  "Buy Bingr Lifetime first, then create your account with the same email address.": "Kaufe zuerst Bingr Lifetime und erstelle danach dein Konto mit derselben E-Mail-Adresse.",
+  "Buy Lifetime": "Lifetime kaufen",
+  "Scan the QR code with your phone's camera to buy Lifetime on bingr.online.": "Scanne den QR-Code mit der Kamera deines Handys, um Lifetime auf bingr.online zu kaufen.",
+  "I already have an account": "Ich habe schon ein Konto",
+  "Already paid? Sign in with the account you created on bingr.online.": "Schon bezahlt? Melde dich mit dem Konto an, das du auf bingr.online erstellt hast."
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -3396,7 +3406,12 @@
   "Your account hasn't been activated yet.": "Tu cuenta aún no está activada.",
   "Your personal code for %d%% off": "Tu código personal con un %d%% de descuento",
   "Your personal discount code": "Tu código de descuento personal",
-  "Your servers, lists, profiles and settings stay saved.": "Tus servidores, listas, perfiles y ajustes se conservan."
+  "Your servers, lists, profiles and settings stay saved.": "Tus servidores, listas, perfiles y ajustes se conservan.",
+  "Buy Bingr Lifetime first, then create your account with the same email address.": "Compra primero Bingr Lifetime y después crea tu cuenta con el mismo correo electrónico.",
+  "Buy Lifetime": "Comprar Lifetime",
+  "Scan the QR code with your phone's camera to buy Lifetime on bingr.online.": "Escanea el código QR con la cámara de tu móvil para comprar Lifetime en bingr.online.",
+  "I already have an account": "Ya tengo una cuenta",
+  "Already paid? Sign in with the account you created on bingr.online.": "¿Ya has pagado? Inicia sesión con la cuenta que creaste en bingr.online."
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -4529,7 +4544,12 @@
   "Your account hasn't been activated yet.": "Votre compte n'est pas encore activé.",
   "Your personal code for %d%% off": "Votre code personnel pour %d%% de réduction",
   "Your personal discount code": "Votre code de réduction personnel",
-  "Your servers, lists, profiles and settings stay saved.": "Vos serveurs, listes, profils et réglages restent conservés."
+  "Your servers, lists, profiles and settings stay saved.": "Vos serveurs, listes, profils et réglages restent conservés.",
+  "Buy Bingr Lifetime first, then create your account with the same email address.": "Achetez d'abord Bingr Lifetime, puis créez votre compte avec la même adresse e-mail.",
+  "Buy Lifetime": "Acheter Lifetime",
+  "Scan the QR code with your phone's camera to buy Lifetime on bingr.online.": "Scannez le code QR avec l'appareil photo de votre téléphone pour acheter Lifetime sur bingr.online.",
+  "I already have an account": "J'ai déjà un compte",
+  "Already paid? Sign in with the account you created on bingr.online.": "Déjà payé ? Connectez-vous avec le compte créé sur bingr.online."
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -5662,7 +5682,12 @@
   "Your account hasn't been activated yet.": "Il tuo account non è ancora attivato.",
   "Your personal code for %d%% off": "Il tuo codice personale per il %d%% di sconto",
   "Your personal discount code": "Il tuo codice sconto personale",
-  "Your servers, lists, profiles and settings stay saved.": "I tuoi server, elenchi, profili e impostazioni restano salvati."
+  "Your servers, lists, profiles and settings stay saved.": "I tuoi server, elenchi, profili e impostazioni restano salvati.",
+  "Buy Bingr Lifetime first, then create your account with the same email address.": "Acquista prima Bingr Lifetime, poi crea il tuo account con lo stesso indirizzo email.",
+  "Buy Lifetime": "Acquista Lifetime",
+  "Scan the QR code with your phone's camera to buy Lifetime on bingr.online.": "Scansiona il codice QR con la fotocamera del telefono per acquistare Lifetime su bingr.online.",
+  "I already have an account": "Ho già un account",
+  "Already paid? Sign in with the account you created on bingr.online.": "Hai già pagato? Accedi con l'account creato su bingr.online."
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -6809,7 +6834,12 @@
   "Your account hasn't been activated yet.": "Je account is nog niet geactiveerd.",
   "Your personal code for %d%% off": "Je persoonlijke code voor %d%% korting",
   "Your personal discount code": "Je persoonlijke kortingscode",
-  "Your servers, lists, profiles and settings stay saved.": "Je servers, lijsten, profielen en instellingen blijven bewaard."
+  "Your servers, lists, profiles and settings stay saved.": "Je servers, lijsten, profielen en instellingen blijven bewaard.",
+  "Buy Bingr Lifetime first, then create your account with the same email address.": "Koop eerst Bingr Lifetime en maak daarna je account met hetzelfde e-mailadres.",
+  "Buy Lifetime": "Koop Lifetime",
+  "Scan the QR code with your phone's camera to buy Lifetime on bingr.online.": "Scan de QR-code met de camera van je telefoon om Lifetime te kopen op bingr.online.",
+  "I already have an account": "Ik heb al een account",
+  "Already paid? Sign in with the account you created on bingr.online.": "Al betaald? Log in met het account dat je op bingr.online hebt gemaakt."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -7942,7 +7972,12 @@
   "Your account hasn't been activated yet.": "Twoje konto nie zostało jeszcze aktywowane.",
   "Your personal code for %d%% off": "Twój osobisty kod na %d%% zniżki",
   "Your personal discount code": "Twój osobisty kod rabatowy",
-  "Your servers, lists, profiles and settings stay saved.": "Twoje serwery, listy, profile i ustawienia pozostaną zachowane."
+  "Your servers, lists, profiles and settings stay saved.": "Twoje serwery, listy, profile i ustawienia pozostaną zachowane.",
+  "Buy Bingr Lifetime first, then create your account with the same email address.": "Najpierw kup Bingr Lifetime, a potem załóż konto z tym samym adresem e-mail.",
+  "Buy Lifetime": "Kup Lifetime",
+  "Scan the QR code with your phone's camera to buy Lifetime on bingr.online.": "Zeskanuj kod QR aparatem telefonu, aby kupić Lifetime na bingr.online.",
+  "I already have an account": "Mam już konto",
+  "Already paid? Sign in with the account you created on bingr.online.": "Już zapłacono? Zaloguj się na konto utworzone na bingr.online."
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -9075,7 +9110,12 @@
   "Your account hasn't been activated yet.": "A sua conta ainda não foi ativada.",
   "Your personal code for %d%% off": "O seu código pessoal com %d%% de desconto",
   "Your personal discount code": "O seu código de desconto pessoal",
-  "Your servers, lists, profiles and settings stay saved.": "Os seus servidores, listas, perfis e definições continuam guardados."
+  "Your servers, lists, profiles and settings stay saved.": "Os seus servidores, listas, perfis e definições continuam guardados.",
+  "Buy Bingr Lifetime first, then create your account with the same email address.": "Compre primeiro o Bingr Lifetime e depois crie a sua conta com o mesmo endereço de e-mail.",
+  "Buy Lifetime": "Comprar Lifetime",
+  "Scan the QR code with your phone's camera to buy Lifetime on bingr.online.": "Leia o código QR com a câmara do telemóvel para comprar o Lifetime em bingr.online.",
+  "I already have an account": "Já tenho uma conta",
+  "Already paid? Sign in with the account you created on bingr.online.": "Já pagou? Inicie sessão com a conta que criou em bingr.online."
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -10208,7 +10248,12 @@
   "Your account hasn't been activated yet.": "Hesabın henüz etkinleştirilmedi.",
   "Your personal code for %d%% off": "%%%d indirim için kişisel kodun",
   "Your personal discount code": "Kişisel indirim kodun",
-  "Your servers, lists, profiles and settings stay saved.": "Sunucuların, listelerin, profillerin ve ayarların kayıtlı kalır."
+  "Your servers, lists, profiles and settings stay saved.": "Sunucuların, listelerin, profillerin ve ayarların kayıtlı kalır.",
+  "Buy Bingr Lifetime first, then create your account with the same email address.": "Önce Bingr Lifetime satın al, ardından aynı e-posta adresiyle hesabını oluştur.",
+  "Buy Lifetime": "Lifetime satın al",
+  "Scan the QR code with your phone's camera to buy Lifetime on bingr.online.": "Lifetime'ı bingr.online'dan satın almak için QR kodunu telefonunun kamerasıyla tara.",
+  "I already have an account": "Zaten bir hesabım var",
+  "Already paid? Sign in with the account you created on bingr.online.": "Ödeme yaptın mı? bingr.online'da oluşturduğun hesapla giriş yap."
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -11341,6 +11386,11 @@
   "Your account hasn't been activated yet.": "你的账户尚未激活。",
   "Your personal code for %d%% off": "你的专属 %d%% 折扣码",
   "Your personal discount code": "你的专属折扣码",
-  "Your servers, lists, profiles and settings stay saved.": "你的服务器、列表、个人资料和设置将继续保留。"
+  "Your servers, lists, profiles and settings stay saved.": "你的服务器、列表、个人资料和设置将继续保留。",
+  "Buy Bingr Lifetime first, then create your account with the same email address.": "请先购买 Bingr Lifetime，然后使用相同的电子邮件地址创建账户。",
+  "Buy Lifetime": "购买 Lifetime",
+  "Scan the QR code with your phone's camera to buy Lifetime on bingr.online.": "用手机相机扫描二维码，在 bingr.online 上购买 Lifetime。",
+  "I already have an account": "我已有账户",
+  "Already paid? Sign in with the account you created on bingr.online.": "已付款？请使用你在 bingr.online 上创建的账户登录。"
  }
 }

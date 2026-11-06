@@ -165,6 +165,38 @@ object Build167Logic {
         fun through(endMs: Long, tz: TimeZone, locale: Locale): String = day(lastDay(endMs, tz), tz, locale)
     }
 
+    /**
+     * Aanvulling 1 (eerst betalen, dan het account): het welkomstscherm vóór het inloggen. Na `cutover_at` (publieke
+     * `billing config`, `lifetime_only`) eerst Koop Lifetime (gastaankoop op [GUEST_URL]) en daaronder Ik heb al een
+     * account / Inloggen. Zonder (bewaarde) config, met `enabled` false of vóór de overgang: het welkomstscherm zoals nu.
+     */
+    object Welcome {
+        const val GUEST_URL = "https://bingr.online/upgrade/?guest=1"
+
+        /** `lifetime_only` uit de publieke `billing config`; tijden in epoch-ms. */
+        data class Config(val enabled: Boolean, val cutoverAt: Long?, val afterCutover: Boolean, val trialDays: Int)
+
+        fun parse(present: Boolean, enabled: Boolean?, cutoverAt: String?, afterCutover: Boolean?, trialDays: Int?,
+                  parseTime: (String?) -> Long?): Config? {
+            if (!present) return null
+            return Config(enabled == true, parseTime(cutoverAt), afterCutover == true, (trialDays ?: 0).coerceIn(0, 365))
+        }
+
+        /**
+         * Eerst kopen? Alleen als het aan staat en de overgang voorbij is: volgens de server (`after_cutover`, op het moment
+         * van ophalen) of volgens de klok (een bewaarde config van vóór de overgang).
+         */
+        fun buyFirst(c: Config?, now: Long): Boolean {
+            if (c == null || !c.enabled) return false
+            if (c.afterCutover) return true
+            val cut = c.cutoverAt ?: return false
+            return now >= cut
+        }
+
+        /** Telefoon: knop naar de betaalpagina; tv (of geen browser): QR-code met het adres. */
+        fun showQR(tv: Boolean, noBrowser: Boolean): Boolean = tv || noBrowser
+    }
+
     object Screen {
         enum class Button { OPEN_UPGRADE, CHECK_AGAIN, SUPPORT, SIGN_OUT, DELETE_ACCOUNT }
 

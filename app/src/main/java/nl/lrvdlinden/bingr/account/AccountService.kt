@@ -183,6 +183,16 @@ object Account {
 
     private fun generic() = AccountException(L("Something went wrong. Please try again."))
 
+    /**
+     * Build 167 (aanvulling 1): publieke `billing config` (zonder inloggen) met `lifetime_only`
+     * `{enabled, cutover_at, after_cutover, trial_days}`; null bij een netwerkfout of een fout van de server.
+     */
+    suspend fun billingConfigJson(): JsonElement? {
+        if (!configured) return null
+        val r = try { post("/functions/v1/billing/config", buildJsonObject { }) } catch (e: AccountException) { return null }
+        return if (r.ok) r.json else null
+    }
+
     /** Melding bij een geblokkeerd account (build 82, = iOS). */
     val bannedMessage: String
         get() = L("Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.")

@@ -333,3 +333,106 @@ fun LifetimeNoticeCard(modifier: Modifier = Modifier) {
         }
     }
 }
+
+/**
+ * Build 167, aanvulling 1 (eerst betalen, dan het account): het welkomstscherm vóór het inloggen. De publieke
+ * `billing config` wordt bewaard (Prefs), zodat het ook bij een trage verbinding meteen klopt; zonder config of zonder
+ * netwerk het welkomstscherm zoals nu.
+ */
+object LifetimeWelcome {
+    private const val KEY = "lifetime.public.config"
+
+    var config by mutableStateOf<Build167Logic.Welcome.Config?>(null)
+        private set
+    private var loaded = false
+
+    private fun parse(j: kotlinx.serialization.json.JsonElement?): Build167Logic.Welcome.Config? {
+        val lo = j.jObj?.get("lifetime_only") as? kotlinx.serialization.json.JsonObject
+        return Build167Logic.Welcome.parse(lo != null, lo.jB("enabled"), lo.jS("cutover_at"), lo.jB("after_cutover"),
+            lo.jI("trial_days"), parseTime = { Net.parseISODate(it) })
+    }
+
+    fun load() {
+        if (loaded) return
+        loaded = true
+        config = Prefs.string(KEY)?.let { s -> runCatching { parse(Http.json.parseToJsonElement(s)) }.getOrNull() }
+    }
+
+    /** Ophalen en bewaren; een fout laat de bewaarde config staan. */
+    suspend fun refresh() {
+        load()
+        val j = runCatching { Account.billingConfigJson() }.getOrNull() ?: return
+        val lo = j.jObj?.get("lifetime_only") as? kotlinx.serialization.json.JsonObject
+        // oudere server zonder lifetime_only: niets bewaren (zoals nu)
+        if (lo == null) { Prefs.remove(KEY); config = null; return }
+        Prefs.put(KEY, buildJsonObjectOf(lo))
+        config = parse(j)
+    }
+
+    private fun buildJsonObjectOf(lo: kotlinx.serialization.json.JsonObject): String =
+        kotlinx.serialization.json.JsonObject(mapOf("lifetime_only" to lo)).toString()
+
+    val buyFirst: Boolean get() = Build167Logic.Welcome.buyFirst(config, System.currentTimeMillis())
+
+    /** Gastaankoop op bingr.online in de browser; false = geen browser (dan de QR-code). */
+    fun openGuest(ctx: Context): Boolean {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(Build167Logic.Welcome.GUEST_URL))
+            .addCategory(Intent.CATEGORY_BROWSABLE)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return runCatching { ctx.startActivity(intent) }.isSuccess
+    }
+}
+
+/**
+ * Welkomstscherm na de overgangsdatum (nog niet ingelogd): Koop Lifetime (telefoon: knop naar
+ * https://bingr.online/upgrade/?guest=1; tv: QR-code met dat adres) en daaronder Ik heb al een account / Inloggen.
+ * Na betalen maakt de koper zijn account op bingr.online (of logt in); daarna gewoon inloggen in de app.
+ */
+@Composable
+fun LifetimeWelcomeScreen(onSignIn: () -> Unit) {
+    val ctx = LocalContext.current
+    val tv = AppState.isTV
+    var noBrowser by remember { mutableStateOf(false) }
+    val showQR = Build167Logic.Welcome.showQR(tv, noBrowser)
+    val first = rememberInitialFocus(key = "welcome")
+    Column(
+        Modifier.fillMaxSize().systemBarsPadding().verticalScroll(rememberScrollState()).padding(vertical = tvs(28)),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        BingrLogo(tsp(34))
+        Spacer(Modifier.height(tvs(22)))
+        Column(
+            Modifier.widthIn(max = if (tv) 900.dp else 520.dp).fillMaxWidth().padding(horizontal = Theme.edge),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(tvs(12)),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LifetimeMark(tvs(28))
+                Spacer(Modifier.width(tvs(10)))
+                Text(L("Bingr Lifetime"), color = Color.White, fontSize = tsp(24), fontWeight = FontWeight.Bold)
+            }
+            Text(L("Buy Bingr Lifetime first, then create your account with the same email address."),
+                color = Theme.secondary, fontSize = tsp(15), textAlign = TextAlign.Center)
+            Text(L("Pay once, keep it forever. No subscription."), color = Theme.secondary, fontSize = tsp(12),
+                textAlign = TextAlign.Center)
+            if (showQR) {
+                val url = Build167Logic.Welcome.GUEST_URL
+                QrCodeImage(url, tvs(170))
+                Text(Build167Logic.Links.display(url), color = Color.White, fontSize = tsp(14), fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center)
+                Text(L("Scan the QR code with your phone's camera to buy Lifetime on bingr.online."), color = Theme.secondary,
+                    fontSize = tsp(12), textAlign = TextAlign.Center)
+            } else {
+                NetflixButton(L("Buy Lifetime"), LifetimeIcon, kind = NetflixKind.ACCENT,
+                    modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).focusRequester(first)) {
+                    if (!LifetimeWelcome.openGuest(ctx)) noBrowser = true
+                }
+            }
+            Spacer(Modifier.height(tvs(4)))
+            NetflixButton(L("I already have an account"), kind = NetflixKind.SECONDARY,
+                modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp).let { if (showQR) it.focusRequester(first) else it }) { onSignIn() }
+            Text(L("Already paid? Sign in with the account you created on bingr.online."), color = Theme.secondary,
+                fontSize = tsp(12), textAlign = TextAlign.Center)
+        }
+    }
+}

@@ -113,6 +113,24 @@ fun main() {
     eq("qr op telefoon zonder browser", S.showQR(tv = false, link = true, noBrowser = true), true)
     eq("geen qr als link uit", S.showQR(tv = true, link = false, noBrowser = true), false)
 
+    // 8. welkomstscherm vóór het inloggen (aanvulling 1: eerst betalen, dan het account)
+    val W = Build167Logic.Welcome
+    val wc = W.parse(true, true, "2026-12-07T00:00:00+01:00", false, null, iso)
+    eq("welkom: config gelezen", wc?.cutoverAt, cut)
+    eq("welkom: proef standaard 0", wc?.trialDays, 0)
+    eq("welkom: geen config = zoals nu", W.buyFirst(null, cut + day), false)
+    eq("welkom: ontbreekt = null", W.parse(false, true, null, true, 0, iso), null)
+    eq("welkom: vóór de overgang zoals nu", W.buyFirst(wc, cut - 1), false)
+    eq("welkom: na de overgang (klok)", W.buyFirst(wc, cut), true)
+    eq("welkom: server zegt na de overgang", W.buyFirst(wc!!.copy(afterCutover = true, cutoverAt = null), 0), true)
+    eq("welkom: uit = zoals nu", W.buyFirst(wc.copy(enabled = false, afterCutover = true), cut + day), false)
+    eq("welkom: zonder datum en niet na = zoals nu", W.buyFirst(wc.copy(cutoverAt = null), cut + day), false)
+    eq("welkom: proefdagen begrensd", W.parse(true, true, null, false, 9999, iso)?.trialDays, 365)
+    eq("welkom: gast-url", W.GUEST_URL, "https://bingr.online/upgrade/?guest=1")
+    eq("welkom: qr op tv", W.showQR(tv = true, noBrowser = false), true)
+    eq("welkom: knop op telefoon", W.showQR(tv = false, noBrowser = false), false)
+    eq("welkom: qr zonder browser", W.showQR(tv = false, noBrowser = true), true)
+
     println("lifetime: $checks controles")
     if (failures > 0) { println("Build167LogicTest: $failures van $checks MISLUKT"); kotlin.system.exitProcess(1) }
     println("Build167LogicTest: alle $checks controles geslaagd")

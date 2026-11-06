@@ -63,11 +63,20 @@ fun AuthScreen() {
             justSignedIn = false
         }
     }
+    // build 167 (aanvulling 1): na de overgangsdatum eerst kopen, dan het account (publieke billing config, bewaard)
+    var toSignIn by remember { mutableStateOf(false) }
+    remember { LifetimeWelcome.load() }
+    LaunchedEffect(Unit) { runCatching { LifetimeWelcome.refresh() } }
+    // terug vanaf inloggen = weer het welkomstscherm (de formulieren hebben hun eigen terug eerst)
+    BackHandler(enabled = toSignIn && !Account.isSignedIn && LifetimeWelcome.buyFirst) { toSignIn = false }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AuthBackdrop()
         when {
             !Account.configured -> AuthNotConfigured()
             justSignedIn -> AuthSignedInBanner()
+            !toSignIn && !Account.isSignedIn && LifetimeWelcome.buyFirst -> {
+                LifetimeWelcomeScreen(onSignIn = { toSignIn = true })
+            }
             AppState.isTV -> AuthTv()
             else -> AuthPhone()
         }
