@@ -13,12 +13,15 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -79,9 +82,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -426,6 +432,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             if (panel == null && player.isPlaying && scrubbing == null) showControls = false
         }
     }
+    // build 169: bediening weg op TV = voorbeeldpositie van de tijdbalk vervalt (niet spoelen)
+    LaunchedEffect(showControls) { if (isTV && !showControls) scrubbing = null }
     LaunchedEffect(toastID) {
         if (toast != null) { delay(1800); toast = null }
     }
@@ -486,6 +494,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     BackHandler {
         when {
             panel != null -> panel = null
+            // build 169: Terug zet de voorbeeldpositie van de tijdbalk terug zonder te spoelen
+            isTV && scrubbing != null -> { scrubbing = null; poke() }
             isTV && showControls -> showControls = false
             else -> close()
         }
@@ -498,7 +508,12 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         if (panel != null) return false
         var handled = true
         when (code) {
-            AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { player.togglePlay(); poke() }
+            AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                // build 169: met een voorbeeldpositie op de tijdbalk springt Afspelen/Pauze erheen (zoals OK)
+                val pv = scrubbing
+                if (isTV && pv != null) { player.seekTo(pv.toDouble()); scrubbing = null } else player.togglePlay()
+                poke()
+            }
             AndroidKeyEvent.KEYCODE_MEDIA_PLAY -> { player.resume(); poke() }
             AndroidKeyEvent.KEYCODE_MEDIA_PAUSE -> { player.pause(); poke() }
             AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> seekBy(10.0)
@@ -653,6 +668,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                     onNext = { nextUp?.let { playNext(it) } },
                     onScrub = { scrubbing = it; poke() },
                     onScrubEnd = { scrubbing?.let { player.seekTo(it.toDouble()) }; scrubbing = null; poke() },
+                    onScrubCancel = { scrubbing = null; poke() },
                     onClose = { close() },
                     onPoke = { poke() },
                     onSeek = { seekBy(it) },
@@ -779,6 +795,7 @@ private fun PlayerControls(
     onNext: () -> Unit,
     onScrub: (Float) -> Unit,
     onScrubEnd: () -> Unit,
+    onScrubCancel: () -> Unit,
     onClose: () -> Unit,
     onPoke: () -> Unit,
     onSeek: (Double) -> Unit,
@@ -874,7 +891,7 @@ private fun PlayerControls(
                 Modifier.fillMaxWidth().padding(start = Theme.edge, end = Theme.edge, bottom = tvs(18)),
                 verticalArrangement = Arrangement.spacedBy(tvs(10))
             ) {
-                if (!live) PlayerTimeline(player, isTV, scrubbing, onScrub, onScrubEnd)
+                if (!live) PlayerTimeline(player, isTV, scrubbing, onScrub, onScrubEnd, onScrubCancel)
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = if (isTV) 12.dp else 0.dp),
                     horizontalArrangement = Arrangement.spacedBy(tvs(if (isTV) 14 else 22)),
@@ -925,27 +942,139 @@ private fun PlayerControls(
 }
 
 @Composable
-private fun PlayerTimeline(player: PlayerController, isTV: Boolean, scrubbing: Float?, onScrub: (Float) -> Unit, onScrubEnd: () -> Unit) {
+private fun PlayerTimeline(
+    player: PlayerController, isTV: Boolean, scrubbing: Float?,
+    onScrub: (Float) -> Unit, onScrubEnd: () -> Unit, onScrubCancel: () -> Unit,
+) {
     val frac = scrubbing?.toDouble() ?: player.position
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(tvs(12))) {
         Text(PlayerController.format(player.duration * frac), color = Theme.secondary, fontSize = tsp(12),
             fontFamily = FontFamily.Monospace, modifier = Modifier.widthIn(min = 44.dp))
         if (isTV) {
-            ProgressBar(frac, Modifier.weight(1f).height(6.dp).clip(CircleShape))
+            TvScrubBar(player, scrubbing, onScrub, onScrubEnd, onScrubCancel, Modifier.weight(1f))
         } else {
-            Slider(
-                value = frac.toFloat().coerceIn(0f, 1f),
-                onValueChange = onScrub,
-                onValueChangeFinished = onScrubEnd,
-                colors = SliderDefaults.colors(
-                    thumbColor = Theme.red, activeTrackColor = Theme.red, inactiveTrackColor = Color.White.copy(alpha = 0.3f)
-                ),
-                modifier = Modifier.weight(1f)
-            )
+            BoxWithConstraints(Modifier.weight(1f)) {
+                Slider(
+                    value = frac.toFloat().coerceIn(0f, 1f),
+                    onValueChange = onScrub,
+                    onValueChangeFinished = onScrubEnd,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Theme.red, activeTrackColor = Theme.red, inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                // build 169: tijd van de voorbeeldpositie en het verschil met nu boven de duim, zolang je sleept
+                scrubbing?.let { f ->
+                    ScrubBubble(player, f.toDouble(), inset = 10.dp, gap = 14.dp, Modifier.align(Alignment.CenterStart))
+                }
+            }
         }
         Text("-" + PlayerController.format(player.duration * (1 - frac)), color = Theme.secondary, fontSize = tsp(12),
             fontFamily = FontFamily.Monospace, textAlign = TextAlign.End, modifier = Modifier.widthIn(min = 50.dp))
     }
+}
+
+/**
+ * Build 169: tijdbalk op Android TV. Krijgt focus met de D-pad (↑ vanaf de knoppenrij), wordt dan dikker met een kop op
+ * de huidige positie. ←/→ verschuiven een voorbeeldpositie (10 s, ingedrukt houden of snel herhalen: 30 s, daarna 60 s),
+ * het afspelen loopt door. OK (of Afspelen/Pauze, in PlayerScreen) springt erheen, Terug annuleert (BackHandler).
+ * Is de focus 5 s van de balk zonder bevestigen, dan vervalt de voorbeeldpositie. Logica: [Build169Logic].
+ */
+@Composable
+private fun TvScrubBar(
+    player: PlayerController, scrubbing: Float?,
+    onScrub: (Float) -> Unit, onScrubEnd: () -> Unit, onScrubCancel: () -> Unit,
+    modifier: Modifier,
+) {
+    val S = Build169Logic.Scrub
+    val dur = player.duration
+    val canScrub = dur > 0
+    var focused by remember { mutableStateOf(false) }
+    var streak by remember { mutableIntStateOf(0) }
+    var lastMs by remember { mutableStateOf<Long?>(null) }
+    var lastDir by remember { mutableIntStateOf(0) }
+    val previewing = scrubbing != null
+    LaunchedEffect(focused, previewing) {
+        if (!focused && previewing) { delay(S.EXPIRE_MS); onScrubCancel() }
+    }
+    val barHeight = if (focused) tvs(10) else 6.dp
+    val knob = tvs(18)
+    val pos = player.position.takeIf { it.isFinite() }?.coerceIn(0.0, 1.0) ?: 0.0
+    val head = (scrubbing?.toDouble() ?: pos).coerceIn(0.0, 1.0)
+    BoxWithConstraints(
+        modifier
+            .height(tvs(24))
+            .onKeyEvent { ev ->
+                if (!canScrub) return@onKeyEvent false
+                val ne = ev.nativeKeyEvent
+                val dir = when (ne.keyCode) {
+                    AndroidKeyEvent.KEYCODE_DPAD_LEFT -> -1
+                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> 1
+                    else -> 0
+                }
+                if (dir != 0) {
+                    if (ev.type == KeyEventType.KeyDown) {
+                        val now = ne.eventTime
+                        streak = S.streak(streak, lastMs, now, ne.repeatCount, sameDirection = dir == lastDir)
+                        lastMs = now; lastDir = dir
+                        val from = scrubbing?.let { S.seconds(it.toDouble(), dur) } ?: player.currentTime
+                        onScrub(S.fraction(S.move(from, dir, streak, dur), dur).toFloat())
+                    }
+                    return@onKeyEvent true   // ←/→ blijven op de balk (geen focus naar een buur)
+                }
+                val ok = ne.keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER || ne.keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
+                    ne.keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER
+                if (ok && scrubbing != null) {
+                    if (ev.type == KeyEventType.KeyDown && ne.repeatCount == 0) { streak = 0; lastMs = null; onScrubEnd() }
+                    return@onKeyEvent true
+                }
+                false
+            }
+            .onFocusChanged { focused = it.isFocused; if (!it.isFocused) { streak = 0; lastMs = null } }
+            .focusable(enabled = canScrub)
+    ) {
+        Box(
+            Modifier.align(Alignment.CenterStart).fillMaxWidth().height(barHeight).clip(CircleShape)
+                .background(Color.White.copy(alpha = if (focused) 0.35f else 0.3f))
+        ) {
+            // voorbeeldpositie verder dan nu: lichte band tot de kop
+            if (previewing && head > pos) Box(Modifier.fillMaxHeight().fillMaxWidth(head.toFloat()).background(Color.White.copy(alpha = 0.35f)))
+            Box(Modifier.fillMaxHeight().fillMaxWidth(pos.toFloat()).background(Theme.red))
+        }
+        if (focused || previewing) {
+            Box(
+                Modifier.align(Alignment.CenterStart)
+                    .offset(x = maxWidth * head.toFloat() - knob / 2)
+                    .size(knob).clip(CircleShape).background(Color.White)
+            )
+        }
+        if (previewing) ScrubBubble(player, head, inset = 0.dp, gap = knob / 2 + 6.dp, Modifier.align(Alignment.CenterStart))
+    }
+}
+
+/**
+ * Build 169: tijd van de voorbeeldpositie plus het verschil met nu ("12:34  +4:30"), gecentreerd boven [fraction] van de
+ * breedte (min [inset] aan beide kanten, zoals de duim van de Slider). Neemt zelf geen ruimte in.
+ */
+@Composable
+private fun ScrubBubble(player: PlayerController, fraction: Double, inset: androidx.compose.ui.unit.Dp, gap: androidx.compose.ui.unit.Dp, modifier: Modifier) {
+    val S = Build169Logic.Scrub
+    val text = Build169Logic.Label.bubble(S.seconds(fraction, player.duration), player.currentTime)
+    Text(
+        text, color = Color.White, fontSize = tsp(13), fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace,
+        maxLines = 1,
+        modifier = modifier
+            .layout { m, c ->
+                val p = m.measure(Constraints())
+                val w = c.maxWidth.takeIf { it != Constraints.Infinity } ?: p.width
+                val ins = inset.roundToPx()
+                val cx = ins + ((w - 2 * ins).coerceAtLeast(0) * fraction.coerceIn(0.0, 1.0)).toInt()
+                val x = (cx - p.width / 2).coerceIn(0, (w - p.width).coerceAtLeast(0))
+                layout(0, 0) { p.place(x, -p.height - gap.roundToPx()) }
+            }
+            .clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.8f))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    )
 }
 
 @Composable
