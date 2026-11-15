@@ -415,9 +415,11 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             if (wait > 0) delay(wait)
             // build 176: vergrendelde zender: eerst de pincode; Annuleren = blijven op de huidige zender
             Locks.guardChannel(next) {
-                (next.sourceID ?: Playlists.source?.id)?.let { Store.pushRecentChannel(it, next.id) }
-                player.stop()
-                start(livePlayable(next))
+                scope.launch {
+                    (next.sourceID ?: Playlists.source?.id)?.let { Store.pushRecentChannel(it, next.id) }
+                    player.stop()
+                    start(livePlayable(next))
+                }
             }
             if (Locks.request != null) zapBanner = null
         }

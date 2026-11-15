@@ -26,7 +26,10 @@ object GuideIndex176 {
 
     class Hit(val channel: Channel, val program: EPGProgram, val field: Build176Logic.EpgSearch.Field, val start: Int, val length: Int) {
         /** Het stuk tekst om te markeren (in de titel of de beschrijving). */
-        val highlightText: String? get() = Build176Logic.EpgSearch.Hit(field, start, length).highlight(program.title, program.description)
+        fun highlightText(): String? {
+            val h = Build176Logic.EpgSearch.Hit(field, start, length)
+            return h.highlight(program.title, program.description)
+        }
     }
 
     @Volatile private var index: Index? = null
