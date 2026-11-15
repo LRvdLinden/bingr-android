@@ -116,6 +116,8 @@ Engelse versies van alle screenshots staan in [`docs/screenshots/en`](docs/scree
 - **Direct starten**: de bibliotheek uit de cache staat er meteen, verversen gebeurt op de achtergrond met een klein "Updating…"
 - **Kleur per bron** bij zoekresultaten als je meerdere bronnen hebt
 - **Trakt, 2 kanten op** (hoofdaccount): koppelcode + QR, gezien-vinkjes uit Trakt, afvinken naar Trakt, scrobblen en watchlist
+- **Radio** (build 171): radiozenders (Xtream `radio_streams`, M3U `radio="true"` of een categorie met "radio") als groep in Live TV, alleen audio met een mini-speler, op de achtergrond met bediening op het vergrendelscherm, en in **Android Auto** (Favorieten / Alle zenders / per categorie). Let op: Android Auto toont apps van buiten de Play Store alleen als je in Android Auto de ontwikkelaarsopties aanzet (tik 10× op de versie) en daar **Onbekende bronnen** aanzet.
+- **Kijk je nog?**, **bediening vergrendelen** (telefoon/tablet), **verborgen zenders** en **geblokkeerde titels** per profiel, **categorieën vastpinnen** met landfilters, **HLS-downloads** met *Alleen via wifi*, en eigen **crashrapporten** zonder derde partij (build 171)
 - **11 talen**: Engels, Nederlands, Duits, Frans, Spaans, Italiaans, Portugees, Turks, Pools, Arabisch en Chinees (gedeeld met de iOS-app)
 
 ## Ondertekensleutel
