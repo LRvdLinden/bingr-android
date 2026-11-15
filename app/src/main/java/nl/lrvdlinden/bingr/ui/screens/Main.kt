@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
@@ -94,8 +95,12 @@ fun MainScreen() {
         if (hasLive && showLive) add(MainTab(1, L("Live TV"), Icons.Default.LiveTv))
         if (showMovies) add(MainTab(2, L("Movies"), Icons.Default.Movie))
         if (showSeries) add(MainTab(3, L("Series"), Icons.Default.VideoLibrary))
+        // build 172: Sport naast Films en Series (TV: in de bovenbalk); op de telefoon (max. 5) in plaats van Categorieën,
+        // dat via Home en Live TV bereikbaar blijft
+        val sport = hasLive && showLive
+        if (sport) add(MainTab(8, L("Sport"), Icons.Default.SportsSoccer))
         // build 140: "Categorieën" naast Series, in plaats van "Mijn Bingr" (dat zit in het profielmenu achter de avatar)
-        add(MainTab(7, L("Categories"), Icons.Default.Category))
+        if (!isPhone || !sport) add(MainTab(7, L("Categories"), Icons.Default.Category))
         if (!isPhone) add(MainTab(4, L("Search"), Icons.Default.Search))
         if (Downloads.supported) add(MainTab(6, L("Downloads"), Icons.Default.Download))
     }
@@ -208,6 +213,7 @@ fun MainScreen() {
                         // build 140: het bestaande overzicht Categorieën als tabblad (kinderprofiel: alleen kindercategorieën,
                         // want het overzicht komt uit de gefilterde bibliotheek)
                         7 -> CategoriesScreen(Filter.ALL, asTab = true)
+                        8 -> SportScreen()   // build 172
                         else -> Box(Modifier.fillMaxSize().then(if (tv) Modifier else Modifier.statusBarsPadding())) { SettingsScreen() }
                     }
                 }

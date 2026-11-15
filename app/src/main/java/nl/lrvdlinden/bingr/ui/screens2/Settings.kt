@@ -534,6 +534,20 @@ fun SettingsScreen() {
                     }
                 }
             }
+            // MARK: build 172: Sport (Mijn teams en competities, standaardmoment van een belletje)
+            item {
+                var lead by remember { mutableStateOf(SportCenter.defaultLead) }
+                var favorites by remember { mutableStateOf(false) }
+                S2Section(L("Sport"), L("Matches of your teams and competitions get a reminder automatically.")) {
+                    S2Row(L("My teams and competitions"), icon = Icons.Default.Notifications,
+                        value = (Store.favoriteTeams.size + Store.favoriteCompetitions.size).takeIf { it > 0 }?.toString(),
+                        onClick = { favorites = true })
+                    S2Dropdown(L("Default notification for a match"), Build173Logic.LEADS.map { it to SportCenter.leadName(it) }, lead) {
+                        lead = it; SportCenter.defaultLead = it
+                    }
+                }
+                if (favorites) SportFavoritesDialog { favorites = false }
+            }
             // niet op TV (build 60): daar is geen deelmenu of bestandskiezer, dus beide knoppen liepen dood
             if (isMain && !AppState.isTV) {
                 // MARK: delen tussen apparaten (vervangt iCloud)

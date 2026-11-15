@@ -425,10 +425,52 @@ object Reminders {
         return o.equals(active, ignoreCase = true)
     }
 
+    // MARK: build 172: Sport
+
+    /** ID van een sportherinnering: de vaste sleutel van de wedstrijd, bij een ander profiel met "p:<profiel>:" ervoor. */
+    fun makeSportID(key: String, profileID: String?): String {
+        val main = Store.mainProfileID
+        if (profileID == null || (main != null && profileID.equals(main, ignoreCase = true))) return key
+        return "p:${profileID.lowercase()}:$key"
+    }
+
+    /** Sportherinnering van het actieve profiel voor deze wedstrijd (of null). */
+    fun sportReminder(key: String): ProgramReminder? {
+        val id = makeSportID(key, currentProfile)
+        return Store.reminders.firstOrNull { it.id == id }
+    }
+
+    /** Belletje bij een wedstrijd: één herinnering per wedstrijd en profiel, op de beste zender. */
+    fun addSport(key: String, match: Build173Logic.Match, start: Long, channel: Channel, playlistID: String, lead: Int, auto: Boolean = false) {
+        val owner = currentProfile
+        val r = ProgramReminder(id = makeSportID(key, owner), playlistID = playlistID, channelID = channel.id,
+            channelName = channel.name, title = match.title, start = start,
+            profileID = owner?.takeUnless { Store.isMain(it) }?.lowercase(),
+            leadMin = Build173Logic.lead(lead), competition = match.competition.takeIf { it.isNotEmpty() }, matchKey = key,
+            auto = if (auto) true else null)
+        remove(r.id)
+        Store.addReminder(r)
+        if (!Push.active) schedule(AppState.appContext, r)
+    }
+
+    /** Tweede regel van een sportmelding: "Eredivisie · Sport 1. Tik om live te kijken." */
+    fun sportLine(r: ProgramReminder): String =
+        listOfNotNull(r.competition?.takeIf { it.isNotEmpty() }, ContentLanguage.channelTitle(r.channelName).takeIf { it.isNotEmpty() })
+            .joinToString(" · ").let { if (it.isEmpty()) L("Tap to watch live.") else it + ". " + L("Tap to watch live.") }
+
+    /** Tweede regel van de banner in de app. */
+    fun bannerLine(r: ProgramReminder): String =
+        if (r.isSport) sportLine(r) else L("Starts now on %@", ContentLanguage.channelTitle(r.channelName))
+
     /** Titel voor melding/banner: met de profielnaam als het account meer profielen heeft ("Voor Emma: Journaal"). */
     fun displayTitle(r: ProgramReminder): String {
         // build 153: programmatitel zonder taal- en pipe-aanduidingen
-        val t = ContentLanguage.displayTitle(r.title)
+        var t = ContentLanguage.displayTitle(r.title)
+        // build 172: "Ajax - PSV begint over 5 minuten" / "… begint nu"
+        if (r.isSport) {
+            val lead = Build173Logic.lead(r.leadMin)
+            t = if (lead == 0) L("%@ starts now", t) else L("%@ starts in %d minutes", t, lead)
+        }
         if (Store.profiles.size <= 1) return t
         val id = owner(r) ?: Store.mainProfileID ?: return t
         val name = Store.profiles.firstOrNull { it.id.equals(id, ignoreCase = true) }?.name?.trim().orEmpty()
@@ -526,7 +568,7 @@ object Reminders {
 
     private fun schedule(ctx: Context, r: ProgramReminder) {
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val fire = maxOf(r.start - 120_000L, System.currentTimeMillis() + 1_000L)
+        val fire = maxOf(r.notifyAt, System.currentTimeMillis() + 1_000L)
         val pi = pending(ctx, r)
         val exactAllowed = if (Build.VERSION.SDK_INT >= 31) am.canScheduleExactAlarms() else true
         try {
@@ -550,7 +592,10 @@ object Reminders {
                 val now = System.currentTimeMillis()
                 // met actieve pushmeldingen komt de herinnering als systeemmelding (ook op de voorgrond): geen banner erbij
                 if (visible && due == null && !Push.active) {
-                    Store.reminders.firstOrNull { it.start <= now + 60_000 && it.start > now - 300_000 }?.let { r ->
+                    // build 172: sport op het gekozen moment (bij de start, 5 of 15 min eerder)
+                    Store.reminders.firstOrNull {
+                        (if (it.isSport) it.notifyAt <= now else it.start <= now + 60_000) && it.start > now - 300_000
+                    }?.let { r ->
                         due = r
                         Store.removeReminder(r.id)
                     }
@@ -569,6 +614,7 @@ object Reminders {
         // met de profielnaam (ook voor een profiel dat nu niet actief is); de herinnering zelf heeft de nieuwste naam
         val title = Store.reminders.firstOrNull { it.id == id }?.let { displayTitle(it) } ?: intent.getStringExtra(EXTRA_TITLE) ?: ""
         val channelName = ContentLanguage.channelTitle(intent.getStringExtra(EXTRA_CHANNEL_NAME) ?: "")
+        val sport = Store.reminders.firstOrNull { it.id == id }?.takeIf { it.isSport }
         ensureChannel(ctx)
         // tik: zender openen met profielcontrole, net als een herinnering via push (bingr://live, PushNav)
         val owner = Store.reminders.firstOrNull { it.id == id }?.let { owner(it) } ?: profileFromID(id)
@@ -588,7 +634,7 @@ object Reminders {
         val n = NotificationCompat.Builder(ctx, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(title)
-            .setContentText(L("Starts in 2 minutes on %@", channelName))
+            .setContentText(sport?.let { sportLine(it) } ?: L("Starts in 2 minutes on %@", channelName))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)

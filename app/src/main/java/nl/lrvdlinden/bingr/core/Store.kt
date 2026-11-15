@@ -72,6 +72,10 @@ object Store {
     var hiddenChannels by mutableStateOf(setOf<String>()); private set
     var pinnedCategories by mutableStateOf(setOf<String>()); private set
     var blockedTitles by mutableStateOf(setOf<String>()); private set
+    /** Build 172 (Sport): favoriete teams (naam), competities (id) en gedempte wedstrijden (matchKey) van het actieve profiel. */
+    var favoriteTeams by mutableStateOf(setOf<String>()); private set
+    var favoriteCompetitions by mutableStateOf(setOf<String>()); private set
+    var sportMuted by mutableStateOf(setOf<String>()); private set
     /** Startscherm (build 51) van het actieve profiel */
     var activeHomeLayout by mutableStateOf(HomeLayout()); private set
     var nasServers by mutableStateOf(listOf<NASServer>()); private set
@@ -131,6 +135,10 @@ object Store {
         val pinnedCategories: Set<String> = emptySet(),
         /** build 171: geblokkeerde titels ("<server-id>|movie:<id>" of "…|series:<id>") */
         val blockedTitles: Set<String> = emptySet(),
+        /** build 172 (Sport) */
+        val favoriteTeams: Set<String> = emptySet(),
+        val favoriteCompetitions: Set<String> = emptySet(),
+        val sportMuted: Set<String> = emptySet(),
     )
 
     /** Per-profiel-bestanden (vroeger in store/, nu in store/profile-<id>/) */
@@ -234,6 +242,9 @@ object Store {
         hiddenChannels = readIn(d, "hiddenchannels", emptySet())
         pinnedCategories = readIn(d, "pinnedcats", emptySet())
         blockedTitles = readIn(d, "blockedtitles", emptySet())
+        favoriteTeams = readIn(d, "sportteams", emptySet())
+        favoriteCompetitions = readIn(d, "sportcomps", emptySet())
+        sportMuted = readIn(d, "sportmuted", emptySet())
         activeHomeLayout = readIn(d, "homelayout", HomeLayout())
     }
 
@@ -1050,18 +1061,21 @@ object Store {
         writeIn(d, "hiddencats", data.hiddenCategories)
         writeIn(d, "hiddenchannels", data.hiddenChannels); writeIn(d, "pinnedcats", data.pinnedCategories)
         writeIn(d, "blockedtitles", data.blockedTitles)
+        writeIn(d, "sportteams", data.favoriteTeams); writeIn(d, "sportcomps", data.favoriteCompetitions)
+        writeIn(d, "sportmuted", data.sportMuted)
         if (id == activeProfileID) loadProfileData()
     }
 
     private fun readProfileData(id: String): ProfileData {
         if (id == activeProfileID) return ProfileData(favorites, myList, progress, localWatched, recentChannels, history, profileHiddenCats,
-            hiddenChannels, pinnedCategories, blockedTitles)
+            hiddenChannels, pinnedCategories, blockedTitles, favoriteTeams, favoriteCompetitions, sportMuted)
         val d = profileDir(id)
         return ProfileData(
             readIn(d, "favorites", emptySet()), readIn(d, "mylist", emptySet()), readIn(d, "progress", emptyMap()),
             readIn(d, "watched", emptySet()), readIn(d, "recent", emptyList()), readIn(d, "history", emptyList()),
             readIn(d, "hiddencats", emptySet()),
             readIn(d, "hiddenchannels", emptySet()), readIn(d, "pinnedcats", emptySet()), readIn(d, "blockedtitles", emptySet()),
+            readIn(d, "sportteams", emptySet()), readIn(d, "sportcomps", emptySet()), readIn(d, "sportmuted", emptySet()),
         )
     }
 
@@ -1072,13 +1086,17 @@ object Store {
         val pid = id ?: activeProfileID ?: return
         val d = profileDir(pid)
         val cur: Set<String> = if (pid == activeProfileID) when (file) {
-            "hiddenchannels" -> hiddenChannels; "pinnedcats" -> pinnedCategories; else -> blockedTitles
+            "hiddenchannels" -> hiddenChannels; "pinnedcats" -> pinnedCategories
+            "sportteams" -> favoriteTeams; "sportcomps" -> favoriteCompetitions; "sportmuted" -> sportMuted
+            else -> blockedTitles
         } else readIn(d, file, emptySet())
         val n = change(cur)
         if (n == cur) return
         writeIn(d, file, n)
         if (pid == activeProfileID) when (file) {
-            "hiddenchannels" -> hiddenChannels = n; "pinnedcats" -> pinnedCategories = n; else -> blockedTitles = n
+            "hiddenchannels" -> hiddenChannels = n; "pinnedcats" -> pinnedCategories = n
+            "sportteams" -> favoriteTeams = n; "sportcomps" -> favoriteCompetitions = n; "sportmuted" -> sportMuted = n
+            else -> blockedTitles = n
         }
         StateSync.profileDataChanged(pid)
     }
@@ -1103,6 +1121,25 @@ object Store {
         changeProfileSet(null, "pinnedcats") { Build171Logic.ProfileSets.toggle(it, Build171Logic.ProfileSets.categoryKey(sid, name), pinned) }
     fun isCategoryPinned(sid: String, name: String): Boolean =
         Build171Logic.ProfileSets.contains(pinnedCategories, Build171Logic.ProfileSets.categoryKey(sid, name))
+
+    // MARK: build 172: Sport (per profiel, docs/ACCOUNT.md "Build 172: Sport")
+
+    /** Favoriet team aan/uit (vergelijken op teamsleutel; bewaard als de getoonde naam). */
+    fun setFavoriteTeam(name: String, on: Boolean) = changeProfileSet(null, "sportteams") { cur ->
+        val k = Build173Logic.teamKey(name)
+        val rest = cur.filterTo(HashSet()) { Build173Logic.teamKey(it) != k }
+        if (on) rest + Build173Logic.cleanTeam(name) else rest
+    }
+    fun isFavoriteTeam(name: String): Boolean {
+        val k = Build173Logic.teamKey(name)
+        return favoriteTeams.any { Build173Logic.teamKey(it) == k }
+    }
+    fun setFavoriteCompetition(id: String, on: Boolean) = changeProfileSet(null, "sportcomps") { if (on) it + id else it - id }
+    /** Gedempt (belletje uitgezet) aan/uit; oude sleutels (> 2 dagen) gaan meteen weg. */
+    fun setSportMuted(key: String, on: Boolean) = changeProfileSet(null, "sportmuted") { cur ->
+        val pruned = Build173Logic.pruneMuted(cur, System.currentTimeMillis()).toSet()
+        if (on) pruned + key else pruned - key
+    }
 
     /** Sets van een (ander) profiel, voor de lijsten in Instellingen. */
     fun profileSets(id: String): Triple<Set<String>, Set<String>, Set<String>> {

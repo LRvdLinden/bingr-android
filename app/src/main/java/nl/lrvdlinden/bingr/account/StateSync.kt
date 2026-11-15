@@ -80,7 +80,9 @@ object StateSync {
     /** Velden met losse items (per item toegevoegd/verwijderd bijhouden). */
     private val setFields = listOf("myList", "favorites", "watched", "recentChannels", "hiddenCategories",
         // build 171: per profiel, zelfde vorm als hiddenCategories (docs/ACCOUNT.md "Build 171")
-        "hiddenChannels", "pinnedCategories", "blockedTitles")
+        "hiddenChannels", "pinnedCategories", "blockedTitles",
+        // build 172 (Sport): per profiel, zelfde vorm (docs/ACCOUNT.md "Build 172: Sport")
+        "favoriteTeams", "favoriteCompetitions", "sportMuted")
 
     private val active: Boolean get() = Account.isSignedIn && Account.configured
 
@@ -1142,6 +1144,11 @@ object StateSync {
             )
             // per profiel (zie docs/ACCOUNT.md → "Herinneringen per profiel"): alleen bij een ander profiel dan het hoofdprofiel
             r.profileID?.let { m["profileID"] = JsonPrimitive(it.lowercase()) }
+            // build 172 (Sport)
+            r.leadMin?.let { m["leadMin"] = JsonPrimitive(it) }
+            r.competition?.takeIf { it.isNotEmpty() }?.let { m["competition"] = JsonPrimitive(it) }
+            r.matchKey?.let { m["matchKey"] = JsonPrimitive(it) }
+            if (r.auto == true) m["auto"] = JsonPrimitive(true)
             JsonObject(m)
         }
         return JsonObject(base + mapOf(
@@ -1161,6 +1168,11 @@ object StateSync {
                 start = time(r["start"]) ?: return@mapNotNull null,
                 // profiel: het veld, anders uit de ID ("p:<profiel>:…"), anders het hoofdprofiel (null)
                 profileID = (r.jS("profileID")?.takeIf { it.isNotEmpty() } ?: Reminders.profileFromID(id))?.lowercase(),
+                // build 172 (Sport): optioneel
+                leadMin = (r["leadMin"] as? JsonPrimitive)?.content?.toDoubleOrNull()?.toInt(),
+                competition = r.jS("competition")?.takeIf { it.isNotEmpty() },
+                matchKey = r.jS("matchKey")?.takeIf { it.isNotEmpty() },
+                auto = if ((r["auto"] as? JsonPrimitive)?.content == "true") true else null,
             )
         }.distinctBy { it.id }
     }
@@ -1492,6 +1504,9 @@ object StateSync {
         record("hiddenChannels", d.hiddenChannels.associateWith { null })
         record("pinnedCategories", d.pinnedCategories.associateWith { null })
         record("blockedTitles", d.blockedTitles.associateWith { null })
+        record("favoriteTeams", d.favoriteTeams.associateWith { null })
+        record("favoriteCompetitions", d.favoriteCompetitions.associateWith { null })
+        record("sportMuted", d.sportMuted.associateWith { null })
         // recente zenders: volgorde = tijd (nieuwste eerst)
         val known = present["recentChannels"] ?: emptyMap()
         val order = known.entries.sortedByDescending { it.value }.map { it.key }.filter { it in d.recent }
@@ -1980,6 +1995,9 @@ object StateSync {
             hiddenChannels = present("hiddenChannels").keys.mapTo(HashSet()) { Build171Logic.ProfileSets.norm(it) },
             pinnedCategories = present("pinnedCategories").keys.mapTo(HashSet()) { Build171Logic.ProfileSets.norm(it) },
             blockedTitles = present("blockedTitles").keys.mapTo(HashSet()) { Build171Logic.ProfileSets.norm(it) },
+            favoriteTeams = present("favoriteTeams").keys,
+            favoriteCompetitions = present("favoriteCompetitions").keys,
+            sportMuted = present("sportMuted").keys,
         )
         // build 147: de bestanden van een niet-actief profiel hier lezen (buiten de main thread); op de main thread alleen
         // nog toepassen (een profiel dat intussen actief werd, leest daar uit het geheugen)

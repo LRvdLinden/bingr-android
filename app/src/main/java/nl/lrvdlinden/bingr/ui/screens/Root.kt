@@ -155,7 +155,7 @@ private fun ReminderBanner(r: ProgramReminder) {
             Column(Modifier.weight(1f)) {
                 Text(Reminders.displayTitle(r), color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.Bold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(L("Starts now on %@", r.channelName), color = Theme.secondary, fontSize = tsp(12),
+                Text(Reminders.bannerLine(r), color = Theme.secondary, fontSize = tsp(12),
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (Reminders.canWatch(r)) {

@@ -376,7 +376,18 @@ data class ProgramReminder(
     val start: Long,
     /** Van welk profiel (kleine letters); null = hoofdprofiel, of van vóór de herinneringen per profiel */
     val profileID: String? = null,
+    /** Build 172 (Sport, docs/ACCOUNT.md → "Build 172: Sport"): minuten vooraf (0/5/15; null = 2 min zoals altijd) */
+    val leadMin: Int? = null,
+    /** Build 172: competitie voor de tekst */
+    val competition: String? = null,
+    /** Build 172: vaste sleutel van de wedstrijd ("sport:…"); maakt het een sportherinnering */
+    val matchKey: String? = null,
+    /** Build 172: automatisch gezet (favoriet team of competitie) */
+    val auto: Boolean? = null,
 ) {
+    val isSport: Boolean get() = matchKey != null
+    /** Moment van de melding: sport `leadMin` minuten vooraf, anders 2 minuten. */
+    val notifyAt: Long get() = start - (if (isSport) Build173Logic.lead(leadMin) else 2) * 60_000L
     /** Build 153: zendernaam zoals de app hem toont. */
     val displayChannelName: String get() = ContentLanguage.channelTitle(channelName)
 }
