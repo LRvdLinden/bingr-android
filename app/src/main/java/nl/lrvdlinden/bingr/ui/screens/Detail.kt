@@ -38,6 +38,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Downloading
@@ -131,6 +135,9 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
     var seasonMenu by remember { mutableStateOf(false) }
     var addToCollection by remember { mutableStateOf(false) }
     var blockConfirm by remember { mutableStateOf(false) }
+    /** Build 175: downloaden vanuit Meer: keuze bij een serie en de bevestiging (hele serie, downloads verwijderen) */
+    var seriesDownloads by remember { mutableStateOf(false) }
+    var downloadConfirm by remember { mutableStateOf<DownloadConfirm175?>(null) }
     var recMatches by remember(target.id) { mutableStateOf(mapOf<String, DetailTarget>()) }
     /** Trailer per seizoen (TMDB, build 53); null-waarde = opgezocht, geen seizoenstrailer. */
     var seasonTrailers by remember(target.id) { mutableStateOf(mapOf<Int, String?>()) }
@@ -351,6 +358,74 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
             val err = Downloads.start(item, seriesTitle, target.poster)
             flash(err ?: L("Download started"))
         }
+    }
+
+    /** Build 175: afleveringen van deze serie met de stand van hun download (null bij een film) */
+    fun seriesDownloadModel(): Triple<List<PlayableItem>, List<Build175Logic.Episode>, Build175Logic.SeriesMenu>? {
+        val st = target as? DetailTarget.SeriesT ?: return null
+        val items = episodes.map { Playables.episode(it, st.series, imdb) }
+        val eps = episodes.zip(items).map { (e, it) ->
+            Build175Logic.Episode(it.id, e.season, e.number, Downloads.canDownload(it), Build175Logic.state(Downloads.find(pid, it.id)?.status))
+        }
+        return Triple(items, eps, Build175Logic.seriesMenu(eps, season, nextEpisode?.id))
+    }
+
+    /** Build 175: meerdere afleveringen na elkaar in de wachtrij (Downloads werkt ze één voor één af) */
+    fun downloadMany(list: List<PlayableItem>) {
+        if (list.isEmpty()) return
+        val seriesTitle = (target as? DetailTarget.SeriesT)?.series?.title
+        scope.launch {
+            var err: String? = null
+            for (it in list) { val e = Downloads.start(it, seriesTitle, target.poster); if (err == null) err = e }
+            flash(err ?: if (list.size == 1) L("Download started") else L("%d episodes added to Downloads", list.size))
+        }
+    }
+
+    /** Build 175: een keuze uit het seriemenu (seizoen, volgende 3, hele serie) */
+    fun downloadScope(scope175: Build175Logic.Scope) {
+        val (items, eps, _) = seriesDownloadModel() ?: return
+        val ids = Build175Logic.episodes(scope175, eps, season, nextEpisode?.id)
+        val byID = items.associateBy { it.id }
+        val chosen = ids.mapNotNull { byID[it] }
+        if (Build175Logic.needsConfirmation(scope175, chosen.size)) downloadConfirm = DownloadConfirm175(download = chosen)
+        else downloadMany(chosen)
+    }
+
+    /** Build 175: Downloaden in Meer bij een film: de stand van de download, of uitgegrijsd met de reden */
+    fun movieDownloadActions(): List<S2Action> {
+        val movie = (target as? DetailTarget.MovieT)?.let { Playables.movie(it.movie, imdb) } ?: return emptyList()
+        if (!Downloads.supported) return emptyList()
+        val dl = Downloads.find(pid, movie.id)
+        return when (Build175Logic.movieMenu(Downloads.canDownload(movie), Build175Logic.state(dl?.status))) {
+            Build175Logic.MovieMenu.DOWNLOADED -> listOfNotNull(
+                S2Action(L("Downloaded") + "  ✓", Icons.Default.DownloadDone, enabled = false) {},
+                dl?.let { x -> S2Action(L("Play offline"), Icons.Default.PlayArrow) { AppState.play(Downloads.playable(x)) } },
+                dl?.let { x -> S2Action(L("Delete"), Icons.Default.Delete, destructive = true) { Downloads.delete(x.key) } },
+            )
+            Build175Logic.MovieMenu.ACTIVE -> listOfNotNull(
+                dl?.let { x -> S2Action(L("Pause download") + " · ${(x.progress * 100).toInt()}%", Icons.Default.Pause) { Downloads.pause(x.key) } },
+                dl?.let { x -> S2Action(L("Delete"), Icons.Default.Delete, destructive = true) { Downloads.delete(x.key) } },
+            )
+            Build175Logic.MovieMenu.RESUME -> listOfNotNull(
+                dl?.let { x -> S2Action(L("Resume download"), Icons.Default.Download) { Downloads.resume(x.key) } },
+                dl?.let { x -> S2Action(L("Delete"), Icons.Default.Delete, destructive = true) { Downloads.delete(x.key) } },
+            )
+            Build175Logic.MovieMenu.DOWNLOAD -> listOf(S2Action(L("Download"), Icons.Default.Download) { download(movie, null) })
+            Build175Logic.MovieMenu.UNAVAILABLE -> listOf(
+                S2Action(L("Download"), Icons.Default.Download, enabled = false, subtitle = L("This stream can't be downloaded")) {},
+            )
+        }
+    }
+
+    /** Build 175: Downloaden in Meer bij een serie: opent de keuze, of uitgegrijsd met de reden */
+    fun seriesDownloadAction(): S2Action? {
+        if (target !is DetailTarget.SeriesT || !Downloads.supported) return null
+        val menu = seriesDownloadModel()?.third
+        if (menu == null || !menu.available) {
+            return S2Action(L("Download"), Icons.Default.Download, enabled = false, subtitle = L("This stream can't be downloaded")) {}
+        }
+        return if (menu.complete) S2Action(L("Downloaded") + "  ✓", Icons.Default.DownloadDone) { seriesDownloads = true }
+        else S2Action(L("Download"), Icons.Default.Download) { seriesDownloads = true }
     }
 
     fun toggleMyList() {
@@ -639,6 +714,14 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                                 when { dl?.isDone == true -> Icons.Default.DownloadDone; dl != null && dl.status != Downloads.FAILED -> Icons.Default.Downloading; else -> Icons.Default.Download },
                                 tint = if (dl?.isDone == true) Theme.red else Color.White
                             ) { download(movieItem, null) }
+                        }
+                        // build 175: tablet: serie downloaden (seizoen, volgende 3, hele serie)
+                        if (target is DetailTarget.SeriesT && Downloads.supported && episodes.isNotEmpty()) {
+                            val m = seriesDownloadModel()?.third
+                            if (m != null && m.available) DetailCircleButton(
+                                if (m.complete) Icons.Default.DownloadDone else Icons.Default.Download,
+                                tint = if (m.complete) Theme.red else Color.White
+                            ) { seriesDownloads = true }
                         }
                         // geen deelknop op Android TV, Google TV en Fire TV (zie docs/ACCOUNT.md, build 45)
                         if (!tv) DetailCircleButton(Icons.Default.Share) { share() }
@@ -1028,16 +1111,45 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
         // build 174: trailer in de app; Meer en de keuze onder Bronnen (telefoon)
         trailerOpen?.let { t -> TrailerPlayerDialog(t) { trailerOpen = null } }
         if (moreMenu) {
-            val movieItem = (target as? DetailTarget.MovieT)?.let { Playables.movie(it.movie, imdb) }
             S2ActionDialog(title, listOfNotNull(
                 if (!target.id.startsWith("rec-") && !DiscoverItem.isExternal(target.id)) S2Action(L("Add to collection…"), Icons.AutoMirrored.Filled.PlaylistAdd) { addToCollection = true } else null,
-                if (movieItem != null && Downloads.canDownload(movieItem)) {
-                    val dl = Downloads.find(pid, movieItem.id)
-                    S2Action(if (dl?.isDone == true) L("Downloaded") else L("Download"), if (dl?.isDone == true) Icons.Default.DownloadDone else Icons.Default.Download) { download(movieItem, null) }
-                } else null,
+                // build 175: downloaden staat er altijd (serie: keuze; film: uitgegrijsd met de reden als het niet kan)
+                seriesDownloadAction(),
+            ) + movieDownloadActions() + listOfNotNull(
                 S2Action(L("Share"), Icons.Default.Share) { share() },
                 if (Store.activeProfile?.kids != true && pid != null) S2Action(L("Hide for this profile"), Icons.Default.VisibilityOff, destructive = true) { blockConfirm = true } else null,
             ), onDismiss = { moreMenu = false })
+        }
+        // build 175: downloaden bij een serie: seizoen, volgende 3, hele serie, en de downloads verwijderen
+        if (seriesDownloads) {
+            val model = seriesDownloadModel()
+            if (model == null) seriesDownloads = false else {
+                val (_, eps, m) = model
+                fun count(n: Int) = if (n == 0) L("Downloaded") else L("%d episodes", n)
+                S2ActionDialog(L("Download"), listOfNotNull(
+                    if (m.complete) S2Action(L("Downloaded") + "  ✓", Icons.Default.DownloadDone, enabled = false) {} else null,
+                    S2Action(L("Download this season"), Icons.Default.Download, enabled = m.season > 0, subtitle = count(m.season)) { downloadScope(Build175Logic.Scope.SEASON) },
+                    S2Action(L("Next 3 episodes"), Icons.Default.SkipNext, enabled = m.nextThree > 0, subtitle = count(m.nextThree)) { downloadScope(Build175Logic.Scope.NEXT_THREE) },
+                    S2Action(L("Entire series"), Icons.Default.VideoLibrary, enabled = m.all > 0, subtitle = count(m.all)) { downloadScope(Build175Logic.Scope.ALL) },
+                    if (m.downloaded > 0) S2Action(L("Delete"), Icons.Default.Delete, destructive = true) {
+                        downloadConfirm = DownloadConfirm175(delete = eps.filter { it.state != Build175Logic.State.NONE }.map { it.id })
+                    } else null,
+                ), onDismiss = { seriesDownloads = false }, message = title)
+            }
+        }
+        downloadConfirm?.let { c ->
+            if (c.delete.isEmpty()) {
+                S2ActionDialog(L("Download %d episodes?", c.download.size), listOf(
+                    S2Action(L("Download"), Icons.Default.Download, primary = true) { downloadMany(c.download) },
+                ), onDismiss = { downloadConfirm = null },
+                    message = if (Downloads.wifiOnly) L("Downloads only start over Wi-Fi.") else L("Downloads also use mobile data."))
+            } else {
+                S2ActionDialog(L("Delete %d downloads?", c.delete.size), listOf(
+                    S2Action(L("Delete"), Icons.Default.Delete, destructive = true) {
+                        c.delete.forEach { id -> Downloads.find(pid, id)?.let { Downloads.delete(it.key) } }
+                    },
+                ), onDismiss = { downloadConfirm = null }, message = L("The episodes stay available to stream."))
+            }
         }
         if (sourcesChoice) {
             S2ActionDialog(L("Sources"), listOfNotNull(
@@ -1393,3 +1505,6 @@ private fun LanguageVersionChip(v: ContentLanguage.Version, onClick: () -> Unit)
             overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = tvs(220)))
     }
 }
+
+/** Build 175: bevestiging bij Hele serie downloaden ([download]) of de downloads van de serie verwijderen ([delete], id's) */
+private data class DownloadConfirm175(val download: List<PlayableItem> = emptyList(), val delete: List<String> = emptyList())

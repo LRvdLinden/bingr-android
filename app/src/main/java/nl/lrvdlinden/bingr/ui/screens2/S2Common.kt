@@ -114,6 +114,8 @@ fun s2StartOfDay(ms: Long): Long = Calendar.getInstance().apply {
  */
 data class S2Action(
     val label: String, val icon: ImageVector? = null, val destructive: Boolean = false, val primary: Boolean = false,
+    /** Build 175: uitgegrijsd (niet te kiezen), met eventueel de reden of het aantal eronder ([subtitle]) */
+    val enabled: Boolean = true, val subtitle: String? = null,
     val run: () -> Unit,
 )
 
@@ -344,8 +346,8 @@ fun S2ActionDialog(title: String?, actions: List<S2Action>, onDismiss: () -> Uni
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth()
                             .then(if (i == 0) Modifier.focusRequester(fr) else Modifier)) { onDismiss(); a.run() }
                 } else {
-                    S2Row(a.label, icon = a.icon, tint = if (a.destructive) Theme.red else Color.White,
-                        focusRequester = if (i == 0) fr else null,
+                    S2Row(a.label, icon = a.icon, subtitle = a.subtitle, tint = if (a.destructive) Theme.red else Color.White,
+                        enabled = a.enabled, focusRequester = if (i == 0 && a.enabled) fr else null,
                         onClick = { onDismiss(); a.run() })
                 }
             }

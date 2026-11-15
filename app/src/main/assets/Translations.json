@@ -1251,7 +1251,17 @@
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "انتهت جلسة OpenSubtitles. سجّل الدخول مرة أخرى من الإعدادات.",
   "Your Trakt account is locked. Check trakt.tv.": "حسابك في Trakt مقفل. تحقق من trakt.tv.",
   "Zap": "تصفّح القنوات",
-  "Open Bingr to choose your radio stations.": "افتح Bingr لاختيار محطات الراديو."
+  "Open Bingr to choose your radio stations.": "افتح Bingr لاختيار محطات الراديو.",
+  "Download this season": "تنزيل هذا الموسم",
+  "Next 3 episodes": "الحلقات الثلاث التالية",
+  "Entire series": "المسلسل كاملًا",
+  "This stream can't be downloaded": "لا يمكن تنزيل هذا البث",
+  "Download %d episodes?": "تنزيل %d حلقة؟",
+  "Delete %d downloads?": "حذف %d تنزيلات؟",
+  "Downloads only start over Wi-Fi.": "تتم التنزيلات عبر Wi-Fi فقط.",
+  "Downloads also use mobile data.": "تستخدم التنزيلات بيانات الجوال أيضًا.",
+  "The episodes stay available to stream.": "تبقى الحلقات متاحة للبث.",
+  "%d episodes added to Downloads": "تمت إضافة %d حلقة إلى التنزيلات"
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -2505,7 +2515,17 @@
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "Deine OpenSubtitles-Sitzung ist abgelaufen. Melde dich in den Einstellungen erneut an.",
   "Your Trakt account is locked. Check trakt.tv.": "Dein Trakt-Konto ist gesperrt. Sieh auf trakt.tv nach.",
   "Zap": "Zappen",
-  "Open Bingr to choose your radio stations.": "Öffne Bingr, um deine Radiosender zu wählen."
+  "Open Bingr to choose your radio stations.": "Öffne Bingr, um deine Radiosender zu wählen.",
+  "Download this season": "Diese Staffel herunterladen",
+  "Next 3 episodes": "Nächste 3 Folgen",
+  "Entire series": "Ganze Serie",
+  "This stream can't be downloaded": "Dieser Stream kann nicht heruntergeladen werden",
+  "Download %d episodes?": "%d Folgen herunterladen?",
+  "Delete %d downloads?": "%d Downloads löschen?",
+  "Downloads only start over Wi-Fi.": "Downloads laufen nur über WLAN.",
+  "Downloads also use mobile data.": "Downloads nutzen auch mobile Daten.",
+  "The episodes stay available to stream.": "Die Folgen kannst du weiterhin streamen.",
+  "%d episodes added to Downloads": "%d Folgen zu Downloads hinzugefügt"
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -3759,7 +3779,17 @@
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "Tu sesión de OpenSubtitles ha caducado. Vuelve a iniciar sesión en Ajustes.",
   "Your Trakt account is locked. Check trakt.tv.": "Tu cuenta de Trakt está bloqueada. Revisa trakt.tv.",
   "Zap": "Zapping",
-  "Open Bingr to choose your radio stations.": "Abre Bingr para elegir tus emisoras de radio."
+  "Open Bingr to choose your radio stations.": "Abre Bingr para elegir tus emisoras de radio.",
+  "Download this season": "Descargar esta temporada",
+  "Next 3 episodes": "Próximos 3 episodios",
+  "Entire series": "Serie completa",
+  "This stream can't be downloaded": "Esta emisión no se puede descargar",
+  "Download %d episodes?": "¿Descargar %d episodios?",
+  "Delete %d downloads?": "¿Eliminar %d descargas?",
+  "Downloads only start over Wi-Fi.": "Las descargas solo se hacen por wifi.",
+  "Downloads also use mobile data.": "Las descargas también usan datos móviles.",
+  "The episodes stay available to stream.": "Los episodios siguen disponibles en streaming.",
+  "%d episodes added to Downloads": "%d episodios añadidos a Descargas"
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -5013,7 +5043,17 @@
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "Ta session OpenSubtitles a expiré. Reconnecte-toi dans les Réglages.",
   "Your Trakt account is locked. Check trakt.tv.": "Ton compte Trakt est verrouillé. Vérifie sur trakt.tv.",
   "Zap": "Zapper",
-  "Open Bingr to choose your radio stations.": "Ouvrez Bingr pour choisir vos stations de radio."
+  "Open Bingr to choose your radio stations.": "Ouvrez Bingr pour choisir vos stations de radio.",
+  "Download this season": "Télécharger cette saison",
+  "Next 3 episodes": "3 prochains épisodes",
+  "Entire series": "Série entière",
+  "This stream can't be downloaded": "Ce flux ne peut pas être téléchargé",
+  "Download %d episodes?": "Télécharger %d épisodes ?",
+  "Delete %d downloads?": "Supprimer %d téléchargements ?",
+  "Downloads only start over Wi-Fi.": "Les téléchargements se font uniquement en Wi-Fi.",
+  "Downloads also use mobile data.": "Les téléchargements utilisent aussi les données mobiles.",
+  "The episodes stay available to stream.": "Les épisodes restent disponibles en streaming.",
+  "%d episodes added to Downloads": "%d épisodes ajoutés aux téléchargements"
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -6267,7 +6307,17 @@
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "La sessione OpenSubtitles è scaduta. Accedi di nuovo in Impostazioni.",
   "Your Trakt account is locked. Check trakt.tv.": "Il tuo account Trakt è bloccato. Controlla su trakt.tv.",
   "Zap": "Zapping",
-  "Open Bingr to choose your radio stations.": "Apri Bingr per scegliere le tue stazioni radio."
+  "Open Bingr to choose your radio stations.": "Apri Bingr per scegliere le tue stazioni radio.",
+  "Download this season": "Scarica questa stagione",
+  "Next 3 episodes": "Prossimi 3 episodi",
+  "Entire series": "Serie intera",
+  "This stream can't be downloaded": "Questo stream non può essere scaricato",
+  "Download %d episodes?": "Scaricare %d episodi?",
+  "Delete %d downloads?": "Eliminare %d download?",
+  "Downloads only start over Wi-Fi.": "I download avvengono solo tramite Wi-Fi.",
+  "Downloads also use mobile data.": "I download usano anche i dati cellulare.",
+  "The episodes stay available to stream.": "Gli episodi restano disponibili in streaming.",
+  "%d episodes added to Downloads": "%d episodi aggiunti ai download"
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -7535,7 +7585,17 @@
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "Je OpenSubtitles-sessie is verlopen. Log opnieuw in via Instellingen.",
   "Your Trakt account is locked. Check trakt.tv.": "Je Trakt-account is vergrendeld. Kijk op trakt.tv.",
   "Zap": "Zappen",
-  "Open Bingr to choose your radio stations.": "Open Bingr om je radiozenders te kiezen."
+  "Open Bingr to choose your radio stations.": "Open Bingr om je radiozenders te kiezen.",
+  "Download this season": "Dit seizoen downloaden",
+  "Next 3 episodes": "Volgende 3 afleveringen",
+  "Entire series": "Hele serie",
+  "This stream can't be downloaded": "Deze stream kan niet gedownload worden",
+  "Download %d episodes?": "%d afleveringen downloaden?",
+  "Delete %d downloads?": "%d downloads verwijderen?",
+  "Downloads only start over Wi-Fi.": "Downloads gaan alleen via wifi.",
+  "Downloads also use mobile data.": "Downloads gaan ook via mobiele data.",
+  "The episodes stay available to stream.": "Je kunt de afleveringen nog steeds streamen.",
+  "%d episodes added to Downloads": "%d afleveringen toegevoegd aan Downloads"
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -8789,7 +8849,17 @@
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "Sesja OpenSubtitles wygasła. Zaloguj się ponownie w Ustawieniach.",
   "Your Trakt account is locked. Check trakt.tv.": "Twoje konto Trakt jest zablokowane. Sprawdź trakt.tv.",
   "Zap": "Przełączaj",
-  "Open Bingr to choose your radio stations.": "Otwórz Bingr, aby wybrać stacje radiowe."
+  "Open Bingr to choose your radio stations.": "Otwórz Bingr, aby wybrać stacje radiowe.",
+  "Download this season": "Pobierz ten sezon",
+  "Next 3 episodes": "Następne 3 odcinki",
+  "Entire series": "Cały serial",
+  "This stream can't be downloaded": "Tego strumienia nie można pobrać",
+  "Download %d episodes?": "Pobrać %d odcinków?",
+  "Delete %d downloads?": "Usunąć %d pobranych plików?",
+  "Downloads only start over Wi-Fi.": "Pobieranie odbywa się tylko przez Wi-Fi.",
+  "Downloads also use mobile data.": "Pobieranie korzysta też z danych komórkowych.",
+  "The episodes stay available to stream.": "Odcinki nadal można streamować.",
+  "%d episodes added to Downloads": "Dodano %d odcinków do pobranych"
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -10043,7 +10113,17 @@
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "A tua sessão OpenSubtitles expirou. Inicia sessão novamente nas Definições.",
   "Your Trakt account is locked. Check trakt.tv.": "A tua conta Trakt está bloqueada. Verifica em trakt.tv.",
   "Zap": "Zapping",
-  "Open Bingr to choose your radio stations.": "Abre o Bingr para escolher as tuas rádios."
+  "Open Bingr to choose your radio stations.": "Abre o Bingr para escolher as tuas rádios.",
+  "Download this season": "Baixar esta temporada",
+  "Next 3 episodes": "Próximos 3 episódios",
+  "Entire series": "Série inteira",
+  "This stream can't be downloaded": "Este stream não pode ser baixado",
+  "Download %d episodes?": "Baixar %d episódios?",
+  "Delete %d downloads?": "Apagar %d downloads?",
+  "Downloads only start over Wi-Fi.": "Os downloads só acontecem por Wi-Fi.",
+  "Downloads also use mobile data.": "Os downloads também usam dados móveis.",
+  "The episodes stay available to stream.": "Os episódios continuam disponíveis para streaming.",
+  "%d episodes added to Downloads": "%d episódios adicionados aos downloads"
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -11297,7 +11377,17 @@
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "OpenSubtitles oturumunun süresi doldu. Ayarlar'dan yeniden giriş yap.",
   "Your Trakt account is locked. Check trakt.tv.": "Trakt hesabın kilitli. trakt.tv'yi kontrol et.",
   "Zap": "Kanal gez",
-  "Open Bingr to choose your radio stations.": "Radyo istasyonlarını seçmek için Bingr’ı aç."
+  "Open Bingr to choose your radio stations.": "Radyo istasyonlarını seçmek için Bingr’ı aç.",
+  "Download this season": "Bu sezonu indir",
+  "Next 3 episodes": "Sonraki 3 bölüm",
+  "Entire series": "Tüm dizi",
+  "This stream can't be downloaded": "Bu yayın indirilemez",
+  "Download %d episodes?": "%d bölüm indirilsin mi?",
+  "Delete %d downloads?": "%d indirme silinsin mi?",
+  "Downloads only start over Wi-Fi.": "İndirmeler yalnızca Wi-Fi üzerinden yapılır.",
+  "Downloads also use mobile data.": "İndirmeler mobil veriyi de kullanır.",
+  "The episodes stay available to stream.": "Bölümler yayın olarak izlenebilir kalır.",
+  "%d episodes added to Downloads": "%d bölüm İndirilenler'e eklendi"
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -12551,6 +12641,16 @@
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "你的 OpenSubtitles 会话已过期。请在设置中重新登录。",
   "Your Trakt account is locked. Check trakt.tv.": "你的 Trakt 账户已被锁定。请访问 trakt.tv 查看。",
   "Zap": "换台",
-  "Open Bingr to choose your radio stations.": "打开 Bingr 选择你的电台。"
+  "Open Bingr to choose your radio stations.": "打开 Bingr 选择你的电台。",
+  "Download this season": "下载本季",
+  "Next 3 episodes": "接下来 3 集",
+  "Entire series": "整部剧集",
+  "This stream can't be downloaded": "此流无法下载",
+  "Download %d episodes?": "下载 %d 集？",
+  "Delete %d downloads?": "删除 %d 个下载？",
+  "Downloads only start over Wi-Fi.": "仅通过 Wi-Fi 下载。",
+  "Downloads also use mobile data.": "下载也会使用蜂窝数据。",
+  "The episodes stay available to stream.": "这些剧集仍可在线播放。",
+  "%d episodes added to Downloads": "已将 %d 集添加到下载"
  }
 }
