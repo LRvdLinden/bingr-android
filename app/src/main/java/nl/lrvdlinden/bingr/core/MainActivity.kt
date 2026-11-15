@@ -47,6 +47,8 @@ class MainActivity : ComponentActivity() {
         setContent { BingrTheme { BingrRoot() } }
         // herinneringen (van alle profielen) als banner in de app, ook op TV waar meldingen niet altijd verschijnen
         Reminders.startChecking()
+        // build 174: widget "Bingr Radio" bijhouden (zender, afspelen/pauze, favorieten, bibliotheek); niet op tv
+        if (!AppState.isTV) RadioWidget.start()
         // meldingen (pushmeldingen, herinneringen, downloads): niet meer meteen bij het starten vragen, maar na inloggen in
         // het hoofdscherm met uitleg (Push.mainShown → NotificationPrimerDialog), alleen op telefoon/tablet
         // tik op een pushmelding of een bingr://-link (niet opnieuw na het herstellen van de activity)

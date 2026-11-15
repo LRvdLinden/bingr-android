@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Build 174: thuisscherm-widget "Bingr Radio" (RadioWidget.kt) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/radio_w_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@drawable/widget_radio_bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/radio_w_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/radio_w_sub"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="#B3B3B3"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/radio_w_toggle"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/widget_radio_button"
+            android:scaleType="center"
+            android:src="@android:drawable/ic_media_play"
+            android:tint="#FFFFFF" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <TextView android:id="@+id/radio_w_s1" style="@style/RadioWidgetStation" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" />
+        <TextView android:id="@+id/radio_w_s2" style="@style/RadioWidgetStation" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" />
+        <TextView android:id="@+id/radio_w_s3" style="@style/RadioWidgetStation" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" />
+        <TextView android:id="@+id/radio_w_s4" style="@style/RadioWidgetStation" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" />
+    </LinearLayout>
+</LinearLayout>
