@@ -4,6 +4,67 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.8 · Build 176
+_15 november 2026_
+
+### iOS, iPadOS en Android
+
+**Nieuw**
+
+- Helderheid regelen door in de speler te vegen (Android ook volume)
+
+### iOS, iPadOS, Android en Website
+
+**Nieuw**
+
+- Data besparen op mobiel netwerk
+
+### iOS, iPadOS, macOS, Android, Android TV en Website
+
+**Nieuw**
+
+- Voorvertoning: na 2 seconden op een poster of bovenaan Home speelt de trailer zonder geluid. Uit te zetten in Instellingen
+
+### iOS, iPadOS, tvOS, macOS, Android, Android TV en Website
+
+**Nieuw**
+
+- Automatisch de volgende aflevering afspelen kun je per profiel aan- of uitzetten
+- Zoeken vindt ook programma's in de beschrijvingen van de tv-gids
+- Nieuw en populair: binnenkort, nieuwe seizoenen en populair, met een herinnering op de releasedatum
+- Zenders, films en series vergrendelen met de pincode van het hoofdprofiel
+- Helpcentrum in de app
+- Momenten bewaren in de speler en later verder kijken vanaf dat moment
+
+**Verbeterd**
+
+- Lichtere posters en kleine animaties
+
+### Android
+
+**Nieuw**
+
+- Knop in de speler om de audio-uitvoer te kiezen, zoals een Bluetooth-koptelefoon
+
+### Android en Android TV
+
+**Verbeterd**
+
+- Snellere netwerklaag voor afspelen en posters, met terugval op apparaten zonder Google Play services zoals Fire TV
+- Servergegevens zoals inloggegevens en afspeellijstlinks worden versleuteld op het apparaat bewaard, zonder opnieuw in te loggen
+
+### Android TV
+
+**Nieuw**
+
+- Op Android TV en Google TV staat Verder kijken in de Watch Next-rij van het beginscherm, en op Android TV is er een kanaal Bingr met je favoriete zenders
+
+### Server
+
+**Nieuw**
+
+- Herinnering op de releasedatum als pushmelding
+
 ## Versie 1.0.7 · Build 175
 _15 november 2026_
 
