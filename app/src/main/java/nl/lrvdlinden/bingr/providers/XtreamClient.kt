@@ -27,7 +27,7 @@ class XtreamClient(source: PlaylistSource, val password: String) {
 
     companion object {
         // build 149: alleen deze velden per item (zelfde als Xtream.KEYS in tizen/js/providers.js)
-        val KEYS_LIVE = listOf("stream_id", "name", "stream_icon", "category_id", "epg_channel_id", "num", "tv_archive", "tv_archive_duration")
+        val KEYS_LIVE = listOf("stream_id", "name", "stream_icon", "category_id", "epg_channel_id", "num", "tv_archive", "tv_archive_duration", "stream_type")
         val KEYS_VOD = listOf("stream_id", "name", "stream_icon", "category_id", "container_extension", "rating", "added", "year", "tmdb", "tmdb_id")
         val KEYS_SERIES = listOf("series_id", "name", "year", "releaseDate", "cover", "category_id", "plot", "rating", "last_modified", "tmdb", "tmdb_id")
 
@@ -191,7 +191,8 @@ class XtreamClient(source: PlaylistSource, val password: String) {
                 streamURL = "$server/live/$username/$password/$sid.$liveExt",
                 epgID = l["epg_channel_id"]?.takeIf { it.isNotEmpty() },
                 number = l.int("num"),
-                catchupDays = if (l.int("tv_archive") == 1) (l.int("tv_archive_duration") ?: 0) else 0)
+                catchupDays = if (l.int("tv_archive") == 1) (l.int("tv_archive_duration") ?: 0) else 0,
+                radio = l["stream_type"] == "radio_streams")
         }
         out.trimToSize(); return out
     }
@@ -262,7 +263,8 @@ class XtreamClient(source: PlaylistSource, val password: String) {
                 streamURL = "$server/live/$username/$password/$sid.$liveExt",
                 epgID = l.jS("epg_channel_id")?.takeIf { it.isNotEmpty() },
                 number = l.jI("num"),
-                catchupDays = if (l.jI("tv_archive") == 1) (l.jI("tv_archive_duration") ?: 0) else 0)
+                catchupDays = if (l.jI("tv_archive") == 1) (l.jI("tv_archive_duration") ?: 0) else 0,
+                radio = l.jS("stream_type") == "radio_streams")
         }
 
     private fun parseVod(list: List<JsonElement>, vcMap: Map<String, String>, other: String): List<Movie> =

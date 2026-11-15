@@ -78,7 +78,9 @@ object StateSync {
     private const val MAX_RECENT = 20
 
     /** Velden met losse items (per item toegevoegd/verwijderd bijhouden). */
-    private val setFields = listOf("myList", "favorites", "watched", "recentChannels", "hiddenCategories")
+    private val setFields = listOf("myList", "favorites", "watched", "recentChannels", "hiddenCategories",
+        // build 171: per profiel, zelfde vorm als hiddenCategories (docs/ACCOUNT.md "Build 171")
+        "hiddenChannels", "pinnedCategories", "blockedTitles")
 
     private val active: Boolean get() = Account.isSignedIn && Account.configured
 
@@ -1487,6 +1489,9 @@ object StateSync {
         record("favorites", d.favorites.associateWith { null })
         record("watched", d.watched.associateWith { null })
         record("hiddenCategories", d.hiddenCategories.associateWith { null })
+        record("hiddenChannels", d.hiddenChannels.associateWith { null })
+        record("pinnedCategories", d.pinnedCategories.associateWith { null })
+        record("blockedTitles", d.blockedTitles.associateWith { null })
         // recente zenders: volgorde = tijd (nieuwste eerst)
         val known = present["recentChannels"] ?: emptyMap()
         val order = known.entries.sortedByDescending { it.value }.map { it.key }.filter { it in d.recent }
@@ -1972,6 +1977,9 @@ object StateSync {
             recent = present("recentChannels").entries.sortedByDescending { it.value.at }.map { it.key },
             history = merged.history.values.mapNotNull { it.value }.sortedByDescending { it.date },
             hiddenCategories = present("hiddenCategories").keys,
+            hiddenChannels = present("hiddenChannels").keys.mapTo(HashSet()) { Build171Logic.ProfileSets.norm(it) },
+            pinnedCategories = present("pinnedCategories").keys.mapTo(HashSet()) { Build171Logic.ProfileSets.norm(it) },
+            blockedTitles = present("blockedTitles").keys.mapTo(HashSet()) { Build171Logic.ProfileSets.norm(it) },
         )
         // build 147: de bestanden van een niet-actief profiel hier lezen (buiten de main thread); op de main thread alleen
         // nog toepassen (een profiel dat intussen actief werd, leest daar uit het geheugen)

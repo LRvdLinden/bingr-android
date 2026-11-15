@@ -154,6 +154,18 @@ fun StreamLimitScreen(info: Account.StreamList, onRetry: () -> Unit, onClose: ()
     val firstButton = rememberInitialFocus(key = info to working)
     BackHandler { onClose() }
 
+    var stopError by remember { mutableStateOf<String?>(null) }
+    /** Build 171: de stream op een ander apparaat stoppen en dan meteen zelf opnieuw starten (zonder nog een tik). */
+    fun stopOn(s: Account.StreamInfo) {
+        if (working) return
+        working = true; stopError = null
+        scope.launch {
+            val ok = Account.streamStopDevice(s.deviceId)
+            working = false
+            if (ok) onRetry() else stopError = L("Something went wrong. Please try again.")
+        }
+    }
+
     fun retry() {
         if (working) return
         working = true
@@ -189,12 +201,18 @@ fun StreamLimitScreen(info: Account.StreamList, onRetry: () -> Unit, onClose: ()
             }
             if (data.streams.isNotEmpty()) {
                 item { S2Header(L("Watching now")) }
-                itemsIndexed(data.streams, key = { _, s -> s.deviceId }) { i, s ->
-                    Column(Modifier.s2Cell(i, data.streams.size)) {
+                // build 171: langst niet gebruikt bovenaan, per stream "Stop on that device"
+                val sorted = Build171Logic.DeviceList.sortStreams(data.streams, { it.lastPing }, { it.current })
+                itemsIndexed(sorted, key = { _, s -> s.deviceId }) { i, s ->
+                    Column(Modifier.s2Cell(i, sorted.size)) {
                         if (i > 0) S2Divider()
-                        StreamRow(s, details = false)
+                        StreamRow(s, details = true)
+                        if (!s.current) Row(Modifier.padding(start = tvs(70), bottom = tvs(10))) {
+                            DeviceSmallButton(L("Stop on that device"), Theme.red, null, !working) { stopOn(s) }
+                        }
                     }
                 }
+                stopError?.let { e -> item { S2Footer(e) } }
             }
             item {
                 Row(

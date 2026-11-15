@@ -1,5 +1,6 @@
 package nl.lrvdlinden.bingr
 
+import kotlinx.coroutines.launch
 import android.app.Application
 import android.app.UiModeManager
 import android.content.Context
@@ -32,6 +33,8 @@ class BingrApplication : Application(), ImageLoaderFactory {
         Prefs.init(this)
         // build 146: startdiagnose (mijlpalen, vorige start niet klaar, crash-handler) zo vroeg mogelijk
         StartDiagnostics.start(this)
+        // build 171: eigen crashrapporten (opslaan bij een crash, versturen bij de volgende start)
+        CrashReports.install(this)
         // build 145: eenmalige omzetting: de vernieuwtermijn ("Afspeellijsten bijwerken": handmatig, elke start, 6 uur,
         // dagelijks, wekelijks) vervalt; "Servers laden bij openen" wordt "Vragen" (per apparaat, niet gesynct)
         Build145Logic.LoadOnOpen.migrate(Prefs.string(Build145Logic.LoadOnOpen.PREF))?.let { Prefs.put(Build145Logic.LoadOnOpen.PREF, it.raw) }
@@ -59,6 +62,8 @@ class BingrApplication : Application(), ImageLoaderFactory {
         ExternalDisplay.init(this)
         // build 146: oude leesbare pincodes op dit apparaat hashen (op de achtergrond, pinUpdatedAt blijft gelijk)
         ParentalControl.migrateLocalPins()
+        // build 171: crashrapporten van vorige keren versturen, rustig na het starten
+        if (!BuildConfig.STRESS && !BuildConfig.SCREENSHOTS) AppScope.launch { kotlinx.coroutines.delay(15_000); CrashReports.flush() }
         StartDiagnostics.mark("app")
     }
 }

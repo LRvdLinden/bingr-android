@@ -64,6 +64,10 @@ object Store {
     private var hiddenIndex: Map<String, Set<String>> = emptyMap()
     /** Build 128: de oude per-profiel-set van het actieve profiel (wordt nog gesynct voor oudere apps, niet meer gebruikt). */
     private var profileHiddenCats = setOf<String>()
+    /** Build 171: verborgen zenders, vastgepinde categorieën en geblokkeerde titels van het actieve profiel. */
+    var hiddenChannels by mutableStateOf(setOf<String>()); private set
+    var pinnedCategories by mutableStateOf(setOf<String>()); private set
+    var blockedTitles by mutableStateOf(setOf<String>()); private set
     /** Startscherm (build 51) van het actieve profiel */
     var activeHomeLayout by mutableStateOf(HomeLayout()); private set
     var nasServers by mutableStateOf(listOf<NASServer>()); private set
@@ -117,10 +121,17 @@ object Store {
         val history: List<HistoryEntry> = emptyList(),
         /** build 128: verborgen categorieën ("<server-id>|<naam>") */
         val hiddenCategories: Set<String> = emptySet(),
+        /** build 171: verborgen zenders ("<server-id kleine letters>|<zender-id>") */
+        val hiddenChannels: Set<String> = emptySet(),
+        /** build 171: vastgepinde categorieën ("<server-id kleine letters>|<categorienaam>") */
+        val pinnedCategories: Set<String> = emptySet(),
+        /** build 171: geblokkeerde titels ("<server-id>|movie:<id>" of "…|series:<id>") */
+        val blockedTitles: Set<String> = emptySet(),
     )
 
     /** Per-profiel-bestanden (vroeger in store/, nu in store/profile-<id>/) */
-    private val profileFiles = listOf("favorites", "mylist", "progress", "watched", "recent", "history", "hiddencats")
+    private val profileFiles = listOf("favorites", "mylist", "progress", "watched", "recent", "history", "hiddencats",
+        "hiddenchannels", "pinnedcats", "blockedtitles")
 
     fun init(ctx: Context) {
         dir = File(ctx.filesDir, "store").apply { mkdirs() }
@@ -214,6 +225,9 @@ object Store {
         recentChannels = readIn(d, "recent", emptyList())
         history = readIn(d, "history", emptyList())
         profileHiddenCats = readIn(d, "hiddencats", emptySet())
+        hiddenChannels = readIn(d, "hiddenchannels", emptySet())
+        pinnedCategories = readIn(d, "pinnedcats", emptySet())
+        blockedTitles = readIn(d, "blockedtitles", emptySet())
         activeHomeLayout = readIn(d, "homelayout", HomeLayout())
     }
 
@@ -996,17 +1010,66 @@ object Store {
         writeIn(d, "progress", data.progress); writeIn(d, "watched", data.watched)
         writeIn(d, "recent", data.recent); writeIn(d, "history", data.history)
         writeIn(d, "hiddencats", data.hiddenCategories)
+        writeIn(d, "hiddenchannels", data.hiddenChannels); writeIn(d, "pinnedcats", data.pinnedCategories)
+        writeIn(d, "blockedtitles", data.blockedTitles)
         if (id == activeProfileID) loadProfileData()
     }
 
     private fun readProfileData(id: String): ProfileData {
-        if (id == activeProfileID) return ProfileData(favorites, myList, progress, localWatched, recentChannels, history, profileHiddenCats)
+        if (id == activeProfileID) return ProfileData(favorites, myList, progress, localWatched, recentChannels, history, profileHiddenCats,
+            hiddenChannels, pinnedCategories, blockedTitles)
         val d = profileDir(id)
         return ProfileData(
             readIn(d, "favorites", emptySet()), readIn(d, "mylist", emptySet()), readIn(d, "progress", emptyMap()),
             readIn(d, "watched", emptySet()), readIn(d, "recent", emptyList()), readIn(d, "history", emptyList()),
             readIn(d, "hiddencats", emptySet()),
+            readIn(d, "hiddenchannels", emptySet()), readIn(d, "pinnedcats", emptySet()), readIn(d, "blockedtitles", emptySet()),
         )
+    }
+
+    // MARK: build 171: verborgen zenders, vastgepinde categorieën en geblokkeerde titels (per profiel, docs/ACCOUNT.md "Build 171")
+
+    /** Een set van profiel [id] (null = actief) aanpassen; gaat ~3 s later naar het account. */
+    private fun changeProfileSet(id: String?, file: String, change: (Set<String>) -> Set<String>) {
+        val pid = id ?: activeProfileID ?: return
+        val d = profileDir(pid)
+        val cur: Set<String> = if (pid == activeProfileID) when (file) {
+            "hiddenchannels" -> hiddenChannels; "pinnedcats" -> pinnedCategories; else -> blockedTitles
+        } else readIn(d, file, emptySet())
+        val n = change(cur)
+        if (n == cur) return
+        writeIn(d, file, n)
+        if (pid == activeProfileID) when (file) {
+            "hiddenchannels" -> hiddenChannels = n; "pinnedcats" -> pinnedCategories = n; else -> blockedTitles = n
+        }
+        StateSync.profileDataChanged(pid)
+    }
+
+    fun setChannelHidden(sid: String, channelID: String, hidden: Boolean, profileID: String? = null) =
+        changeProfileSet(profileID, "hiddenchannels") { Build171Logic.ProfileSets.toggle(it, Build171Logic.ProfileSets.channelKey(sid, channelID), hidden) }
+    fun setChannelKeyHidden(key: String, hidden: Boolean, profileID: String? = null) =
+        changeProfileSet(profileID, "hiddenchannels") { Build171Logic.ProfileSets.toggle(it, key, hidden) }
+    fun isChannelHidden(sid: String, channelID: String): Boolean =
+        Build171Logic.ProfileSets.contains(hiddenChannels, Build171Logic.ProfileSets.channelKey(sid, channelID))
+
+    fun setTitleBlocked(sid: String, series: Boolean, id: String, blocked: Boolean, profileID: String? = null) =
+        changeProfileSet(profileID, "blockedtitles") { Build171Logic.ProfileSets.toggle(it, Build171Logic.ProfileSets.titleKey(sid, series, id), blocked) }
+    fun setTitleKeyBlocked(key: String, blocked: Boolean, profileID: String? = null) =
+        changeProfileSet(profileID, "blockedtitles") { Build171Logic.ProfileSets.toggle(it, key, blocked) }
+    fun isTitleBlocked(sid: String?, series: Boolean, id: String): Boolean {
+        val s = sid ?: Playlists.source?.id ?: return false
+        return blockedTitles.isNotEmpty() && Build171Logic.ProfileSets.contains(blockedTitles, Build171Logic.ProfileSets.titleKey(s, series, id))
+    }
+
+    fun setCategoryPinned(sid: String, name: String, pinned: Boolean) =
+        changeProfileSet(null, "pinnedcats") { Build171Logic.ProfileSets.toggle(it, Build171Logic.ProfileSets.categoryKey(sid, name), pinned) }
+    fun isCategoryPinned(sid: String, name: String): Boolean =
+        Build171Logic.ProfileSets.contains(pinnedCategories, Build171Logic.ProfileSets.categoryKey(sid, name))
+
+    /** Sets van een (ander) profiel, voor de lijsten in Instellingen. */
+    fun profileSets(id: String): Triple<Set<String>, Set<String>, Set<String>> {
+        val d = readProfileData(id)
+        return Triple(d.hiddenChannels, d.pinnedCategories, d.blockedTitles)
     }
 
     // MARK: build 140: categorieën per account (docs/ACCOUNT.md → "Build 140")

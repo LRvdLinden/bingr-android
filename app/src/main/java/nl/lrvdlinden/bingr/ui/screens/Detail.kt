@@ -129,6 +129,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
     var afterPIN by remember { mutableStateOf<(() -> Unit)?>(null) }
     var seasonMenu by remember { mutableStateOf(false) }
     var addToCollection by remember { mutableStateOf(false) }
+    var blockConfirm by remember { mutableStateOf(false) }
     var recMatches by remember(target.id) { mutableStateOf(mapOf<String, DetailTarget>()) }
     /** Trailer per seizoen (TMDB, build 53); null-waarde = opgezocht, geen seizoenstrailer. */
     var seasonTrailers by remember(target.id) { mutableStateOf(mapOf<Int, String?>()) }
@@ -142,6 +143,9 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
 
     // build 128: titel van een andere server: Mijn lijst, downloads en afspelen op die server (zonder te wisselen)
     val pid = target.sourceID ?: Playlists.source?.id
+    // build 171: titel geblokkeerd voor dit profiel (deeplink, zoeken): alleen de melding
+    var justBlocked by remember(target.id) { mutableStateOf(false) }
+    if (!justBlocked && Store.isTitleBlocked(pid, target.isSeries, target.id)) { BlockedTitleNotice(onClose); return }
     val lib = Playlists.library
     val details = d
     val rawTitle = details?.title?.takeIf { it.isNotBlank() } ?: target.title
@@ -590,6 +594,8 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                         }
                         // geen deelknop op Android TV, Google TV en Fire TV (zie docs/ACCOUNT.md, build 45)
                         if (!tv) DetailCircleButton(Icons.Default.Share) { share() }
+                        // build 171: "Verbergen voor dit profiel" (niet in een kinderprofiel; dat stelt het hoofdaccount in)
+                        if (Store.activeProfile?.kids != true && pid != null) DetailCircleButton(Icons.Default.VisibilityOff) { blockConfirm = true }
                         DetailCapsule(L("Other sources"), Modifier.weight(1f), icon = BingrIcons.otherSources, busy = sourcesLoading) { openSources() }
                     }
                 }
@@ -974,6 +980,15 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
         if (addToCollection) {
             AddToCollectionDialog(Collections.ref(target), target.title, target.poster) { addToCollection = false }
         }
+    if (blockConfirm) {
+        S2ActionDialog(L("Hide for this profile"), listOf(
+            S2Action(L("Hide for this profile"), Icons.Default.VisibilityOff, destructive = true) {
+                val sid = pid
+                if (sid != null) { justBlocked = true; Store.setTitleBlocked(sid, target.isSeries, target.id, true); onClose() }
+            },
+        ), onDismiss = { blockConfirm = false },
+            message = L("This title disappears from rows, search, Top 10, Continue watching and My List of this profile. Undo under Settings > Profile > Blocked titles."))
+    }
 
         if (ageGate) {
             PinPad(

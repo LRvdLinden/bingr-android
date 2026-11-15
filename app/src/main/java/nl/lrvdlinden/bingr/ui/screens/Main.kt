@@ -212,6 +212,8 @@ fun MainScreen() {
                     }
                 }
             }
+            // build 171: mini-speler van de radio (blijft staan terwijl je verder bladert)
+            RadioMiniPlayer()
             if (!tv) {
                 NavigationBar(containerColor = Color.Black.copy(alpha = 0.92f), contentColor = Color.White, tonalElevation = 0.dp) {
                     tabs.forEach { t ->
@@ -258,6 +260,10 @@ fun MainScreen() {
         }
 
         ScreensStackHost()
+        // build 171: radio: te veel streams
+        Radio.blocked?.let { info ->
+            StreamLimitScreen(info, onRetry = { Radio.blocked = null }, onClose = { Radio.blocked = null })
+        }
     }
     SupportDialogHost()
     KidsGateHost()

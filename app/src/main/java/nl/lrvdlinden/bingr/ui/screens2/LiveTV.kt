@@ -23,6 +23,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Check
@@ -70,6 +72,8 @@ private const val S2_FAV_KEY = "★"
 private const val S2_RECENT_KEY = "◷"
 private const val S2_ALL_KEY = "*"
 private const val S2_EVENTS_KEY = "⚑"
+/** Build 171: radiozenders */
+private const val S2_RADIO_KEY = "♫"
 /** Collectie als groep: voorvoegsel + id */
 private const val S2_COLLECTION_PREFIX = "▣"
 
@@ -78,6 +82,7 @@ private fun s2LiveGroupTitle(g: String): String = when {
     g == S2_RECENT_KEY -> "◷ " + L("Recent")
     g == S2_ALL_KEY -> L("All channels")
     g == S2_EVENTS_KEY -> "⚑ " + L("Events")
+    g == S2_RADIO_KEY -> "♫ " + L("Radio")
     g.startsWith(S2_COLLECTION_PREFIX) -> "▣ " + (Collections.byID(g.removePrefix(S2_COLLECTION_PREFIX))?.name ?: "")
     else -> ContentLanguage.categoryTitle(g)
 }
@@ -124,10 +129,18 @@ fun LiveTVScreen() {
     val mergedGroups = remember(libKey) {
         Build150Logic.Merge.groups(lib.channelGroups).associate { it.name to it.sources.toHashSet() }
     }
-    val groups = remember(libKey, events.isNotEmpty(), channelCollections) {
-        listOf(S2_ALL_KEY, S2_FAV_KEY, S2_RECENT_KEY) + (if (events.isNotEmpty()) listOf(S2_EVENTS_KEY) else emptyList()) +
-            channelCollections.map { S2_COLLECTION_PREFIX + it.id } + mergedGroups.keys
+    // build 171: radio als eigen groep (mini-speler onderaan, speelt door op de achtergrond)
+    val hasRadio = remember(libKey) { lib.channels.any { Radio.isRadio(it) } }
+    val pinnedCats = Store.pinnedCategories
+    val groups = remember(libKey, events.isNotEmpty(), channelCollections, hasRadio, pinnedCats) {
+        listOf(S2_ALL_KEY, S2_FAV_KEY, S2_RECENT_KEY) + (if (hasRadio) listOf(S2_RADIO_KEY) else emptyList()) +
+            (if (events.isNotEmpty()) listOf(S2_EVENTS_KEY) else emptyList()) +
+            channelCollections.map { S2_COLLECTION_PREFIX + it.id } +
+            // build 171: vastgepinde categorieën bovenaan
+            Build171Logic.ProfileSets.pinnedFirst(mergedGroups.keys.toList(), pinnedCats) { g ->
+                Build171Logic.ProfileSets.categoryKey(pid, mergedGroups[g]?.firstOrNull() ?: g) }
     }
+    var allCategories by remember { mutableStateOf(false) }
     val current = if (group in groups) group else S2_ALL_KEY
     val favorites = Store.favorites
     val recents = Store.recentChannels
@@ -152,6 +165,7 @@ fun LiveTVScreen() {
             }
             current == S2_ALL_KEY -> lib.channels
             current == S2_EVENTS_KEY -> events.map { it.first }
+            current == S2_RADIO_KEY -> Radio.channels()
             current.startsWith(S2_COLLECTION_PREFIX) -> collectionChannels?.takeIf { it.first == current }?.second ?: emptyList()
             else -> mergedGroups[current]?.let { set -> lib.channels.filter { it.group in set } } ?: lib.channels.filter { it.group == current }
         }
@@ -185,6 +199,7 @@ fun LiveTVScreen() {
     val searchPending = searching && found?.first != query
 
     fun play(c: Channel) {
+        if (Radio.isRadio(c)) { Radio.play(c); return }
         if (c.sourceID != null) { AllServers.playChannel(c, visible, if (current == S2_FAV_KEY) AllServers.Field.FAVORITES else AllServers.Field.RECENT); return }
         Store.pushRecentChannel(pid, c.id)
         AppState.play(Playables.channel(c, Playlists.library.nowPlaying(c)), zap = visible)
@@ -208,6 +223,9 @@ fun LiveTVScreen() {
                     if (gridMode) Icons.AutoMirrored.Filled.List else Icons.Default.CalendarViewDay) { gridMode = !gridMode }
                 Spacer(Modifier.width(tvs(8)))
             }
+            // build 171: overzicht "Alle categorieën" (raster met aantal en logo's, landfilters, vastpinnen)
+            S2LiveHeaderButton(L("Categories"), Icons.Default.Apps, enabled = mergedGroups.isNotEmpty()) { allCategories = true }
+            Spacer(Modifier.width(tvs(8)))
             S2LiveHeaderButton("Multiview", Icons.Default.GridView, enabled = lib.channels.isNotEmpty()) {
                 AppState.openMultiview(visible.take(1), visible)
             }
@@ -300,15 +318,21 @@ fun LiveTVScreen() {
             S2Action(if (c.catchupDays > 0) L("Guide & catch-up") else L("Guide"), Icons.Default.Schedule) { guideFor = c },
             S2Action(L("Open in Multiview"), Icons.Default.GridView) { AppState.openMultiview(listOf(c), visible) },
             S2Action(L("Add to collection…"), Icons.AutoMirrored.Filled.PlaylistAdd) { collectFor = c },
-        ) + (if (c.catchupDays > 0) listOf(S2Action(L("Catch-up offset…") + catchupOffsetLabel(pid, c), Icons.Default.History) { offsetFor = c })
+        ) + (if (Store.activeProfile?.kids != true) listOf(
+            // build 171: zender verbergen voor dit profiel (Instellingen > Profiel > Verborgen zenders)
+            S2Action(L("Hide channel"), Icons.Default.VisibilityOff) { Store.setChannelHidden(c.sourceID ?: pid, c.id, true) }
+        ) else emptyList()) + (if (c.catchupDays > 0) listOf(S2Action(L("Catch-up offset…") + catchupOffsetLabel(pid, c), Icons.Default.History) { offsetFor = c })
             else emptyList()), onDismiss = { menuFor = null })
     }
     collectFor?.let { c -> AddToCollectionDialog(Collections.ref(c), c.name, c.logo) { collectFor = null } }
     offsetFor?.let { c -> CatchupOffsetDialog(pid, c) { offsetFor = null } }
     guideFor?.let { c -> GuideSheet(c, onDismiss = { guideFor = null }) }
     // build 165: groep/categorie kiezen vanuit de tv-gids (zelfde groepen als in de lijst)
+    if (allCategories) {
+        LiveCategoriesScreen(mergedGroups, lib.channels, onPick = { pickGroup(it) }, onDismiss = { allCategories = false })
+    }
     if (groupPicker) {
-        S2ActionDialog(L("Categories"), groups.map { g ->
+        S2ActionDialog(L("Categories"), listOf(S2Action("▦ " + L("All categories")) { groupPicker = false; allCategories = true }) + groups.map { g ->
             S2Action(s2LiveGroupTitle(g) + if (g == current && !searching) "  ✓" else "", primary = g == current && !searching) {
                 pickGroup(g); groupPicker = false
             }

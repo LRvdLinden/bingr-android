@@ -72,6 +72,8 @@ data class DownloadItem(
     val status: String = Downloads.QUEUED,
     val error: String? = null,
     val addedAt: Long = System.currentTimeMillis(),
+    /** build 171: HLS (.m3u8), via Media3 in de cache van [HlsDownloads] (geen los bestand) */
+    val hls: Boolean = false,
 ) {
     val key: String get() = "${sourceID ?: "-"}|$id"
     val progress: Double get() = if (totalBytes > 0) (bytes.toDouble() / totalBytes).coerceIn(0.0, 1.0) else 0.0
@@ -172,7 +174,25 @@ object Downloads {
     fun find(sourceID: String?, id: String): DownloadItem? = items.firstOrNull { it.id == id && (sourceID == null || it.sourceID == null || it.sourceID == sourceID) }
 
     /** Ruimte die alle downloads innemen (bytes). */
-    fun storageUsed(): Long = runCatching { dir.listFiles()?.sumOf { it.length() } ?: 0L }.getOrDefault(0L)
+    fun storageUsed(): Long = runCatching { dir.walkTopDown().filter { it.isFile }.sumOf { it.length() } }.getOrDefault(0L)
+
+    /** Build 171: "Alleen via wifi" (standaard aan, per apparaat), zoals "Mobiele data" uit op Apple. */
+    var wifiOnly: Boolean
+        get() = Prefs.bool("downloads.wifiOnly", true)
+        set(v) { Prefs.put("downloads.wifiOnly", v); if (::ctx.isInitialized) schedule() }
+
+    /** Nu op een netwerk met datalimiet (mobiel)? */
+    internal fun metered(): Boolean = runCatching {
+        (ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).isActiveNetworkMetered
+    }.getOrDefault(false)
+
+    /** Build 171: speelt dit af vanaf een download (telt niet als stream, net als op Apple)? */
+    fun isOffline(url: String?): Boolean {
+        if (url == null) return false
+        val scheme = Uri.parse(url).scheme?.lowercase(Locale.ROOT)
+        if (scheme == "file" || scheme == "content") return true
+        return items.any { it.hls && it.isDone && it.url == url }
+    }
 
     private fun isStreamManifest(url: String): Boolean {
         val l = url.lowercase(Locale.ROOT).substringBefore('?')
@@ -185,7 +205,8 @@ object Downloads {
         val u = item.url
         if (u != null && item.stalkerCmd == null) {
             val scheme = Uri.parse(u).scheme?.lowercase(Locale.ROOT)
-            return (scheme == "http" || scheme == "https") && !isStreamManifest(u)
+            // build 171: HLS ook (Media3 HlsDownloader); DASH niet
+            return (scheme == "http" || scheme == "https") && !u.lowercase(Locale.ROOT).substringBefore('?').endsWith(".mpd")
         }
         return item.stalkerCmd != null || item.stremio != null
     }
@@ -204,14 +225,17 @@ object Downloads {
         }
         val url = runCatching { Playlists.resolve(item) }.getOrNull() ?: return L("No stream address available.")
         val scheme = Uri.parse(url).scheme?.lowercase(Locale.ROOT)
-        if ((scheme != "http" && scheme != "https") || isStreamManifest(url)) return L("This title can't be downloaded (streaming only).")
+        if (scheme != "http" && scheme != "https") return L("This title can't be downloaded (streaming only).")
+        // build 171: HLS via Media3; DASH en andere manifesten niet
+        val hls = url.lowercase(Locale.ROOT).contains(".m3u8")
+        if (!hls && isStreamManifest(url)) return L("This title can't be downloaded (streaming only).")
         val ext = Uri.parse(url).lastPathSegment?.substringAfterLast('.', "")?.lowercase(Locale.ROOT)
             ?.takeIf { it.length in 2..4 && it.all { c -> c.isLetterOrDigit() } } ?: "mp4"
         val safe = (src ?: "x").filter { it.isLetterOrDigit() }.take(12) + "_" + item.id.filter { it.isLetterOrDigit() || it == '-' }.take(60)
         val d = DownloadItem(
             id = item.id, title = item.title, subtitle = item.subtitle, poster = poster ?: item.artwork, type = item.type,
             seriesID = item.seriesID, seriesTitle = seriesTitle, season = item.season, episode = item.episode, imdbID = item.imdbID,
-            sourceID = src, profileID = Store.activeProfileID, url = url, fileName = "$safe.$ext",
+            sourceID = src, profileID = Store.activeProfileID, url = url, fileName = if (hls) "hls/$safe" else "$safe.$ext", hls = hls,
         )
         mutate { it.filterNot { x -> x.key == d.key } + d }
         askNotificationPermission()
@@ -238,7 +262,7 @@ object Downloads {
     fun delete(key: String) {
         val d = get(key) ?: return
         mutate { l -> l.filterNot { it.key == key } }
-        runCatching { file(d).delete() }
+        if (d.hls) Thread { HlsDownloads.remove(ctx, d.url) }.start() else runCatching { file(d).delete() }
     }
 
     /**
@@ -251,7 +275,7 @@ object Downloads {
         // opslag (even) niet beschikbaar: niets weghalen, anders verdwijnen downloads die er gewoon nog zijn
         val ext = ctx.getExternalFilesDir("downloads") ?: return
         if (android.os.Environment.getExternalStorageState(ext) != android.os.Environment.MEDIA_MOUNTED) return
-        val missing = synchronized(lock) { list.filter { it.status == DONE && runCatching { !file(it).isFile }.getOrDefault(false) } }
+        val missing = synchronized(lock) { list.filter { !it.hls && it.status == DONE && runCatching { !file(it).isFile }.getOrDefault(false) } }
         if (missing.isEmpty()) return
         val keys = missing.map { it.key }.toSet()
         mutate { l -> l.filterNot { it.key in keys } }
@@ -264,13 +288,13 @@ object Downloads {
         if (gone.isEmpty()) return
         val keys = gone.map { it.key }.toSet()
         mutate { l -> l.filterNot { it.key in keys } }
-        gone.forEach { d -> runCatching { file(d).delete() } }
+        gone.forEach { d -> if (d.hls) Thread { HlsDownloads.remove(ctx, d.url) }.start() else runCatching { file(d).delete() } }
     }
 
     /** Afspeelbaar item voor een voltooide download (lokaal bestand, hervat op de opgeslagen positie). */
     fun playable(d: DownloadItem): PlayableItem = PlayableItem(
         id = d.id, title = d.seriesTitle ?: d.title, subtitle = d.subtitle,
-        url = Uri.fromFile(file(d)).toString(), type = d.type, imdbID = d.imdbID, season = d.season, episode = d.episode,
+        url = if (d.hls) d.url else Uri.fromFile(file(d)).toString(), type = d.type, imdbID = d.imdbID, season = d.season, episode = d.episode,
         artwork = d.poster, resumeAt = Store.progress[d.id]?.fraction ?: 0.0, seriesID = d.seriesID,
     )
 
@@ -283,7 +307,7 @@ object Downloads {
         if (DownloadRunner.running) return
         if (Build.VERSION.SDK_INT >= 34 && scheduleUserInitiated()) return
         val req = OneTimeWorkRequestBuilder<DownloadWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
             .build()
         runCatching { WorkManager.getInstance(ctx).enqueueUniqueWork(WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, req) }
@@ -297,7 +321,7 @@ object Downloads {
             .sumOf { d -> if (d.totalBytes > 0) (d.totalBytes - d.bytes).coerceAtLeast(0) else 0L }
         val info = JobInfo.Builder(JOB_ID, ComponentName(ctx, DownloadJobService::class.java))
             .setUserInitiated(true)
-            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            .setRequiredNetworkType(if (wifiOnly) JobInfo.NETWORK_TYPE_UNMETERED else JobInfo.NETWORK_TYPE_ANY)
             .apply { if (left > 0) setEstimatedNetworkBytes(left, JobInfo.NETWORK_BYTES_UNKNOWN.toLong()) }
             .build()
         js.schedule(info) == JobScheduler.RESULT_SUCCESS
@@ -388,6 +412,9 @@ class DownloadRunner(
 
     private suspend fun download(start: DownloadItem) = withContext(Dispatchers.IO) {
         val key = start.key
+        // build 171: "Alleen via wifi": op mobiel netwerk wachten (de taak start weer als er wifi is)
+        if (Downloads.wifiOnly && Downloads.metered()) throw NetworkLost()
+        if (start.hls) { downloadHls(start); return@withContext }
         val file = Downloads.file(start)
         var have = if (file.exists()) file.length() else 0L
         Downloads.update(key) { it.copy(status = Downloads.DOWNLOADING, error = null, bytes = have) }
@@ -448,6 +475,43 @@ class DownloadRunner(
             Downloads.update(key) { it.copy(status = Downloads.DONE, bytes = have, totalBytes = have) }
             finished(start, true)
         }
+    }
+
+    /** Build 171: HLS met Media3; hervat zelf (wat al in de cache staat, wordt overgeslagen). */
+    private fun downloadHls(start: DownloadItem) {
+        val key = start.key
+        Downloads.update(key) { it.copy(status = Downloads.DOWNLOADING, error = null) }
+        var lastUI = 0L
+        var why: String? = null
+        try {
+            HlsDownloads.download(context, start.url) { pct, bytes ->
+                val now = System.currentTimeMillis()
+                if (now - lastUI < 700) return@download true
+                lastUI = now
+                val cur = Downloads.get(key) ?: return@download false
+                if (cur.status == Downloads.PAUSED) return@download false
+                if (stopped()) { why = "stopped"; return@download false }
+                // percent → bytes: geschat totaal zodat de bestaande voortgang (bytes / totalBytes) klopt
+                val total = if (pct > 0.5f) (bytes * 100 / pct).toLong() else -1L
+                Downloads.update(key) { it.copy(bytes = bytes, totalBytes = total) }
+                runCatching { progress(Downloads.notification(context, cur.subtitle?.let { "${cur.seriesTitle ?: cur.title} · $it" } ?: cur.title,
+                    "${pct.toInt()}%", pct.toInt(), false)) }
+                true
+            }
+        } catch (e: InterruptedException) {
+            Thread.interrupted()
+        } catch (e: IOException) {
+            if (Downloads.get(key)?.status == Downloads.DOWNLOADING) throw NetworkLost()
+        } catch (e: Exception) {
+            val cur = Downloads.get(key)
+            if (cur != null && cur.status == Downloads.DOWNLOADING) { fail(key, L("This title can't be downloaded (streaming only).")); return }
+        }
+        val cur = Downloads.get(key) ?: run { HlsDownloads.remove(context, start.url); return }
+        if (cur.status == Downloads.PAUSED) return
+        if (why != null) throw NetworkLost()
+        if (cur.status != Downloads.DOWNLOADING) return
+        Downloads.update(key) { it.copy(status = Downloads.DONE, totalBytes = it.bytes) }
+        finished(start, true)
     }
 
     private fun fail(key: String, why: String) {

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Pause
@@ -54,6 +55,9 @@ fun DownloadsScreen() {
         item {
             S2Section(footer = L("Downloads are kept on this device and play without an internet connection.")) {
                 S2Row(L("Storage used"), icon = Icons.Default.Download, value = Downloads.formatBytes(used))
+                // build 171: alleen via wifi (standaard aan)
+                var wifi by remember { mutableStateOf(Downloads.wifiOnly) }
+                S2Toggle(L("Download over Wi-Fi only"), wifi, icon = Icons.Default.Wifi) { wifi = it; Downloads.wifiOnly = it }
             }
         }
         if (list.isEmpty()) {

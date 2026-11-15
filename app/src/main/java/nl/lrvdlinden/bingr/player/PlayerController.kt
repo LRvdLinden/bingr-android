@@ -214,7 +214,8 @@ class PlayerController(item: PlayableItem) {
         retryPending = false
         stopped = false
         // nieuwe titel of zender (ook zappen en de volgende aflevering): stream_start; herverbinden niet
-        if (!isPreview && streamItemID != item.id) beginStream()
+        // build 171: een download afspelen telt niet als stream (zoals op Apple)
+        if (!isPreview && streamItemID != item.id && !Downloads.isOffline(url)) beginStream()
         if (contentInfo == null && !isPreview) contentInfo = ContentLanguage.of(item)
         val exo = forceExo ?: prefersExo(url, live = isLive)
         if (exo != usingExo || timer == null) makeEngine(exo)
@@ -560,6 +561,20 @@ class PlayerController(item: PlayableItem) {
         val w = watchedSeconds; val rec = recordedHistory
         start(u)
         watchedSeconds = w; recordedHistory = rec
+    }
+
+    /**
+     * Build 171: "Kijk je nog?" zonder antwoord: de stream echt stoppen (zoals naar de achtergrond) én `stream_stop`, zodat
+     * de plek in de streamlimiet en de providerverbinding vrijkomen. [resumeAfterStillWatching] gaat op dezelfde plek verder.
+     */
+    fun pauseForStillWatching() {
+        suspendForBackground()
+        endStream()
+    }
+
+    fun resumeAfterStillWatching() {
+        // start() ziet dat er geen stream meer loopt (streamItemID null) en stuurt weer stream_start
+        resumeFromBackground()
     }
 
     fun stop() {

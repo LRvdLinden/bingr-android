@@ -101,6 +101,13 @@ object Playlists {
                 reloadUnhidden()
             }
         }
+        // build 171: verborgen zenders en geblokkeerde titels van het profiel
+        AppScope.launch {
+            snapshotFlow { Store.hiddenChannels to Store.blockedTitles }.drop(1).debounce(300).collect {
+                applyCustomizations(background = true)
+                AllServers.catalogsRefreshed()
+            }
+        }
         AppScope.launch {
             snapshotFlow { ParentalControl.unlockedUntil }.drop(1).collect { applyCustomizations() }
         }
@@ -587,6 +594,10 @@ object Playlists {
         val hiddenCategories: Set<String> = emptySet(),
         /** build 140: kinderprofiel: alleen inhoud uit kindercategorieën (docs/ACCOUNT.md → "Build 140") */
         val kids: Boolean = false,
+        /** build 171: verborgen zenders en geblokkeerde films/series van het actieve profiel op deze server (id's) */
+        val hiddenChannelIDs: Set<String> = emptySet(),
+        val blockedMovieIDs: Set<String> = emptySet(),
+        val blockedSeriesIDs: Set<String> = emptySet(),
     )
 
     /** Filtercontext voor deze bron en het actieve profiel (op de main thread aanroepen: leest Compose-state). */
@@ -600,6 +611,9 @@ object Playlists {
             unlocked = ParentalControl.isUnlocked,
             hiddenCategories = Store.hiddenCategoryNames(p.id),
             kids = prof?.kids == true,
+            hiddenChannelIDs = Build171Logic.ProfileSets.channelIDs(Store.hiddenChannels, p.id),
+            blockedMovieIDs = Build171Logic.ProfileSets.titleIDs(Store.blockedTitles, p.id).first,
+            blockedSeriesIDs = Build171Logic.ProfileSets.titleIDs(Store.blockedTitles, p.id).second,
         )
     }
 
@@ -713,7 +727,7 @@ object Playlists {
         // build 141: alleen een kopie als er echt iets hernoemd/samengevoegd is; anders hetzelfde object (de gefilterde lijst
         // deelt zo de titels met de ruwe lijst, in plaats van tienduizenden kopieën per filterronde en per server)
         val plain = c.renamed.isEmpty() && c.merged.isEmpty()
-        var channels = raw.channels.filter { visible(it.id, it.group) }
+        var channels = raw.channels.filter { it.id !in ctx.hiddenChannelIDs && visible(it.id, it.group) }
             .let { l -> if (plain) l else l.map { ch ->
                 val g = group(ch.group); val n = c.renamed[ch.id] ?: ch.name
                 if (g == ch.group && n == ch.name) ch else ch.copy(group = g, name = n)
@@ -722,13 +736,13 @@ object Playlists {
         // de categorie (de zendernaam telt niet mee)
         if (ageLimit != null && !ctx.unlocked && !kids) channels = channels.filter { ParentalControl.channelAllowedFor(it.name, it.group, ageLimit, ctx.strict) }
         val movies = raw.movies.filter {
-            visible(it.id, it.group) && (ageLimit == null || ageOK(Metadata.cached(it), AgeRatings.cached(it), it.group))
+            it.id !in ctx.blockedMovieIDs && visible(it.id, it.group) && (ageLimit == null || ageOK(Metadata.cached(it), AgeRatings.cached(it), it.group))
         }.let { l -> if (plain) l else l.map { m ->
             val g = group(m.group); val t = c.renamed[m.id] ?: m.title
             if (g == m.group && t == m.title) m else m.copy(group = g, title = t)
         } }
         val series = raw.series.filter {
-            visible(it.id, it.group) && (ageLimit == null || ageOK(Metadata.cached(it), AgeRatings.cached(it), it.group))
+            it.id !in ctx.blockedSeriesIDs && visible(it.id, it.group) && (ageLimit == null || ageOK(Metadata.cached(it), AgeRatings.cached(it), it.group))
         }.let { l -> if (plain) l else l.map { se ->
             val g = group(se.group); val t = c.renamed[se.id] ?: se.title
             if (g == se.group && t == se.title) se else se.copy(group = g, title = t)

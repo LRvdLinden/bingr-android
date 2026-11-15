@@ -123,6 +123,8 @@ data class Channel(
     val stalkerCmd: String? = null,
     /** Build 128: server van deze zender als die niet de actieve is (null = de actieve server). */
     val sourceID: String? = null,
+    /** Build 171: radiozender volgens de server (Xtream `radio_streams`, M3U `radio="true"`). */
+    val radio: Boolean = false,
 ) {
     /** Build 153: naam zoals de app hem toont ("┃NL┃ NPO 1 HD" → "NPO 1"); [name] blijft voor sleutels, id's en afspelen. */
     val displayName: String get() = ContentLanguage.channelTitle(name)

@@ -149,14 +149,33 @@ fun deviceLastUsed(ms: Long?, current: Boolean): String? {
     val diff = now - ms
     val today = s2StartOfDay(now)
     val yesterday = s2StartOfDay(today - 1)
+    // build 171: relatief ("2 hours ago", "5 days ago"); ouder dan 30 dagen een datum
+    Build171Logic.DeviceList.relative(ms, now)?.let { (k, n) -> return if (k.contains("%d")) L(k, n) else L(k) }
     return when {
-        diff < 60_000L -> L("just now")
-        diff < 3_600_000L -> L("%d min ago", (diff / 60_000L).toInt())
         ms >= today -> s2Time(ms)
         ms >= yesterday -> L("yesterday")
         else -> deviceDate(ms)
     }
 }
+
+/** Build 171: voorstel bovenaan de lijst: het langst niet gebruikte apparaat afmelden. */
+@Composable
+internal fun StaleDeviceSuggestion(devices: List<Account.Device>, enabled: Boolean, onRemove: (Account.Device) -> Unit) {
+    val now = System.currentTimeMillis()
+    val d = Build171Logic.DeviceList.suggestion(devices, { it.lastSeenAt }, { it.current }, now) ?: return
+    val since = d.lastSeenAt?.let { deviceLastUsed(it, false) }
+    S2Section {
+        S2Row(
+            if (since != null) L("Sign out: not used since %@", since) else L("Sign out: not used recently"),
+            icon = Icons.Default.Delete, subtitle = deviceNameWithLabel(d.name, d.platform), tint = Theme.red, enabled = enabled,
+            onClick = { onRemove(d) }
+        )
+    }
+}
+
+/** Build 171: langst niet gebruikt bovenaan, dit apparaat onderaan. */
+internal fun sortedStale(list: List<Account.Device>): List<Account.Device> =
+    Build171Logic.DeviceList.sortStale(list, { it.lastSeenAt }, { it.current })
 
 /** Eén apparaat: icoon, naam (+ "This device"), platform, gekoppeld en laatst gebruikt, knoppen Rename en Remove. */
 @Composable
@@ -204,7 +223,7 @@ private fun DeviceRow(
 
 /** Kleine knop ("Rename", "Remove"); op tv wit bij focus. */
 @Composable
-private fun DeviceSmallButton(label: String, tint: Color, fr: FocusRequester?, enabled: Boolean, onClick: () -> Unit) {
+internal fun DeviceSmallButton(label: String, tint: Color, fr: FocusRequester?, enabled: Boolean, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val lit = focused && AppState.isTV
     Text(
@@ -294,8 +313,9 @@ fun DevicesScreen(onClose: () -> Unit) {
 
     S2FullDialog(onClose) {
         S2Page(L("Devices"), onClose = onClose) {
-            val d = data
+            val d = data?.let { it.copy(devices = sortedStale(it.devices)) }
             if (d != null) {
+                item { StaleDeviceSuggestion(d.devices, !Account.busy) { confirm = it } }
                 item { S2Header(L("%d of %d devices", d.devices.size, d.limit)) }
                 itemsIndexed(d.devices, key = { _, dv -> dv.id }) { i, dev ->
                     Column(Modifier.s2Cell(i, d.devices.size)) {
@@ -386,9 +406,11 @@ fun TooManyDevicesScreen(info: Account.DeviceLimit) {
                     }
                 }
             }
+            item { StaleDeviceSuggestion(info.devices, !working) { confirm = it } }
             item { S2Header(L("%d of %d devices", info.devices.size, info.limit)) }
-            itemsIndexed(info.devices, key = { _, dv -> dv.id }) { i, dev ->
-                Column(Modifier.s2Cell(i, info.devices.size)) {
+            val sorted = sortedStale(info.devices)
+            itemsIndexed(sorted, key = { _, dv -> dv.id }) { i, dev ->
+                Column(Modifier.s2Cell(i, sorted.size)) {
                     if (i > 0) S2Divider()
                     DeviceRow(dev, if (i == 0) firstRemove else null, enabled = !working) { confirm = dev }
                 }

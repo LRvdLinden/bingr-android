@@ -31,6 +31,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
@@ -158,6 +159,11 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     var langVersions by remember { mutableStateOf(listOf<ContentLanguage.Version>()) }
     val skipFocus = remember { FocusRequester() }
 
+    // build 171: Kijk je nog?
+    val still = remember { StillWatchingState() }
+    var autoNext by remember { mutableStateOf(false) }
+    // build 171: bediening vergrendeld (telefoon/tablet)
+    var locked by remember { mutableStateOf(false) }
     fun flash(text: String) { toast = text; toastID++ }
     fun poke() { showControls = true; pokeID++ }
     fun toggleControls() { showControls = !showControls; if (showControls) poke() }
@@ -171,7 +177,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             val cur = player.item
             val n = nextUp
             when {
-                n != null -> playNextRef(n)   // zoals Netflix: gewoon door naar de volgende aflevering
+                n != null -> { autoNext = true; playNextRef(n) }   // zoals Netflix: gewoon door naar de volgende aflevering
                 Trakt.askRating && Trakt.isLoggedIn && cur.imdbID != null && cur.type != MediaType.LIVE -> { panel = PlayerPanel.RATE }
                 else -> close()
             }
@@ -329,6 +335,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     }
 
     fun playNext(n: PlayableItem) {
+        // build 171: vanzelf of met Volgende aflevering = telt voor "Kijk je nog?"
+        still.autoStarted(viaButton = !autoNext); autoNext = false
         nextUp = null
         panel = null
         flash(n.displaySubtitle ?: n.displayTitle)
@@ -404,7 +412,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             // app naar de achtergrond zonder beeld-in-beeld of Chromecast (bijv. TV-thuisknop): de stream echt stoppen,
             // zodat de providerverbinding vrijkomt (pauzeren hield hem open); terug = verder op dezelfde plek
             if (e == Lifecycle.Event.ON_STOP && !AppState.inPiP && !Casting.connected) player.suspendForBackground()
-            if (e == Lifecycle.Event.ON_START) player.resumeFromBackground()
+            if (e == Lifecycle.Event.ON_START && !still.paused) player.resumeFromBackground()
         }
         val lc = ProcessLifecycleOwner.get().lifecycle
         lc.addObserver(obs)
@@ -488,7 +496,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             delay(1000)
             if (player.isPlaying) countdown--
         }
-        nextUp?.let { playNext(it) }
+        nextUp?.let { autoNext = true; playNext(it) }
     }
 
     BackHandler {
@@ -505,6 +513,14 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
 
     fun handleKey(code: Int, down: Boolean, repeat: Int): Boolean {
         if (!down) return swallowUp.remove(code)
+        // build 171: elke toets is bediening; met de vraag of het pauzescherm open: alleen de knoppen daar (Afspelen = verder)
+        still.touch()
+        if (still.askedAt != null || still.paused) {
+            if (still.paused && (code == AndroidKeyEvent.KEYCODE_MEDIA_PLAY || code == AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)) {
+                still.answered(); player.resumeAfterStillWatching(); swallowUp += code; return true
+            }
+            return false
+        }
         if (panel != null) return false
         var handled = true
         when (code) {
@@ -559,6 +575,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             .onFocusChanged { rootFocused = it.isFocused }
             .focusRequester(rootFocus)
             .focusable()
+            .stillWatchingTouches(still)
     ) {
         if (externalTarget != null && !inPiP) {
             // video op het externe scherm, bediening hier
@@ -729,6 +746,16 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                 zapBanner?.let { c -> ZapBanner(c, pending = c.id != (player.item.channelID ?: player.item.id)) }
             }
 
+            // build 171: slotknop (telefoon en tablet), links in het midden zolang de bediening zichtbaar is
+            if (!isTV && showControls && !locked && player.errorText == null) {
+                Box(Modifier.align(Alignment.CenterStart).padding(start = 20.dp).size(44.dp).clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.5f)).focusLift { locked = true; showControls = false; panel = null },
+                    contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.LockOpen, L("Lock controls"), tint = Color.White, modifier = Modifier.size(22.dp))
+                }
+            }
+            if (locked) ControlsLockLayer(onUnlock = { locked = false; poke() })
+
             AnimatedVisibility(
                 toast != null, enter = fadeIn() + slideInVertically { -it }, exit = fadeOut() + slideOutVertically { -it },
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = tvs(40))
@@ -741,6 +768,17 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             }
         }
     }
+
+    // MARK: build 171: Kijk je nog?
+    StillWatchingDriver(still,
+        kind = when (player.item.type) {
+            MediaType.LIVE -> Build171Logic.StillWatching.Kind.LIVE
+            MediaType.EPISODE -> Build171Logic.StillWatching.Kind.EPISODE
+            else -> Build171Logic.StillWatching.Kind.MOVIE
+        },
+        playing = player.isPlaying && !inPiP && !Casting.connected,
+        onTimeout = { player.pauseForStillWatching() })
+    if (!inPiP) StillWatchingOverlay(still, onStop = { close() }, onResume = { still.answered(); player.resumeAfterStillWatching() })
 
     // MARK: tegelijk kijken (build 51)
 
