@@ -4,6 +4,27 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.8 · Build 177
+_15 november 2026_
+
+### iOS, iPadOS, tvOS, macOS en Android
+
+**Verbeterd**
+
+- Kaart Meer apps zonder de regel lrvdlinden.app
+
+### iOS, iPadOS, tvOS, macOS, Android en Android TV
+
+**Opgelost**
+
+- Tv-gids per zender toont de hele dag: je kunt terug naar eerder op de dag
+
+### iOS, iPadOS, tvOS, macOS, Android, Android TV en Website
+
+**Opgelost**
+
+- Tv-gids per zender staat op volgorde, zonder dubbele programma's
+
 ## Versie 1.0.8 · Build 176
 _15 november 2026_
 
