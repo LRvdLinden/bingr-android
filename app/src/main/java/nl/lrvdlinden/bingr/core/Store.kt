@@ -151,6 +151,27 @@ object Store {
         load()
         // build 97: geheimen van vóór build 97 (platte tekst) eenmalig versleutelen, op de achtergrond
         writer.execute { runCatching { migrateSecrets() } }
+        // build 176: servergegevens (playlists.json, nas.json) eenmalig versleutelen, zonder opnieuw in te loggen
+        writer.execute { runCatching { migrateSealedFiles() } }
+    }
+
+    /**
+     * Build 176: bestanden met servergegevens in platte tekst (van vóór build 176) versleutelen: dezelfde inhoud, alleen
+     * versleuteld (atomair via een tijdelijk bestand). Niet als het bestand geen geldige JSON is of de Keystore niet werkt.
+     */
+    private fun migrateSealedFiles() {
+        for (name in Build176TechLogic.Vault.SEALED_FILES) {
+            val f = File(dir, "$name.json")
+            if (!f.exists() || pending.keys.any { it == f.path }) continue
+            val raw = runCatching { f.readText() }.getOrNull() ?: continue
+            val valid: (String) -> Boolean = { t -> runCatching { Http.json.parseToJsonElement(t) }.isSuccess }
+            val sealed = Build176TechLogic.Vault.migrateFile(raw, valid, SecureBox::encrypt) ?: continue
+            val tmp = File(dir, "$name.json.tmp")
+            runCatching {
+                tmp.writeText(sealed)
+                if (!tmp.renameTo(f)) { f.delete(); if (!tmp.renameTo(f)) tmp.delete() }
+            }
+        }
     }
 
     // MARK: build 97: bestanden schrijven buiten de main thread
@@ -177,6 +198,13 @@ object Store {
         val f = File(d, "$name.json")
         // build 97: wat nog op de schrijf-thread wacht is de nieuwste versie
         pending[f.path]?.let { p -> (p as? T)?.let { return it } }
+        // build 176: servergegevens (playlists, nas) staan versleuteld; platte tekst van vroeger wordt ook gelezen
+        if (d == dir && name in Build176TechLogic.Vault.SEALED_FILES) {
+            val raw = runCatching { f.readText() }.getOrNull() ?: return def
+            val o = Build176TechLogic.Vault.open(raw, SecureBox::decrypt)
+            if (o.unreadable) android.util.Log.w("BingrStore", "$name.json niet te ontsleutelen")
+            return runCatching { Http.json.decodeFromString<T>(o.text!!) }.getOrDefault(def)
+        }
         return runCatching { Http.json.decodeFromString<T>(f.readText()) }.getOrDefault(def)
     }
 
@@ -192,7 +220,9 @@ object Store {
             // schrijven stopt (update, geheugen vol, afsluiten) nooit een half bestand achterlaat (= profielen of lijsten kwijt)
             runCatching {
                 val tmp = File(d, "$name.json.tmp")
-                tmp.writeText(Http.json.encodeToString(ser, v))
+                val text = Http.json.encodeToString(ser, v)
+                // build 176: servergegevens versleuteld (SecureBox); werkt de Keystore niet, dan platte tekst zoals vroeger
+                tmp.writeText(if (d == dir && name in Build176TechLogic.Vault.SEALED_FILES) Build176TechLogic.Vault.seal(text, SecureBox::encrypt) else text)
                 if (!tmp.renameTo(f)) { f.delete(); if (!tmp.renameTo(f)) tmp.delete() }
             }
             pending.remove(f.path, v)

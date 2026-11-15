@@ -20,6 +20,11 @@
     <!-- build 171: radio op de achtergrond (MediaSession, vergrendelscherm, Android Auto) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
+    <!-- build 176: Watch Next-rij en preview-kanaal op Android TV / Google TV (TvProvider) -->
+    <queries>
+        <provider android:authorities="android.media.tv" />
+    </queries>
+
     <!-- Werkt op telefoon/tablet én Android TV / Google TV / Fire TV -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -62,6 +67,9 @@
                 <data android:scheme="bingr" android:host="title" />
                 <!-- build 146: antwoord van support (pushmelding support_reply): bingr://support en bingr://support/ticket?n= -->
                 <data android:scheme="bingr" android:host="support" />
+                <!-- build 176: Watch Next-rij (bingr://continue?id=&src=&title=&profile=) en het preview-kanaal (bingr://open) -->
+                <data android:scheme="bingr" android:host="continue" />
+                <data android:scheme="bingr" android:host="open" />
             </intent-filter>
             <!-- Build 120: app link uit de e-mail van Bingr: https://bingr.online/titel/?type=&id=&q=&y=
                  (geverifieerd via https://bingr.online/.well-known/assetlinks.json; eigen filter, zodat autoVerify alleen

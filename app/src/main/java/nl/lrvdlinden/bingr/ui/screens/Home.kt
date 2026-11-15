@@ -737,6 +737,8 @@ fun HomeScreen(filter: Filter) {
         continueItems(filter, index, pid, progress, traktContinue)
     }
     ResolveContinueCovers(continueList)
+    // build 176: Android TV / Google TV: Verder kijken ook in de Watch Next-rij van het systeem (alleen filter Alles)
+    if (AppState.isTV && filter == Filter.ALL) LaunchedEffect(continueList) { TvHome.publishContinue(continueList) }
     val myList = Store.myList
     // build 111: plus TMDB-titels (Binnenkort op Bingr / Nieuw op Bingr) die niet in je bibliotheek staan; alleen
     // zonder leeftijdsgrens (die profielen zien alleen hun eigen, gefilterde bibliotheek)

@@ -142,6 +142,12 @@ dependencies {
     implementation("androidx.media3:media3-database:$media3")
     implementation("androidx.media3:media3-datasource-okhttp:$media3")
     implementation("org.videolan.android:libvlc-all:3.5.1")
+    // build 176: Cronet (uit Google Play services) voor Media3 en posters; zonder Play services (Fire TV) OkHttp
+    implementation("androidx.media3:media3-datasource-cronet:$media3")
+    implementation("com.google.android.gms:play-services-cronet:18.1.0")
+
+    // build 176: Watch Next-rij en preview-kanaal op Android TV / Google TV
+    implementation("androidx.tvprovider:tvprovider:1.0.0")
 
     // Chromecast
     implementation("com.google.android.gms:play-services-cast-framework:21.5.0")

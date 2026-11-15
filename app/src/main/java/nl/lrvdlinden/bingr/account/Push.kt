@@ -441,6 +441,8 @@ object PushNav {
             }
             // build 146: bingr://support (de lijst) en bingr://support/ticket?n=<nummer>
             "support" -> SupportCenter.openRequest = Build146Logic.Support.parseLink(u.toString())?.ticket ?: 0
+            // build 176: tegel uit de Watch Next-rij (Android TV / Google TV)
+            "continue" -> TvHome.open(u)
             "live" -> {
                 val ch = u.getQueryParameter("channel")?.takeIf { it.isNotBlank() } ?: return
                 pending = Live(ch, u.getQueryParameter("profile")?.takeIf { it.isNotBlank() })

@@ -49,6 +49,8 @@ class MainActivity : ComponentActivity() {
         Reminders.startChecking()
         // build 174: widget "Bingr Radio" bijhouden (zender, afspelen/pauze, favorieten, bibliotheek); niet op tv
         if (!AppState.isTV) RadioWidget.start()
+        // build 176: Android TV / Google TV: Watch Next-rij en preview-kanaal "Bingr" op het beginscherm
+        TvHome.start(this)
         // meldingen (pushmeldingen, herinneringen, downloads): niet meer meteen bij het starten vragen, maar na inloggen in
         // het hoofdscherm met uitleg (Push.mainShown → NotificationPrimerDialog), alleen op telefoon/tablet
         // tik op een pushmelding of een bingr://-link (niet opnieuw na het herstellen van de activity)

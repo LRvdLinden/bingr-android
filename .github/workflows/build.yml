@@ -233,7 +233,12 @@ jobs:
               tools/test/Build175LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b175-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b175-test.jar" | tee "$RUNNER_TEMP/b175-test.txt"; rc27=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 175::$(tail -1 "$RUNNER_TEMP/b175-test.txt")"
-            [ $rc27 -eq 0 ] && [ $rc26 -eq 0 ] && [ $rc25 -eq 0 ] && [ $rc24 -eq 0 ] && [ $rc23 -eq 0 ] && [ $rc22 -eq 0 ] && [ $rc21 -eq 0 ] && [ $rc20 -eq 0 ] && [ $rc19 -eq 0 ] && [ $rc18 -eq 0 ] && [ $rc17 -eq 0 ] && [ $rc16 -eq 0 ] && [ $rc15 -eq 0 ] && [ $rc14 -eq 0 ] && [ $rc13 -eq 0 ] && [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
+            # build 176 (techniek): Watch Next, preview-kanaal, Cronet-keuze, versleutelde opslag (migratie), audio-uitvoer
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build176TechLogic.kt \
+              tools/test/Build176TechLogicTest.kt -include-runtime -d "$RUNNER_TEMP/b176t-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b176t-test.jar" | tee "$RUNNER_TEMP/b176t-test.txt"; rcTech176=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 176 techniek::$(tail -1 "$RUNNER_TEMP/b176t-test.txt")"
+            [ $rcTech176 -eq 0 ] && [ $rc27 -eq 0 ] && [ $rc26 -eq 0 ] && [ $rc25 -eq 0 ] && [ $rc24 -eq 0 ] && [ $rc23 -eq 0 ] && [ $rc22 -eq 0 ] && [ $rc21 -eq 0 ] && [ $rc20 -eq 0 ] && [ $rc19 -eq 0 ] && [ $rc18 -eq 0 ] && [ $rc17 -eq 0 ] && [ $rc16 -eq 0 ] && [ $rc15 -eq 0 ] && [ $rc14 -eq 0 ] && [ $rc13 -eq 0 ] && [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi

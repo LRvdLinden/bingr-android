@@ -117,7 +117,8 @@ class ExoEngine(ctx: Context) : PlaybackEngine {
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .build()
-        val http = OkHttpDataSource.Factory(client).setUserAgent(Http.USER_AGENT)
+        // build 176: Cronet (Play services) met terugval op OkHttp; zonder Cronet (Fire TV) alleen OkHttp zoals altijd
+        val http = NetEngine.mediaFactory(client, 8_000, 15_000)
         val dataSource = DefaultDataSource.Factory(ctx, http)
         // Standaard wacht ExoPlayer op 2,5 s buffer voor het eerste beeld (en 5 s na haperen); 1 s / 2 s is genoeg
         // voor IPTV en scheelt merkbaar bij elke start.

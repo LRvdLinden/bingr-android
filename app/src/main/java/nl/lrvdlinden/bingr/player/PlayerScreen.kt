@@ -1101,6 +1101,9 @@ private fun PlayerControls(
                             onPanel(PlayerPanel.CAST)
                         }
                     }
+                    // build 176: audio-uitvoer (Bluetooth, koptelefoon, luidspreker) via de systeemkiezer
+                    val outCtx = androidx.compose.ui.platform.LocalContext.current
+                    PlayerRoundIcon(AudioOutput.icon(rememberAudioOutput()), L("Audio output"), 22) { AudioOutput.show(outCtx) }
                     if (PlayerController.pipSupported) {
                         PlayerRoundIcon(Icons.Filled.PictureInPictureAlt, L("Picture in Picture"), 22) { player.startPiP() }
                     }

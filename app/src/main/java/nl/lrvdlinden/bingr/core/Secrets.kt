@@ -30,12 +30,36 @@ object Secrets {
     /** Privé-instellingen met de sleutels van de server; blijven staan na uitloggen (zo werkt de app ook offline). */
     fun init(ctx: Context) {
         serverSp = ctx.getSharedPreferences("bingr.serverkeys", Context.MODE_PRIVATE)
+        // build 176: sleutels in platte tekst (van vóór build 176) eenmalig versleutelen, op de achtergrond
+        Thread({ runCatching { migrate() } }, "bingr-serverkeys").apply { isDaemon = true }.start()
+    }
+
+    /** Build 176: ontsleutelde sleutels van de server (de Keystore niet bij elke lezing aanspreken). */
+    private val serverCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    private fun migrate() {
+        val sp = serverSp ?: return
+        val todo = Build176TechLogic.Vault.migrateValues(sp.all, SecureBox::encrypt)
+        if (todo.isEmpty()) return
+        synchronized(this) {
+            val e = sp.edit()
+            // alleen als de waarde intussen niet veranderd is
+            for ((k, v) in todo) if (sp.getString(k, null)?.let { !SecureBox.isEncrypted(it) } == true) e.putString(k, v)
+            e.apply()
+        }
     }
 
     /** Zelf ingevulde sleutel (alleen die; leeg = niet ingevuld). */
     fun userValue(k: Key): String = Store.secret("apikey.${k.name}")?.takeIf { it.isNotBlank() } ?: ""
     /** Sleutel van de Bingr-server (leeg = niet opgehaald of leeg op de server). */
-    fun serverValue(k: Key): String = runCatching { serverSp?.getString(k.serverField, null) }.getOrNull()?.trim().orEmpty()
+    fun serverValue(k: Key): String {
+        serverCache[k.serverField]?.let { return it }
+        val raw = runCatching { serverSp?.getString(k.serverField, null) }.getOrNull() ?: return ""
+        // build 176: versleuteld bewaard (SecureBox); platte tekst van vroeger wordt ook gelezen
+        val v = SecureBox.decrypt(raw)?.trim() ?: return ""
+        serverCache[k.serverField] = v
+        return v
+    }
 
     fun value(k: Key): String {
         if (revision < 0) return "" // lezen = Compose-afhankelijkheid
@@ -53,7 +77,14 @@ object Secrets {
     fun storeServerKeys(values: Map<Key, String>) {
         val sp = serverSp ?: return
         runCatching {
-            sp.edit().apply { values.forEach { (k, v) -> putString(k.serverField, v.trim()) } }.apply()
+            synchronized(this) {
+                values.forEach { (k, _) -> serverCache.remove(k.serverField) }
+                // build 176: versleuteld (werkt de Keystore niet, dan platte tekst zoals vroeger)
+                sp.edit().apply { values.forEach { (k, v) ->
+                    val t = v.trim()
+                    putString(k.serverField, if (t.isEmpty()) t else Build176TechLogic.Vault.seal(t, SecureBox::encrypt))
+                } }.apply()
+            }
         }
         reload()
     }

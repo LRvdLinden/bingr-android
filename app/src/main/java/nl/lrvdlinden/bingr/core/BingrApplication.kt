@@ -20,7 +20,7 @@ class BingrApplication : Application(), ImageLoaderFactory {
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
         .okHttpClient { Http.client.newBuilder().addInterceptor { chain ->
             chain.proceed(chain.request().newBuilder().header("User-Agent", Http.USER_AGENT).build())
-        }.build() }
+        }.addInterceptor(NetEngine.imageInterceptor).build() }   // build 176: via Cronet als dat kan
         .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.20).build() }
         .diskCache { DiskCache.Builder().directory(cacheDir.resolve("image_cache")).maxSizeBytes(200L * 1024 * 1024).build() }
         .respectCacheHeaders(false)
@@ -39,6 +39,8 @@ class BingrApplication : Application(), ImageLoaderFactory {
         // dagelijks, wekelijks) vervalt; "Servers laden bij openen" wordt "Vragen" (per apparaat, niet gesynct)
         Build145Logic.LoadOnOpen.migrate(Prefs.string(Build145Logic.LoadOnOpen.PREF))?.let { Prefs.put(Build145Logic.LoadOnOpen.PREF, it.raw) }
         if (Prefs.has("playlist.refresh")) Prefs.remove("playlist.refresh")
+        // build 176: Cronet (Play services) op de achtergrond starten; tot dan en zonder Play services: OkHttp
+        NetEngine.start(this)
         Secrets.init(this)
         // build 141: belastingmodus (alleen de rooktest-build, BuildConfig.STRESS): geen account, main-thread-wachter
         StressMode.initApp()
