@@ -100,7 +100,8 @@ object M3UParser {
                         streamURL = Net.urlValue(e.url),
                         epgID = e.attrs["tvg-id"]?.takeIf { it.isNotEmpty() },
                         number = (e.attrs["tvg-chno"] ?: "").toIntOrNull() ?: number,
-                        catchupDays = catchup))
+                        catchupDays = catchup,
+                        radio = e.attrs["radio"].equals("true", ignoreCase = true)))
                 }
             }
         }

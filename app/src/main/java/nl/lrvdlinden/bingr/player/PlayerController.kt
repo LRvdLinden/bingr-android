@@ -214,7 +214,8 @@ class PlayerController(item: PlayableItem) {
         retryPending = false
         stopped = false
         // nieuwe titel of zender (ook zappen en de volgende aflevering): stream_start; herverbinden niet
-        if (!isPreview && streamItemID != item.id) beginStream()
+        // build 171: een download afspelen telt niet als stream (zoals op Apple)
+        if (!isPreview && streamItemID != item.id && !Downloads.isOffline(url)) beginStream()
         if (contentInfo == null && !isPreview) contentInfo = ContentLanguage.of(item)
         val exo = forceExo ?: prefersExo(url, live = isLive)
         if (exo != usingExo || timer == null) makeEngine(exo)

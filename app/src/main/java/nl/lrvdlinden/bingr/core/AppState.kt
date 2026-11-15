@@ -156,6 +156,8 @@ object AppState {
         // leeftijdscontrole die nog loopt (build 59): hoort bij deze titel, de speler wacht er bij het eerste beeld op
         playingAgeCheck = pendingAgeCheck
         pendingAgeCheck = null
+        // build 171: één stream per apparaat: de radio stopt als er video start
+        Radio.stopForVideo()
         playing = item
     }
 

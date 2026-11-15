@@ -135,7 +135,11 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-exoplayer-dash:$media3")
     implementation("androidx.media3:media3-ui:$media3")
-    // build 97: media3-session weg (geen MediaSession in de app)
+    // build 171: MediaSession voor de radio (achtergrond, vergrendelscherm, Android Auto)
+    implementation("androidx.media3:media3-session:$media3")
+    // build 171: HLS-downloads (SimpleCache met database)
+    implementation("androidx.media3:media3-datasource:$media3")
+    implementation("androidx.media3:media3-database:$media3")
     implementation("androidx.media3:media3-datasource-okhttp:$media3")
     implementation("org.videolan.android:libvlc-all:3.5.1")
 

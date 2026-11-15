@@ -21,7 +21,9 @@ object StreamSession {
     )
 
     /** [onActivation] (build 167): stream_start gaf 403 activation_required; afspelen stoppen (het scherm Activeer Lifetime komt erover). */
-    class Owner(val info: () -> Info, val onBlocked: (Account.StreamList) -> Unit, val onActivation: () -> Unit = {})
+    class Owner(val info: () -> Info, val onBlocked: (Account.StreamList) -> Unit, val onActivation: () -> Unit = {},
+                /** build 171: radio speelt door op de achtergrond (geen stream_stop bij ON_STOP) */
+                val background: Boolean = false)
 
     private var owner: Owner? = null
     /** Op de achtergrond gezet: stream_stop is al verstuurd. */
@@ -108,7 +110,7 @@ object StreamSession {
                 androidx.lifecycle.LifecycleEventObserver { _, e ->
                     when (e) {
                         androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
-                            if (owner != null && !suspended && !AppState.inPiP && !Casting.connected) {
+                            if (owner != null && owner?.background != true && !suspended && !AppState.inPiP && !Casting.connected) {
                                 suspended = true
                                 if (enabled) enqueue { Account.streamStop() }
                             }

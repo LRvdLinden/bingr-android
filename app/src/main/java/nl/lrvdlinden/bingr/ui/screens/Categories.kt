@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.CheckCircle
@@ -327,7 +328,23 @@ fun CategoriesScreen(initial: Filter, asTab: Boolean = false, onClose: () -> Uni
     val genres = remember(index, kind) {
         index?.let { i -> Genres.all.mapNotNull { g -> i.genres[g.slug]?.takeIf { it.count(kind) > 0 }?.let { g to it } } }.orEmpty()
     }
-    val server = remember(index, kind) { index?.server?.filter { it.second.count(kind) > 0 }.orEmpty() }
+    // build 171: filterchips per land/regio en "Favoriete categorieën" (vastgepind), vastgepinde bovenaan, vastpinnen/verbergen
+    val pid = Playlists.source?.id ?: ""
+    val pinned = Store.pinnedCategories
+    var chip by remember { mutableStateOf<String?>(null) }
+    var menuFor by remember { mutableStateOf<Pair<String, CategoryMembers>?>(null) }
+    fun rawOf(name: String, m: CategoryMembers): String = m.sources.firstOrNull() ?: name
+    fun isPinned(name: String, m: CategoryMembers) = Store.isCategoryPinned(pid, rawOf(name, m))
+    val allServer = remember(index, kind) { index?.server?.filter { it.second.count(kind) > 0 }.orEmpty() }
+    val chips = remember(allServer) { Build171Logic.Countries.chips(allServer.flatMap { it.second.sources.ifEmpty { listOf(it.first) } }) }
+    val server = remember(allServer, pinned, chip) {
+        val f = when (chip) {
+            null -> allServer
+            CATS_PINNED -> allServer.filter { isPinned(it.first, it.second) }
+            else -> allServer.filter { (n, m) -> m.sources.ifEmpty { listOf(n) }.any { Build171Logic.Countries.matches(it, chip) } }
+        }
+        Build171Logic.ProfileSets.pinnedFirst(f, pinned) { Build171Logic.ProfileSets.categoryKey(pid, rawOf(it.first, it.second)) }
+    }
 
     Column(Modifier.fillMaxSize().background(Theme.bg).then(if (tv) Modifier else Modifier.statusBarsPadding())) {
         Row(
@@ -345,6 +362,14 @@ fun CategoriesScreen(initial: Filter, asTab: Boolean = false, onClose: () -> Uni
         Spacer(Modifier.height(tvs(10)))
         KindSegments(kind, Modifier.padding(horizontal = Theme.edge), focus = if (asTab) null else firstFocus) { kind = it }
         Spacer(Modifier.height(tvs(8)))
+        if (chips.isNotEmpty() || pinned.isNotEmpty()) {
+            LazyRow(contentPadding = PaddingValues(horizontal = Theme.edge), horizontalArrangement = Arrangement.spacedBy(tvs(8))) {
+                item { Pill(L("All"), chip == null) { chip = null } }
+                item { Pill("★ " + L("Favorite categories"), chip == CATS_PINNED) { chip = CATS_PINNED } }
+                items(chips) { c -> Pill(c, chip == c) { chip = c } }
+            }
+            Spacer(Modifier.height(tvs(8)))
+        }
 
         if (index == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -370,7 +395,8 @@ fun CategoriesScreen(initial: Filter, asTab: Boolean = false, onClose: () -> Uni
             if (server.isNotEmpty()) {
                 item(key = "h-server", span = { GridItemSpan(maxLineSpan) }) { SectionTitle(L("From your server")) }
                 items(server, key = { "s|" + it.first }) { (name, m) ->
-                    CategoryTile(ContentLanguage.categoryTitle(name), m.count(kind), m.posters(kind), Genres.serverColors(name), chips = Build150Logic.Merge.chips(m.tags)) {
+                    CategoryTile((if (isPinned(name, m)) "★ " else "") + ContentLanguage.categoryTitle(name), m.count(kind), m.posters(kind),
+                        Genres.serverColors(name), chips = Build150Logic.Merge.chips(m.tags), onLongClick = { menuFor = name to m }) {
                         ScreensNav.push(ScreenEntry.CategoryPage(CategoryRef(null, name), kind))
                     }
                 }
@@ -380,7 +406,21 @@ fun CategoriesScreen(initial: Filter, asTab: Boolean = false, onClose: () -> Uni
             }
         }
     }
+    menuFor?.let { (name, m) ->
+        val on = isPinned(name, m)
+        val kids = Store.activeProfile?.kids == true
+        S2ActionDialog(ContentLanguage.categoryTitle(name), listOfNotNull(
+            S2Action(if (on) L("Unpin category") else L("Pin category"), Icons.Default.PushPin) { Store.setCategoryPinned(pid, rawOf(name, m), !on) },
+            // verbergen = de bestaande account-set hiddenCategories (niet in een kinderprofiel)
+            if (kids) null else S2Action(L("Hide category"), Icons.Default.VisibilityOff, destructive = true) {
+                Store.setCategoriesHidden(m.sources.ifEmpty { listOf(name) }.map { "${pid.lowercase()}|$it" }, true)
+            },
+        ), onDismiss = { menuFor = null })
+    }
 }
+
+/** Build 171: chip "Favoriete categorieën". */
+private const val CATS_PINNED = "\u2605pinned"
 
 @Composable
 private fun SectionTitle(text: String) {
@@ -424,14 +464,15 @@ private fun Pill(label: String, selected: Boolean, focus: androidx.compose.ui.fo
 @Composable
 private fun CategoryTile(
     title: String, count: Int, posters: List<String>, colors: List<Color>,
-    modifier: Modifier = Modifier.fillMaxWidth(), compact: Boolean = false, chips: String = "", onClick: () -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth(), compact: Boolean = false, chips: String = "", onLongClick: (() -> Unit)? = null,
+    onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(tvs(if (compact) 8 else 10))
     BoxWithConstraints(
         modifier.aspectRatio(16f / 9f)
             .onFocusChanged { focused = it.isFocused }
-            .focusLift(1.06f) { onClick() }
+            .focusLift(1.06f, onLongClick = onLongClick) { onClick() }
             .clip(shape)
             .background(Brush.linearGradient(colors))
             .then(if (focused) Modifier.border(2.5.dp, Color.White, shape) else Modifier)

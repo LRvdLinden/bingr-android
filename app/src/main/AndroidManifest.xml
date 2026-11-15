@@ -17,6 +17,8 @@
          gegevensoverdracht (DownloadJobService, JobScheduler setUserInitiated); daar is geen voorgronddienst voor nodig -->
     <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- build 171: radio op de achtergrond (MediaSession, vergrendelscherm, Android Auto) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <!-- Werkt op telefoon/tablet én Android TV / Google TV / Fire TV -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -167,6 +169,18 @@
         <!-- melding met een notification-blok terwijl de app niet draait: kanaal "Berichten" en het Bingr-icoon -->
         <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="messages" />
         <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_bingr" />
+
+        <!-- build 171: radio (alleen audio) op de achtergrond en in Android Auto -->
+        <service
+            android:name=".RadioService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+        <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc" />
 
         <receiver android:name=".ReminderReceiver" android:exported="false" />
         <!-- Herinneringen opnieuw plannen na een herstart (alarmen overleven dat niet) -->
