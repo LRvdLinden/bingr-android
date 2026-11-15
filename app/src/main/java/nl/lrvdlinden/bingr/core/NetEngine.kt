@@ -74,7 +74,7 @@ object NetEngine {
             }.getOrNull()
             engine = e
             initMs = SystemClock.elapsedRealtime() - t0
-            val msg = "net engine=${if (e != null) "cronet" else "okhttp"} cronet_available=${e != null} init_ms=$initMs"
+            val msg = "net engine=$label cronet_available=${e != null} init_ms=$initMs"
             Log.i(TAG, msg)
             if (BuildConfig.STRESS) Log.i(StressMode.TAG, "BINGR_STRESS $msg")
         }, "bingr-cronet-init").apply { isDaemon = true }.start()
