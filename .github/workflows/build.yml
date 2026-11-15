@@ -279,7 +279,7 @@ jobs:
           AAPT2=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
           "$AAPT2" dump xmltree --file AndroidManifest.xml "$APK" > "$RUNNER_TEMP/manifest.txt"
           # build 171: alleen mediaPlayback (radio, RadioService) mag; dataSync (0x1) nooit
-          bad=$(grep -iE 'foregroundServiceType' "$RUNNER_TEMP/manifest.txt" | grep -viE 'mediaPlayback|0x2$|=2$' || true)
+          bad=$(grep -iE 'foregroundServiceType' "$RUNNER_TEMP/manifest.txt" | grep -viE 'mediaPlayback|=0x0*2$|=2$' || true)
           if grep -qiE 'FOREGROUND_SERVICE_DATA_SYNC' "$RUNNER_TEMP/manifest.txt" || [ -n "$bad" ]; then
             grep -iE -B3 'FOREGROUND_SERVICE_|foregroundServiceType' "$RUNNER_TEMP/manifest.txt" | head -40
             echo "::error::Het manifest vraagt nog FOREGROUND_SERVICE_DATA_SYNC of een dataSync-voorgronddienst."
