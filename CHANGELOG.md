@@ -4,6 +4,21 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.7 · Build 175
+_15 november 2026_
+
+### iOS, iPadOS en Android
+
+**Verbeterd**
+
+- Downloaden staat altijd onder Meer: bij series dit seizoen, de volgende 3 afleveringen of de hele serie, en bij films zie je waarom een stream niet te downloaden is
+
+### Android
+
+**Opgelost**
+
+- De app reageert weer meteen na het laden van een grote bibliotheek
+
 ## Versie 1.0.7 · Build 174
 _15 november 2026_
 
