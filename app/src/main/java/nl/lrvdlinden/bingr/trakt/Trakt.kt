@@ -118,12 +118,12 @@ object Trakt {
     private fun noteFailure(e: Exception) {
         val L173 = Build173PlayerLogic
         val kind = when (e) {
-            is ReauthRequired, is NotLoggedIn -> L173.TraktFailure.REAUTH
-            is AccountLocked -> L173.TraktFailure.LOCKED
+            is ReauthRequired, is NotLoggedIn -> Build173PlayerLogic.TraktFailure.REAUTH
+            is AccountLocked -> Build173PlayerLogic.TraktFailure.LOCKED
             is StatusException -> L173.traktClassify(e.code)
-            else -> L173.TraktFailure.TRANSIENT
+            else -> Build173PlayerLogic.TraktFailure.TRANSIENT
         }
-        if (failure == null || kind != L173.TraktFailure.TRANSIENT) failure = kind
+        if (failure == null || kind != Build173PlayerLogic.TraktFailure.TRANSIENT) failure = kind
         if (!Prefs.has(FAILING_SINCE)) Prefs.put(FAILING_SINCE, System.currentTimeMillis())
         updateWarning()
     }
