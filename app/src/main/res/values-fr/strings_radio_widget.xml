@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- build 174: widget "Bingr Radio" -->
+<resources>
+    <string name="radio_widget_description">Vos stations de radio favorites et ce qui passe maintenant.</string>
+</resources>

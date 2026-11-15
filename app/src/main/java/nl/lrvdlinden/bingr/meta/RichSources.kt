@@ -89,7 +89,15 @@ object TMDB {
         val recommendations: List<TitleDetails.Recommendation> = emptyList(),
         /** original_language (build 59) */
         val originalLanguage: String? = null,
+        /** build 174: alle video's voor de keuze van de beste trailer over alle bronnen */
+        val videos: List<Build174Logic.Candidate> = emptyList(),
     )
+
+    /** build 174: TMDB-video's als kandidaten voor [Build174Logic.bestTrailer] */
+    private fun candidates(list: List<JsonElement>): List<Build174Logic.Candidate> = list.mapNotNull { v ->
+        val key = v.jS("key") ?: return@mapNotNull null
+        Build174Logic.Candidate(key, Build174Logic.Source.TMDB, v.jS("type"), v.jS("iso_639_1"), v.jB("official"), v.jS("site") ?: "")
+    }
 
     private val language: String
         get() {
@@ -174,8 +182,9 @@ object TMDB {
             "language" to lang,
             "append_to_response" to if (isShow) "aggregate_credits,recommendations,images,videos,external_ids" else "credits,recommendations,images,videos",
             "include_image_language" to "$base,en,null",
-            "include_video_language" to "$base,en",
+            "include_video_language" to "$base,en,null",
         )) ?: return null
+        val videos = candidates(f.jO("videos").jList("results"))
         val logos = f.jO("images").jList("logos")
         val logo = logos.firstOrNull { it.jS("iso_639_1") == base } ?: logos.firstOrNull { it.jS("iso_639_1") == "en" } ?: logos.firstOrNull()
         val castSrc = f.jO(if (isShow) "aggregate_credits" else "credits").jList("cast")
@@ -185,7 +194,9 @@ object TMDB {
             overview = f.jS("overview"),
             poster = img(f.jS("poster_path"), "w780"), backdrop = img(f.jS("backdrop_path"), "w1280"),
             logo = img(logo.jS("file_path"), "w500"),
-            trailer = f.jO("videos").jList("results").firstOrNull { it.jS("site") == "YouTube" && it.jS("type") == "Trailer" }.jS("key"),
+            // build 174: de beste (officieel, Trailer, anders Teaser; app-taal, Engels), niet zomaar de eerste
+            trailer = Build174Logic.bestTrailer(videos, base),
+            videos = videos,
             cast = castSrc.take(20).mapNotNull { c ->
                 val name = c.jS("name") ?: return@mapNotNull null
                 TitleDetails.CastMember(name = name, role = c.jS("character") ?: c.jList("roles").firstOrNull().jS("character"),
@@ -316,11 +327,8 @@ object TMDB {
         if (list.none { it.jS("site") == "YouTube" && (it.jS("type") == "Trailer" || it.jS("type") == "Teaser") } && base != "en") {
             list = list + get("/tv/$tvID/season/$season/videos", listOf("language" to "en-US")).jList("results")
         }
-        fun typeRank(v: JsonElement) = when (v.jS("type")) { "Trailer" -> 0; "Teaser" -> 1; else -> 9 }
-        fun langRank(v: JsonElement) = when (v.jS("iso_639_1")) { base -> 0; "en" -> 1; else -> 2 }
-        return list.filter { it.jS("site") == "YouTube" && typeRank(it) < 9 && !it.jS("key").isNullOrBlank() }
-            .sortedWith(compareBy<JsonElement> { typeRank(it) }.thenBy { langRank(it) }.thenByDescending { it.jB("official") == true })
-            .firstOrNull()?.jS("key")
+        // build 174: dezelfde keuze als bij films en series (Build174Logic)
+        return Build174Logic.bestTrailer(candidates(list), base)
     }
 
     /** Afleveringen van één seizoen; key "s-e". */

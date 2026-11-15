@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Downloading
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Share
@@ -108,7 +109,7 @@ import kotlinx.coroutines.withContext
  * Detailpagina in UHF/Netflix-stijl (= DetailView.swift): grote afbeelding met logo, score, afspeelknop,
  * Mijn lijst, trailer, bekeken, andere bronnen, beschrijving, afleveringen, beoordelingen, cast en aanbevelingen.
  */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = null) {
     val tv = AppState.isTV
@@ -140,6 +141,13 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
     /** Andere taalversies van deze titel in de bibliotheek (build 59) en de gekozen versie (menu). */
     var versions by remember(target.id) { mutableStateOf(emptyList<ContentLanguage.Version>()) }
     var versionMenu by remember(target.id) { mutableStateOf<ContentLanguage.Version?>(null) }
+    /** Build 174: trailer in de app (YouTube IFrame-player), menu Meer en keuze onder Bronnen (telefoon) */
+    var trailerOpen by remember { mutableStateOf<String?>(null) }
+    var moreMenu by remember { mutableStateOf(false) }
+    var sourcesChoice by remember { mutableStateOf(false) }
+    /** Build 174: andere bronnen alvast opgezocht (telefoon: de knop Bronnen alleen als er meer dan deze ene is) */
+    var prefetchedSources by remember(target.id) { mutableStateOf<List<OtherHit>?>(null) }
+    val compact = Build174Logic.isCompact(androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp, tv)
 
     // build 128: titel van een andere server: Mijn lijst, downloads en afspelen op die server (zonder te wisselen)
     val pid = target.sourceID ?: Playlists.source?.id
@@ -396,6 +404,13 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
         lib.series.firstOrNull { it.id == id }?.let { ScreensNav.detail(DetailTarget.SeriesT(it)) }
     }
 
+    // build 174: telefoon: andere bronnen alvast opzoeken (na het laden), zodat Bronnen alleen verschijnt als er meer is
+    LaunchedEffect(target.id, loading, compact) {
+        if (loading || !compact || prefetchedSources != null) return@LaunchedEffect
+        val year = screensInt(d?.year) ?: target.year
+        prefetchedSources = screensSafe { Playlists.otherSources(rawTitle, year, target.isSeries, target.id) } ?: emptyList()
+    }
+
     // MARK: trailer in de kop (build 82)
     val heroTrailer = remember(target.id) { HeroTrailerState() }
     var inForeground by remember { mutableStateOf(true) }
@@ -509,7 +524,11 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                 horizontalAlignment = contentAlign,
                 verticalArrangement = Arrangement.spacedBy(tvs(22))
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(tvs(14))) {
+                // build 174: afbreken in plaats van één te brede regel (de pagina schoof eerst buiten het scherm)
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(tvs(14), contentAlign),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     val main = details?.ratings?.firstOrNull { it.source == "IMDb" } ?: details?.ratings?.firstOrNull()
                     Text(
                         "★ ${main?.value?.toString() ?: "–"}", color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.Bold,
@@ -528,7 +547,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                     } else {
                         screensText(details?.runtime)?.let { Text(it, color = Color.White, fontSize = tsp(16)) }
                     }
-                    if (isWatchedTitle) Icon(Icons.Default.CheckCircle, null, tint = Theme.green, modifier = Modifier.size(tvs(18)))
+                    if (isWatchedTitle) Icon(Icons.Default.CheckCircle, null, tint = Theme.green, modifier = Modifier.size(tvs(18)).align(Alignment.CenterVertically))
                 }
 
                 // MARK: knoppen
@@ -569,6 +588,35 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                             }
                         }
                     }
+                    // build 174: telefoon: Mijn lijst · Trailer · Bronnen · Gezien · Meer (de rest onder Meer), gelijk verdeeld
+                    if (compact) {
+                        val other = prefetchedSources?.size ?: 0
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                            for (a in Build174Logic.compactActions(pid != null, trailerToPlay != null, other, versions.size, isMovie)) {
+                                when (a) {
+                                    Build174Logic.Action.MY_LIST -> DetailAction(L("My List"), if (inMyList) L("In My List") else L("Add to My List"), Modifier.weight(1f), { toggleMyList() }) {
+                                        PlusCheckIcon(inMyList, tint = if (inMyList) Theme.red else Color.White, size = 24.dp)
+                                    }
+                                    Build174Logic.Action.TRAILER -> DetailAction(L("Trailer"), L("Trailer"), Modifier.weight(1f), { heroTrailer.stop(); trailerOpen = trailerToPlay }) {
+                                        Icon(Icons.Default.Theaters, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                                    }
+                                    Build174Logic.Action.SOURCES -> DetailAction(L("Sources"), L("Sources"), Modifier.weight(1f), {
+                                        when (Build174Logic.sourcesTarget(other, versions.size)) {
+                                            Build174Logic.SourcesTarget.CHOOSE -> sourcesChoice = true
+                                            Build174Logic.SourcesTarget.LANGUAGES -> versions.firstOrNull()?.let { v -> if (versions.size == 1 && v.target !is DetailTarget.SeriesT) versionMenu = v else sourcesChoice = true }
+                                            else -> { sources = prefetchedSources ?: emptyList(); showSources = true }
+                                        }
+                                    }) { Icon(BingrIcons.otherSources, null, tint = Color.White, modifier = Modifier.size(24.dp)) }
+                                    Build174Logic.Action.WATCHED -> DetailAction(L("Watched"), if (isWatchedTitle) L("Mark as unwatched") else L("Mark as watched"), Modifier.weight(1f), { toggleWatchedMovie() }) {
+                                        Icon(if (isWatchedTitle) Icons.Default.CheckCircle else Icons.Default.Check, null, tint = if (isWatchedTitle) Theme.green else Color.White, modifier = Modifier.size(24.dp))
+                                    }
+                                    Build174Logic.Action.MORE -> DetailAction(L("More"), L("More"), Modifier.weight(1f), { moreMenu = true }) {
+                                        Icon(Icons.Default.MoreHoriz, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                                    }
+                                }
+                            }
+                        }
+                    } else
                     Row(horizontalArrangement = Arrangement.spacedBy(tvs(12)), verticalAlignment = Alignment.CenterVertically) {
                         // Mijn lijst: plus / vinkje in de accentkleur, met animatie (was een hartje)
                         DetailCircleBox(if (inMyList) L("In My List") else L("Add to My List"), onClick = { toggleMyList() }) { lit ->
@@ -581,7 +629,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                                 heroTrailer.toggleMute()
                             }
                         }
-                        if (trailerToPlay != null) DetailCircleButton(Icons.Default.Theaters) { heroTrailer.stop(); Trailer.open(ctx, trailerToPlay) }
+                        if (trailerToPlay != null) DetailCircleButton(Icons.Default.Theaters) { heroTrailer.stop(); trailerOpen = trailerToPlay }
                         if (isMovie) DetailCircleButton(if (isWatchedTitle) Icons.Default.CheckCircle else Icons.Default.Check) { toggleWatchedMovie() }
                         // downloaden (build 52): niet op TV
                         val movieItem = (target as? DetailTarget.MovieT)?.let { Playables.movie(it.movie, imdb) }
@@ -702,7 +750,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                         if (seasonTrailer != null) {
                             Spacer(Modifier.width(tvs(10)))
                             Row(
-                                Modifier.focusLift(1.05f) { Trailer.open(ctx, seasonTrailer) }
+                                Modifier.focusLift(1.05f) { heroTrailer.stop(); trailerOpen = seasonTrailer }
                                     .clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.12f))
                                     .padding(horizontal = 14.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -977,6 +1025,29 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                 S2Action(L("Open"), Icons.Default.Translate) { ScreensNav.detail(vt) },
             ), onDismiss = { versionMenu = null })
         }
+        // build 174: trailer in de app; Meer en de keuze onder Bronnen (telefoon)
+        trailerOpen?.let { t -> TrailerPlayerDialog(t) { trailerOpen = null } }
+        if (moreMenu) {
+            val movieItem = (target as? DetailTarget.MovieT)?.let { Playables.movie(it.movie, imdb) }
+            S2ActionDialog(title, listOfNotNull(
+                if (!target.id.startsWith("rec-") && !DiscoverItem.isExternal(target.id)) S2Action(L("Add to collection…"), Icons.AutoMirrored.Filled.PlaylistAdd) { addToCollection = true } else null,
+                if (movieItem != null && Downloads.canDownload(movieItem)) {
+                    val dl = Downloads.find(pid, movieItem.id)
+                    S2Action(if (dl?.isDone == true) L("Downloaded") else L("Download"), if (dl?.isDone == true) Icons.Default.DownloadDone else Icons.Default.Download) { download(movieItem, null) }
+                } else null,
+                S2Action(L("Share"), Icons.Default.Share) { share() },
+                if (Store.activeProfile?.kids != true && pid != null) S2Action(L("Hide for this profile"), Icons.Default.VisibilityOff, destructive = true) { blockConfirm = true } else null,
+            ), onDismiss = { moreMenu = false })
+        }
+        if (sourcesChoice) {
+            S2ActionDialog(L("Sources"), listOfNotNull(
+                if (!prefetchedSources.isNullOrEmpty()) S2Action(L("Other sources"), BingrIcons.otherSources) { sources = prefetchedSources ?: emptyList(); showSources = true } else null,
+            ) + versions.map { v ->
+                S2Action(listOfNotNull(v.info?.longName, ContentLanguage.displayTitle(v.target.title)).joinToString(" · "), Icons.Default.Translate) {
+                    if (v.target is DetailTarget.SeriesT) ScreensNav.detail(v.target) else versionMenu = v
+                }
+            }, onDismiss = { sourcesChoice = false })
+        }
         if (addToCollection) {
             AddToCollectionDialog(Collections.ref(target), target.title, target.poster) { addToCollection = false }
         }
@@ -1088,6 +1159,20 @@ private fun CreditLine(k: String, v: String) {
         },
         fontSize = tsp(13), maxLines = 2, overflow = TextOverflow.Ellipsis
     )
+}
+
+/** Build 174: knop in de rij onder Afspelen op de telefoon: icoon met de tekst eronder, even breed als de andere. */
+@Composable
+private fun DetailAction(text: String, label: String, modifier: Modifier, onClick: () -> Unit, icon: @Composable () -> Unit) {
+    Column(
+        modifier.focusLift(1.06f, onClick = onClick).semantics { contentDescription = label; role = Role.Button }
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(Modifier.height(26.dp), contentAlignment = Alignment.Center) { icon() }
+        Text(text, color = Theme.secondary, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
 }
 
 /** Ronde knop; op TV wit bij focus (zoals Netflix). */

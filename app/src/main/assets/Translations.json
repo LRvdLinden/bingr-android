@@ -1250,7 +1250,8 @@
   "This programme has already started": "بدأ هذا البرنامج بالفعل",
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "انتهت جلسة OpenSubtitles. سجّل الدخول مرة أخرى من الإعدادات.",
   "Your Trakt account is locked. Check trakt.tv.": "حسابك في Trakt مقفل. تحقق من trakt.tv.",
-  "Zap": "تصفّح القنوات"
+  "Zap": "تصفّح القنوات",
+  "Open Bingr to choose your radio stations.": "افتح Bingr لاختيار محطات الراديو."
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -2503,7 +2504,8 @@
   "This programme has already started": "Diese Sendung läuft bereits",
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "Deine OpenSubtitles-Sitzung ist abgelaufen. Melde dich in den Einstellungen erneut an.",
   "Your Trakt account is locked. Check trakt.tv.": "Dein Trakt-Konto ist gesperrt. Sieh auf trakt.tv nach.",
-  "Zap": "Zappen"
+  "Zap": "Zappen",
+  "Open Bingr to choose your radio stations.": "Öffne Bingr, um deine Radiosender zu wählen."
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -3756,7 +3758,8 @@
   "This programme has already started": "Este programa ya ha empezado",
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "Tu sesión de OpenSubtitles ha caducado. Vuelve a iniciar sesión en Ajustes.",
   "Your Trakt account is locked. Check trakt.tv.": "Tu cuenta de Trakt está bloqueada. Revisa trakt.tv.",
-  "Zap": "Zapping"
+  "Zap": "Zapping",
+  "Open Bingr to choose your radio stations.": "Abre Bingr para elegir tus emisoras de radio."
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -5009,7 +5012,8 @@
   "This programme has already started": "Ce programme a déjà commencé",
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "Ta session OpenSubtitles a expiré. Reconnecte-toi dans les Réglages.",
   "Your Trakt account is locked. Check trakt.tv.": "Ton compte Trakt est verrouillé. Vérifie sur trakt.tv.",
-  "Zap": "Zapper"
+  "Zap": "Zapper",
+  "Open Bingr to choose your radio stations.": "Ouvrez Bingr pour choisir vos stations de radio."
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -6262,7 +6266,8 @@
   "This programme has already started": "Questo programma è già iniziato",
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "La sessione OpenSubtitles è scaduta. Accedi di nuovo in Impostazioni.",
   "Your Trakt account is locked. Check trakt.tv.": "Il tuo account Trakt è bloccato. Controlla su trakt.tv.",
-  "Zap": "Zapping"
+  "Zap": "Zapping",
+  "Open Bingr to choose your radio stations.": "Apri Bingr per scegliere le tue stazioni radio."
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -7529,7 +7534,8 @@
   "This programme has already started": "Dit programma is al bezig",
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "Je OpenSubtitles-sessie is verlopen. Log opnieuw in via Instellingen.",
   "Your Trakt account is locked. Check trakt.tv.": "Je Trakt-account is vergrendeld. Kijk op trakt.tv.",
-  "Zap": "Zappen"
+  "Zap": "Zappen",
+  "Open Bingr to choose your radio stations.": "Open Bingr om je radiozenders te kiezen."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -8782,7 +8788,8 @@
   "This programme has already started": "Ten program już się zaczął",
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "Sesja OpenSubtitles wygasła. Zaloguj się ponownie w Ustawieniach.",
   "Your Trakt account is locked. Check trakt.tv.": "Twoje konto Trakt jest zablokowane. Sprawdź trakt.tv.",
-  "Zap": "Przełączaj"
+  "Zap": "Przełączaj",
+  "Open Bingr to choose your radio stations.": "Otwórz Bingr, aby wybrać stacje radiowe."
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -10035,7 +10042,8 @@
   "This programme has already started": "Este programa já começou",
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "A tua sessão OpenSubtitles expirou. Inicia sessão novamente nas Definições.",
   "Your Trakt account is locked. Check trakt.tv.": "A tua conta Trakt está bloqueada. Verifica em trakt.tv.",
-  "Zap": "Zapping"
+  "Zap": "Zapping",
+  "Open Bingr to choose your radio stations.": "Abre o Bingr para escolher as tuas rádios."
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -11288,7 +11296,8 @@
   "This programme has already started": "Bu program çoktan başladı",
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "OpenSubtitles oturumunun süresi doldu. Ayarlar'dan yeniden giriş yap.",
   "Your Trakt account is locked. Check trakt.tv.": "Trakt hesabın kilitli. trakt.tv'yi kontrol et.",
-  "Zap": "Kanal gez"
+  "Zap": "Kanal gez",
+  "Open Bingr to choose your radio stations.": "Radyo istasyonlarını seçmek için Bingr’ı aç."
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -12541,6 +12550,7 @@
   "This programme has already started": "该节目已开始",
   "Your OpenSubtitles session has expired. Sign in again in Settings.": "你的 OpenSubtitles 会话已过期。请在设置中重新登录。",
   "Your Trakt account is locked. Check trakt.tv.": "你的 Trakt 账户已被锁定。请访问 trakt.tv 查看。",
-  "Zap": "换台"
+  "Zap": "换台",
+  "Open Bingr to choose your radio stations.": "打开 Bingr 选择你的电台。"
  }
 }

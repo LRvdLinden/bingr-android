@@ -182,6 +182,13 @@
         </service>
         <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc" />
 
+        <!-- build 174: thuisscherm-widget "Bingr Radio" -->
+        <receiver android:name=".RadioWidget" android:exported="false" android:label="Bingr Radio">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/radio_widget_info" />
+        </receiver>
         <receiver android:name=".ReminderReceiver" android:exported="false" />
         <!-- Herinneringen opnieuw plannen na een herstart (alarmen overleven dat niet) -->
         <receiver android:name=".BootReceiver" android:exported="true">
