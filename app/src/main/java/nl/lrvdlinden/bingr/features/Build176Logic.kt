@@ -126,53 +126,6 @@ object Build176Logic {
         }
     }
 
-    // MARK: 3. Momenten bewaren
-
-    object Bookmarks {
-        const val MAX = 200
-        const val REMOVED_DAYS = 90L
-        data class B(
-            val id: String, val playlistID: String? = null, val key: String? = null, val title: String? = null,
-            val t: Long = 0, val at: Long, val removed: Boolean = false,
-        )
-
-        fun id(serverID: String, key: String, t: Double): String = "${serverID.lowercase()}|$key@${Math.floor(t).toLong()}"
-
-        /** Per id wint de nieuwste `at` (gelijk: removed); oude verwijderingen weg; max. 200 aanwezig; vaste volgorde. */
-        fun merge(local: List<B>, server: List<B>, now: Long): List<B> {
-            val by = HashMap<String, B>()
-            for (b in local + server) {
-                val c = by[b.id]
-                if (c == null || b.at > c.at || (b.at == c.at && b.removed && !c.removed)) by[b.id] = b
-            }
-            val cutoff = now - REMOVED_DAYS * 86_400_000L
-            val order = compareByDescending<B> { it.at }.thenBy { it.id }
-            val present = by.values.filter { !it.removed }.sortedWith(order).take(MAX)
-            val removed = by.values.filter { it.removed && it.at >= cutoff }.sortedWith(order)
-            return present + removed
-        }
-
-        /** Aanwezige momenten van één titel (sleutel + server), op `t` oplopend. */
-        fun forTitle(all: List<B>, serverID: String?, key: String): List<B> =
-            all.filter { !it.removed && it.key == key && (serverID == null || it.playlistID == null || it.playlistID.equals(serverID, true)) }
-                .sortedBy { it.t }
-
-        /** Bewaren (of opnieuw bewaren) op tijd [t]. */
-        fun add(all: List<B>, serverID: String, key: String, title: String, t: Double, now: Long): List<B> {
-            val b = B(id(serverID, key, t), serverID, key, title, Math.floor(t).toLong(), now)
-            return merge(all.filter { it.id != b.id }, listOf(b), now)
-        }
-
-        fun remove(all: List<B>, id: String, now: Long): List<B> =
-            merge(all.filter { it.id != id }, listOf(B(id, at = now, removed = true)), now)
-
-        /** "1:02:03" / "4:05" */
-        fun clock(t: Long): String {
-            val h = t / 3600; val m = (t % 3600) / 60; val s = t % 60
-            return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
-        }
-    }
-
     // MARK: 4. Herinnering op de releasedatum
 
     object Release {

@@ -269,8 +269,6 @@ class PlayerController(item: PlayableItem) {
     private fun startSeconds(fraction: Double?): Double? {
         if (isLive) return null
         pendingStartSeconds?.let { pendingStartSeconds = null; return it.takeIf { s -> s > 5 } }
-        // build 176: bewaard moment (eenmalig: bij herverbinden weer de gewone hervatplek)
-        item.startAt?.let { s -> item = item.copy(startAt = null); return s.takeIf { it > 1 } }
         val f = fraction ?: return null
         if (duration > 60) return f * duration
         Store.progress[item.id]?.let { p -> if (kotlin.math.abs(p.fraction - f) < 0.01 && p.position > 5) return p.position }

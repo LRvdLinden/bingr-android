@@ -284,8 +284,6 @@ data class PlayableItem(
     /** Build 154: TMDB-id (film of serie) en jaar, voor de inhoudssleutels van "gezien" en `ids` naar Trakt */
     val tmdbID: String? = null,
     val year: Int? = null,
-    /** Build 176: starten op precies deze plek (seconden), bijv. een bewaard moment; eenmalig (daarna gewoon hervatten). */
-    val startAt: Double? = null,
 ) {
     /** Build 153: titel zoals de app hem toont (zender: opgeschoonde zendernaam); [title] blijft voor sleutels. */
     val displayTitle: String get() = if (type == MediaType.LIVE) ContentLanguage.channelTitle(title) else ContentLanguage.displayTitle(title)

@@ -896,8 +896,6 @@ fun HomeScreen(filter: Filter) {
                         }
                     }.also {
                         shown(myMovies.isNotEmpty() || mySeries.isNotEmpty())
-                        // build 176: bewaarde momenten (alle, nieuwste eerst) onder Mijn lijst
-                        if (filter == Filter.ALL && Store.bookmarks.isNotEmpty()) item(key = "moments") { AllMomentsRow() }
                         // build 176: Nieuw en populair (Binnenkort en nieuwe seizoenen met een belletje; Alles = de pagina)
                         if (filter == Filter.ALL) item(key = "newpopular") { NewPopularHomeRow() }
                     }

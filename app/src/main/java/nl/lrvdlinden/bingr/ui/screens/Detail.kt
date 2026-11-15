@@ -797,30 +797,6 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                 }
             }
 
-            // MARK: build 176: bewaarde momenten van deze titel (film, of de afleveringen van deze serie), op tijd oplopend
-            run {
-                val all = Store.bookmarks
-                val moments = remember(all, target.id, episodes) {
-                    when (target) {
-                        is DetailTarget.MovieT -> Build176Logic.Bookmarks.forTitle(all.map { it.logic() }, pid, target.movie.id)
-                        is DetailTarget.SeriesT -> {
-                            val ids = episodes.mapTo(HashSet()) { it.id }
-                            all.map { it.logic() }.filter { !it.removed && it.key in ids &&
-                                (pid == null || it.playlistID == null || it.playlistID.equals(pid, true)) }
-                                .sortedWith(compareBy<Build176Logic.Bookmarks.B>({ b -> episodes.firstOrNull { it.id == b.key }?.let { it.season * 10_000 + it.number } ?: 0 }, { it.t }))
-                        }
-                    }.map { Bookmark176.of(it) }
-                }
-                MomentsRow(moments, showTitle = target is DetailTarget.SeriesT) { b ->
-                    when (target) {
-                        is DetailTarget.MovieT -> AppState.play(Playables.movie(target.movie, imdb).copy(startAt = b.t.toDouble()))
-                        is DetailTarget.SeriesT -> episodes.firstOrNull { it.id == b.key }?.let { e ->
-                            AppState.play(Playables.episode(e, target.series, imdb).copy(startAt = b.t.toDouble()))
-                        } ?: playMoment(b)
-                    }
-                }
-            }
-
             // MARK: afleveringen
             if (target is DetailTarget.SeriesT) {
                 val s = target.series

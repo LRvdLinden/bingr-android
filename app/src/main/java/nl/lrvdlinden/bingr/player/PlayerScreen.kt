@@ -31,7 +31,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Cast
@@ -440,16 +439,6 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     }
 
     /** Build 173: één tik terug naar de vorige zender (en weer terug). */
-    /** Build 176: moment bewaren op de huidige tijd (sleutel = die van Verder kijken, `bookmarks` in het profiel). */
-    fun saveMoment() {
-        val it = player.item
-        val sid = it.sourceID ?: Store.activePlaylistID ?: Playlists.source?.id ?: return
-        val title = if (it.type == MediaType.EPISODE && it.season != null && it.episode != null)
-            "${it.displayTitle} · S${it.season}:E${it.episode}" else it.displayTitle
-        Store.addBookmark(sid, it.id, title, player.currentTime)
-        flash(L("Moment saved"))
-    }
-
     fun previousChannel() {
         val id = prevChannel.previous ?: return
         val c = Playlists.library.channels.firstOrNull { it.id == id } ?: return
@@ -923,8 +912,6 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                     onZapList = { panel = PlayerPanel.ZAP },
                     onPreviousChannel = if (prevChannel.previous != null) ({ previousChannel() }) else null,
                     onEpisodes = if (player.item.type == MediaType.EPISODE) ({ openEpisodes() }) else null,
-                    onSaveMoment = if (!player.isLive && player.item.channelID == null &&
-                        (player.item.type == MediaType.MOVIE || player.item.type == MediaType.EPISODE)) ({ saveMoment() }) else null,
                 )
             }
 
@@ -1120,8 +1107,6 @@ private fun PlayerControls(
     onZapList: () -> Unit = {},
     onPreviousChannel: (() -> Unit)? = null,
     onEpisodes: (() -> Unit)? = null,
-    /** Build 176: "Moment bewaren" (films en afleveringen) */
-    onSaveMoment: (() -> Unit)? = null,
 ) {
     val live = player.isLive
     val sleepCountdown = sleepCountdown173(player)
@@ -1241,7 +1226,6 @@ private fun PlayerControls(
                     }
                     buttons.add(Triple(Icons.Filled.Subtitles, L("Audio & subtitles")) { onPanel(PlayerPanel.AUDIO_SUBS) })
                     onEpisodes?.let { f -> buttons.add(Triple(Icons.Filled.Layers, L("Episodes")) { f() }) }
-                    onSaveMoment?.let { f -> buttons.add(Triple(Icons.Filled.BookmarkAdd, L("Save moment")) { f() }) }
                     if (hasSources) buttons.add(Triple(Icons.Filled.VideoLibrary, L("Sources")) { onPanel(PlayerPanel.SOURCES) })
                     if (live && Playlists.library.channels.isNotEmpty()) buttons.add(Triple(Icons.Filled.GridView, "Multiview") { onMultiview() })
                     // build 52: andere bron (live) en intro/aftiteling markeren (afleveringen)

@@ -49,14 +49,6 @@ private class J(val s: String) {
 }
 
 private val isoFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
-private fun iso(s: String): Long = isoFmt.parse(s.replace(Regex("""\.\d+Z$"""), "Z")).time
-
-@Suppress("UNCHECKED_CAST")
-private fun bm(v: Any?): L.Bookmarks.B {
-    val m = v as Map<String, Any?>
-    return L.Bookmarks.B(m["id"] as String, m["playlistID"] as String?, m["key"] as String?, m["title"] as String?,
-        (m["t"] as Double?)?.toLong() ?: 0, iso(m["at"] as String), m["removed"] == true)
-}
 
 @Suppress("UNCHECKED_CAST")
 fun main(args: Array<String>) {
@@ -91,23 +83,6 @@ fun main(args: Array<String>) {
         val got = hit?.let { mapOf("field" to if (it.field == L.EpgSearch.Field.TITLE) "title" else "description", "highlight" to it.highlight(title, desc)) }
         eq("epgSearch '$q'", got, exp)
     }
-    for (c in cases("bookmarks")) {
-        val m = c as Map<String, Any?>
-        val merged = L.Bookmarks.merge((m["local"] as List<Any?>).map { bm(it) }, (m["server"] as List<Any?>).map { bm(it) }, iso(m["now"] as String))
-        val exp = (m["expect"] as List<Any?>).map { e -> val o = e as Map<String, Any?>; Triple(o["id"], o["removed"] == true, iso(o["at"] as String)) }
-        eq("bookmarks ${m["name"]}", merged.map { Triple(it.id, it.removed, it.at) }, exp)
-    }
-    val lim = (root["bookmarks"] as Map<String, Any?>)["limit"] as Map<String, Any?>
-    val n = (lim["count"] as Double).toInt()
-    val base = iso("2026-11-01T00:00:00Z")
-    val many = (0 until n).map { L.Bookmarks.B("abc|k$it@1", "abc", "k$it", "K", 1, base + it * 60_000L) }
-    val kept = L.Bookmarks.merge(many, emptyList(), base + 86_400_000L)
-    eq("bookmarks limiet", kept.size, (lim["keep"] as Double).toInt())
-    eq("bookmarks limiet oudste weg", kept.none { it.id == "abc|k4@1" } && kept.any { it.id == "abc|k5@1" }, true)
-    for ((i, c) in cases("bookmarkID").withIndex()) {
-        val a = c as List<Any?>
-        eq("bookmarkID $i", L.Bookmarks.id(a[0] as String, a[1] as String, a[2] as Double), a[3])
-    }
     for ((i, c) in cases("releaseReminder").withIndex()) {
         val a = c as List<Any?>
         val tmdb = (a[1] as Double).toInt(); val season = (a[2] as Double?)?.toInt()
@@ -116,12 +91,6 @@ fun main(args: Array<String>) {
     }
 
     // eigen gevallen (Android)
-    eq("bookmarks: toevoegen", L.Bookmarks.add(emptyList(), "ABC", "x1", "Film", 61.7, 1000).map { it.id }, listOf("abc|x1@61"))
-    eq("bookmarks: verwijderen", L.Bookmarks.remove(L.Bookmarks.add(emptyList(), "abc", "x1", "F", 5.0, 1000), "abc|x1@5", 2000).single().removed, true)
-    eq("bookmarks: per titel", L.Bookmarks.forTitle(listOf(
-        L.Bookmarks.B("abc|x@90", "abc", "x", "F", 90, 1), L.Bookmarks.B("abc|x@10", "ABC", "x", "F", 10, 2),
-        L.Bookmarks.B("abc|y@5", "abc", "y", "G", 5, 3), L.Bookmarks.B("abc|x@7", at = 4, removed = true)), "abc", "x").map { it.t }, listOf(10L, 90L))
-    eq("klok", L.Bookmarks.clock(3723), "1:02:03"); eq("klok kort", L.Bookmarks.clock(65), "1:05")
     eq("autoplay instelling kind", L.Autoplay.effective(null, true), false)
     eq("poster maat", L.Posters.size(300), "w342"); eq("poster maat groot", L.Posters.size(2000), "w780")
     eq("poster url kleiner", L.Posters.sized("https://image.tmdb.org/t/p/original/a.jpg", 180), "https://image.tmdb.org/t/p/w185/a.jpg")

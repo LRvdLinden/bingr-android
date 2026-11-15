@@ -20,23 +20,6 @@ import kotlinx.serialization.Serializable
  * Build 176 (1.0.8): Android-kant van docs/ACCOUNT.md "Build 176" (pure regels in [Build176Logic]).
  */
 
-/** Moment (bladwijzer) zoals in `profile.<id>.bookmarks`; `removed` = verwijdering (blijft 90 dagen staan). */
-@Serializable
-data class Bookmark176(
-    val id: String,
-    val playlistID: String? = null,
-    val key: String? = null,
-    val title: String? = null,
-    val t: Long = 0,
-    val at: Long,
-    val removed: Boolean = false,
-) {
-    fun logic() = Build176Logic.Bookmarks.B(id, playlistID, key, title, t, at, removed)
-    companion object {
-        fun of(b: Build176Logic.Bookmarks.B) = Bookmark176(b.id, b.playlistID, b.key, b.title, b.t, b.at, b.removed)
-    }
-}
-
 /** `profile.<id>.autoplayNext` = {value, at}. */
 @Serializable
 data class AutoplayPref176(val value: Boolean, val at: Long)
