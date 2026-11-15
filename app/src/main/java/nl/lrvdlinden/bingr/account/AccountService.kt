@@ -980,10 +980,11 @@ object Account {
      * Build 171: crashrapport naar device-auth `crash_report`. Ingelogd met de sessie; anders alleen met de app-sleutel
      * (`apikey`, de server begrenst per IP). Geeft de HTTP-code, null = netwerkfout (later opnieuw).
      */
-    internal suspend fun crashReport(body: JsonElement): Int? {
-        if (!configured) return null
-        if (isSignedIn) authedDeviceAuth(body)?.let { return it.code }
-        return try { post("/functions/v1/device-auth", body).code } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
+    internal suspend fun crashReport(body: JsonElement): Pair<Int?, String?> {
+        if (!configured) return null to null
+        if (isSignedIn) authedDeviceAuth(body)?.let { return it.code to it.errorCode }
+        return try { post("/functions/v1/device-auth", body).let { it.code to it.errorCode } }
+            catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null to null }
     }
 
     /**
@@ -1141,7 +1142,8 @@ object Account {
         val current: Boolean get() = deviceId == Account.deviceId
     }
 
-    data class StreamList(val limit: Int, val streams: List<StreamInfo>, val plan: String? = null) {
+    /** [stopRemote] (build 171): de server kent "Stoppen op dat apparaat" (`stop_remote:true` bij stream_limit). */
+    data class StreamList(val limit: Int, val streams: List<StreamInfo>, val plan: String? = null, val stopRemote: Boolean = false) {
         /** Build 88: Gratis (van de server, anders uit het bewaarde abonnement). */
         val isFree: Boolean get() = plan?.lowercase()?.let { it == "free" } ?: Entitlements.isFree
     }
@@ -1201,7 +1203,8 @@ object Account {
         // build 167: eerst activation_required (ook een 403), dan pas de streamlimiet
         if (Build167Logic.Access.isActivationRequired(r.code, r.json.jS("error") ?: r.errorCode)) return StreamStart.ActivationRequired
         if (r.code == 403 && (r.errorCode == "stream_limit" || r.json.jObj?.containsKey("streams") == true)) {
-            return StreamStart.Limit(StreamList(r.json.jI("limit") ?: DEFAULT_STREAM_LIMIT, parseStreams(r.json.jList("streams")), r.json.jS("plan")))
+            return StreamStart.Limit(StreamList(r.json.jI("limit") ?: DEFAULT_STREAM_LIMIT, parseStreams(r.json.jList("streams")), r.json.jS("plan"),
+                stopRemote = r.json.jB("stop_remote") == true))
         }
         return if (r.ok) StreamStart.Ok else StreamStart.Failed
     }
@@ -1212,9 +1215,16 @@ object Account {
             put("action", "stream_ping"); put("device_id", deviceId)
             if (!title.isNullOrBlank()) put("title", title)
         }) ?: return null
-        if (r.json.jB("stopped") == true) return false
+        if (r.json.jB("stopped") == true) {
+            // build 171: gestopt vanaf een ander apparaat: niet vanzelf opnieuw starten
+            if (r.json.jS("reason") == "stopped_remotely") lastRemoteStopBy = r.json.jS("by_device_name") ?: ""
+            return false
+        }
         return if (r.ok) true else null
     }
+
+    /** Build 171: naam van het apparaat dat deze stream stopte (na een ping met `stopped_remotely`); "" = onbekend. */
+    @Volatile var lastRemoteStopBy: String? = null
 
     suspend fun streamStop() {
         authedDeviceAuth(buildJsonObject { put("action", "stream_stop"); put("device_id", deviceId) })
@@ -1226,7 +1236,7 @@ object Account {
      * `{stopped:true}`. true = gelukt.
      */
     suspend fun streamStopDevice(id: String): Boolean {
-        val r = authedDeviceAuth(buildJsonObject { put("action", "stream_stop"); put("device_id", id) }) ?: return false
+        val r = authedDeviceAuth(buildJsonObject { put("action", "stream_stop"); put("device_id", id); put("by_device_id", deviceId) }) ?: return false
         return r.ok
     }
 

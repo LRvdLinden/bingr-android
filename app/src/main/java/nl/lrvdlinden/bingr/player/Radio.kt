@@ -132,6 +132,7 @@ object Radio {
             onBlocked = { l -> exo?.stop(); current = null; playing = false; owner = null; blocked = l },
             onActivation = { exo?.stop(); current = null; playing = false; owner = null },
             background = true,
+            onRemoteStop = { exo?.stop(); current = null; playing = false; owner = null },
         )
         owner = o
         StreamSession.begin(o)

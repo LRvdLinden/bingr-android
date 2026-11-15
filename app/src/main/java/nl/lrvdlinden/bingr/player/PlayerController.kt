@@ -609,7 +609,7 @@ class PlayerController(item: PlayableItem) {
         streamItemID = item.id
         streamLimit = null
         val o = StreamSession.Owner(info = { streamInfo() }, onBlocked = { l -> blockedByLimit(l) },
-            onActivation = { blockedByActivation() })
+            onActivation = { blockedByActivation() }, onRemoteStop = { by -> stoppedRemotely(by) })
         streamOwner = o
         StreamSession.begin(o)
     }
@@ -662,6 +662,12 @@ class PlayerController(item: PlayableItem) {
         timer?.cancel(); timer = null
         runCatching { engine.stop() }
         isPlaying = false; isBuffering = false; reconnecting = false
+    }
+
+    /** Build 171: gestopt vanaf een ander apparaat: stoppen met de melding; Opnieuw = zelf weer starten. */
+    private fun stoppedRemotely(by: String) {
+        blockedByActivation()
+        fail(if (by.isBlank()) L("Stopped from another device") else L("Stopped from %@", by))
     }
 
     /** "Close" of "Try again" op het scherm "Too many people are watching". */

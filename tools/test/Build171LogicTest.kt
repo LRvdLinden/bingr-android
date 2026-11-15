@@ -99,6 +99,11 @@ fun main() {
     val K = Build171Logic.Crash
     eq("url", K.scrub("open http://host.tv:8080/live/user/pass/1.ts mislukt"), "open <url> mislukt")
     eq("host/pad", K.scrub("at line.example.com/get.php?username=a&password=b"), "at <url>")
+    eq("xtream-pad", K.scrub("open /live/jan/geheim/123.ts"), "open <url>")
+    eq("gebruiker@host", K.scrub("jan:geheim@tv.host:8080 down"), "<url> down")
+    eq("sleutel=waarde", K.scrub("failed password=abc&x"), "failed password=<redacted>&x")
+    eq("query", K.scrub("load ?a=1&b=2"), "load <query>")
+    eq("jwt", K.scrub("bearer eyJhbGc.eyJzdWIi.sig"), "bearer <token>")
     eq("e-mail", K.scrub("user a.b@c.nl"), "user <email>")
     eq("ip", K.scrub("connect 192.168.1.20:80 failed"), "connect <ip> failed")
     eq("token", K.scrub("key eyJhbGciOiJIUzI1NiJ9abc123def456"), "key <token>")
@@ -110,7 +115,7 @@ fun main() {
     val sig1 = K.signature("crash", "java.lang.IllegalStateException: a", "\tat nl.lrvdlinden.bingr.A.b(A.kt:1)")
     val sig2 = K.signature("crash", "java.lang.IllegalStateException: b", "\tat nl.lrvdlinden.bingr.A.b(A.kt:99)")
     eq("signatuur zonder regels", sig1, sig2)
-    eq("signatuur lengte", sig1.length, 16)
+    eq("signatuur leesbaar", sig1, "java.lang.IllegalStateException @ nl.lrvdlinden.bingr.A.b")
     val r = Build171Logic.Crash.Report("crash", sig1, "m", "s", now, build = 171)
     var q = K.enqueue(emptyList(), r, now)
     q = K.enqueue(q, r.copy(at = now + 1), now + 1)
@@ -121,7 +126,9 @@ fun main() {
     eq("404 later", K.outcome(404), Build171Logic.Crash.Outcome.RETRY)
     eq("netwerk later", K.outcome(null), Build171Logic.Crash.Outcome.RETRY)
     eq("200 klaar", K.outcome(200), Build171Logic.Crash.Outcome.SENT)
-    eq("400 weg", K.outcome(400), Build171Logic.Crash.Outcome.DROP)
+    eq("400 weg", K.outcome(400, "bad_report"), Build171Logic.Crash.Outcome.DROP)
+    eq("400 oude server", K.outcome(400, "unknown_action"), Build171Logic.Crash.Outcome.RETRY)
+    eq("413 weg", K.outcome(413), Build171Logic.Crash.Outcome.DROP)
 
     println("build171: $checks controles")
     if (failures > 0) { println("Build171LogicTest: $failures van $checks MISLUKT"); kotlin.system.exitProcess(1) }

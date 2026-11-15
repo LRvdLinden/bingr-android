@@ -263,19 +263,32 @@ object Build171Logic {
         private val IPV4_RE = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b""")
         private val IPV6_RE = Regex("""(?i)\b(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}\b""")
         private val QUERY_RE = Regex("""\?[^\s"'<>]*=[^\s"'<>]*""")
+        /** Xtream-paden zonder host ("/live/<user>/<pass>/1.ts") en de bekende IPTV-scripts. */
+        private val XTREAM_RE = Regex("""(?i)/(?:live|movie|series|timeshift)/[^\s/"'<>]+/[^\s/"'<>]+/[^\s"'<>]*""")
+        private val SCRIPT_RE = Regex("""(?i)\b(?:get|player_api|xmltv|panel_api)\.php\b[^\s"'<>]*""")
+        private val USERINFO_RE = Regex("""(?i)\b[^\s:/@"'<>]+:[^\s:/@"'<>]+@[a-z0-9.\-]+(?::\d+)?[^\s"'<>]*""")
+        private val SECRET_KV_RE = Regex("""(?i)\b(username|password|passwd|pass|token|key|apikey|api_key|mac|auth|secret)=([^\s&"'<>]+)""")
+        private val JWT_RE = Regex("""eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]*""")
+        private val HEX_RE = Regex("""\b[0-9a-fA-F]{32,}\b""")
         /** Lange tokens: 24+ tekens zonder spatie met cijfers én letters (JWT, sleutels, wachtwoorden in paden). */
         private val TOKEN_RE = Regex("""[A-Za-z0-9_\-+/=]{24,}""")
 
         /** Alles wat persoonlijk kan zijn eruit: URL's (IPTV-links bevatten gebruikersnaam en wachtwoord), IP, e-mail, tokens. */
         fun scrub(s: String): String {
             var t = s
+            t = JWT_RE.replace(t, "<token>")
             t = URL_RE.replace(t, "<url>")
+            t = USERINFO_RE.replace(t, "<url>")
             t = WWW_RE.replace(t, "<url>")
             t = HOSTPATH_RE.replace(t, "<url>")
+            t = XTREAM_RE.replace(t, "<url>")
+            t = SCRIPT_RE.replace(t, "<url>")
             t = EMAIL_RE.replace(t, "<email>")
             t = IPV4_RE.replace(t, "<ip>")
             t = IPV6_RE.replace(t) { m -> if (m.value.count { it == ':' } >= 2 && m.value.any { it.isDigit() || it in 'a'..'f' }) "<ip>" else m.value }
-            t = QUERY_RE.replace(t, "")
+            t = SECRET_KV_RE.replace(t) { m -> m.groupValues[1] + "=<redacted>" }
+            t = QUERY_RE.replace(t, "<query>")
+            t = HEX_RE.replace(t, "<token>")
             t = TOKEN_RE.replace(t) { m ->
                 val v = m.value
                 // pakketnamen en klassen ("nl.lrvdlinden.bingr.PlayerController") hebben punten en zijn geen token
@@ -300,14 +313,15 @@ object Build171Logic {
         fun frames(stack: String): List<String> = stack.lineSequence().map { it.trim() }
             .filter { it.startsWith("at ") }.map { it.removePrefix("at ").substringBefore('(').trim() }.toList()
 
-        /** Signatuur: soort + klasse van de fout + de eerste 3 frames van Bingr (anders de eerste 3), zonder regelnummers. */
+        /**
+         * Signatuur (contract build 171): klasse van de fout + het eerste frame van Bingr (anders het eerste frame), zonder
+         * regelnummers of adressen; max. 200 tekens. "java.lang.IllegalStateException @ nl.lrvdlinden.bingr.A.b"
+         */
         fun signature(kind: String, exception: String, stack: String): String {
             val all = frames(stack)
-            val own = all.filter { it.startsWith("nl.lrvdlinden.") }
-            val top = (own.ifEmpty { all }).take(3)
-            val base = kind + "|" + exception.substringBefore(':').trim() + "|" + top.joinToString(";")
-            val md = java.security.MessageDigest.getInstance("SHA-256").digest(base.toByteArray(Charsets.UTF_8))
-            return md.take(8).joinToString("") { "%02x".format(it) }
+            val top = all.firstOrNull { it.startsWith("nl.lrvdlinden.") } ?: all.firstOrNull()
+            val cls = exception.substringBefore(':').trim().ifEmpty { kind }
+            return scrub(if (top != null) "$cls @ $top" else cls).replace(Regex("\\d{3,}"), "#").take(200)
         }
 
         data class Report(
@@ -331,9 +345,11 @@ object Build171Logic {
 
         /** Wat te doen met het antwoord van de server: verstuurd, later opnieuw (404/5xx/netwerk) of weggooien (400/413). */
         enum class Outcome { SENT, RETRY, DROP }
-        fun outcome(code: Int?): Outcome = when {
+        /** 400 unknown_action / 404 = oude server, 401/429/5xx = later; 400 bad_report en 413 = weggooien. */
+        fun outcome(code: Int?, error: String? = null): Outcome = when {
             code == null -> Outcome.RETRY
             code in 200..299 -> Outcome.SENT
+            code == 400 && error == "unknown_action" -> Outcome.RETRY
             code == 404 || code == 401 || code == 429 || code >= 500 -> Outcome.RETRY
             else -> Outcome.DROP
         }

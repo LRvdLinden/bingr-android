@@ -1172,7 +1172,9 @@
   "This title is hidden for this profile": "هذا العنوان مخفي لهذا الملف",
   "Unblock": "إلغاء الحظر",
   "Unpin category": "إلغاء تثبيت الفئة",
-  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "عند تعطل Bingr أو تجمده، يُرسل تقرير بدون بيانات شخصية (لا عناوين ولا روابط ولا كلمات مرور) إلى Bingr عند التشغيل التالي."
+  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "عند تعطل Bingr أو تجمده، يُرسل تقرير بدون بيانات شخصية (لا عناوين ولا روابط ولا كلمات مرور) إلى Bingr عند التشغيل التالي.",
+  "Stopped from another device": "تم الإيقاف من جهاز آخر",
+  "Stopped from %@": "تم الإيقاف من %@"
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -2347,7 +2349,9 @@
   "This title is hidden for this profile": "Dieser Titel ist für dieses Profil ausgeblendet",
   "Unblock": "Entsperren",
   "Unpin category": "Kategorie lösen",
-  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Wenn Bingr abstürzt oder hängt, wird beim nächsten Start ein Bericht ohne persönliche Daten (keine Adressen, Links oder Passwörter) an Bingr gesendet."
+  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Wenn Bingr abstürzt oder hängt, wird beim nächsten Start ein Bericht ohne persönliche Daten (keine Adressen, Links oder Passwörter) an Bingr gesendet.",
+  "Stopped from another device": "Von einem anderen Gerät beendet",
+  "Stopped from %@": "Von %@ beendet"
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -3522,7 +3526,9 @@
   "This title is hidden for this profile": "Este título está oculto para este perfil",
   "Unblock": "Desbloquear",
   "Unpin category": "Desfijar categoría",
-  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Si Bingr se cierra o se bloquea, en el siguiente inicio se envía a Bingr un informe sin datos personales (sin direcciones, enlaces ni contraseñas)."
+  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Si Bingr se cierra o se bloquea, en el siguiente inicio se envía a Bingr un informe sin datos personales (sin direcciones, enlaces ni contraseñas).",
+  "Stopped from another device": "Detenido desde otro dispositivo",
+  "Stopped from %@": "Detenido desde %@"
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -4697,7 +4703,9 @@
   "This title is hidden for this profile": "Ce titre est masqué pour ce profil",
   "Unblock": "Débloquer",
   "Unpin category": "Désépingler la catégorie",
-  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Si Bingr plante ou se fige, un rapport sans données personnelles (ni adresses, ni liens, ni mots de passe) est envoyé à Bingr au prochain démarrage."
+  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Si Bingr plante ou se fige, un rapport sans données personnelles (ni adresses, ni liens, ni mots de passe) est envoyé à Bingr au prochain démarrage.",
+  "Stopped from another device": "Arrêté depuis un autre appareil",
+  "Stopped from %@": "Arrêté depuis %@"
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -5872,7 +5880,9 @@
   "This title is hidden for this profile": "Questo titolo è nascosto per questo profilo",
   "Unblock": "Sblocca",
   "Unpin category": "Rimuovi fissaggio",
-  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Se Bingr si arresta o si blocca, al prossimo avvio viene inviato a Bingr un rapporto senza dati personali (niente indirizzi, link o password)."
+  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Se Bingr si arresta o si blocca, al prossimo avvio viene inviato a Bingr un rapporto senza dati personali (niente indirizzi, link o password).",
+  "Stopped from another device": "Interrotto da un altro dispositivo",
+  "Stopped from %@": "Interrotto da %@"
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -7061,7 +7071,9 @@
   "This title is hidden for this profile": "Deze titel is verborgen voor dit profiel",
   "Unblock": "Deblokkeren",
   "Unpin category": "Categorie losmaken",
-  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Als Bingr crasht of vastloopt, gaat er bij de volgende start een rapport zonder persoonsgegevens (geen adressen, links of wachtwoorden) naar Bingr."
+  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Als Bingr crasht of vastloopt, gaat er bij de volgende start een rapport zonder persoonsgegevens (geen adressen, links of wachtwoorden) naar Bingr.",
+  "Stopped from another device": "Gestopt vanaf een ander apparaat",
+  "Stopped from %@": "Gestopt vanaf %@"
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -8236,7 +8248,9 @@
   "This title is hidden for this profile": "Ten tytuł jest ukryty dla tego profilu",
   "Unblock": "Odblokuj",
   "Unpin category": "Odepnij kategorię",
-  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Gdy Bingr ulegnie awarii lub się zawiesi, przy następnym uruchomieniu do Bingr trafi raport bez danych osobowych (bez adresów, linków i haseł)."
+  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Gdy Bingr ulegnie awarii lub się zawiesi, przy następnym uruchomieniu do Bingr trafi raport bez danych osobowych (bez adresów, linków i haseł).",
+  "Stopped from another device": "Zatrzymano z innego urządzenia",
+  "Stopped from %@": "Zatrzymano z %@"
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -9411,7 +9425,9 @@
   "This title is hidden for this profile": "Este título está oculto para este perfil",
   "Unblock": "Desbloquear",
   "Unpin category": "Desafixar categoria",
-  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Se o Bingr falhar ou bloquear, no próximo arranque é enviado ao Bingr um relatório sem dados pessoais (sem endereços, links ou palavras-passe)."
+  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Se o Bingr falhar ou bloquear, no próximo arranque é enviado ao Bingr um relatório sem dados pessoais (sem endereços, links ou palavras-passe).",
+  "Stopped from another device": "Parado a partir de outro dispositivo",
+  "Stopped from %@": "Parado a partir de %@"
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -10586,7 +10602,9 @@
   "This title is hidden for this profile": "Bu başlık bu profil için gizli",
   "Unblock": "Engeli kaldır",
   "Unpin category": "Kategori sabitlemesini kaldır",
-  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Bingr çöktüğünde veya donduğunda, bir sonraki açılışta Bingr'e kişisel veri içermeyen (adres, bağlantı veya şifre yok) bir rapor gönderilir."
+  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "Bingr çöktüğünde veya donduğunda, bir sonraki açılışta Bingr'e kişisel veri içermeyen (adres, bağlantı veya şifre yok) bir rapor gönderilir.",
+  "Stopped from another device": "Başka bir cihazdan durduruldu",
+  "Stopped from %@": "%@ cihazından durduruldu"
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -11761,6 +11779,8 @@
   "This title is hidden for this profile": "此影片已对此档案隐藏",
   "Unblock": "取消屏蔽",
   "Unpin category": "取消置顶分类",
-  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "当 Bingr 崩溃或卡住时，会在下次启动时向 Bingr 发送一份不含个人数据（无地址、链接或密码）的报告。"
+  "When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.": "当 Bingr 崩溃或卡住时，会在下次启动时向 Bingr 发送一份不含个人数据（无地址、链接或密码）的报告。",
+  "Stopped from another device": "已从其他设备停止",
+  "Stopped from %@": "已从 %@ 停止"
  }
 }

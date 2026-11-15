@@ -23,7 +23,9 @@ object StreamSession {
     /** [onActivation] (build 167): stream_start gaf 403 activation_required; afspelen stoppen (het scherm Activeer Lifetime komt erover). */
     class Owner(val info: () -> Info, val onBlocked: (Account.StreamList) -> Unit, val onActivation: () -> Unit = {},
                 /** build 171: radio speelt door op de achtergrond (geen stream_stop bij ON_STOP) */
-                val background: Boolean = false)
+                val background: Boolean = false,
+                /** build 171: gestopt vanaf een ander apparaat (naam, "" = onbekend): stoppen, niet opnieuw starten */
+                val onRemoteStop: (String) -> Unit = {})
 
     private var owner: Owner? = null
     /** Op de achtergrond gezet: stream_stop is al verstuurd. */
@@ -99,7 +101,18 @@ object StreamSession {
         if (owner !== o || suspended) return
         val info = o.info()
         // false = de server telt deze stream niet meer (bijv. te lange pauze): opnieuw starten
-        if (Account.streamPing(info.title) == false && owner === o) startNow(o, info)
+        Account.lastRemoteStopBy = null
+        if (Account.streamPing(info.title) == false && owner === o) {
+            val by = Account.lastRemoteStopBy
+            if (by != null) {
+                Account.lastRemoteStopBy = null
+                owner = null
+                pingJob?.cancel(); pingJob = null
+                o.onRemoteStop(by)
+                return
+            }
+            startNow(o, info)
+        }
     }
 
     private fun installObserver() {

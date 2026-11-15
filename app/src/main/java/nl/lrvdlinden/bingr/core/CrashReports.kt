@@ -142,11 +142,12 @@ object CrashReports {
                 var stop = false
                 for (r in queue) {
                     if (stop || !Build171Logic.Crash.allowed(sent, now)) { left += r; continue }
-                    val code = Account.crashReport(buildJsonObject {
+                    val (code, err) = Account.crashReport(buildJsonObject {
                         put("action", "crash_report")
                         put("device_id", Account.deviceId)
-                        put("platform", Account.devicePlatform)
-                        put("app_version", r.appVersion.ifEmpty { BuildConfig.VERSION_NAME })
+                        // contract build 171: android of androidtv
+                        put("platform", if (AppState.isTV) "androidtv" else "android")
+                        put("app_version", "${r.appVersion.ifEmpty { BuildConfig.VERSION_NAME }} (${r.build.takeIf { it > 0 } ?: BuildConfig.VERSION_CODE})")
                         put("build", r.build.takeIf { it > 0 } ?: BuildConfig.VERSION_CODE)
                         put("os_version", Account.osVersion.trim())
                         put("device_model", ((Build.MANUFACTURER ?: "") + " " + (Build.MODEL ?: "")).trim().take(80))
@@ -157,7 +158,7 @@ object CrashReports {
                         put("at", Build149Logic.Dates.formatIso(r.at))
                         put("count", r.count)
                     })
-                    when (Build171Logic.Crash.outcome(code)) {
+                    when (Build171Logic.Crash.outcome(code, err)) {
                         Build171Logic.Crash.Outcome.SENT -> sent += now
                         Build171Logic.Crash.Outcome.DROP -> {}
                         Build171Logic.Crash.Outcome.RETRY -> { left += r; stop = true }

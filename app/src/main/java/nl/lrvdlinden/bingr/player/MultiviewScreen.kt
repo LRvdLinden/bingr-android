@@ -106,6 +106,11 @@ fun MultiviewScreen(onClose: () -> Unit) {
                 streamOwner = null
                 tiles.forEach { it.controller.stop() }
             },
+            // build 171: gestopt vanaf een ander apparaat
+            onRemoteStop = {
+                streamOwner = null
+                tiles.forEach { it.controller.stop() }
+            },
         )
         streamOwner = o
         StreamSession.begin(o)

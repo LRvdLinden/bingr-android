@@ -172,7 +172,7 @@ fun StreamLimitScreen(info: Account.StreamList, onRetry: () -> Unit, onClose: ()
         scope.launch {
             val fresh = try { Account.listStreams() } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
             working = false
-            if (fresh != null && fresh.streams.count { !it.current } >= fresh.limit) data = fresh
+            if (fresh != null && fresh.streams.count { !it.current } >= fresh.limit) data = fresh.copy(stopRemote = data.stopRemote)
             else onRetry()
         }
     }
@@ -207,7 +207,7 @@ fun StreamLimitScreen(info: Account.StreamList, onRetry: () -> Unit, onClose: ()
                     Column(Modifier.s2Cell(i, sorted.size)) {
                         if (i > 0) S2Divider()
                         StreamRow(s, details = true)
-                        if (!s.current) Row(Modifier.padding(start = tvs(70), bottom = tvs(10))) {
+                        if (!s.current && data.stopRemote) Row(Modifier.padding(start = tvs(70), bottom = tvs(10))) {
                             DeviceSmallButton(L("Stop on that device"), Theme.red, null, !working) { stopOn(s) }
                         }
                     }
