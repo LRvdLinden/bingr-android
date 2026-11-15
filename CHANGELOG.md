@@ -4,6 +4,33 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.7 · Build 174
+_15 november 2026_
+
+### iOS, iPadOS en Android
+
+**Nieuw**
+
+- Widget Bingr Radio met je favoriete zenders en wat er nu speelt
+
+### iOS, iPadOS, Android en Website
+
+**Verbeterd**
+
+- Detailpagina op de telefoon past weer op het scherm: de metaregel breekt af en onder Afspelen staan Mijn lijst, Trailer, Bronnen, Gezien en Meer
+
+### iOS, iPadOS, tvOS, macOS, Android, Android TV en Website
+
+**Verbeterd**
+
+- Altijd de beste trailer uit alle bronnen (officiële trailer, eerst in je eigen taal, dan Engels), ook per seizoen
+
+### Android en Android TV
+
+**Nieuw**
+
+- Trailers spelen nu in de app
+
 ## Versie 1.0.7 · Build 173
 _15 november 2026_
 
