@@ -73,6 +73,9 @@ object Details {
             }
         }
         val yearInt = d.year?.take(4)?.toIntOrNull()
+        // build 174: trailers uit alle bronnen (server, TMDB, Trakt), daarna de beste
+        val trailers = ArrayList<Build174Logic.Candidate>()
+        Build174Logic.youtubeID(d.trailerYouTubeID)?.let { trailers += Build174Logic.Candidate(it, Build174Logic.Source.SERVER) }
 
         // IMDb via OMDb
         val meta = when (t) {
@@ -90,6 +93,7 @@ object Details {
             if (d.cast.isEmpty()) meta.actors?.let { a -> d.cast = a.split(", ").map { TitleDetails.CastMember(it) } }
             d.poster = d.poster ?: meta.poster
             d.trailerYouTubeID = d.trailerYouTubeID ?: meta.trailerYouTubeID
+            meta.trailerYouTubeID?.let { trailers += Build174Logic.Candidate(it, Build174Logic.Source.TRAKT) }
             d.traktSlug = meta.traktSlug
             d.seasonCount = meta.totalSeasons
         }
@@ -104,6 +108,7 @@ object Details {
             if (d.runtime == null) tr.runtime?.let { d.runtime = L("%d min", it) }
             d.certification = d.certification ?: tr.certification
             d.trailerYouTubeID = d.trailerYouTubeID ?: tr.trailer?.let { Metadata.youtubeID(it) }
+            tr.trailer?.let { Metadata.youtubeID(it) }?.let { trailers += Build174Logic.Candidate(it, Build174Logic.Source.TRAKT) }
             if (tr.cast.isNotEmpty() && d.cast.all { it.role == null }) d.cast = tr.cast
             if (d.recommendations.isEmpty()) d.recommendations = tr.related
             val eps = d.episodeInfo.toMutableMap()
@@ -126,10 +131,12 @@ object Details {
             if (tm.cast.isNotEmpty()) d.cast = tm.cast
             if (tm.recommendations.isNotEmpty()) d.recommendations = tm.recommendations
             d.trailerYouTubeID = d.trailerYouTubeID ?: tm.trailer
+            trailers += tm.videos
             d.imdbID = d.imdbID ?: tm.imdb
             d.tmdbID = tm.id
             d.originalLanguage = tm.originalLanguage
         }
+        Build174Logic.bestTrailer(trailers, Localizer.language)?.let { d.trailerYouTubeID = it }
         // taal op posters als de titel/categorie hem niet noemt (build 59)
         ContentLanguage.rememberOriginal(t.title, t.year, isShow, d.originalLanguage)
         synchronized(cache) { cache[t.id] = d.copy() }
