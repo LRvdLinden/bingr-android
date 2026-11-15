@@ -106,6 +106,14 @@ class PlayerController(item: PlayableItem) {
     private var stallSince: Long? = null
     private var attempts = 0
     private var triedOtherEngine = false
+    // build 179: automatisch een andere speler (docs/ACCOUNT.md "Build 179", punt 3)
+    private var switched179 = false
+    private var startedWith179: String? = null
+    private var startAt179 = 0L
+    private var firstFrame179 = false
+    private var played179 = 0.0
+    private var stallAt179: Long? = null
+    private var memoKey179: String? = null
     /** Foutherstel (build 52): er staat al een stille nieuwe poging klaar. */
     private var retryPending = false
     /** Deze stream heeft al gespeeld (dan is een fout eerder een netwerkprobleem dan een formaatprobleem). */
@@ -211,6 +219,10 @@ class PlayerController(item: PlayableItem) {
         tracksApplied = false; playingTicks = 0
         if (stopped || timer == null) { watchedSeconds = 0.0; recordedHistory = false; attempts = 0; triedOtherEngine = false }
         if (url != this.lastStartedURL) everPlayed = false
+        // build 179: nieuwe stream (ook na zappen of een andere bron): weer één keer automatisch wisselen
+        if (url != this.lastStartedURL || forceExo == null) { switched179 = false; startedWith179 = null }
+        startAt179 = android.os.SystemClock.elapsedRealtime(); firstFrame179 = false; played179 = 0.0; stallAt179 = null
+        memoKey179 = if (engineSwitch179Allowed(url)) EngineMemo179.key(item) else null
         lastStartedURL = url
         retryPending = false
         stopped = false
@@ -218,7 +230,10 @@ class PlayerController(item: PlayableItem) {
         // build 171: een download afspelen telt niet als stream (zoals op Apple)
         if (!isPreview && streamItemID != item.id && !Downloads.isOffline(url)) beginStream()
         if (contentInfo == null && !isPreview) contentInfo = ContentLanguage.of(item)
-        val exo = forceExo ?: prefersExo(url, live = isLive)
+        // build 179: een onthouden engine voor deze stream begint (engineFirst)
+        val exo = forceExo ?: Build179Logic.Engine.first(listOf(if (prefersExo(url, live = isLive)) "exo" else "vlc", "exo", "vlc").distinct(),
+            EngineMemo179.get(memoKey179)).let { if (it == "exo") canUseExo(url) else false }
+        if (startedWith179 == null) startedWith179 = if (exo) "exo" else "vlc"
         if (exo != usingExo || timer == null) makeEngine(exo)
         val live = isLive && timeshiftStart == null
         val fraction = startFraction()
@@ -329,6 +344,8 @@ class PlayerController(item: PlayableItem) {
             subtitleText = if (cue != null && cue.end >= t) cue.text else null
         }
 
+        // build 179: automatisch een andere speler proberen (eén keer per stream), daarna het bestaande herstel
+        if (autoSwitch179(st)) return
         // automatisch herverbinden
         if (st == EngineState.ERROR || (isLive && st == EngineState.ENDED)) {
             reconnect()
@@ -427,8 +444,41 @@ class PlayerController(item: PlayableItem) {
         }
     }
 
+    /** Build 179: mag deze stream automatisch van speler wisselen (niet bij downloads, één-engine-adressen, casten, voorbeelden)? */
+    private fun engineSwitch179Allowed(u: String): Boolean =
+        !isPreview && canUseExo(u) && !Downloads.isOffline(u) && !u.contains(".movpkg", ignoreCase = true)
+
+    /** Build 179 (engineSwitch, engineMemo): true = er is net gewisseld. */
+    private fun autoSwitch179(st: EngineState): Boolean {
+        val u = url ?: return false
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (st == EngineState.PLAYING) {
+            played179 += 0.5
+            if (!firstFrame179) {
+                firstFrame179 = true
+                // speelt: deze engine onthouden voor deze stream
+                memoKey179?.let { k -> EngineMemo179.set(k, Build179Logic.Engine.memo(EngineMemo179.get(k), startedWith179 ?: "exo",
+                    if (switched179) (if (usingExo) "exo" else "vlc") else null, true)) }
+            }
+        }
+        stallAt179 = if (firstFrame179 && isBuffering) (stallAt179 ?: now) else null
+        if (!engineSwitch179Allowed(u) || Casting.connected || holdingForAge || retryPending || backupPending || errorText != null) return false
+        val go = Build179Logic.Engine.shouldSwitch(error = st == EngineState.ERROR, firstFrame = firstFrame179,
+            sinceStart = (now - startAt179) / 1000.0, stalled = stallAt179?.let { (now - it) / 1000.0 } ?: 0.0,
+            played = played179, switched = switched179 || triedOtherEngine)
+        if (!go) return false
+        val next = Build179Logic.Engine.next(listOf("exo", "vlc"), if (usingExo) "exo" else "vlc", false) ?: return false
+        switched179 = true; triedOtherEngine = true
+        notice = L("Tried another player")
+        if (!isLive) item = item.copy(resumeAt = lastGoodPosition.takeIf { it > 0.0 } ?: position)
+        start(u, forceExo = next == "exo")
+        return true
+    }
+
     /** Foutmelding tonen (Opnieuw / Andere bron / Andere speler); de timer stopt. */
     fun showFailure() {
+        // build 179: ook de andere speler lukte niet: het onthouden wissen
+        if (switched179) memoKey179?.let { EngineMemo179.set(it, null) }
         val generic = L("This stream can't be played right now.")
         errorText = generic; reconnecting = false; isBuffering = false
         retryPending = false; backupPending = false

@@ -246,7 +246,9 @@ fun MainScreen() {
 
         // verversen op de achtergrond (de lijst uit de cache staat er al): klein label "Updating…"
         // build 130: ook bij "alles vernieuwen" (met de server die nu aan de beurt is)
-        AnimatedVisibility((Playlists.updating || Playlists.refreshStatus != null) && !Playlists.isLoading, enter = fadeIn(), exit = fadeOut(),
+        // build 179: ook kort "12 titels niet meer beschikbaar" na het opruimen
+        val busy179 = Playlists.updating || Playlists.refreshStatus != null
+        AnimatedVisibility((busy179 || Cleanup179.notice != null) && !Playlists.isLoading, enter = fadeIn(), exit = fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = if (tv) 24.dp else 96.dp)) {
             Row(
                 Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.8f))
@@ -254,9 +256,12 @@ fun MainScreen() {
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(12.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(Playlists.refreshStatus ?: L("Updating…"), color = Color.White, fontSize = tsp(12), fontWeight = FontWeight.Medium)
+                if (busy179) {
+                    CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(12.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(Playlists.refreshStatus ?: (if (Playlists.updating) null else Cleanup179.notice) ?: L("Updating…"),
+                    color = Color.White, fontSize = tsp(12), fontWeight = FontWeight.Medium)
             }
         }
 

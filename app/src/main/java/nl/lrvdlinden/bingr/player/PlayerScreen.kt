@@ -572,6 +572,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         lc.addObserver(obs)
         onDispose {
             lc.removeObserver(obs)
+            LiveSession179.stop()   // build 179
             player.dismissed = true
             player.stop()
             if (PlayerController.current === player) PlayerController.current = null
@@ -604,6 +605,18 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     }
     LaunchedEffect(player.notice) {
         player.notice?.let { flash(it); player.notice = null }
+    }
+    // build 179: mediamelding bij live tv (zender, nu en straks; bij zappen, pauzeren en de programmawissel bijgewerkt)
+    LaunchedEffect(player.item.channelID, player.item.id, player.isPlaying, player.isLive) {
+        val itm = player.item
+        val cid = itm.channelID
+        if (!player.isLive || cid == null || player.isPreview) { LiveSession179.stop(); return@LaunchedEffect }
+        while (true) {
+            val c = Playlists.library.channels.firstOrNull { it.id == cid && it.sourceID == itm.sourceID }
+                ?: Channel(id = cid, name = itm.title, logo = itm.artwork, sourceID = itm.sourceID)
+            LiveSession179.update(c, player.isPlaying)
+            delay(30_000)
+        }
     }
     // andere taalversies van deze titel (build 59): de film zelf of de serie van deze aflevering
     LaunchedEffect(player.item.id, player.item.seriesID) {
@@ -734,7 +747,10 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         if (!rootFocused) return false
         // bediening verborgen: OK = tonen · ←/→ = 10 s spoelen · ↑/↓ = zappen (live) of tonen
         when (code) {
-            AndroidKeyEvent.KEYCODE_DPAD_LEFT -> seekBy(-10.0)
+            // build 179: live en niet achter live (geen timeshift/pauze): links opent de zaplijst; anders −10 s
+            AndroidKeyEvent.KEYCODE_DPAD_LEFT -> if (isTV && player.isLive && player.behindLive < 1.0 && player.isPlaying) {
+                if (repeat == 0) panel = PlayerPanel.ZAP
+            } else seekBy(-10.0)
             AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> seekBy(10.0)
             AndroidKeyEvent.KEYCODE_DPAD_UP -> if (repeat == 0) { if (player.isLive) zap(-1) else poke() }
             AndroidKeyEvent.KEYCODE_DPAD_DOWN -> if (repeat == 0) { if (player.isLive) zap(1) else poke() }

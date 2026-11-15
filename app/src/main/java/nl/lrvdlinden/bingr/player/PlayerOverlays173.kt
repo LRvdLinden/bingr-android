@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material.icons.filled.Search
@@ -263,17 +264,64 @@ fun AudioSubsPanel173(
 
 // MARK: - 3. Zappen als lijst
 
-/** Zenders met wat er nu op is (titel, voortgang); de huidige zender heeft de eerste focus. Kiezen = overschakelen. */
+/**
+ * Zenders met wat er nu op is (titel, voortgang); de huidige zender heeft de eerste focus. Kiezen = overschakelen.
+ * Build 179: boven de zenders tabs Alle / Favorieten / categorieën ([Build179Logic.Zap.categories]) en een zoekveld
+ * ([Build179Logic.Zap.search]); opent op de categorie van de zender die speelt. Vergrendelde zenders met een slotje.
+ */
 @Composable
 fun ZapPanel173(channels: List<Channel>, currentID: String?, onPick: (Channel) -> Unit, onClose: () -> Unit) {
-    val start = channels.indexOfFirst { it.id == currentID }
+    val pid = Playlists.source?.id ?: ""
+    val favs = remember(channels, Store.favorites) { channels.map { Store.isFavorite(it.sourceID ?: pid, it.id) } }
+    val tabs = remember(channels, favs) { Build179Logic.Zap.categories(channels.map { it.group }, favs) }
+    val ALL = "\u0000all"
+    var tab by remember(currentID) { mutableStateOf(channels.firstOrNull { it.id == currentID }?.group?.takeIf { it in tabs } ?: ALL) }
+    var query by remember { mutableStateOf("") }
+    val shown = remember(channels, favs, tab, query) {
+        val inTab = channels.indices.filter { i ->
+            when (tab) { ALL -> true; Build179Logic.Zap.FAVORITES -> favs[i]; else -> channels[i].group == tab }
+        }
+        val hits = Build179Logic.Zap.search(query, inTab.map { channels[it].displayName }, inTab.map { channels[it].number })
+        hits.map { channels[inTab[it]] }
+    }
+    val start = shown.indexOfFirst { it.id == currentID }
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (start - 1).coerceAtLeast(0))
+    LaunchedEffect(tab, query) { runCatching { state.scrollToItem((shown.indexOfFirst { it.id == currentID } - 1).coerceAtLeast(0)) } }
     val cur = remember { FocusRequester() }
     val firstRow = remember { FocusRequester() }
-    BottomPanel173(L("Zap"), onClose, initialFocus = if (start >= 0) cur else firstRow, state = state) {
-        if (channels.isEmpty()) item { PlayerSheetNote(L("No channels.")) }
-        items(channels.size, key = { channels[it].id }) { i ->
-            val c = channels[i]
+    BottomPanel173(L("Zap"), onClose, initialFocus = if (start >= 0) cur else firstRow, state = state,
+        header = {
+            Column {
+                // zoeken (tv: OK op het veld opent het systeemtoetsenbord)
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp).clip(RoundedCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Search, null, tint = Theme.secondary, modifier = Modifier.size(tvs(18)))
+                    Spacer(Modifier.width(8.dp))
+                    Box(Modifier.weight(1f)) {
+                        if (query.isEmpty()) Text(L("Search channels"), color = Theme.secondary, fontSize = tsp(14))
+                        androidx.compose.foundation.text.BasicTextField(query, { query = it }, singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = tsp(14)),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White), modifier = Modifier.fillMaxWidth())
+                    }
+                    if (query.isNotEmpty()) PlayerFocusText(L("Clear")) { query = "" }
+                }
+                if (tabs.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        (listOf(ALL) + tabs).forEach { t ->
+                            val sel = t == tab
+                            val name = when (t) { ALL -> L("All"); Build179Logic.Zap.FAVORITES -> L("Favorites"); else -> ContentLanguage.plainName(t).ifEmpty { t } }
+                            PlayerFocusText(name, bold = sel, color = if (sel) Theme.red else Color.White) { tab = t }
+                        }
+                    }
+                }
+            }
+        }
+    ) {
+        if (shown.isEmpty()) item { PlayerSheetNote(if (query.isNotBlank()) L("No results") else L("No channels.")) }
+        items(shown.size, key = { shown[it].sourceID.orEmpty() + "|" + shown[it].id }) { i ->
+            val c = shown[i]
             val isCurrent = c.id == currentID
             val now = Playlists.nowOf(c)
             PlayerSheetItem(onClick = { onPick(c) },
@@ -291,6 +339,7 @@ fun ZapPanel173(channels: List<Channel>, currentID: String?, onPick: (Channel) -
                         Box(Modifier.fillMaxWidth(0.6f).clip(RoundedCornerShape(2.dp))) { ProgressBar(now.progress) }
                     }
                 }
+                if (Locks.channelLocked(c)) Icon(Icons.Filled.Lock, null, tint = Theme.secondary, modifier = Modifier.size(tvs(16)))
                 if (isCurrent) Icon(Icons.Filled.Sensors, null, tint = Theme.red, modifier = Modifier.size(tvs(18)))
             }
         }

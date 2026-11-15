@@ -214,6 +214,12 @@ fun SettingsScreen() {
     var engine by remember { mutableStateOf(Prefs.string("player.engine") ?: "auto") }
     // build 145: "Servers laden bij openen" (per apparaat, niet gesynct); vervangt de vernieuwtermijn
     var loadMode by remember { mutableStateOf(Playlists.loadOnOpen) }
+    // build 179: vanzelf verversen, mediasessie bij live tv, Voor jou (per apparaat)
+    var refreshCatalog by remember { mutableStateOf(AutoRefresh179.catalog) }
+    var refreshEpg by remember { mutableStateOf(AutoRefresh179.epg) }
+    var refreshCellular by remember { mutableStateOf(AutoRefresh179.cellular) }
+    var liveSession by remember { mutableStateOf(LiveSession179.enabled) }
+    var forYouOn by remember { mutableStateOf(ForYou179.enabled) }
     var zapDelay by remember { mutableIntStateOf(PlayerSettings.zapDelay) }
     var livePreview by remember { mutableStateOf(PlayerSettings.livePreview) }
     var matchFrameRate by remember { mutableStateOf(PlayerSettings.matchFrameRate) }
@@ -507,6 +513,10 @@ fun SettingsScreen() {
                     S2Toggle(L("Show Live TV"), showLive) { showLive = it; Prefs.put("ui.showLive", it) }
                     S2Toggle(L("Show Movies"), showMovies) { showMovies = it; Prefs.put("ui.showMovies", it) }
                     S2Toggle(L("Show Series"), showSeries) { showSeries = it; Prefs.put("ui.showSeries", it) }
+                    // build 179: rij "Voor jou" op Home (per apparaat)
+                    S2Toggle(L("For you"), forYouOn, subtitle = L("A row on Home based on what you watch and your thumbs up and down.")) {
+                        forYouOn = it; ForYou179.enabled = it
+                    }
                     S2Row(L("Home screen"), icon = Icons.Default.ViewAgenda, onClick = { sub = S2SettingsSub.HOME_SCREEN })
                 }
             }
@@ -597,6 +607,11 @@ fun SettingsScreen() {
                     }
                     S2Dropdown(L("Zap delay"), PlayerSettings.zapDelayOptions, zapDelay) {
                         zapDelay = it; PlayerSettings.zapDelay = it
+                    }
+                    // build 179: zender, nu en straks in de mediamelding (Android-tegenhanger van de Live Activity)
+                    S2Toggle(L("Live TV in notifications"), liveSession,
+                        subtitle = L("While watching live TV: the channel, what's on now and next, with play and pause.")) {
+                        liveSession = it; LiveSession179.enabled = it
                     }
                     // build 164: Altijd / Alleen wifi / Nooit (vervangt de schakelaar Zendervoorbeeld)
                     S2Dropdown(L("Live preview in the guide"), PlayerSettings.livePreviewOptions, livePreview) {
@@ -758,6 +773,17 @@ fun SettingsScreen() {
                     if (Store.activeProfile?.kids != true) S2Dropdown(L("Load servers on open"),
                         Build145Logic.LoadOnOpen.Mode.entries.map { it to loadOnOpenTitle(it) }, loadMode) {
                         loadMode = it; Playlists.loadOnOpen = it
+                    }
+                    // build 179: vanzelf verversen (per apparaat)
+                    S2Dropdown(L("Refresh channels, movies and series"), AutoRefresh179.catalogOptions, refreshCatalog) {
+                        refreshCatalog = it; AutoRefresh179.catalog = it
+                    }
+                    S2Dropdown(L("Refresh TV guide"), AutoRefresh179.epgOptions, refreshEpg) {
+                        refreshEpg = it; AutoRefresh179.epg = it
+                    }
+                    if (!AppState.isTV) S2Toggle(L("Also on cellular"), refreshCellular,
+                        subtitle = L("Refresh automatically on a mobile network too, even with Save data on.")) {
+                        refreshCellular = it; AutoRefresh179.cellular = it
                     }
                     val busy = Playlists.refreshingAll
                     S2Row(L("Refresh all playlists now"), icon = Icons.Default.Refresh, enabled = !busy, subtitle = refreshSubtitle(),
@@ -1362,7 +1388,7 @@ fun S2DeleteAccountDialog(onDismiss: () -> Unit, onDelete: (String) -> Unit) {
 }
 
 /** Build 130: voortgang van "alles vernieuwen", of welke servers de laatste keer niet lukten. */
-private fun refreshSubtitle(): String? = Playlists.refreshStatus
+private fun refreshSubtitle(): String? = Playlists.refreshStatus ?: Cleanup179.notice
     ?: Playlists.refreshFailed.takeIf { it.isNotEmpty() }?.let { L("Couldn't refresh: %@", it.joinToString(", ")) }
 
 /** Build 145: de keuzes van "Servers laden bij openen" (zelfde teksten als de Apple-apps, Samsung TV en de webspeler). */

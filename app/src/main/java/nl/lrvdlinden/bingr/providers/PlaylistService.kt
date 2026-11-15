@@ -220,10 +220,12 @@ object Playlists {
         if (!decisionPending) return
         decisionPending = false
         val kids = Store.activeProfile?.kids == true
+        // build 179: een automatische verversing (termijn verstreken) vervangt die keer de vraag "Servers bijwerken?"
+        val auto = AutoRefresh179.anyDue()
         when (Build145Logic.LoadOnOpen.decide(loadOnOpen, savedList, kids, askedThisLaunch)) {
-            Build145Logic.LoadOnOpen.Action.ASK -> { askedThisLaunch = true; askUpdate = true }
+            Build145Logic.LoadOnOpen.Action.ASK -> if (auto) AutoRefresh179.check() else { askedThisLaunch = true; askUpdate = true }
             Build145Logic.LoadOnOpen.Action.UPDATE_ALL -> updateAll(onlyNotYetThisLaunch = true)
-            Build145Logic.LoadOnOpen.Action.NOTHING -> {}
+            Build145Logic.LoadOnOpen.Action.NOTHING -> AutoRefresh179.check()
         }
     }
 
@@ -343,6 +345,9 @@ object Playlists {
         val rec = UpdateLog.begin(s)
         try {
             val fetched = fetch(s, rec = rec)
+            // build 179: wat er de vorige keer stond (de open server uit het geheugen, anders de bewaarde lijst)
+            val before = if (source?.id == s.id && !rawLibrary.isEmpty) rawLibrary
+                else withContext(Dispatchers.IO) { runCatching { readCatalog(s) }.getOrNull() }
             // build 141: eerst wegschrijven, dan de gids van schijf gebruiken (DiskEpg) in plaats van de hele gids in het
             // geheugen te houden; lukt het schrijven niet, dan zoals vroeger in het geheugen
             writeCacheNow(s, fetched)
@@ -358,6 +363,8 @@ object Playlists {
                 UpdateLog.phase(rec, "apply")
             }
             UpdateLog.finish(rec, "ok")
+            AutoRefresh179.markFull(s.id)
+            Cleanup179.afterRefresh(s, before, fetched)
             return true
         } catch (e: CancellationException) {
             UpdateLog.finish(rec, "cancelled")
@@ -407,6 +414,7 @@ object Playlists {
                 status(L("Sorting channels and movies…"))
                 lib = withContext(Dispatchers.Default) { M3UParser.library(text, s.id) }
                 val epg = Net.urlValue(s.epgURL) ?: M3UParser.epgURL(text)
+                AutoRefresh179.rememberEpgURL(s.id, epg)   // build 179: gids apart verversen
                 // build 148: de tekst van de lijst niet vasthouden tijdens het laden van de gids
                 text = ""
                 UpdateLog.phase(rec, "parse")
@@ -490,13 +498,16 @@ object Playlists {
     private fun markFetch(p: PlaylistSource) = Prefs.put(fetchKey(p), System.currentTimeMillis().toString())
 
     /** Build 130: een andere server (niet de actieve) nu verversen, stil en met een time-out. true = gelukt. */
-    private suspend fun refreshOther(p: PlaylistSource): Boolean {
+    internal suspend fun refreshOther(p: PlaylistSource): Boolean {
         val rec = UpdateLog.begin(p)
         return try {
             markFetch(p)
             val lib = withTimeoutOrNull(AllServersLogic.FETCH_TIMEOUT) { fetch(p, quiet = true, rec = rec) }
+            // build 179: wat er de vorige keer stond, voor het opruimen van verwijderde titels
+            val before = if (lib != null) withContext(Dispatchers.IO) { runCatching { readCatalog(p) }.getOrNull() } else null
             // build 141: meteen wegschrijven (niet in een losse taak die de catalogus nog vasthoudt terwijl het volgende begint)
             if (lib != null) { writeCacheNow(p, lib); UpdateLog.phase(rec, "save") }
+            if (lib != null) { AutoRefresh179.markFull(p.id); withContext(Dispatchers.Main) { Cleanup179.afterRefresh(p, before, lib) } }
             UpdateLog.finish(rec, if (lib != null) "ok" else "failed")
             lib != null
         } catch (e: CancellationException) { UpdateLog.finish(rec, "cancelled"); throw e } catch (_: Exception) { UpdateLog.finish(rec, "failed"); false }
@@ -551,6 +562,36 @@ object Playlists {
         }
         AllServers.catalogsRefreshed()
     }
+
+    /**
+     * Build 179: alleen de tv-gids van [p] opnieuw ophalen (de catalogus blijft staan). true = gelukt. Adres: het ingevulde
+     * EPG-adres, bij Xtream xmltv.php, bij M3U het adres uit de lijst (bewaard bij de vorige volledige verversing).
+     */
+    suspend fun refreshEpg(p: PlaylistSource): Boolean {
+        if (Screenshots.isActive || StressMode.isActive) return true
+        val url = Net.urlValue(p.epgURL) ?: when (p.kind) {
+            PlaylistKind.XTREAM -> XtreamClient(p, Store.secret(p.passwordKey) ?: "").xmltvURL
+            PlaylistKind.M3U -> AutoRefresh179.epgURL(p.id)
+            else -> null
+        } ?: return false
+        return try {
+            val active = source?.id == p.id && !rawLibrary.isEmpty
+            val core = (if (active) rawLibrary else withContext(Dispatchers.IO) { runCatching { readCatalog(p) }.getOrNull() })
+                ?: return false
+            val epg = XMLTVParser.load(url, back = catchupBack(core.channels))
+            if (epg.isEmpty()) return false
+            writeCacheNow(p, core.copy(epg = epg))
+            if (source?.id == p.id && !rawLibrary.isEmpty) {
+                val disk = withContext(Dispatchers.IO) { CatalogFiles.openEpg(cachePaths(p), Http.json) }
+                withContext(Dispatchers.Main) { if (source?.id == p.id) setRaw(rawLibrary.copy(epg = disk ?: epg)) }
+            }
+            AutoRefresh179.markEpg(p.id)
+            true
+        } catch (e: CancellationException) { throw e } catch (_: Exception) { false }
+    }
+
+    /** Build 179: voortgang van een automatische verversing in de bestaande vernieuw-weergave. */
+    fun setAutoStatus(text: String?) { refreshStatus = text }
 
     // MARK: sessies (Plex / Jellyfin / Emby)
 

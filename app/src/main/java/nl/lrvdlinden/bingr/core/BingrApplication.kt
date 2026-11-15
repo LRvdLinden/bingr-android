@@ -66,6 +66,8 @@ class BingrApplication : Application(), ImageLoaderFactory {
         ParentalControl.migrateLocalPins()
         // build 171: crashrapporten van vorige keren versturen, rustig na het starten
         if (!BuildConfig.STRESS && !BuildConfig.SCREENSHOTS) AppScope.launch { kotlinx.coroutines.delay(15_000); CrashReports.flush() }
+        // build 179: servers en gids vanzelf verversen op de achtergrond (WorkManager), rustig na het starten
+        if (!BuildConfig.STRESS && !BuildConfig.SCREENSHOTS) AppScope.launch { kotlinx.coroutines.delay(20_000); AutoRefresh179.schedule() }
         StartDiagnostics.mark("app")
     }
 }

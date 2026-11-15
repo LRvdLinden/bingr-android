@@ -158,6 +158,23 @@ object Downloads {
         publish()
     }
 
+    /**
+     * Build 179 (opruimen): titel [id] staat niet meer op server [sid]. Klaar zijnde downloads wijzen naar [to] (server, id)
+     * of verliezen hun koppeling met de server; het bestand blijft en blijft afspeelbaar.
+     */
+    fun detach179(sid: String, id: String, to: Pair<String, String>?) {
+        if (!::ctx.isInitialized || !supported) return
+        if (synchronized(lock) { list.none { it.isDone && it.sourceID.equals(sid, true) && (it.id == id || it.seriesID == id) } }) return
+        mutate { l ->
+            l.map { d ->
+                if (!d.isDone || !d.sourceID.equals(sid, true) || (d.id != id && d.seriesID != id)) d
+                else if (to == null) d.copy(sourceID = null)
+                else if (d.id == id) d.copy(sourceID = to.first, id = to.second)
+                else d.copy(sourceID = to.first, seriesID = to.second)
+            }
+        }
+    }
+
     internal fun update(key: String, change: (DownloadItem) -> DownloadItem) =
         mutate { l -> l.map { if (it.key == key) change(it) else it } }
 

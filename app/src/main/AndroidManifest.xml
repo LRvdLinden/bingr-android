@@ -198,6 +198,8 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/radio_widget_info" />
         </receiver>
         <receiver android:name=".ReminderReceiver" android:exported="false" />
+        <!-- build 179: Pauze/Afspelen in de melding bij live tv -->
+        <receiver android:name=".LiveSession179Receiver" android:exported="false" />
         <!-- Herinneringen opnieuw plannen na een herstart (alarmen overleven dat niet) -->
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>

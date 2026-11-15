@@ -82,6 +82,8 @@ class MainActivity : ComponentActivity() {
         // Zonder force: eerst /sync/last_activities, dus goedkoop als er niets veranderd is.
         // build 154: ook de wachtrij opnieuw, en elke 15 minuten ophalen zolang de app open is
         if (AppState.stage == AppState.Stage.MAIN && Trakt.isLoggedIn) Trakt.onForeground()
+        // build 179: terug op de voorgrond: servers/gids verversen als de termijn verstreken is
+        if (AppState.stage == AppState.Stage.MAIN) AutoRefresh179.check()
         // build 145: geen automatisch verversen meer na terugkeer uit de achtergrond (de vernieuwtermijn is weg; de
         // gebruiker kiest zelf, zie "Servers laden bij openen")
     }
