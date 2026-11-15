@@ -47,6 +47,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -112,6 +113,11 @@ fun MultiviewScreen(onClose: () -> Unit) {
 
     fun endStream() { streamOwner?.let { StreamSession.end(it) }; streamOwner = null }
 
+    // build 171: Kijk je nog? (alle beelden samen)
+    val still = remember { StillWatchingState() }
+    fun stillPause() { tiles.forEach { it.controller.suspendForBackground() }; endStream() }
+    fun stillResume() { still.answered(); tiles.forEach { it.controller.resumeFromBackground() }; beginStream() }
+
     fun focus(t: MultiviewTile) {
         active = t.id
         for (x in tiles) x.controller.muted = x.id != t.id
@@ -172,7 +178,7 @@ fun MultiviewScreen(onClose: () -> Unit) {
         // naar de achtergrond: alle beelden echt stoppen (providerverbindingen vrij); StreamSession meldt af en weer aan
         val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
             if (e == androidx.lifecycle.Lifecycle.Event.ON_STOP && !AppState.inPiP) tiles.forEach { it.controller.suspendForBackground() }
-            if (e == androidx.lifecycle.Lifecycle.Event.ON_START) tiles.forEach { it.controller.resumeFromBackground() }
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_START && !still.paused) tiles.forEach { it.controller.resumeFromBackground() }
         }
         val lc = androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle
         lc.addObserver(obs)
@@ -188,7 +194,8 @@ fun MultiviewScreen(onClose: () -> Unit) {
     }
     BackHandler { if (menuFor != null) menuFor = null else closeAll() }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(Color.Black).stillWatchingTouches(still)
+        .onPreviewKeyEvent { still.touch(); false }) {
         val cols = if (tiles.size <= 1) 1 else 2
         val rows = tiles.chunked(cols)
         Column(Modifier.fillMaxSize()) {
@@ -265,6 +272,10 @@ fun MultiviewScreen(onClose: () -> Unit) {
             add(c)
         }
     }
+
+    StillWatchingDriver(still, Build171Logic.StillWatching.Kind.LIVE,
+        playing = tiles.any { it.controller.isPlaying } && !AppState.inPiP, onTimeout = { stillPause() })
+    StillWatchingOverlay(still, onStop = { closeAll() }, onResume = { stillResume() })
 
     streamLimit?.let { info ->
         StreamLimitScreen(

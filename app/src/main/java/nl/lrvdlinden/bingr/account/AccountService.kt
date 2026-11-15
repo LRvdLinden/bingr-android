@@ -977,6 +977,16 @@ object Account {
     }
 
     /**
+     * Build 171: crashrapport naar device-auth `crash_report`. Ingelogd met de sessie; anders alleen met de app-sleutel
+     * (`apikey`, de server begrenst per IP). Geeft de HTTP-code, null = netwerkfout (later opnieuw).
+     */
+    internal suspend fun crashReport(body: JsonElement): Int? {
+        if (!configured) return null
+        if (isSignedIn) authedDeviceAuth(body)?.let { return it.code }
+        return try { post("/functions/v1/device-auth", body).code } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
+    }
+
+    /**
      * Aanvraag aan de Edge Function `push` (docs/PUSH.md in iptv-ios-appletv) met een geldig access_token; bij 401 één
      * keer vernieuwen. true = 2xx. Geen sessie, netwerkfout of fout van de server = false (stil).
      */
@@ -1208,6 +1218,16 @@ object Account {
 
     suspend fun streamStop() {
         authedDeviceAuth(buildJsonObject { put("action", "stream_stop"); put("device_id", deviceId) })
+    }
+
+    /**
+     * Build 171: de stream op een ander apparaat van hetzelfde account stoppen ("Stop on that device"). device-auth
+     * `stream_stop` werkt op `user_id` + `device_id`, dus dat mag al. Dat apparaat krijgt bij zijn volgende `stream_ping`
+     * `{stopped:true}`. true = gelukt.
+     */
+    suspend fun streamStopDevice(id: String): Boolean {
+        val r = authedDeviceAuth(buildJsonObject { put("action", "stream_stop"); put("device_id", id) }) ?: return false
+        return r.ok
     }
 
     /** list_streams: limiet en wie er nu kijkt. */

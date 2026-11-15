@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Check
@@ -300,7 +301,10 @@ fun LiveTVScreen() {
             S2Action(if (c.catchupDays > 0) L("Guide & catch-up") else L("Guide"), Icons.Default.Schedule) { guideFor = c },
             S2Action(L("Open in Multiview"), Icons.Default.GridView) { AppState.openMultiview(listOf(c), visible) },
             S2Action(L("Add to collection…"), Icons.AutoMirrored.Filled.PlaylistAdd) { collectFor = c },
-        ) + (if (c.catchupDays > 0) listOf(S2Action(L("Catch-up offset…") + catchupOffsetLabel(pid, c), Icons.Default.History) { offsetFor = c })
+        ) + (if (Store.activeProfile?.kids != true) listOf(
+            // build 171: zender verbergen voor dit profiel (Instellingen > Profiel > Verborgen zenders)
+            S2Action(L("Hide channel"), Icons.Default.VisibilityOff) { Store.setChannelHidden(c.sourceID ?: pid, c.id, true) }
+        ) else emptyList()) + (if (c.catchupDays > 0) listOf(S2Action(L("Catch-up offset…") + catchupOffsetLabel(pid, c), Icons.Default.History) { offsetFor = c })
             else emptyList()), onDismiss = { menuFor = null })
     }
     collectFor?.let { c -> AddToCollectionDialog(Collections.ref(c), c.name, c.logo) { collectFor = null } }

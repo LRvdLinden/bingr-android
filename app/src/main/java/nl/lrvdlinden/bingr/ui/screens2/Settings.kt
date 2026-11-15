@@ -34,6 +34,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material.icons.filled.SupportAgent
@@ -126,7 +129,7 @@ private fun S2AppFooter() {
     }
 }
 
-private enum class S2SettingsSub { CATEGORIES, MANAGE, HISTORY, NAS, CHECK, COLLECTIONS, HOME_SCREEN, WATCHING, WATCH_LOG, STATS }
+private enum class S2SettingsSub { CATEGORIES, MANAGE, HISTORY, NAS, CHECK, COLLECTIONS, HOME_SCREEN, WATCHING, WATCH_LOG, STATS, HIDDEN_CHANNELS, BLOCKED_TITLES }
 private enum class S2PinMode { SET, UNLOCK, DISABLE }
 
 private const val S2_FILE_AUTHORITY = "nl.lrvdlinden.bingr.files"
@@ -217,6 +220,10 @@ fun SettingsScreen() {
     var deinterlace by remember { mutableStateOf(PlayerSettings.deinterlace) }
     var resumeLastChannel by remember { mutableStateOf(PlayerSettings.resumeLastChannel) }
     var iconConfirm by remember { mutableStateOf<String?>(null) }
+    // build 171
+    var askStill by remember { mutableStateOf(StillWatchingPrefs.enabled) }
+    var stillHours by remember { mutableIntStateOf(StillWatchingPrefs.hours) }
+    var crashShare by remember { mutableStateOf(CrashReports.enabled) }
 
     // build 141 (M7): deelmenu voor de export; als het dicht is, het tijdelijke bestand weghalen
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -271,6 +278,8 @@ fun SettingsScreen() {
         S2SettingsSub.WATCHING -> { WatchingNowScreen { sub = null }; return }
         S2SettingsSub.WATCH_LOG -> { WatchLogScreen { sub = null }; return }
         S2SettingsSub.STATS -> { StatsScreen { sub = null }; return }
+        S2SettingsSub.HIDDEN_CHANNELS -> { HiddenChannelsScreen { sub = null }; return }
+        S2SettingsSub.BLOCKED_TITLES -> { BlockedTitlesScreen { sub = null }; return }
         null -> {}
     }
     val editingNow = editing
@@ -568,6 +577,14 @@ fun SettingsScreen() {
                     S2Dropdown(L("Live preview in the guide"), PlayerSettings.livePreviewOptions, livePreview) {
                         livePreview = it; PlayerSettings.livePreview = it
                     }
+                    // build 171: Kijk je nog? (per apparaat)
+                    S2Toggle(L("Ask if you're still watching"), askStill,
+                        subtitle = L("After 3 episodes in a row, or after a while of live TV or a movie without using the remote or screen.")) {
+                        askStill = it; StillWatchingPrefs.enabled = it
+                    }
+                    if (askStill) S2Dropdown(L("Ask after (live TV and movies)"), StillWatchingPrefs.hourOptions, stillHours) {
+                        stillHours = it; StillWatchingPrefs.hours = it
+                    }
                     if (AppState.isTV) {
                         S2Toggle(L("Match frame rate"), matchFrameRate) { matchFrameRate = it; PlayerSettings.matchFrameRate = it }
                     } else {
@@ -735,6 +752,17 @@ fun SettingsScreen() {
                         S2Row(L("Edit profile"), icon = Icons.Default.Edit, onClick = { editingProfile = profile })
                     }
                     S2Row(L("Switch profile"), icon = Icons.Default.SwapHoriz, onClick = { AppState.switchPlaylist() })
+                    // build 171: verborgen zenders en geblokkeerde titels per profiel; in een kinderprofiel achter de
+                    // pincode van het hoofdaccount (als die er is)
+                    val kidsGate: (S2SettingsSub) -> Unit = { target ->
+                        val main = Store.mainProfileID
+                        if (profile?.kids == true && main != null && ParentalControl.hasPIN(main)) mainPinFor = L("Enter PIN") to { sub = target }
+                        else sub = target
+                    }
+                    S2Row(L("Hidden channels"), icon = Icons.Default.VisibilityOff,
+                        value = Store.hiddenChannels.size.takeIf { it > 0 }?.toString(), onClick = { kidsGate(S2SettingsSub.HIDDEN_CHANNELS) })
+                    S2Row(L("Blocked titles"), icon = Icons.Default.Block,
+                        value = Store.blockedTitles.size.takeIf { it > 0 }?.toString(), onClick = { kidsGate(S2SettingsSub.BLOCKED_TITLES) })
                     if (isMain) {
                         S2Row(L("Manage profiles"), icon = Icons.Default.People,
                             value = Store.profiles.size.takeIf { it > 0 }?.toString(), onClick = { MyBingrNav.page = MyBingrPage.PROFILES })
@@ -879,6 +907,12 @@ fun SettingsScreen() {
           SettingsTab.DIAGNOSE -> diagnoseTabItems()
 
           SettingsTab.ABOUT -> {
+            // build 171: eigen crashrapporten (zonder derde partij)
+            item {
+                S2Section(L("Privacy"), footer = L("When Bingr crashes or freezes, a report without personal data (no addresses, links or passwords) is sent to Bingr at the next start.")) {
+                    S2Toggle(L("Share crash reports"), crashShare, icon = Icons.Default.BugReport) { crashShare = it; CrashReports.enabled = it }
+                }
+            }
             item {
                 // build 112: verplichte bronvermelding van TMDB en JustWatch (stond eerder onder de Home-rijen)
                 S2Section(L("About"), footer = DiscoverKind.attribution) {

@@ -481,6 +481,13 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
     val out = ArrayList<ContinueItem>()
     for ((key, e) in progress) {
         if (!Store.belongsToActive(e.profileID)) continue                    // alleen van dit profiel
+        // build 171: geblokkeerd voor dit profiel (film, of de serie van een aflevering)
+        if (Store.blockedTitles.isNotEmpty()) {
+            val sid = e.playlistID ?: pid
+            if (Store.isTitleBlocked(sid, false, key)) continue
+            val ser = CatalogMeta.episode("${sid ?: ""}|$key")?.series?.substringAfter('|')
+            if (ser != null && Store.isTitleBlocked(sid, true, ser)) continue
+        }
         // build 128: ook van de andere (en verwijderde) servers; titel en artwork staan al in de voortgang
         if (e.playlistID != null && !e.playlistID.equals(pid, ignoreCase = true)) {
             val full = "${e.playlistID}|$key"
@@ -726,7 +733,7 @@ fun HomeScreen(filter: Filter) {
     val traktContinue = rememberTraktContinue(index)
     val allV = AllServers.version + CatalogMeta.version
     // build 144: ContinueCovers.version = TMDB-posters binnen
-    val continueList = remember(progress, index, pid, filter, traktContinue, Store.activeProfileID, allV, ContinueCovers.version) {
+    val continueList = remember(progress, index, pid, filter, traktContinue, Store.activeProfileID, allV, ContinueCovers.version, Store.blockedTitles) {
         continueItems(filter, index, pid, progress, traktContinue)
     }
     ResolveContinueCovers(continueList)
@@ -736,12 +743,13 @@ fun HomeScreen(filter: Filter) {
     var knownTick by remember { mutableStateOf(0) }
     val external = Store.activeProfile?.effectiveAgeLimit == null
     // build 128: Mijn lijst over alle servers (laatst toegevoegd eerst; hetzelfde werk op twee servers = één tegel)
-    val allMine = remember(myList, index, pid, external, knownTick, allV) {
+    val blocked = Store.blockedTitles
+    val allMine = remember(myList, index, pid, external, knownTick, allV, blocked) {
         if (pid == null) emptyList<DetailTarget>()
         else AllServers.myList(myList, pid) { k ->
             (index.movie(k, pid) ?: if (external) DiscoverKnown.movie(k, pid) else null)?.let { DetailTarget.MovieT(it) }
                 ?: (index.series(k, pid) ?: if (external) DiscoverKnown.series(k, pid) else null)?.let { DetailTarget.SeriesT(it) }
-        }
+        }.filterNot { t -> blocked.isNotEmpty() && Store.isTitleBlocked(t.sourceID ?: pid, t.isSeries, t.id) }   // build 171
     }
     val myMovies = remember(allMine) { allMine.mapNotNull { (it as? DetailTarget.MovieT)?.movie } }
     val mySeries = remember(allMine) { allMine.mapNotNull { (it as? DetailTarget.SeriesT)?.series } }

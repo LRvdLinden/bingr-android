@@ -562,6 +562,20 @@ class PlayerController(item: PlayableItem) {
         watchedSeconds = w; recordedHistory = rec
     }
 
+    /**
+     * Build 171: "Kijk je nog?" zonder antwoord: de stream echt stoppen (zoals naar de achtergrond) én `stream_stop`, zodat
+     * de plek in de streamlimiet en de providerverbinding vrijkomen. [resumeAfterStillWatching] gaat op dezelfde plek verder.
+     */
+    fun pauseForStillWatching() {
+        suspendForBackground()
+        endStream()
+    }
+
+    fun resumeAfterStillWatching() {
+        // start() ziet dat er geen stream meer loopt (streamItemID null) en stuurt weer stream_start
+        resumeFromBackground()
+    }
+
     fun stop() {
         endStream()
         backgroundResume = null
