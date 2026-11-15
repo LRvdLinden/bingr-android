@@ -35,10 +35,8 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
-import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forward10
-import androidx.compose.material.icons.filled.Forward30
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -58,6 +56,10 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.SwitchVideo
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.DesktopAccessDisabled
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -107,7 +109,13 @@ import kotlinx.coroutines.flow.first
 import java.text.DateFormat
 import java.util.Date
 
-private enum class PlayerPanel { AUDIO_SUBS, OPENSUBS, OPTIONS, CAST, SOURCES, RATE, INTRO, BACKUP }
+private enum class PlayerPanel {
+    AUDIO_SUBS, OPENSUBS, OPTIONS, CAST, SOURCES, RATE, INTRO, BACKUP,
+    /** Build 173: zaplijst en afleveringen (net als Audio en ondertitels onderin over het beeld) */
+    ZAP, EPISODES;
+    /** Build 173: deze panelen openen onderin over het beeld (geen dialoog) en pauzeren niet */
+    val isOverlay: Boolean get() = this == AUDIO_SUBS || this == ZAP || this == EPISODES
+}
 
 /** Zender → afspeelbaar item (zoals Playables.channel op iOS). */
 private fun livePlayable(c: Channel): PlayableItem = PlayableItem(
@@ -164,6 +172,16 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     var autoNext by remember { mutableStateOf(false) }
     // build 171: bediening vergrendeld (telefoon/tablet)
     var locked by remember { mutableStateOf(false) }
+    // build 173: vorige zender, dubbeltikken, vraag vanaf het begin, slaaptimer, afleveringen
+    var prevChannel by remember { mutableStateOf(Build173PlayerLogic.PreviousChannel()) }
+    var doubleTap by remember { mutableStateOf(Build173PlayerLogic.DoubleTap()) }
+    var tapBadge by remember { mutableStateOf<Int?>(null) }
+    var tapBadgeID by remember { mutableIntStateOf(0) }
+    var startOverPrompt by remember { mutableStateOf<EPGProgram?>(null) }
+    var sleepStopped by remember { mutableStateOf(false) }
+    var catchupOK by remember { mutableStateOf(false) }
+    var episodeSeries by remember { mutableStateOf<Series?>(null) }
+    var episodeList by remember { mutableStateOf(listOf<Episode>()) }
     fun flash(text: String) { toast = text; toastID++ }
     fun poke() { showControls = true; pokeID++ }
     fun toggleControls() { showControls = !showControls; if (showControls) poke() }
@@ -171,6 +189,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
 
     // vooruit gedeclareerd: bind() verwijst naar playNext(), dat start() aanroept
     var playNextRef: (PlayableItem) -> Unit = {}
+    var sleepNowRef: () -> Unit = {}
 
     fun bind() {
         player.onFinished = {
@@ -183,6 +202,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             }
             Unit
         }
+        // build 173: slaaptimer afgegaan → pauzeren, stream_stop en "Slaaptimer: gestopt"
+        player.onSleep = { sleepNowRef() }
     }
 
     /** Zoekt de aflevering na deze (ook over seizoenen heen). */
@@ -245,8 +266,24 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         Casting.castCurrent()
     }
 
-    suspend fun start(itm: PlayableItem) {
+    /**
+     * Build 173: programma al bezig en terugkijken kan: vragen "Vanaf het begin" of "Live kijken" (live speelt alvast;
+     * zonder antwoord na 12 s blijft het live). Zonder terugkijken geen vraag.
+     */
+    fun askStartOverIfRunning() {
+        if (!player.isLive || !catchupOK) return
+        val p = currentProgram173(player) ?: return
+        if (!Build173PlayerLogic.askStartOver(true, p.start, p.end, System.currentTimeMillis())) return
+        startOverPrompt = p
+        scope.launch {
+            delay(12_000)
+            if (startOverPrompt?.id == p.id) startOverPrompt = null
+        }
+    }
+
+    suspend fun start(itm: PlayableItem, askStartOver: Boolean = false) {
         if (player.dismissed) return
+        startOverPrompt = null
         StartTiming.ensure(itm.title)
         StartTiming.mark("player screen")
         player.prepareNew()
@@ -297,6 +334,10 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             player.liveURL = url
             player.start(url)
         }
+        // build 173: terugkijken mogelijk (knop Vanaf het begin), vorige zender bijhouden, vraag bij een lopend programma
+        catchupOK = player.hasCatchup
+        if (itm.type == MediaType.LIVE && cid != null && !itm.id.contains("-cu-")) prevChannel = prevChannel.tuned(cid)
+        if (askStartOver) askStartOverIfRunning()
         // Chromecast pas na het starten koppelen (build 59): de eerste keer kost CastContext een paar honderd ms
         // op de main thread, en dat zat vóór het laden van de stream
         Casting.init(ctx)
@@ -335,6 +376,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     }
 
     fun playNext(n: PlayableItem) {
+        sleepStopped = false
         // build 171: vanzelf of met Volgende aflevering = telt voor "Kijk je nog?"
         still.autoStarted(viaButton = !autoNext); autoNext = false
         nextUp = null
@@ -367,6 +409,100 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         }
     }
 
+    /** Build 173: direct naar een zender (zaplijst, Vorige zender), zonder de speler te verlaten. */
+    fun tune(c: Channel) {
+        if (c.id == player.item.channelID) return
+        still.touch()
+        zapJob?.cancel()
+        zapBanner = c
+        zapBannerID++
+        (c.sourceID ?: Playlists.source?.id)?.let { Store.pushRecentChannel(it, c.id) }
+        zapJob = scope.launch { player.stop(); start(livePlayable(c)) }
+    }
+
+    /** Build 173: één tik terug naar de vorige zender (en weer terug). */
+    fun previousChannel() {
+        val id = prevChannel.previous ?: return
+        val c = Playlists.library.channels.firstOrNull { it.id == id } ?: return
+        tune(c)
+    }
+
+    /** Build 173: zaplijst: favorieten, dan de huidige categorie, dan de rest (verborgen zenders en kinderprofiel: al gefilterd). */
+    fun zapChannels(): List<Channel> {
+        val all = Playlists.library.channels.filter { !Radio.isRadio(it) }.distinctBy { it.id }
+        val pid = Playlists.source?.id ?: ""
+        val group = all.firstOrNull { it.id == player.item.channelID }?.group
+        val fav = all.map { Store.isFavorite(it.sourceID ?: pid, it.id) }
+        return Build173PlayerLogic.zapOrder(all.map { it.group }, fav, group).map { all[it] }
+    }
+
+    /** Build 173: Vanaf het begin van het lopende programma (terugkijken van de server; daarna Terug naar live). */
+    fun startOver173() {
+        startOverPrompt = null
+        val p = currentProgram173(player) ?: return
+        if (player.startOver(p.start)) flash(L("From the start"))
+        poke()
+    }
+
+    /** Build 173: afleveringen van deze serie ophalen en het paneel openen (de speler blijft open). */
+    fun openEpisodes() {
+        panel = PlayerPanel.EPISODES
+        val itm = player.item
+        if (episodeSeries != null && episodeSeries?.id == itm.seriesID && episodeList.isNotEmpty()) return
+        val lib = Playlists.library
+        val series = itm.seriesID?.let { sid -> lib.series.firstOrNull { it.id == sid } }
+            ?: lib.series.firstOrNull { s -> s.episodes.any { it.id == itm.id } }
+            ?: lib.series.firstOrNull { it.title == itm.title }
+            ?: run { flash(L("No episodes")); panel = null; return }
+        scope.launch {
+            val eps = runCatching { Playlists.episodes(series) }.getOrDefault(emptyList())
+                .sortedWith(compareBy<Episode>({ it.season }, { it.number }))
+            episodeList = eps
+            episodeSeries = series
+        }
+    }
+
+    /** Build 173: dubbeltik = 10 s; vaker tikken telt op (20, 30 s) met een kleine animatie. */
+    fun doubleTapSeek(forward: Boolean, taps: Int) {
+        if (locked) return
+        if (player.isLive && !player.canTimeshift) { toggleControls(); return }
+        still.touch()
+        val now = System.currentTimeMillis()
+        val n = if (taps == 2 && doubleTap.active(now)) 2 else 1
+        var d = doubleTap
+        var step = 0
+        repeat(n) {
+            val before = if (d.active(now) && d.forward == forward) d.total else 0
+            d = d.tap(forward, now)
+            step += d.total - before
+        }
+        doubleTap = d
+        player.seek(step.toDouble())
+        tapBadge = d.total
+        tapBadgeID++
+    }
+
+    /** Build 173: slaaptimer afgegaan: pauzeren, de stream afmelden (stream_stop, zoals bij "Kijk je nog?") en het scherm. */
+    fun sleepNow() {
+        panel = null
+        showControls = false
+        startOverPrompt = null
+        player.pauseForStillWatching()
+        sleepStopped = true
+    }
+    sleepNowRef = { sleepNow() }
+
+    fun continueAfterSleep() {
+        sleepStopped = false
+        if (player.item.type != MediaType.LIVE && player.position >= 0.999) {
+            val n = nextUp
+            if (n != null) playNext(n) else close()
+            return
+        }
+        player.resumeAfterStillWatching()
+        poke()
+    }
+
     fun openMultiview() {
         val current = Playlists.library.channels.firstOrNull { it.id == player.item.channelID }
         val zapList = AppState.liveZapList
@@ -392,7 +528,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             AppState.playingAgeCheck = null
             player.ageGate = scope.async { try { check() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { false } }
         }
-        start(item)
+        start(item, askStartOver = true)
     }
     // build 164: stilstaand beeld voor de tv-gids: elke minuut een kleine momentopname van de live zender (alleen ExoPlayer)
     LaunchedEffect(player) {
@@ -412,7 +548,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             // app naar de achtergrond zonder beeld-in-beeld of Chromecast (bijv. TV-thuisknop): de stream echt stoppen,
             // zodat de providerverbinding vrijkomt (pauzeren hield hem open); terug = verder op dezelfde plek
             if (e == Lifecycle.Event.ON_STOP && !AppState.inPiP && !Casting.connected) player.suspendForBackground()
-            if (e == Lifecycle.Event.ON_START && !still.paused) player.resumeFromBackground()
+            if (e == Lifecycle.Event.ON_START && !still.paused && !sleepStopped) player.resumeFromBackground()
         }
         val lc = ProcessLifecycleOwner.get().lifecycle
         lc.addObserver(obs)
@@ -442,6 +578,9 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     }
     // build 169: bediening weg op TV = voorbeeldpositie van de tijdbalk vervalt (niet spoelen)
     LaunchedEffect(showControls) { if (isTV && !showControls) scrubbing = null }
+    LaunchedEffect(tapBadgeID) {
+        if (tapBadge != null) { delay(900); tapBadge = null }
+    }
     LaunchedEffect(toastID) {
         if (toast != null) { delay(1800); toast = null }
     }
@@ -472,12 +611,33 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         player.currentTime >= creditsAt && creditsDismissedFor != player.item.id && !inPiP && panel == null
     LaunchedEffect(markerKey, creditsAt) { player.creditsStart = creditsAt }
 
+    val showNext = nextUp != null && player.errorText == null && player.duration > 120 && !showCredits &&
+        (player.duration - player.currentTime < 45 || (creditsAt != null && player.currentTime >= creditsAt))
+
+    // build 173: wat er nu op is (live), Vanaf het begin, en de belangrijkste knop van dit moment
+    val currentProgram = currentProgram173(player)
+    val canStartOver = player.errorText == null &&
+        Build173PlayerLogic.canStartOver(catchupOK, currentProgram?.start, System.currentTimeMillis(), player.behindLive)
+    val primary = if (player.errorText != null) null else
+        Build173PlayerLogic.primary(inIntro = showSkip, nextEpisode = showNext || showCredits, isLive = player.isLive,
+            canStartOver = canStartOver, behindLiveSec = player.behindLive)
+    fun runPrimary(p: Build173PlayerLogic.Primary) {
+        when (p) {
+            Build173PlayerLogic.Primary.SKIP_INTRO -> introRange?.let { r -> player.seek(r.endInclusive - player.currentTime) }
+            Build173PlayerLogic.Primary.NEXT_EPISODE -> nextUp?.let { playNext(it) }
+            Build173PlayerLogic.Primary.START_OVER -> startOver173()
+            Build173PlayerLogic.Primary.GO_LIVE -> { player.goLive(); flash(L("Back to live")) }
+        }
+        poke()
+    }
+    val overlayOpen = panel?.isOverlay == true
+
     // bediening tevoorschijn → focus op afspelen/pauze; weg → focus terug naar het scherm zelf (vangt de D-pad op).
     // Fout zonder bediening (TV) → focus op "Try again".
     val hasError = player.errorText != null
     val skipVisible = showSkip || showCredits
-    LaunchedEffect(showControls, panel, inPiP, hasError, skipVisible) {
-        if (panel != null || inPiP) return@LaunchedEffect
+    LaunchedEffect(showControls, panel, inPiP, hasError, skipVisible, primary != null, sleepStopped) {
+        if (panel != null || inPiP || sleepStopped) return@LaunchedEffect
         delay(60)
         runCatching {
             when {
@@ -496,12 +656,16 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             delay(1000)
             if (player.isPlaying) countdown--
         }
+        // build 173: slaaptimer "na deze aflevering": niet door naar de volgende
+        if (player.sleep == Build173PlayerLogic.Sleep.EndOfEpisode) { player.setSleep(Build173PlayerLogic.Sleep.Off); sleepNow(); return@LaunchedEffect }
         nextUp?.let { autoNext = true; playNext(it) }
     }
 
     BackHandler {
         when {
+            sleepStopped -> close()
             panel != null -> panel = null
+            startOverPrompt != null -> startOverPrompt = null
             // build 169: Terug zet de voorbeeldpositie van de tijdbalk terug zonder te spoelen
             isTV && scrubbing != null -> { scrubbing = null; poke() }
             isTV && showControls -> showControls = false
@@ -521,7 +685,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             }
             return false
         }
-        if (panel != null) return false
+        if (panel != null || sleepStopped || startOverPrompt != null) return false
         var handled = true
         when (code) {
             AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
@@ -538,6 +702,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             AndroidKeyEvent.KEYCODE_CHANNEL_DOWN -> zap(1)
             AndroidKeyEvent.KEYCODE_MEDIA_NEXT -> { val n = nextUp; if (n != null) playNext(n) else if (player.isLive) zap(1) else handled = false }
             AndroidKeyEvent.KEYCODE_MEDIA_PREVIOUS -> { if (player.isLive) zap(-1) else handled = false }
+            // build 173: vaste toets "vorige zender" op de afstandsbediening
+            AndroidKeyEvent.KEYCODE_LAST_CHANNEL -> { if (player.isLive && prevChannel.previous != null) previousChannel() else handled = false }
             else -> handled = false
         }
         if (handled) { swallowUp += code; return true }
@@ -560,8 +726,6 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
 
     // MARK: opbouw
 
-    val showNext = nextUp != null && player.errorText == null && player.duration > 120 && !showCredits &&
-        (player.duration - player.currentTime < 45 || (creditsAt != null && player.currentTime >= creditsAt))
 
     Box(
         Modifier
@@ -604,13 +768,19 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                         onVerticalDrag = { change, amount -> dy += amount; change.consume() }
                     )
                 }.pointerInput(player) {
+                    // build 173: dubbeltik links/rechts = 10 s; vaker tikken telt op (20, 30 s) met een kleine animatie
                     detectTapGestures(
-                        onTap = { toggleControls() },
+                        onTap = { off ->
+                            val w = size.width
+                            val side = when { off.x < w * 0.35f -> false; off.x > w * 0.65f -> true; else -> null }
+                            if (side != null && doubleTap.active(System.currentTimeMillis()) && doubleTap.forward == side) doubleTapSeek(side, 1)
+                            else toggleControls()
+                        },
                         onDoubleTap = { off ->
                             val w = size.width
                             when {
-                                off.x < w * 0.35f -> { seekBy(-10.0); poke() }
-                                off.x > w * 0.65f -> { seekBy(10.0); poke() }
+                                off.x < w * 0.35f -> doubleTapSeek(false, 2)
+                                off.x > w * 0.65f -> doubleTapSeek(true, 2)
                                 else -> toggleControls()
                             }
                         }
@@ -673,7 +843,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                 Box(Modifier.align(Alignment.Center)) { CastingOverlay { player.resume() } }
             }
 
-            AnimatedVisibility(showControls, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
+            AnimatedVisibility(showControls && !overlayOpen && !sleepStopped, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
                 PlayerControls(
                     player = player,
                     isTV = isTV,
@@ -693,6 +863,14 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                     onPanel = { panel = it },
                     onMultiview = { openMultiview() },
                     canMarkIntro = player.item.type == MediaType.EPISODE && markerKey != null,
+                    primary = primary,
+                    onPrimary = { runPrimary(it) },
+                    currentProgram = currentProgram,
+                    canStartOver = canStartOver,
+                    onStartOver = { startOver173() },
+                    onZapList = { panel = PlayerPanel.ZAP },
+                    onPreviousChannel = if (prevChannel.previous != null) ({ previousChannel() }) else null,
+                    onEpisodes = if (player.item.type == MediaType.EPISODE) ({ openEpisodes() }) else null,
                 )
             }
 
@@ -746,8 +924,41 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                 zapBanner?.let { c -> ZapBanner(c, pending = c.id != (player.item.channelID ?: player.item.id)) }
             }
 
+            // build 173: panelen onderin over het beeld (pauzeren niet)
+            if (!locked) when (panel) {
+                PlayerPanel.AUDIO_SUBS -> AudioSubsPanel173(player, langVersions,
+                    onVersion = { v -> panel = null; switchVersion(v) },
+                    onOpenSubtitles = if (player.isLive) null else ({
+                        // build 157: OpenSubtitles hoort bij Lifetime (Gratis: slotje met de vergelijking)
+                        Upgrade.gate(Entitlements.Feature.OPENSUBTITLES) { panel = PlayerPanel.OPENSUBS }
+                    }),
+                    onClose = { panel = null })
+                PlayerPanel.ZAP -> {
+                    val channels = remember(player.item.channelID) { zapChannels() }
+                    ZapPanel173(channels, player.item.channelID, onPick = { c -> panel = null; tune(c) }, onClose = { panel = null })
+                }
+                PlayerPanel.EPISODES -> EpisodesPanel173(
+                    series = episodeSeries?.takeIf { s -> player.item.seriesID == null || s.id == player.item.seriesID },
+                    episodes = episodeList, currentID = player.item.id,
+                    onPick = { e ->
+                        panel = null
+                        val sr = episodeSeries
+                        if (e.id != player.item.id && sr != null) playNext(Playables.episode(e, sr, player.item.imdbID).copy(seriesID = sr.id))
+                    },
+                    onClose = { panel = null })
+                else -> {}
+            }
+            // build 173: vraag bij een lopend programma (live speelt alvast)
+            startOverPrompt?.let { p ->
+                if (panel == null && !sleepStopped) {
+                    StartOverPrompt173(p, onStartOver = { startOver173() }, onLive = { startOverPrompt = null; poke() },
+                        modifier = Modifier.align(Alignment.BottomStart).padding(start = Theme.edge, bottom = if (showControls) tvs(150) else tvs(40)))
+                }
+            }
+            tapBadge?.let { DoubleTapBadge173(it) }
+
             // build 171: slotknop (telefoon en tablet), links in het midden zolang de bediening zichtbaar is
-            if (!isTV && showControls && !locked && player.errorText == null) {
+            if (!isTV && showControls && !locked && player.errorText == null && !overlayOpen) {
                 Box(Modifier.align(Alignment.CenterStart).padding(start = 20.dp).size(44.dp).clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.5f)).focusLift { locked = true; showControls = false; panel = null },
                     contentAlignment = Alignment.Center) {
@@ -755,6 +966,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                 }
             }
             if (locked) ControlsLockLayer(onUnlock = { locked = false; poke() })
+            // build 173: slaaptimer afgegaan
+            if (sleepStopped) SleepStopped173(onContinue = { continueAfterSleep() }, onClose = { close() })
 
             AnimatedVisibility(
                 toast != null, enter = fadeIn() + slideInVertically { -it }, exit = fadeOut() + slideOutVertically { -it },
@@ -794,7 +1007,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     // MARK: panelen
 
     when (panel) {
-        PlayerPanel.AUDIO_SUBS -> TracksPanel(player, langVersions, onVersion = { v -> panel = null; switchVersion(v) }) { panel = null }
+        // build 173: onderin over het beeld (zie boven)
+        PlayerPanel.AUDIO_SUBS, PlayerPanel.ZAP, PlayerPanel.EPISODES -> {}
         PlayerPanel.OPENSUBS -> OpenSubtitlesPanel(player) { panel = null }
         PlayerPanel.OPTIONS -> OptionsPanel(player) { panel = null }
         PlayerPanel.CAST -> CastDevicesDialog { panel = null }
@@ -841,9 +1055,21 @@ private fun PlayerControls(
     onPanel: (PlayerPanel) -> Unit,
     onMultiview: () -> Unit,
     canMarkIntro: Boolean = false,
+    // build 173
+    primary: Build173PlayerLogic.Primary? = null,
+    onPrimary: (Build173PlayerLogic.Primary) -> Unit = {},
+    currentProgram: EPGProgram? = null,
+    canStartOver: Boolean = false,
+    onStartOver: () -> Unit = {},
+    onZapList: () -> Unit = {},
+    onPreviousChannel: (() -> Unit)? = null,
+    onEpisodes: (() -> Unit)? = null,
 ) {
     val live = player.isLive
-    val canSeek = !live || player.canTimeshift
+    val sleepCountdown = sleepCountdown173(player)
+    val sleepEpisode = player.sleep == Build173PlayerLogic.Sleep.EndOfEpisode
+    // build 173: tv: de belangrijkste knop krijgt de eerste focus, anders de tijdbalk, anders de eerste knop
+    val tvTimelineFirst = isTV && primary == null && !live && player.duration > 0
     Box(Modifier.fillMaxSize()) {
         Box(
             Modifier.fillMaxSize().background(
@@ -924,58 +1150,103 @@ private fun PlayerControls(
                 Spacer(Modifier.weight(1f))
             }
 
-            // onderbalk
+            // onderbalk. Build 173: op de tv geen knoppen voor afspelen/pauze en terug (die zitten op de afstandsbediening);
+            // de knoppen bij elkaar linksonder boven een iets grotere tijdbalk, de belangrijkste knop het grootst.
             Column(
                 Modifier.fillMaxWidth().padding(start = Theme.edge, end = Theme.edge, bottom = tvs(18)),
                 verticalArrangement = Arrangement.spacedBy(tvs(10))
             ) {
-                if (!live) PlayerTimeline(player, isTV, scrubbing, onScrub, onScrubEnd, onScrubCancel)
+                if (!isTV) {
+                    if (live) LiveInfo173(currentProgram) else PlayerTimeline(player, false, scrubbing, onScrub, onScrubEnd, onScrubCancel)
+                }
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = if (isTV) 12.dp else 0.dp),
-                    horizontalArrangement = Arrangement.spacedBy(tvs(if (isTV) 14 else 22)),
+                    horizontalArrangement = Arrangement.spacedBy(tvs(if (isTV) 12 else 22)),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // de belangrijkste knop: op de tv altijd vooraan (Intro overslaan en Volgende aflevering staan op de
+                    // telefoon al boven het beeld, Terug naar live in het LIVE-label)
+                    val showPrimary = primary != null && (isTV || primary == Build173PlayerLogic.Primary.START_OVER)
+                    if (primary != null && showPrimary) {
+                        PrimaryButton173(primary, isTV, if (isTV) Modifier.focusRequester(firstButton) else Modifier) { onPrimary(primary) }
+                    }
                     val buttons = mutableListOf<Triple<ImageVector, String, () -> Unit>>()
-                    if (isTV) {
-                        buttons.add(Triple(if (player.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            if (player.isPlaying) L("Pause") else L("Play")) { player.togglePlay() })
-                        if (showNext) buttons.add(Triple(Icons.Filled.SkipNext, L("Next episode")) { onNext() })
-                        if (canSeek) {
-                            buttons.add(Triple(Icons.Filled.Replay10, "−10") { onSeek(-10.0) })
-                            buttons.add(Triple(Icons.Filled.Forward30, "+30") { onSeek(30.0) })
-                        }
-                        if (live) {
-                            buttons.add(Triple(Icons.Filled.KeyboardArrowUp, L("Previous channel")) { onZap(-1) })
-                            buttons.add(Triple(Icons.Filled.KeyboardArrowDown, L("Next channel")) { onZap(1) })
+                    if (live) {
+                        buttons.add(Triple(Icons.Filled.LiveTv, L("Zap")) { onZapList() })
+                        onPreviousChannel?.let { f -> buttons.add(Triple(Icons.Filled.History, L("Previous channel")) { f() }) }
+                        if (canStartOver && primary != Build173PlayerLogic.Primary.START_OVER) {
+                            buttons.add(Triple(Icons.Filled.SkipPrevious, L("From the start")) { onStartOver() })
                         }
                     }
                     buttons.add(Triple(Icons.Filled.Subtitles, L("Audio & subtitles")) { onPanel(PlayerPanel.AUDIO_SUBS) })
-                    if (!live) buttons.add(Triple(Icons.Filled.ClosedCaption, "OpenSubtitles") {
-                        // build 157: OpenSubtitles hoort bij Lifetime (Gratis: slotje met de vergelijking)
-                        Upgrade.gate(Entitlements.Feature.OPENSUBTITLES) { onPanel(PlayerPanel.OPENSUBS) }
-                    })
+                    onEpisodes?.let { f -> buttons.add(Triple(Icons.Filled.Layers, L("Episodes")) { f() }) }
                     if (hasSources) buttons.add(Triple(Icons.Filled.VideoLibrary, L("Sources")) { onPanel(PlayerPanel.SOURCES) })
                     if (live && Playlists.library.channels.isNotEmpty()) buttons.add(Triple(Icons.Filled.GridView, "Multiview") { onMultiview() })
                     // build 52: andere bron (live) en intro/aftiteling markeren (afleveringen)
                     if (live && Store.playlists.size > 1) buttons.add(Triple(BingrIcons.otherSources, L("Other source")) { onPanel(PlayerPanel.BACKUP) })
                     if (canMarkIntro) buttons.add(Triple(Icons.Filled.Flag, L("Intro & credits")) { onPanel(PlayerPanel.INTRO) })
                     buttons.add(Triple(Icons.Filled.Tune, L("Options")) { onPanel(PlayerPanel.OPTIONS) })
+                    val firstIsButton = isTV && !showPrimary && !tvTimelineFirst
                     buttons.forEachIndexed { i, (icon, label, action) ->
-                        PlayerBarButton(icon, label, isTV, if (i == 0) Modifier.focusRequester(firstButton) else Modifier) {
+                        PlayerBarButton(icon, label, isTV, if (i == 0 && (firstIsButton || !isTV)) Modifier.focusRequester(firstButton) else Modifier) {
                             action(); onPoke()
                         }
                     }
-                    player.sleepAt?.let { s ->
+                    // slaaptimer: aftellen (build 173)
+                    if (sleepCountdown != null || sleepEpisode) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Bedtime, null, tint = Theme.secondary, modifier = Modifier.size(tvs(14)))
-                            Spacer(Modifier.width(4.dp))
-                            Text(DateFormat.getTimeInstance(DateFormat.SHORT, Localizer.locale).format(Date(s)),
-                                color = Theme.secondary, fontSize = tsp(12))
+                            if (sleepCountdown != null) {
+                                Spacer(Modifier.width(4.dp))
+                                Text(sleepCountdown, color = Theme.secondary, fontSize = tsp(12), fontFamily = FontFamily.Monospace)
+                            }
                         }
                     }
                 }
+                if (isTV) {
+                    if (live) LiveInfo173(currentProgram)
+                    else PlayerTimeline(player, true, scrubbing, onScrub, onScrubEnd, onScrubCancel,
+                        barModifier = if (tvTimelineFirst) Modifier.focusRequester(firstButton) else Modifier)
+                }
             }
         }
+    }
+}
+
+/** Build 173: grote knop vooraan (Intro overslaan, Volgende aflevering, Vanaf het begin, Terug naar live). */
+@Composable
+private fun PrimaryButton173(p: Build173PlayerLogic.Primary, isTV: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val (title, icon) = when (p) {
+        Build173PlayerLogic.Primary.SKIP_INTRO -> L("Skip intro") to Icons.Filled.FastForward
+        Build173PlayerLogic.Primary.NEXT_EPISODE -> L("Next episode") to Icons.Filled.SkipNext
+        Build173PlayerLogic.Primary.START_OVER -> L("From the start") to Icons.Filled.SkipPrevious
+        Build173PlayerLogic.Primary.GO_LIVE -> L("Back to live") to Icons.Filled.Sensors
+    }
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        modifier
+            .onFocusChanged { focused = it.isFocused }
+            .focusLift(1.08f, onClick = onClick)
+            .clip(RoundedCornerShape(if (isTV) 10.dp else 50.dp))
+            .background(if (!isTV || focused) Color.White else Color.White.copy(alpha = 0.85f))
+            .padding(horizontal = if (isTV) tvs(22) else 14.dp, vertical = if (isTV) tvs(11) else 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = Color.Black, modifier = Modifier.size(if (isTV) tvs(24) else 18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(title, color = Color.Black, fontSize = if (isTV) tsp(19) else tsp(14), fontWeight = FontWeight.Bold, maxLines = 1)
+    }
+}
+
+/** Build 173: live: wat er nu op is, met voortgang en de eindtijd volgens de gids. */
+@Composable
+private fun LiveInfo173(p: EPGProgram?) {
+    if (p == null) return
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(tvs(12))) {
+        Text(p.displayTitle, color = Color.White, fontSize = tsp(13), fontWeight = FontWeight.SemiBold, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = tvs(320)))
+        Box(Modifier.weight(1f).clip(CircleShape)) { ProgressBar(p.progress) }
+        Text(L("Ends at %@", clock173(p.end)), color = Theme.secondary, fontSize = tsp(12), maxLines = 1)
     }
 }
 
@@ -983,13 +1254,17 @@ private fun PlayerControls(
 private fun PlayerTimeline(
     player: PlayerController, isTV: Boolean, scrubbing: Float?,
     onScrub: (Float) -> Unit, onScrubEnd: () -> Unit, onScrubCancel: () -> Unit,
+    barModifier: Modifier = Modifier,
 ) {
     val frac = scrubbing?.toDouble() ?: player.position
+    // build 173: eindtijd (rekening houdend met de afspeelsnelheid)
+    val endsAt = Build173PlayerLogic.endsAt(System.currentTimeMillis(),
+        (player.duration * (1 - player.position) * 1000).toLong(), player.rate)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(tvs(12))) {
         Text(PlayerController.format(player.duration * frac), color = Theme.secondary, fontSize = tsp(12),
             fontFamily = FontFamily.Monospace, modifier = Modifier.widthIn(min = 44.dp))
         if (isTV) {
-            TvScrubBar(player, scrubbing, onScrub, onScrubEnd, onScrubCancel, Modifier.weight(1f))
+            TvScrubBar(player, scrubbing, onScrub, onScrubEnd, onScrubCancel, Modifier.weight(1f).then(barModifier))
         } else {
             BoxWithConstraints(Modifier.weight(1f)) {
                 Slider(
@@ -1009,6 +1284,9 @@ private fun PlayerTimeline(
         }
         Text("-" + PlayerController.format(player.duration * (1 - frac)), color = Theme.secondary, fontSize = tsp(12),
             fontFamily = FontFamily.Monospace, textAlign = TextAlign.End, modifier = Modifier.widthIn(min = 50.dp))
+        if (endsAt != null && player.duration > 0) {
+            Text(L("Ends at %@", clock173(endsAt)), color = Theme.secondary, fontSize = tsp(12), maxLines = 1)
+        }
     }
 }
 
@@ -1035,13 +1313,14 @@ private fun TvScrubBar(
     LaunchedEffect(focused, previewing) {
         if (!focused && previewing) { delay(S.EXPIRE_MS); onScrubCancel() }
     }
-    val barHeight = if (focused) tvs(10) else 6.dp
-    val knob = tvs(18)
+    // build 173: iets groter
+    val barHeight = if (focused) tvs(13) else tvs(8)
+    val knob = tvs(22)
     val pos = player.position.takeIf { it.isFinite() }?.coerceIn(0.0, 1.0) ?: 0.0
     val head = (scrubbing?.toDouble() ?: pos).coerceIn(0.0, 1.0)
     BoxWithConstraints(
         modifier
-            .height(tvs(24))
+            .height(tvs(30))
             .onKeyEvent { ev ->
                 if (!canScrub) return@onKeyEvent false
                 val ne = ev.nativeKeyEvent

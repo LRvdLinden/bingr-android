@@ -184,6 +184,11 @@ object PlayerSettings {
         set(v) = Prefs.put("player.zapDelay", v)
     val zapDelayOptions: List<Pair<Int, String>> get() = listOf(0 to L("Off"), 500 to "0.5 s", 1000 to "1 s", 2000 to "2 s")
 
+    /** Build 173: ondertitels even aan na kort terugspoelen (Afspelen, standaard aan; per apparaat). */
+    var rewindSubtitles: Boolean
+        get() = Prefs.bool("player.rewindSubtitles", true)
+        set(v) = Prefs.put("player.rewindSubtitles", v)
+
     var channelPreview: Boolean
         get() = Prefs.bool("player.channelPreview", true)
         set(v) = Prefs.put("player.channelPreview", v)

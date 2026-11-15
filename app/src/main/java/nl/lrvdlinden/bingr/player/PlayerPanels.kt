@@ -118,12 +118,13 @@ fun PlayerFocusText(text: String, modifier: Modifier = Modifier, bold: Boolean =
 
 /** Een regel in een paneel; op TV licht de regel op bij focus. */
 @Composable
-fun PlayerSheetItem(enabled: Boolean = true, onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
+fun PlayerSheetItem(enabled: Boolean = true, onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 1.dp)
+            .then(modifier)   // build 173: bijv. een FocusRequester (eerste focus in een paneel)
             .onFocusChanged { focused = it.isFocused }
             .focusLift(1.02f) { if (enabled) onClick() }
             .clip(RoundedCornerShape(8.dp))
@@ -142,9 +143,10 @@ fun PlayerSheetRow(
     enabled: Boolean = true,
     destructive: Boolean = false,
     icon: ImageVector? = null,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    PlayerSheetItem(enabled = enabled, onClick = onClick) {
+    PlayerSheetItem(enabled = enabled, onClick = onClick, modifier = modifier) {
         if (icon != null) Icon(icon, null, tint = Color.White, modifier = Modifier.size(tvs(20)))
         Text(text, color = if (destructive) Theme.red else if (enabled) Color.White else Theme.secondary,
             fontSize = tsp(15), modifier = Modifier.weight(1f), maxLines = 3, overflow = TextOverflow.Ellipsis)
@@ -375,9 +377,10 @@ fun OpenSubtitlesPanel(player: PlayerController, onDismiss: () -> Unit) {
 
 // MARK: - Opties ------------------------------------------------------------------------------
 
-/** Snelheid, beeld, engine en slaaptimer. */
+/** Snelheid, beeld, engine en slaaptimer (build 173: ondertitelgrootte staat in Audio en ondertitels). */
 @Composable
 fun OptionsPanel(player: PlayerController, onDismiss: () -> Unit) {
+    val sleepLabel = sleepLabel173(player)
     PlayerSheet(L("Options"), onDismiss) {
         if (!player.isLive) {
             item { PlayerSheetHeader(L("Speed")) }
@@ -385,17 +388,6 @@ fun OptionsPanel(player: PlayerController, onDismiss: () -> Unit) {
                 item {
                     val label = if (r == 1f) L("Normal") else "${if (r == r.toInt().toFloat()) r.toInt().toString() else r.toString()}×"
                     PlayerSheetRow(label, selected = player.rate == r) { player.rate = r }
-                }
-            }
-        }
-        item { PlayerSheetHeader(L("Subtitle size")) }
-        for (sz in SubtitleSize.entries) {
-            item {
-                PlayerSheetRow(sz.title, selected = SubtitleSize.current == sz) {
-                    if (SubtitleSize.current != sz) {
-                        SubtitleSize.current = sz
-                        player.applySubtitleSize()
-                    }
                 }
             }
         }
@@ -412,12 +404,13 @@ fun OptionsPanel(player: PlayerController, onDismiss: () -> Unit) {
         if (player.usingExo) {
             item { PlayerSheetRow(L("Try VLC (all formats)")) { player.switchToVLC(); onDismiss() } }
         }
+        // build 173: na deze aflevering (live: na dit programma) / 30 / 60 / 90 minuten / uit, met aftellen
         item { PlayerSheetHeader(L("Sleep timer")) }
-        for (m in listOf(0, 15, 30, 45, 60, 90)) {
+        sleepLabel?.let { item { PlayerSheetNote(it) } }
+        val programEnd = currentProgram173(player)?.end
+        for (c in sleepChoices173(player, programEnd)) {
             item {
-                PlayerSheetRow(if (m == 0) L("Off") else L("In %d minutes", m), selected = m == 0 && player.sleepAt == null) {
-                    player.sleepAt = if (m == 0) null else System.currentTimeMillis() + m * 60_000L
-                }
+                PlayerSheetRow(sleepTitle173(c, player.isLive), selected = player.sleep == c) { player.setSleep(c, programEnd) }
             }
         }
     }

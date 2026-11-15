@@ -23,6 +23,8 @@ import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -105,6 +107,7 @@ object Radio {
         AppScope.launch {
             val it = item(c) ?: return@launch
             if (AppState.playing != null) AppState.playing = null
+            sleptChannel = null
             current = c
             val p = player
             p.setMediaItem(it); p.prepare(); p.play()
@@ -115,8 +118,46 @@ object Radio {
 
     fun togglePause() { val p = exo ?: return; if (p.isPlaying) p.pause() else p.play() }
 
+    // MARK: build 173: slaaptimer (30 / 60 / 90 minuten / uit)
+
+    /** Einde van de slaaptimer (epoch-ms); null = uit. */
+    var sleepAt by mutableStateOf<Long?>(null); private set
+    /** Slaaptimer afgegaan: de zender om met "Verder luisteren" weer te starten. */
+    var sleptChannel by mutableStateOf<Channel?>(null); private set
+    private var sleepJob: Job? = null
+
+    fun setSleep(s: Build173PlayerLogic.Sleep) {
+        sleepJob?.cancel(); sleepJob = null
+        sleptChannel = null
+        val at = Build173PlayerLogic.sleepDeadline(s, System.currentTimeMillis())
+        sleepAt = at
+        if (at == null) return
+        sleepJob = AppScope.launch {
+            while (System.currentTimeMillis() < at) delay(1_000)
+            val c = current
+            sleepAt = null
+            sleepJob = null
+            // stoppen en `stream_stop`: de stream komt vrij
+            halt()
+            sleptChannel = c
+        }
+    }
+
+    fun continueAfterSleep() {
+        val c = sleptChannel ?: return
+        sleptChannel = null
+        play(c)
+    }
+
+    fun dismissSleep() { sleptChannel = null }
+
     /** Mini-speler sluiten: stoppen en `stream_stop`. */
     fun stop() {
+        sleepJob?.cancel(); sleepJob = null; sleepAt = null   // build 173
+        halt()
+    }
+
+    private fun halt() {
         exo?.let { it.stop(); it.clearMediaItems() }
         current = null; playing = false
         owner?.let { StreamSession.end(it) }; owner = null

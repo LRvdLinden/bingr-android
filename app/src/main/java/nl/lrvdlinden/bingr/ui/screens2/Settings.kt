@@ -223,6 +223,7 @@ fun SettingsScreen() {
     var iconConfirm by remember { mutableStateOf<String?>(null) }
     // build 171
     var askStill by remember { mutableStateOf(StillWatchingPrefs.enabled) }
+    var rewindSubs by remember { mutableStateOf(PlayerSettings.rewindSubtitles) }
     var stillHours by remember { mutableIntStateOf(StillWatchingPrefs.hours) }
     var crashShare by remember { mutableStateOf(CrashReports.enabled) }
 
@@ -605,6 +606,11 @@ fun SettingsScreen() {
                     if (askStill) S2Dropdown(L("Ask after (live TV and movies)"), StillWatchingPrefs.hourOptions, stillHours) {
                         stillHours = it; StillWatchingPrefs.hours = it
                     }
+                    // build 173: kort terugspoelen (10–30 s) met ondertitels uit: tijdelijk aan tot je weer voorbij dat punt bent
+                    S2Toggle(L("Subtitles after rewinding"), rewindSubs,
+                        subtitle = L("Rewind briefly and subtitles turn on until you're past that point again (when there's a track in your language).")) {
+                        rewindSubs = it; PlayerSettings.rewindSubtitles = it
+                    }
                     if (AppState.isTV) {
                         S2Toggle(L("Match frame rate"), matchFrameRate) { matchFrameRate = it; PlayerSettings.matchFrameRate = it }
                     } else {
@@ -892,7 +898,10 @@ fun SettingsScreen() {
             // MARK: OpenSubtitles (inloggen; de taal staat onder Taal en ondertitels)
             item {
                 S2Section("OpenSubtitles", if (!Entitlements.openSubtitles && OpenSubtitles.isLoggedIn)
-                    L("Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.") else null) {
+                    L("Your OpenSubtitles connection is kept, but is only used with Bingr Lifetime.")
+                    // build 173: na een uitlog door foute inloggegevens, of een verlopen sessie zonder bewaard wachtwoord
+                    else if (OpenSubtitles.needsSignIn) L("Your OpenSubtitles session has expired. Sign in again in Settings.")
+                    else if (!OpenSubtitles.isLoggedIn) OpenSubtitles.notice else null) {
                     if (!Entitlements.openSubtitles) {
                         // build 157 (Gratis): slotje; een bestaande koppeling blijft bewaard maar wordt niet gebruikt
                         S2Row(if (OpenSubtitles.isLoggedIn) L("Signed in as") else L("Sign in to OpenSubtitles"),
@@ -901,6 +910,11 @@ fun SettingsScreen() {
                             onClick = { Upgrade.show(Entitlements.Feature.OPENSUBTITLES) }, trailing = { LifetimeBadge() })
                     } else if (OpenSubtitles.isLoggedIn) {
                         S2Row(L("Signed in as"), value = OpenSubtitles.username ?: "")
+                        if (OpenSubtitles.needsSignIn && isMain) {
+                            S2Row(L("Sign in to OpenSubtitles again"), icon = Icons.Default.Subtitles, tint = Theme.red, onClick = {
+                                s2WithServerKeys({ Secrets.openSubtitlesReady }, { showOSLogin = true }, { setup = "opensubtitles" })
+                            })
+                        }
                         OpenSubtitles.remainingDownloads?.let { S2Row(L("Downloads left today"), value = "$it") }
                         if (isMain) {
                             S2Row(L("Sign out"), icon = Icons.AutoMirrored.Filled.Logout, tint = Theme.red, onClick = {

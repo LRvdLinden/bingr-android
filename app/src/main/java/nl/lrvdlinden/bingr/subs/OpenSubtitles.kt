@@ -3,7 +3,10 @@ package nl.lrvdlinden.bingr
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -17,9 +20,24 @@ import java.io.File
 object OpenSubtitles {
     private const val DEFAULT_HOST = "api.opensubtitles.com"
     private const val SESSION_KEY = "opensubtitles.session"
+    /**
+     * Build 173: wachtwoord voor stil opnieuw inloggen als het token (± 24 uur geldig) verloopt. Alleen op dit apparaat
+     * (versleutelde opslag); gaat niet mee naar de account-sync (StateSync kent alleen [SESSION_KEY]) en nooit in een log.
+     */
+    private const val PASSWORD_KEY = "opensubtitles.password"
+    /** Build 173: aanroepen die echt het token gebruiken (een 401 bij zoeken zegt niets over het token). */
+    private val AUTHENTICATED_PATHS = setOf("/download", "/infos/user")
 
+    /** Build 173: [loggedInAt] (epoch-ms) om het token op tijd stil te vernieuwen; null = oude sessie, leeftijd onbekend. */
     @Serializable
-    private data class Session(val token: String, val baseURL: String, val username: String)
+    private data class Session(val token: String, val baseURL: String, val username: String, val loggedInAt: Long? = null)
+
+    /** Build 173: het token is verlopen en er is hier geen wachtwoord om stil opnieuw in te loggen (niet uitgelogd). */
+    var needsSignIn by mutableStateOf(false); private set
+    /** Build 173: melding na een uitlog door foute inloggegevens (Instellingen toont hem). */
+    var notice by mutableStateOf<String?>(null)
+    private val renewLock = Mutex()
+    private val storedPassword: String? get() = Store.secret(PASSWORD_KEY)?.takeIf { it.isNotEmpty() }
 
     data class Subtitle(val id: Int, val language: String, val release: String, val downloads: Int,
                         val hearingImpaired: Boolean, val fromTrusted: Boolean, val hashMatch: Boolean = false)
@@ -75,11 +93,18 @@ object OpenSubtitles {
     }
 
     private val notLoggedIn: ServiceException get() = ServiceException(L("Sign in to OpenSubtitles first (My Bingr)."))
+    private val signInAgain: ServiceException get() = ServiceException(L("Your OpenSubtitles session has expired. Sign in again in Settings."))
 
     private suspend fun request(
         path: String, method: String = "GET", query: Map<String, String> = emptyMap(), body: JsonObject? = null,
-        base: String? = null,
+        base: String? = null, retried: Boolean = false,
     ): String {
+        // build 173: token bijna 24 uur oud: eerst stil vernieuwen (lukt dat niet door het netwerk, dan het oude proberen)
+        if (!retried && session != null && path in AUTHENTICATED_PATHS &&
+            Build173PlayerLogic.osShouldRenew(session?.loggedInAt, System.currentTimeMillis(), storedPassword != null)) {
+            try { renew(session?.token) } catch (e: CancellationException) { throw e } catch (_: Exception) {}
+        }
+        val sent = session
         // build 141: alleen (een subdomein van) opensubtitles.com; token en API-sleutel gaan nooit naar een andere host
         val host = Build141Logic.TrustedHosts.openSubtitlesHost(base ?: session?.baseURL)
         val u = Net.url("https://$host/api/v1$path", query.entries.sortedBy { it.key }.map { it.key to it.value })
@@ -88,9 +113,21 @@ object OpenSubtitles {
         headers["Api-Key"] = Secrets.openSubtitlesAPIKey
         headers["Content-Type"] = "application/json"
         headers["Accept"] = "application/json"
-        session?.token?.let { headers["Authorization"] = "Bearer $it" }
+        sent?.token?.let { headers["Authorization"] = "Bearer $it" }
         val r = Http.request(u, method = method, headers = headers, jsonBody = body?.toString())
-        if (r.code == 401 && session != null && path != "/login") session = null
+        // build 91: alleen bij aanroepen die echt de inlog gebruiken telt een 401. Build 173: dan niet meer uitloggen (dat
+        // logde via de account ook je andere apparaten uit), maar stil opnieuw inloggen met het bewaarde wachtwoord en het
+        // verzoek één keer herhalen. Zonder wachtwoord: de sessie blijft, met de vraag om opnieuw in te loggen.
+        // Netwerkfouten, 429 en 5xx laten de sessie altijd staan.
+        val authenticated = sent != null && path in AUTHENTICATED_PATHS
+        when (Build173PlayerLogic.osOnResponse(r.code, authenticated, storedPassword != null)) {
+            Build173PlayerLogic.OsOnResponse.KEEP -> {}
+            Build173PlayerLogic.OsOnResponse.RELOGIN -> {
+                if (!retried && renew(sent?.token)) return request(path, method, query, body, base, retried = true)
+                throw signInAgain
+            }
+            Build173PlayerLogic.OsOnResponse.EXPIRED -> { needsSignIn = true; throw signInAgain }
+        }
         if (!r.ok) {
             val msg = runCatching { Http.json.parseToJsonElement(r.body).jS("message") }.getOrNull() ?: r.body
             throw Net.statusError(r.code, msg)
@@ -104,9 +141,49 @@ object OpenSubtitles {
         val body = buildJsonObject { put("username", user); put("password", pass) }
         val r = Net.parse(request("/login", "POST", body = body, base = DEFAULT_HOST))
         val token = r.jS("token") ?: throw Net.decoding("token")
-        session = Session(token, Build141Logic.TrustedHosts.openSubtitlesHost(r.jS("base_url")), user)
+        // build 173: wachtwoord alleen op dit apparaat bewaren, voor stil opnieuw inloggen als het token verloopt
+        Store.setSecret(PASSWORD_KEY, pass)
+        session = Session(token, Build141Logic.TrustedHosts.openSubtitlesHost(r.jS("base_url")), user, System.currentTimeMillis())
         val u = r.jO("user")
         remainingDownloads = u.jI("remaining_downloads") ?: u.jI("allowed_downloads")
+        needsSignIn = false
+        notice = null
+    }
+
+    /**
+     * Build 173: stil opnieuw inloggen met de bewaarde gegevens (één tegelijk). true = nieuw token (ook als een andere
+     * aanroep het intussen al vernieuwde). Foute gegevens (400/401): uitloggen met een melding; netwerk, 403, 429 en
+     * 5xx: false (de sessie blijft staan).
+     */
+    private suspend fun renew(staleToken: String?): Boolean = renewLock.withLock {
+        val s = session ?: return@withLock false
+        if (staleToken != null && s.token != staleToken) return@withLock true
+        val user = s.username.takeIf { it.isNotEmpty() } ?: return@withLock false
+        val pass = storedPassword ?: return@withLock false
+        val u = Net.url("https://$DEFAULT_HOST/api/v1/login", emptyList()) ?: return@withLock false
+        val headers = mapOf("Api-Key" to Secrets.openSubtitlesAPIKey, "Content-Type" to "application/json", "Accept" to "application/json")
+        val body = buildJsonObject { put("username", user); put("password", pass) }
+        val r = try { Http.request(u, method = "POST", headers = headers, jsonBody = body.toString()) }
+            catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+        when (Build173PlayerLogic.osLoginResult(r?.code)) {
+            Build173PlayerLogic.OsLogin.OK -> {
+                val j = runCatching { Http.json.parseToJsonElement(r?.body ?: "") }.getOrNull() ?: return@withLock false
+                val token = j.jS("token") ?: return@withLock false
+                session = Session(token, Build141Logic.TrustedHosts.openSubtitlesHost(j.jS("base_url")), user, System.currentTimeMillis())
+                needsSignIn = false
+                true
+            }
+            Build173PlayerLogic.OsLogin.BAD_CREDENTIALS -> {
+                Store.setSecret(PASSWORD_KEY, null)
+                session = null
+                remainingDownloads = null
+                needsSignIn = false
+                val m = L("OpenSubtitles: your username or password is no longer correct. Please sign in again.")
+                notice = m
+                throw ServiceException(m)
+            }
+            Build173PlayerLogic.OsLogin.TRANSIENT -> false
+        }
     }
 
     /** Huidige sessie voor de account-sync (build 44): token, gebruikersnaam en baseURL. */
@@ -116,14 +193,21 @@ object OpenSubtitles {
     /** Sessie uit het Bingr-account (build 44); null = elders uitgelogd (lokaal wissen, geen /logout). */
     fun applySyncedSession(token: String?, username: String?, baseURL: String?) {
         if (token.isNullOrEmpty()) { clearLocal(); return }
-        val n = Session(token, Build141Logic.TrustedHosts.openSubtitlesHost(baseURL), username ?: session?.username ?: "")
-        if (n == session) return
-        session = n
+        val cur = session
+        val user = username ?: cur?.username ?: ""
+        val host = Build141Logic.TrustedHosts.openSubtitlesHost(baseURL)
+        if (cur != null && cur.token == token && cur.baseURL == host && cur.username == user) return
+        // build 173: ander account: het bewaarde wachtwoord hoort er niet bij; een nieuw token telt als vers
+        if (cur != null && cur.username != user) Store.setSecret(PASSWORD_KEY, null)
+        session = Session(token, host, user, System.currentTimeMillis())
         remainingDownloads = null
+        needsSignIn = false
     }
 
     /** Alleen lokaal uitloggen (ander account op dit apparaat, of elders uitgelogd). */
     fun clearLocal() {
+        Store.setSecret(PASSWORD_KEY, null)   // build 173: elders bewust uitgelogd
+        needsSignIn = false
         if (session == null) return
         session = null
         remainingDownloads = null
@@ -133,6 +217,8 @@ object OpenSubtitles {
         runCatching { request("/logout", "DELETE") }
         session = null
         remainingDownloads = null
+        Store.setSecret(PASSWORD_KEY, null)   // build 173
+        needsSignIn = false
     }
 
     /** Account-info (resterende downloads vandaag) verversen. */

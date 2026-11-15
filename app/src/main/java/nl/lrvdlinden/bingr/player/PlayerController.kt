@@ -71,8 +71,8 @@ class PlayerController(item: PlayableItem) {
     var rate: Float
         get() = _rate
         set(v) { _rate = v; engine.rate = v }
-    /** Slaaptimer: epoch-ms */
-    var sleepAt by mutableStateOf<Long?>(null)
+    /** Slaaptimer: epoch-ms (bij 30/60/90 minuten), zie [setSleep] */
+    var sleepAt by mutableStateOf<Long?>(null); private set
     private var _aspect by mutableStateOf(Aspect.FIT)
     var aspect: Aspect
         get() = _aspect
@@ -164,6 +164,7 @@ class PlayerController(item: PlayableItem) {
 
     /** Nieuwe titel/zender: niets meenemen van de vorige (timeshift, pauze, herverbind-pogingen, fout). */
     fun prepareNew() {
+        tempSubtitles = false
         timeshiftStart = null; behindLive = 0.0; pausedAt = null
         // niets van de vorige titel gebruiken voor de hervatplek (build 59)
         duration = 0.0; currentTime = 0.0; position = 0.0
@@ -365,7 +366,15 @@ class PlayerController(item: PlayableItem) {
                 if (t != null && t.frameRateDen > 0 && t.frameRateNum > 0) FrameRateMatcher.apply(t.frameRateNum.toFloat() / t.frameRateDen, null, exo = false)
             }
         }
-        sleepAt?.let { if (System.currentTimeMillis() >= it) { sleepAt = null; pause() } }
+        // build 173: slaaptimer (minuten, of na het programma bij live) en ondertitels even aan na terugspoelen
+        val nowMs = System.currentTimeMillis()
+        if (sleep != Build173PlayerLogic.Sleep.Off && Build173PlayerLogic.sleepDue(sleep, sleepAt, nowMs,
+                titleEnded = isLive && (sleepProgramEnd?.let { nowMs >= it } ?: false))) fireSleep()
+        if (tempSubtitles && Build173PlayerLogic.rewindSubtitlesDone((currentTime * 1000).toLong(), tempSubUntil, tempSubFrom)) {
+            tempSubtitles = false
+            engine.selectSubtitle(null)
+            tracksVersion++
+        }
         if (System.currentTimeMillis() - lastSaved > 15_000) saveProgress()
         if (!isLive && st == EngineState.ENDED) finish()
     }
@@ -504,7 +513,12 @@ class PlayerController(item: PlayableItem) {
 
     /** Spoelen. Bij live: binnen het HLS-venster, of via catch-up (timeshift). */
     fun seek(seconds: Double) {
-        if (!isLive) { engine.jump(seconds); return }
+        if (!isLive) {
+            val before = currentTime
+            engine.jump(seconds)
+            if (seconds < 0) rewindSubtitles(seconds, before)   // build 173
+            return
+        }
         val exo = engine as? ExoEngine
         if (exo != null && timeshiftStart == null && exo.liveWindow > 30) { exo.jump(seconds); return }
         val provider = catchupProvider ?: return
@@ -599,7 +613,74 @@ class PlayerController(item: PlayableItem) {
         position = 1.0
         saveProgress()
         if (!isPreview) { scrobble(Trakt.Scrobble.STOP, 1.0); StateSync.flush() }
+        // build 173: slaaptimer "Na deze aflevering": stoppen in plaats van door naar de volgende
+        if (sleep == Build173PlayerLogic.Sleep.EndOfEpisode) { fireSleep(); return }
         onFinished?.invoke()
+    }
+
+    // MARK: build 173: slaaptimer, vanaf het begin, ondertitels na terugspoelen
+
+    /** Slaaptimer: na deze aflevering (live: na dit programma) / 30 / 60 / 90 minuten / uit. */
+    var sleep by mutableStateOf<Build173PlayerLogic.Sleep>(Build173PlayerLogic.Sleep.Off); private set
+    /** Live met "na dit programma": einde van het programma volgens de gids (epoch-ms). */
+    private var sleepProgramEnd: Long? = null
+    /** Slaaptimer afgegaan: het spelerscherm pauzeert, meldt de stream af en toont "Slaaptimer: gestopt". */
+    var onSleep: (() -> Unit)? = null
+
+    fun setSleep(s: Build173PlayerLogic.Sleep, programEnd: Long? = null) {
+        sleep = s
+        sleepAt = Build173PlayerLogic.sleepDeadline(s, System.currentTimeMillis())
+        sleepProgramEnd = if (s == Build173PlayerLogic.Sleep.EndOfEpisode) programEnd else null
+    }
+
+    private fun fireSleep() {
+        sleep = Build173PlayerLogic.Sleep.Off; sleepAt = null; sleepProgramEnd = null
+        onSleep?.invoke() ?: pause()
+    }
+
+    /** Kan deze zender terugkijken (catch-up van de server)? */
+    val hasCatchup: Boolean
+        get() {
+            if (!isLive) return false
+            val p = catchupProvider ?: return false
+            val now = System.currentTimeMillis()
+            return runCatching { p(now - 600_000L, now) }.getOrNull() != null
+        }
+
+    /** Vanaf het begin van het lopende programma (terugkijken van de server); daarna Terug naar live met [goLive]. */
+    fun startOver(begin: Long): Boolean {
+        val provider = catchupProvider ?: return false
+        val now = System.currentTimeMillis()
+        if (!isLive || begin >= now) return false
+        val u = provider(begin, now + 3 * 3600_000L) ?: return false
+        timeshiftStart = begin
+        behindLive = (now - begin) / 1000.0
+        pausedAt = null
+        start(u)
+        return true
+    }
+
+    /** Ondertitels staan tijdelijk aan na kort terugspoelen (tot [tempSubUntil], seconden → ms). */
+    var tempSubtitles by mutableStateOf(false); private set
+    private var tempSubUntil = 0L
+    private var tempSubFrom = 0L
+
+    private fun rewindSubtitles(jump: Double, before: Double) {
+        if (isLive || duration <= 0) return
+        val target = kotlin.math.max(0.0, before + jump)
+        // al aan: tot hetzelfde punt (verder terug telt vanaf de nieuwe plek)
+        if (tempSubtitles) { tempSubFrom = (target * 1000).toLong(); return }
+        val on = engine.currentSubtitle != null || hasExternalSubtitle
+        val tracks = engine.subtitleTracks
+        val wanted = listOf(TrackPreferences.subtitle, TrackPreferences.preferredSubtitle, Localizer.language)
+            .filter { it.isNotEmpty() && it != "off" }.distinct()
+        val idx = Build173PlayerLogic.subtitleTrack(tracks.map { t -> t.lang?.takeIf { it.isNotEmpty() } ?: t.name }, wanted)
+        if (!Build173PlayerLogic.rewindSubtitles(jump, on, idx != null, PlayerSettings.rewindSubtitles) || idx == null) return
+        tempSubtitles = true
+        tempSubUntil = (before * 1000).toLong()
+        tempSubFrom = (target * 1000).toLong()
+        engine.selectSubtitle(tracks[idx])
+        tracksVersion++
     }
 
     // MARK: tegelijk kijken (build 51)
@@ -888,6 +969,7 @@ class PlayerController(item: PlayableItem) {
 
     fun selectAudio(t: MediaTrack) { engine.selectAudio(t); tracksVersion++ }
     fun selectSubtitle(t: MediaTrack?) {
+        tempSubtitles = false   // build 173: eigen keuze gaat voor
         externalCues = emptyList(); subtitleText = null; externalSubtitleName = null
         externalSubtitleFile = null; externalSubtitleLang = null
         engine.selectSubtitle(t); tracksVersion++
