@@ -674,6 +674,8 @@ object Reminders {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(contentIntent)
+            // build 178: logo van de club (of competitie) als groot pictogram, alleen als het al in de cache staat
+            .apply { sport?.let { r -> runCatching { SportLogos.notificationIcon(r) }.getOrNull()?.let { setLargeIcon(it) } } }
             .build()
         val nm = NotificationManagerCompat.from(ctx)
         if (nm.areNotificationsEnabled()) runCatching { nm.notify(id.hashCode(), n) }

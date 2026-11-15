@@ -1291,7 +1291,8 @@
   "Titles": "العناوين",
   "Catch-up": "إعادة المشاهدة",
   "No channels with catch-up": "لا توجد قنوات مع المشاهدة لاحقاً",
-  "%d channels, up to %d days": "%d قناة، حتى %d أيام"
+  "%d channels, up to %d days": "%d قناة، حتى %d أيام",
+  "Logos and crests are trademarks of their respective owners and are shown for identification only.": "الشعارات علامات تجارية لمالكيها وتُعرض لأغراض التعريف فقط."
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -2585,7 +2586,8 @@
   "Titles": "Titel",
   "Catch-up": "Nachträglich ansehen",
   "No channels with catch-up": "Keine Sender mit Replay",
-  "%d channels, up to %d days": "%d Sender, bis zu %d Tage"
+  "%d channels, up to %d days": "%d Sender, bis zu %d Tage",
+  "Logos and crests are trademarks of their respective owners and are shown for identification only.": "Logos und Wappen sind Marken ihrer jeweiligen Inhaber und werden nur zur Identifizierung angezeigt."
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -3879,7 +3881,8 @@
   "Titles": "Títulos",
   "Catch-up": "Ver de nuevo",
   "No channels with catch-up": "Ningún canal con reproducción diferida",
-  "%d channels, up to %d days": "%d canales, hasta %d días"
+  "%d channels, up to %d days": "%d canales, hasta %d días",
+  "Logos and crests are trademarks of their respective owners and are shown for identification only.": "Los logotipos y escudos son marcas comerciales de sus respectivos propietarios y se muestran solo a efectos de identificación."
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -5173,7 +5176,8 @@
   "Titles": "Titres",
   "Catch-up": "Replay",
   "No channels with catch-up": "Aucune chaîne avec replay",
-  "%d channels, up to %d days": "%d chaînes, jusqu’à %d jours"
+  "%d channels, up to %d days": "%d chaînes, jusqu’à %d jours",
+  "Logos and crests are trademarks of their respective owners and are shown for identification only.": "Les logos et écussons sont des marques de leurs propriétaires respectifs et ne sont affichés qu’à des fins d’identification."
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -6467,7 +6471,8 @@
   "Titles": "Titoli",
   "Catch-up": "Rivedi",
   "No channels with catch-up": "Nessun canale con replay",
-  "%d channels, up to %d days": "%d canali, fino a %d giorni"
+  "%d channels, up to %d days": "%d canali, fino a %d giorni",
+  "Logos and crests are trademarks of their respective owners and are shown for identification only.": "Loghi e stemmi sono marchi dei rispettivi proprietari e sono mostrati solo a scopo identificativo."
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -7775,7 +7780,8 @@
   "Titles": "Titels",
   "Catch-up": "Terugkijken",
   "No channels with catch-up": "Geen zenders met terugkijken",
-  "%d channels, up to %d days": "%d zenders, tot %d dagen"
+  "%d channels, up to %d days": "%d zenders, tot %d dagen",
+  "Logos and crests are trademarks of their respective owners and are shown for identification only.": "Logo's en clubwapens zijn handelsmerken van hun respectieve eigenaren en worden alleen ter herkenning getoond."
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -9069,7 +9075,8 @@
   "Titles": "Tytuły",
   "Catch-up": "Oglądaj ponownie",
   "No channels with catch-up": "Brak kanałów z odtwarzaniem wstecz",
-  "%d channels, up to %d days": "%d kanałów, do %d dni"
+  "%d channels, up to %d days": "%d kanałów, do %d dni",
+  "Logos and crests are trademarks of their respective owners and are shown for identification only.": "Logo i herby są znakami towarowymi ich właścicieli i są pokazywane wyłącznie w celach identyfikacyjnych."
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -10363,7 +10370,8 @@
   "Titles": "Títulos",
   "Catch-up": "Rever",
   "No channels with catch-up": "Nenhum canal com catch-up",
-  "%d channels, up to %d days": "%d canais, até %d dias"
+  "%d channels, up to %d days": "%d canais, até %d dias",
+  "Logos and crests are trademarks of their respective owners and are shown for identification only.": "Os logótipos e emblemas são marcas comerciais dos respetivos proprietários e são apresentados apenas para identificação."
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -11657,7 +11665,8 @@
   "Titles": "Başlıklar",
   "Catch-up": "Tekrar izle",
   "No channels with catch-up": "Tekrar izleme olan kanal yok",
-  "%d channels, up to %d days": "%d kanal, %d güne kadar"
+  "%d channels, up to %d days": "%d kanal, %d güne kadar",
+  "Logos and crests are trademarks of their respective owners and are shown for identification only.": "Logolar ve armalar ilgili sahiplerinin ticari markalarıdır ve yalnızca tanımlama amacıyla gösterilir."
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -12951,6 +12960,7 @@
   "Titles": "影片",
   "Catch-up": "回看",
   "No channels with catch-up": "没有支持回看的频道",
-  "%d channels, up to %d days": "%d 个频道，最多 %d 天"
+  "%d channels, up to %d days": "%d 个频道，最多 %d 天",
+  "Logos and crests are trademarks of their respective owners and are shown for identification only.": "标志和队徽是其各自所有者的商标，仅用于识别目的。"
  }
 }

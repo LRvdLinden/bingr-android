@@ -338,6 +338,8 @@ fun SportScreen() {
                         items(list, key = { it.key }) { g -> SportRow(g) { sheet = g } }
                     }
                 }
+                // build 178: club- en competitielogo's alleen ter herkenning
+                item(key = "logo-notice") { SportLogoNotice() }
             }
         }
     }
@@ -379,14 +381,10 @@ private fun SportLiveHeader() {
     }
 }
 
-/** Cirkel met initialen en een vaste kleur per team (geen echte clublogo's). */
+/** Build 178: logo van het team (vlag of clublogo, [SportLogos]); zolang het laadt of ontbreekt de cirkel met initialen. */
 @Composable
-fun SportTeamBadge(name: String, size: Int = 30) {
-    Box(Modifier.size(tvs(size)).clip(CircleShape).background(Color(0xFF000000 or Build173Logic.color(name))),
-        contentAlignment = Alignment.Center) {
-        Text(Build173Logic.short(name), color = Color.White, fontSize = tsp((size * 0.36f).toInt()), fontWeight = FontWeight.ExtraBold,
-            maxLines = 1)
-    }
+fun SportTeamBadge(name: String, size: Int = 30, match: Build173Logic.Match? = null) {
+    SportLogo(SportArt.Team(name, match?.sport ?: "football", match?.competitionId ?: ""), name, size)
 }
 
 @Composable
@@ -420,12 +418,15 @@ private fun SportLiveCard(g: Build173Logic.Group, now: Long, autoPreview: Boolea
                     .background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 7.dp, vertical = 3.dp))
         }
         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(SportCenter.label(g.match), color = Theme.secondary, fontSize = tsp(12))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                SportCompetitionLogo(g.match, 16)
+                Text(SportCenter.label(g.match), color = Theme.secondary, fontSize = tsp(12))
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (g.match.isDuel) SportTeamBadge(g.match.home)
+                if (g.match.isDuel) SportTeamBadge(g.match.home, 34, g.match)
                 Text(g.match.title, color = Color.White, fontSize = tsp(17), fontWeight = FontWeight.Bold, maxLines = 2,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                if (g.match.isDuel) SportTeamBadge(g.match.away)
+                if (g.match.isDuel) SportTeamBadge(g.match.away, 34, g.match)
             }
             LinearProgressIndicator(progress = { (((now - g.start).toFloat()) / (g.end - g.start).coerceAtLeast(1)).coerceIn(0f, 1f) },
                 color = Theme.brandRed, trackColor = Color(0xFF333333), modifier = Modifier.fillMaxWidth().height(3.dp))
@@ -448,8 +449,20 @@ private fun SportRow(g: Build173Logic.Group, onOpen: () -> Unit) {
                 Text(SportCenter.channel(g)?.displayName ?: "", color = Color(0xFF8A8A8A), fontSize = tsp(11), maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
             }
+            // build 178: logo's van beide teams (of van de competitie bij een evenement)
+            if (g.match.isDuel) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SportTeamBadge(g.match.home, 26, g.match)
+                    SportTeamBadge(g.match.away, 26, g.match)
+                }
+            } else if (g.match.competitionId.isNotEmpty()) {
+                Box(Modifier.width(56.dp), contentAlignment = Alignment.Center) { SportCompetitionLogo(g.match, 30) }
+            }
             Column(Modifier.weight(1f)) {
-                Text(SportCenter.label(g.match), color = Theme.secondary, fontSize = tsp(12), maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    if (g.match.isDuel) SportCompetitionLogo(g.match, 14)
+                    Text(SportCenter.label(g.match), color = Theme.secondary, fontSize = tsp(12), maxLines = 1)
+                }
                 Text(g.match.title, color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.Bold, maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
             }
@@ -487,9 +500,19 @@ private fun SportTvCard(g: Build173Logic.Group, now: Long, onMore: () -> Unit) {
             Icon(if (on) Icons.Default.Notifications else Icons.Default.NotificationsNone, null,
                 tint = if (on) Theme.brandRed else Theme.secondary, modifier = Modifier.size(24.dp).bounceOnChange(on))
         }
-        Text(listOfNotNull(SportCenter.label(g.match), SportCenter.channel(g)?.displayName).filter { it.isNotEmpty() }.joinToString(" · "),
-            color = Theme.secondary, fontSize = tsp(13), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(g.match.title, color = Color.White, fontSize = tsp(17), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SportCompetitionLogo(g.match, 20)
+            Text(listOfNotNull(SportCenter.label(g.match), SportCenter.channel(g)?.displayName).filter { it.isNotEmpty() }.joinToString(" · "),
+                color = Theme.secondary, fontSize = tsp(13), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        // build 178: logo's groot genoeg op de tv
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (g.match.isDuel) {
+                SportTeamBadge(g.match.home, 32, g.match)
+                SportTeamBadge(g.match.away, 32, g.match)
+            }
+            Text(g.match.title, color = Color.White, fontSize = tsp(17), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -513,9 +536,9 @@ private fun SportMatchDialog(g: Build173Logic.Group, onDismiss: () -> Unit) {
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (g.match.isDuel) SportTeamBadge(g.match.home, 36)
+                if (g.match.isDuel) SportTeamBadge(g.match.home, 40, g.match) else SportCompetitionLogo(g.match, 36)
                 Text(g.match.title, color = Color.White, fontSize = tsp(20), fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f, fill = false))
-                if (g.match.isDuel) SportTeamBadge(g.match.away, 36)
+                if (g.match.isDuel) SportTeamBadge(g.match.away, 40, g.match)
             }
             if (live) {
                 NetflixButton(L("Watch live"), Icons.Default.PlayArrow, kind = NetflixKind.PLAY, modifier = Modifier.fillMaxWidth()) {
@@ -618,9 +641,17 @@ fun SportFavoritesDialog(onDismiss: () -> Unit) {
                     }
                 }
             }
-            S2Section(L("Competitions"), L("Matches of your teams and competitions get a reminder automatically.")) {
+            S2Section(L("Competitions"), L("Matches of your teams and competitions get a reminder automatically.") + "\n" +
+                L("Logos and crests are trademarks of their respective owners and are shown for identification only.")) {
                 Build173Logic.COMPETITIONS.forEach { c ->
-                    S2Toggle(c.name, c.id in Store.favoriteCompetitions) { SportCenter.setFavoriteCompetition(c.id, it) }
+                    // build 178: klein logo (favicon van de officiële site, zoals Weekdot)
+                    val checked = c.id in Store.favoriteCompetitions
+                    S2Row(c.name, leading = { SportLogo(SportArt.Competition(c.id, true), c.name, 22) },
+                        onClick = { SportCenter.setFavoriteCompetition(c.id, !checked) }, trailing = {
+                            Switch(checked = checked, onCheckedChange = null,
+                                colors = SwitchDefaults.colors(checkedTrackColor = Theme.red, checkedThumbColor = Color.White,
+                                    uncheckedTrackColor = Theme.elevated, uncheckedBorderColor = Theme.elevated, uncheckedThumbColor = Theme.secondary))
+                        })
                 }
             }
         }
