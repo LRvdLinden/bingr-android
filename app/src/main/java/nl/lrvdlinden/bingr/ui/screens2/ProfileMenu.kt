@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -154,6 +155,11 @@ fun ProfileMenu(expanded: Boolean, onDismiss: () -> Unit) {
             }
         }
         if (others.isNotEmpty()) ProfileMenuDivider()
+        // build 173: Categorieën (hetzelfde overzicht als het tabblad) boven "Servers vernieuwen": op de telefoon staat Sport in de
+        // onderbalk op de plek van Categorieën
+        ProfileMenuItem(L("Categories"), Icons.Default.Category, focus = firstOnce()) {
+            onDismiss(); ScreensNav.push(ScreenEntry.Categories(Filter.ALL))
+        }
         // build 146: alle servers vernieuwen (één voor één, met de bijwerk-indicator), direct boven "Wissel profiel";
         // niet bij een kinderprofiel
         if (Store.activeProfile?.kids != true && Store.playlists.isNotEmpty()) {

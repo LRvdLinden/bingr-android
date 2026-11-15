@@ -102,6 +102,59 @@ object Trakt {
     }
 
     private class NotLoggedIn : Exception(L("Not signed in to Trakt."))
+    /** Build 173: Trakt weigert het token blijvend (opnieuw inloggen nodig). */
+    private class ReauthRequired : ServiceException(L("Sign in to Trakt again"))
+    /** Build 173: 423, het Trakt-account is vergrendeld. */
+    private class AccountLocked : ServiceException(L("Your Trakt account is locked. Check trakt.tv."))
+
+    // MARK: build 173: alleen een blijvende fout als waarschuwing
+
+    /** Soort van de laatste fout sinds de laatste geslaagde aanroep (null = alles goed). */
+    var failure by mutableStateOf<Build173PlayerLogic.TraktFailure?>(null); private set
+    /** Opnieuw inloggen bij Trakt nodig (de knop opent dan Koppelingen in plaats van te synchroniseren). */
+    val needsReauth: Boolean get() = failure == Build173PlayerLogic.TraktFailure.REAUTH && lastError != null
+    private const val FAILING_SINCE = "trakt.failingSince"
+
+    private fun noteFailure(e: Exception) {
+        val L173 = Build173PlayerLogic
+        val kind = when (e) {
+            is ReauthRequired, is NotLoggedIn -> L173.TraktFailure.REAUTH
+            is AccountLocked -> L173.TraktFailure.LOCKED
+            is StatusException -> L173.traktClassify(e.code)
+            else -> L173.TraktFailure.TRANSIENT
+        }
+        if (failure == null || kind != L173.TraktFailure.TRANSIENT) failure = kind
+        if (!Prefs.has(FAILING_SINCE)) Prefs.put(FAILING_SINCE, System.currentTimeMillis())
+        updateWarning()
+    }
+
+    private fun noteSuccess() {
+        failure = null
+        Prefs.remove(FAILING_SINCE)
+        lastError = null
+    }
+
+    private fun updateWarning() {
+        val since = if (Prefs.has(FAILING_SINCE)) Prefs.long(FAILING_SINCE) else null
+        lastError = if (!Build173PlayerLogic.traktShowWarning(failure, since, System.currentTimeMillis())) null else when (failure) {
+            Build173PlayerLogic.TraktFailure.REAUTH -> L("Sign in to Trakt again")
+            Build173PlayerLogic.TraktFailure.LOCKED -> L("Your Trakt account is locked. Check trakt.tv.")
+            else -> L("Trakt: could not connect")
+        }
+    }
+
+    /** "Nu synchroniseren": eerst de wachtrij, dan alles ophalen. */
+    suspend fun syncNow() {
+        runCatching { flushQueue(wake = true) }
+        refresh(force = true)
+    }
+
+    /** Build 173: blijvend ongeldig token: lokaal loskoppelen zodat Koppelen weer verschijnt; de wachtrij blijft bewaard. */
+    fun resetForReauth() {
+        saveTokens(null)
+        isLoggedIn = false
+        noteSuccess()
+    }
 
     // MARK: state
 
@@ -320,6 +373,7 @@ object Trakt {
         saveQueue()
         lastActivity = null
         lastRefresh = null; lastError = null; lastScrobble = null; lastScrobbleDate = null; justSynced = false
+        failure = null; Prefs.remove(FAILING_SINCE)
         saveCache()
     }
 
@@ -355,12 +409,15 @@ object Trakt {
             t = n
         }
         var lastCode = 0
+        // build 173: per poging de status (null = netwerkfout), om "opnieuw inloggen" van "later opnieuw" te scheiden
+        val statuses = ArrayList<Int?>()
         for (redirect in redirectURIs) {
             val r = try {
                 oauthPost("/oauth/token", oauthBody(mapOf(
                     "refresh_token" to t.refreshToken, "redirect_uri" to redirect, "grant_type" to "refresh_token")))
             } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
             lastCode = r?.code ?: lastCode
+            statuses += r?.code
             val n = if (r?.code == 200) parseTokens(r.body) else null
             if (n != null) {
                 saveTokens(n.copy(username = t.username))
@@ -381,17 +438,23 @@ object Trakt {
             }
         }
         // nooit null in het account: de koppeling blijft staan, alleen deze aanvraag mislukt
-        withContext(Dispatchers.Main) { lastError = L("Trakt refused the connection (%d).", lastCode) }
+        // build 173: geen melding hier (alleen bij een blijvende fout, zie noteFailure)
         if (failed == null && t.expiresAt > now) return@withLock t.accessToken
+        if (Build173PlayerLogic.traktRefreshFailure(statuses) == Build173PlayerLogic.TraktFailure.REAUTH) throw ReauthRequired()
         throw ServiceException(L("Trakt refused the connection (%d).", lastCode))
     }
 
     /** Verzoek met token; bij een 401 één keer verversen en opnieuw. */
     private suspend fun authed(send: suspend (String) -> Http.Response): Http.Response {
         val tok = validToken()
-        val r = send(tok)
-        if (r.code != 401) return r
-        return send(validToken(failed = tok))
+        var r = send(tok)
+        if (r.code == 401) r = send(validToken(failed = tok))
+        // build 173: ook na verversen nog 401 (of 403): de koppeling is niet meer geldig; 423: account vergrendeld
+        when (r.code) {
+            401, 403 -> throw ReauthRequired()
+            423 -> throw AccountLocked()
+        }
+        return r
     }
 
     // MARK: requests
@@ -457,7 +520,7 @@ object Trakt {
             val act = get("/sync/last_activities").jS("all")
             if (!force && act != null && act == lastActivity && (watchedMovies.isNotEmpty() || watchedEpisodes.isNotEmpty())) {
                 lastRefresh = System.currentTimeMillis()
-                lastError = null
+                noteSuccess()
                 return@withContext
             }
             val fetched = coroutineScope {
@@ -475,12 +538,12 @@ object Trakt {
             watchedKeys = r.keys; showEpisodes = r.showEps; aired = r.aired
             lastActivity = act
             lastRefresh = System.currentTimeMillis()
-            lastError = null
+            noteSuccess()
             saveCache()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            lastError = Net.message(e)
+            noteFailure(e)
             if (e is NotLoggedIn) isLoggedIn = false
         } finally {
             // spinner minstens even laten zien, en daarna kort "Bijgewerkt ✓"
@@ -799,7 +862,7 @@ object Trakt {
             putJsonArray(if (isShow) "shows" else "movies") { addJsonObject { putJsonObject("ids") { put("imdb", imdb) } } }
         }
         try { post(if (add) "/sync/watchlist" else "/sync/watchlist/remove", body) }
-        catch (ex: CancellationException) { throw ex } catch (ex: Exception) { lastError = Net.message(ex) }
+        catch (ex: CancellationException) { throw ex } catch (ex: Exception) { noteFailure(ex) }
         Unit
     }
 
@@ -961,13 +1024,13 @@ object Trakt {
                     runCatching { Http.json.parseToJsonElement(r.body).jS("action") }.getOrNull() == "scrobble"
                 r.code == 409 -> countedByTrakt = a == Scrobble.STOP && p >= 80.0   // net al gescrobbeld
                 r.code == 404 -> result = ScrobbleResult.NOT_FOUND
-                else -> { result = ScrobbleResult.FAILED; lastError = Net.message(Net.statusError(r.code, r.body)) }
+                else -> { result = ScrobbleResult.FAILED; noteFailure(Net.statusError(r.code, r.body)) }
             }
         } catch (ex: CancellationException) {
             throw ex
         } catch (ex: Exception) {
             result = ScrobbleResult.FAILED
-            lastError = Net.message(ex)
+            noteFailure(ex)
         }
         if (a == Scrobble.STOP && queuedWatch != null) {
             if (countedByTrakt) { synchronized(queueSync) { queue = Build154Logic.Queue.done(queue, queuedWatch.id) }; saveQueue() }

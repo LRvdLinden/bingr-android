@@ -457,6 +457,10 @@ fun SettingsScreen() {
                             trailing = {
                                 if (syncing) CircularProgressIndicator(color = Theme.red, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
                             })
+                        // build 173: blijvend ongeldig token: opnieuw koppelen (de wachtrij blijft bewaard)
+                        if (Trakt.needsReauth) {
+                            S2Row(L("Sign in to Trakt again"), icon = Icons.Default.Link, tint = Theme.red, onClick = { Trakt.resetForReauth() })
+                        }
                         S2Row(L("Sign out of Trakt"), icon = Icons.AutoMirrored.Filled.Logout, tint = Theme.red, onClick = { Trakt.logout() })
                     } else {
                         S2Row(L("Connect Trakt"), icon = Icons.Default.Link,
@@ -1042,7 +1046,9 @@ fun SettingsScreen() {
 /** Trakt nu synchroniseren (draaiende pijltjes zolang [Trakt.isSyncing]). */
 private fun s2TraktSyncNow() {
     if (Trakt.isSyncing) return
-    AppScope.launch { runCatching { Trakt.refresh(force = true) } }
+    // build 173: blijvend ongeldig token → naar Koppelingen (opnieuw inloggen); anders wachtrij en alles ophalen
+    if (Trakt.needsReauth) { MyBingrNav.openSettings(SettingsTab.CONNECTIONS); return }
+    AppScope.launch { runCatching { Trakt.syncNow() } }
 }
 
 /** Verder kijken van dít profiel: per serie alleen de laatste aflevering (= MyBingrHeader.swift). */
@@ -1172,6 +1178,7 @@ private fun S2TraktStatus() {
         val text = when {
             syncing -> L("Syncing with Trakt…")
             Trakt.justSynced -> L("Up to date")
+            Trakt.needsReauth -> L("Sign in to Trakt again")
             else -> Trakt.lastRefresh?.let { L("Trakt synced %@", s2Time(it)) } ?: L("Sync now")
         }
         Text(text, color = if (lit) Color.Black else Theme.secondary, fontSize = tsp(12), fontWeight = FontWeight.Medium, maxLines = 1)

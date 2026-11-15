@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -277,8 +278,17 @@ fun SportScreen() {
     ) {
         item {
             Column(Modifier.padding(top = tvs(8))) {
-                if (!tv) Text(L("Sport"), color = Color.White, fontSize = Theme.titleSize, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = Theme.edge))
+                // build 173: rechtsboven het vergrootglas en het profielmenu, zoals op Home, Films en Series
+                // (tv: Zoeken en het profiel staan al in de bovenbalk)
+                if (!tv) Row(Modifier.fillMaxWidth().padding(horizontal = Theme.edge), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(L("Sport"), color = Color.White, fontSize = Theme.titleSize, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f))
+                    Box(Modifier.size(34.dp).focusLift { ScreensNav.search() }, contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Search, L("Search"), tint = Color.White, modifier = Modifier.size(25.dp))
+                    }
+                    ProfileMenuButton(avatarSize = 30.dp)
+                }
                 LazyRow(contentPadding = PaddingValues(horizontal = Theme.edge, vertical = tvs(6)),
                     horizontalArrangement = Arrangement.spacedBy(tvs(8))) {
                     items(filters) { f ->

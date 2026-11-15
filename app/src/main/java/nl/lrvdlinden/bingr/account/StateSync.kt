@@ -819,7 +819,11 @@ object StateSync {
         var keptLocal = false
         applyingChanges {
             val t = traktFrom(o["trakt"] as? JsonObject)
-            if (t != null || !keepLocalWhereServerEmpty || Trakt.currentTokens == null) Trakt.applySyncedTokens(t)
+            val cur = Trakt.currentTokens
+            // build 173: nooit een ouder Trakt-token over een nieuwer heen (het refresh-token daarvan is al gebruikt)
+            if (t != null && cur != null && !Build173PlayerLogic.traktAdoptRemote(cur.accessToken, cur.expiresAt, t.accessToken, t.expiresAt)) {
+                keptLocal = true
+            } else if (t != null || !keepLocalWhereServerEmpty || cur == null) Trakt.applySyncedTokens(t)
             else { keptLocal = true }
             val os = o["opensubtitles"] as? JsonObject
             val token = os.jS("token")?.takeIf { it.isNotEmpty() }
@@ -858,7 +862,9 @@ object StateSync {
         return when (plan(CONNECTIONS, row, at)) {
             Plan.ADOPT -> {
                 serverConnections = data
-                withContext(Dispatchers.Main) { applyConnections(data, keepLocalWhereServerEmpty = false) }
+                val kept = withContext(Dispatchers.Main) { applyConnections(data, keepLocalWhereServerEmpty = false) }
+                // build 173: een nieuwer lokaal Trakt-token gehouden: terug naar het account
+                if (kept) { bumpLocal(CONNECTIONS); return putSimple(CONNECTIONS) }
                 adopted(CONNECTIONS, at, row)
                 true
             }
@@ -895,6 +901,9 @@ object StateSync {
             if (server == null && local == null) return false
             // zelfde tokens: niets te doen (de gewone sync neemt eventuele andere wijzigingen over)
             if (server == Trakt.currentTokens) return false
+            // build 173: een ouder token uit het account niet overnemen
+            val cur = Trakt.currentTokens
+            if (server != null && cur != null && !Build173PlayerLogic.traktAdoptRemote(cur.accessToken, cur.expiresAt, server.accessToken, server.expiresAt)) return false
             serverConnections = data
             withContext(Dispatchers.Main) { applyConnections(data, keepLocalWhereServerEmpty = false) }
             adopted(CONNECTIONS, at, row)
