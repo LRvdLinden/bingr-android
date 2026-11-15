@@ -93,10 +93,8 @@ fun S2MoreAppsSection() {
                 Text(subtitle, color = Theme.secondary, fontSize = tsp(12), maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(12.dp))
-            Column(horizontalAlignment = Alignment.End) {
-                Text(view, color = Theme.brandRed, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Text("lrvdlinden.app", color = Theme.secondary, fontSize = tsp(11), maxLines = 1)
-            }
+            // build 177: zonder de regel "lrvdlinden.app" eronder (de link blijft)
+            Text(view, color = Theme.brandRed, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
     }
 }

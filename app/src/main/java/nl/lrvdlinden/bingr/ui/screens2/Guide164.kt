@@ -59,6 +59,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
@@ -117,11 +119,16 @@ private fun guideDay(list: List<EPGProgram>, offset: Int, now: Long): Pair<List<
     val r = Build164Logic.Index.window(list, Build164Logic.Days.start(now, offset), Build164Logic.Days.end(now, offset),
         { it.start }, { it.end })
     if (r.isEmpty()) return emptyList<EPGProgram>() to -1
-    val day = list.subList(r.first, r.last + 1)
+    // build 177: op volgorde en zonder dubbelen (zelfde titel kort na elkaar, kleine overlap met het vorige)
+    val day = guideClean(list.subList(r.first, r.last + 1))
     val anchor = Build164Logic.Days.anchor(now, offset)
     val i = Build164Logic.Index.firstEndingAfter(day, anchor, { it.start }, { it.end })
     return day to i
 }
+
+/** Build 177: programma's op volgorde en zonder dubbelen (`Build177Logic.clean`, gelijk aan Apple en web). */
+private fun guideClean(day: List<EPGProgram>): List<EPGProgram> =
+    Build177Logic.clean(day, { it.title }, { it.start }, { it.end }) { p, s, e -> p.copy(start = s, end = e) }
 
 /**
  * Build 166: dagen in de dagbalk/dagkiezer: alleen dagen waarop de zenders van [sample] programma's hebben (vandaag altijd;
@@ -577,27 +584,73 @@ fun GuideTV(
     program?.let { (c, p) -> ProgramSheet(c, p, onDismiss = { program = null }, fromGuide = true) }
 }
 
+/**
+ * Build 177: een kolom toont de hele dag en scrolt zelf (was: 2 programma's vóór NU en 4 erna; eerder op de dag kon je
+ * niet terug). Vandaag staat de kolom bij openen op twee programma's vóór NU, zodat de NU-kaarten naast elkaar staan;
+ * de focus gaat bij het binnenkomen van de kolom naar de NU-kaart (andere dagen het eerste programma) en omhoog gaat
+ * naar eerder op de dag. Regels: `Build177Logic.column`.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun GuideTVColumn(c: Channel, dayOffset: Int, now: Long, width: Dp, onPlay: () -> Unit, onProgram: (EPGProgram) -> Unit) {
     val all = remember(c.id, Playlists.library.epg, AllServers.version) { guidePrograms(c) }
-    val anchorT = Build164Logic.Days.anchor(now, dayOffset)
-    val col = remember(all, dayOffset, now / 60_000L) { Build164Logic.Index.column(all, anchorT, { it.start }, { it.end }) }
+    val dayStart = Build164Logic.Days.start(now, dayOffset)
+    val progs = remember(all, dayStart) { guideDay(all, dayOffset, now).first }
     val today = dayOffset == 0
-    Column(Modifier.width(width), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    val col = remember(progs, today, now / 60_000L) {
+        val n = if (today) Build164Logic.Index.at(progs, now, { it.start }, { it.end }).takeIf { it >= 0 } else null
+        val f = progs.indexOfFirst { it.start > now }.takeIf { it >= 0 }
+        Build177Logic.column(progs.size, n, f, today, nowCard = true)
+    }
+    val state = rememberLazyListState()
+    val target = remember { FocusRequester() }
+    var inside by remember { mutableStateOf(false) }
+    // bij openen, een andere dag of als de gids binnenkomt: naar het anker (niet als de focus al in de kolom staat)
+    LaunchedEffect(c.id, dayOffset, progs.isEmpty()) {
+        val a = col.anchor
+        if (a != null && !inside) runCatching { state.scrollToItem(a) }
+    }
+    Column(Modifier.width(width).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // build 166: compacte kop (±56 pt): logo op een donker vlak met een dunne rand, of de opgeschoonde naam
-        GuideLogo(c, Modifier.fillMaxWidth().height(30.dp).padding(bottom = 2.dp), fontSize = 11.sp, radius = 6.dp)
-        col.before.forEach { idx -> GuideTVLine(all[idx], dim = true) { onProgram(all[idx]) } }
-        val anchor = if (col.anchor >= 0) all[col.anchor] else null
-        GuideTVNowCard(c, anchor, now, live = today && anchor != null,
-            onClick = { if (today && (anchor == null || anchor.isNow)) onPlay() else if (anchor != null) onProgram(anchor) })
-        col.after.forEach { idx -> GuideTVLine(all[idx], dim = false) { onProgram(all[idx]) } }
+        GuideLogo(c, Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(30.dp).padding(bottom = 2.dp), fontSize = 11.sp, radius = 6.dp)
+        if (col.rows.isEmpty()) {
+            Text(L("No guide information"), color = Theme.secondary, fontSize = 11.sp, modifier = Modifier.padding(8.dp))
+            return@Column
+        }
+        LazyColumn(
+            Modifier.fillMaxWidth().weight(1f)
+                .onFocusChanged { inside = it.hasFocus }
+                .focusProperties {
+                    // de focus komt binnen op NU (of het eerste programma), als die regel opgebouwd is
+                    enter = {
+                        val f = col.focus
+                        if (f != null && state.layoutInfo.visibleItemsInfo.any { it.index == f }) target else FocusRequester.Default
+                    }
+                },
+            state = state,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items(col.rows.size, key = { r -> col.rows[r].let { if (it.now) "now" else progs[it.index].id + "#" + it.index } },
+                contentType = { r -> if (col.rows[r].now) "now" else "line" }) { r ->
+                val row = col.rows[r]
+                val m = if (r == col.focus) Modifier.focusRequester(target) else Modifier
+                if (row.now) {
+                    val p = if (row.index >= 0) progs[row.index] else null
+                    GuideTVNowCard(c, p, now, live = today, modifier = m, onClick = onPlay)
+                } else {
+                    val p = progs[row.index]
+                    GuideTVLine(p, dim = p.end <= now, modifier = m) { onProgram(p) }
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun GuideTVLine(p: EPGProgram, dim: Boolean, onClick: () -> Unit) {
+private fun GuideTVLine(p: EPGProgram, dim: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    Row(Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }.focusLift(1.04f, onClick = onClick)
+    Row(modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }.focusLift(1.04f, onClick = onClick)
         .clip(RoundedCornerShape(6.dp)).background(if (focused) Color.White else Color.Transparent)
         .padding(horizontal = 4.dp, vertical = 3.dp)) {
         Text(s2Time(p.start), fontSize = 11.sp, maxLines = 1, modifier = Modifier.width(36.dp),
@@ -608,12 +661,12 @@ private fun GuideTVLine(p: EPGProgram, dim: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun GuideTVNowCard(c: Channel, p: EPGProgram?, now: Long, live: Boolean, onClick: () -> Unit) {
+private fun GuideTVNowCard(c: Channel, p: EPGProgram?, now: Long, live: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(12.dp)
     // build 166: het beeld vult de bovenkant van rand tot rand (16:9), geen kader in een kader; focus = de standaard
     // tv-lift en schaduw (focusLift)
-    Column(Modifier.fillMaxWidth()
+    Column(modifier.fillMaxWidth()
         .onFocusChanged {
             val was = focused
             focused = it.isFocused
