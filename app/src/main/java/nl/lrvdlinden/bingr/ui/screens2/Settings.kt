@@ -78,6 +78,7 @@ import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
@@ -129,7 +130,7 @@ private fun S2AppFooter() {
     }
 }
 
-private enum class S2SettingsSub { CATEGORIES, MANAGE, HISTORY, NAS, CHECK, COLLECTIONS, HOME_SCREEN, WATCHING, WATCH_LOG, STATS, HIDDEN_CHANNELS, BLOCKED_TITLES }
+private enum class S2SettingsSub { CATEGORIES, MANAGE, CLEANUP, HISTORY, NAS, CHECK, COLLECTIONS, HOME_SCREEN, WATCHING, WATCH_LOG, STATS, HIDDEN_CHANNELS, BLOCKED_TITLES }
 private enum class S2PinMode { SET, UNLOCK, DISABLE }
 
 private const val S2_FILE_AUTHORITY = "nl.lrvdlinden.bingr.files"
@@ -270,6 +271,7 @@ fun SettingsScreen() {
     if (lockedSub == null) when (sub) {
         S2SettingsSub.CATEGORIES -> { if (Store.activeProfile?.kids != true) { ManageCategoriesScreen { sub = null }; return } else sub = null }
         S2SettingsSub.MANAGE -> { ManageScreen { sub = null }; return }
+        S2SettingsSub.CLEANUP -> { CategoryCleanupScreen { sub = null }; return }
         S2SettingsSub.HISTORY -> { HistoryScreen { sub = null }; return }
         S2SettingsSub.NAS -> { NetworkBrowserScreen { sub = null }; return }
         S2SettingsSub.CHECK -> { SourceCheckScreen { sub = null }; return }
@@ -685,6 +687,8 @@ fun SettingsScreen() {
                         if (isMain) {
                             S2Row(L("Edit server"), icon = Icons.Default.Dns, onClick = { editing = current })
                             S2Row(L("Manage groups and channels"), icon = Icons.Default.Tune, onClick = { sub = S2SettingsSub.MANAGE })
+                            // build 172: categorieën slim samenvoegen, pas na akkoord
+                            S2Row(L("Clean up categories"), icon = Icons.Default.AutoFixHigh, onClick = { sub = S2SettingsSub.CLEANUP })
                             S2Row(L("Check source"), icon = Icons.Default.Analytics, onClick = { sub = S2SettingsSub.CHECK })
                         }
                         // build 130: eerst deze server, daarna de andere één voor één op de achtergrond

@@ -47,6 +47,10 @@ object Store {
     /** "<playlistID>|<channelID>" — van het actieve profiel */
     var recentChannels by mutableStateOf(listOf<String>()); private set
     var customizations by mutableStateOf(mapOf<String, Customization>()); private set
+    /** Build 172: overgeslagen voorstellen van "Categorieën opschonen" per server ("<soort>|<id>"); gesynct in het android-blok */
+    var mergeIgnored by mutableStateOf(mapOf<String, List<String>>()); private set
+    /** Build 172: doelnamen die het opschonen zelf zette ("<server>|<doelgroep>" → naam), alleen lokaal */
+    private var mergeMade = mapOf<String, String>()
     var parental by mutableStateOf(ParentalSettings()); private set
     var reminders by mutableStateOf(listOf<ProgramReminder>()); private set
     /** Kijkgeschiedenis van het actieve profiel */
@@ -195,6 +199,8 @@ object Store {
     fun load() {
         playlists = read("playlists", emptyList())
         customizations = read("custom", emptyMap())
+        mergeIgnored = read("mergeIgnored172", emptyMap())
+        mergeMade = read("mergeMade172", emptyMap())
         parental = read("parental", ParentalSettings())
         reminders = read<List<ProgramReminder>>("reminders", emptyList()).filter { it.start > System.currentTimeMillis() - 3_600_000 }
         nasServers = read("nas", emptyList())
@@ -904,6 +910,38 @@ object Store {
         customizations = customizations + (playlist to n)
         write("custom", customizations)
         if (n != old) { SourceSync.sourceEdited(playlist); SourceSync.sourcesChanged() }
+    }
+
+    // MARK: build 172: categorieën opschonen
+
+    fun mergeIgnored(playlist: String, section: String): Set<String> {
+        val p = "$section|"
+        return (mergeIgnored[playlist] ?: emptyList()).filter { it.startsWith(p) }.map { it.removePrefix(p) }.toSet()
+    }
+
+    private fun setMergeIgnored(playlist: String, list: List<String>, sync: Boolean) {
+        val v = list.distinct().sorted()
+        if (v == (mergeIgnored[playlist] ?: emptyList<String>())) return
+        mergeIgnored = if (v.isEmpty()) mergeIgnored - playlist else mergeIgnored + (playlist to v)
+        write("mergeIgnored172", mergeIgnored)
+        if (sync) { SourceSync.sourceEdited(playlist); SourceSync.sourcesChanged() }
+    }
+
+    fun ignoreMerge(playlist: String, section: String, id: String) =
+        setMergeIgnored(playlist, (mergeIgnored[playlist] ?: emptyList()) + Build172Logic.ignoreKey(section, id), true)
+
+    /** "Opnieuw zoeken": overgeslagen voorstellen van deze soort komen terug */
+    fun clearMergeIgnored(playlist: String, section: String) =
+        setMergeIgnored(playlist, (mergeIgnored[playlist] ?: emptyList()).filterNot { it.startsWith("$section|") }, true)
+
+    /** Uit de account-sync (null = de sleutel ontbrak: geen overgeslagen voorstellen) */
+    fun applySyncedMergeIgnored(playlist: String, list: List<String>?) = setMergeIgnored(playlist, list ?: emptyList(), false)
+
+    fun mergeMade(playlist: String, target: String): String? = mergeMade["$playlist|$target"]
+    fun setMergeMade(playlist: String, target: String, name: String?) {
+        val k = "$playlist|$target"
+        mergeMade = if (name == null) mergeMade - k else mergeMade + (k to name)
+        write("mergeMade172", mergeMade)
     }
 
     // MARK: kinderslot — gedeeld (ingesteld door het hoofdaccount)

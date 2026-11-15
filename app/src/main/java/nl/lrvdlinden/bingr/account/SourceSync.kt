@@ -348,6 +348,8 @@ object SourceSync {
         }
         val locked = (a["lockedGroups"] as? JsonArray)?.mapNotNull { it.jFlex }?.toSet()
         Store.applySyncedSourceSettings(id, custom, locked)
+        // build 172: overgeslagen voorstellen van "Categorieën opschonen"
+        Store.applySyncedMergeIgnored(id, (a[IGNORED_KEY] as? JsonArray)?.mapNotNull { it.jFlex })
     }
 
     private fun toSource(o: JsonObject, existing: PlaylistSource?): PlaylistSource? {
@@ -403,8 +405,14 @@ object SourceSync {
     private fun androidBlock(id: String, old: JsonObject?): JsonObject {
         val custom = Http.json.encodeToJsonElement(Customization.serializer(), Store.customization(id))
         val locked = JsonArray(Store.lockedGroups(id).sorted().map { JsonPrimitive(it) })
-        return JsonObject((old ?: JsonObject(emptyMap())) + mapOf("customization" to custom, "lockedGroups" to locked))
+        val base = (old ?: JsonObject(emptyMap())) + mapOf("customization" to custom, "lockedGroups" to locked)
+        // build 172: alleen als er iets is (anders verandert er niets aan bestaande servers); oudere apps laten het staan
+        val ign = Store.mergeIgnored[id].orEmpty()
+        return JsonObject(if (ign.isEmpty()) base - IGNORED_KEY else base + (IGNORED_KEY to JsonArray(ign.map { JsonPrimitive(it) })))
     }
+
+    /** Build 172: sleutel in het android-blok voor overgeslagen voorstellen */
+    private const val IGNORED_KEY = "ignoredMergeSuggestions"
 
     private fun sourcesJson(): JsonArray {
         val activeList = Store.playlists.map { p ->
