@@ -61,18 +61,24 @@ class RadioWidget : AppWidgetProvider() {
             if (started) return
             started = true
             AppScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                // build 175: op identiteit vergelijken (niet de hele bibliotheek met == op de main thread) en het werk
+                // (zenders filteren en sorteren, bewaren) buiten de main thread; zonder widget op het thuisscherm niets
                 androidx.compose.runtime.snapshotFlow {
-                    listOf<Any?>(Playlists.library, Store.favorites, Radio.current?.id, Radio.playing)
-                }.debounce(800).collect { refresh() }
+                    listOf<Any?>(System.identityHashCode(Playlists.library), System.identityHashCode(Store.favorites),
+                        Radio.current?.id, Radio.playing)
+                }.debounce(800).collect {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { refresh(onlyIfPlaced = true) }
+                }
             }
         }
 
         /** Bijwerken na een wijziging (andere zender, afspelen/pauze, stoppen, andere bibliotheek). */
-        fun refresh(ctx: Context = AppState.appContext) {
+        fun refresh(ctx: Context = AppState.appContext, onlyIfPlaced: Boolean = false) {
             runCatching {
-                save(ctx)
                 val m = AppWidgetManager.getInstance(ctx)
                 val ids = m.getAppWidgetIds(ComponentName(ctx, RadioWidget::class.java))
+                if (onlyIfPlaced && ids.isEmpty()) return
+                save(ctx)
                 if (ids.isNotEmpty()) for (id in ids) m.updateAppWidget(id, views(ctx))
             }
         }
