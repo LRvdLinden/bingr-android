@@ -158,7 +158,13 @@ private fun ReminderBanner(r: ProgramReminder) {
                 Text(Reminders.bannerLine(r), color = Theme.secondary, fontSize = tsp(12),
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (Reminders.canWatch(r)) {
+            if (r.isRelease) {
+                // build 176: releaseherinnering: de titel openen (op een server van het account, anders de TMDB-pagina)
+                NetflixButton(L("View"), Icons.Default.PlayArrow, kind = NetflixKind.PLAY) {
+                    Reminders.due = null
+                    PushNav.handle(android.content.Intent(android.content.Intent.ACTION_VIEW, Reminders.releaseLink(r)))
+                }
+            } else if (Reminders.canWatch(r)) {
                 NetflixButton(L("Watch"), Icons.Default.PlayArrow, kind = NetflixKind.PLAY) {
                     Reminders.due = null
                     val c = Playlists.library.channels.firstOrNull { it.id == r.channelID }

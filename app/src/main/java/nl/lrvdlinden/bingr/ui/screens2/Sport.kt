@@ -461,7 +461,7 @@ private fun SportRow(g: Build173Logic.Group, onOpen: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(if (on) Icons.Default.Notifications else Icons.Default.NotificationsNone, null,
-                tint = if (on) Theme.brandRed else Theme.secondary, modifier = Modifier.size(22.dp))
+                tint = if (on) Theme.brandRed else Theme.secondary, modifier = Modifier.size(22.dp).bounceOnChange(on))
         }
     }
 }
@@ -485,7 +485,7 @@ private fun SportTvCard(g: Build173Logic.Group, now: Long, onMore: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(SportCenter.time(g.start), color = Color.White, fontSize = tsp(20), fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
             Icon(if (on) Icons.Default.Notifications else Icons.Default.NotificationsNone, null,
-                tint = if (on) Theme.brandRed else Theme.secondary, modifier = Modifier.size(24.dp))
+                tint = if (on) Theme.brandRed else Theme.secondary, modifier = Modifier.size(24.dp).bounceOnChange(on))
         }
         Text(listOfNotNull(SportCenter.label(g.match), SportCenter.channel(g)?.displayName).filter { it.isNotEmpty() }.joinToString(" · "),
             color = Theme.secondary, fontSize = tsp(13), maxLines = 1, overflow = TextOverflow.Ellipsis)

@@ -797,6 +797,30 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                 }
             }
 
+            // MARK: build 176: bewaarde momenten van deze titel (film, of de afleveringen van deze serie), op tijd oplopend
+            run {
+                val all = Store.bookmarks
+                val moments = remember(all, target.id, episodes) {
+                    when (target) {
+                        is DetailTarget.MovieT -> Build176Logic.Bookmarks.forTitle(all.map { it.logic() }, pid, target.movie.id)
+                        is DetailTarget.SeriesT -> {
+                            val ids = episodes.mapTo(HashSet()) { it.id }
+                            all.map { it.logic() }.filter { !it.removed && it.key in ids &&
+                                (pid == null || it.playlistID == null || it.playlistID.equals(pid, true)) }
+                                .sortedWith(compareBy<Build176Logic.Bookmarks.B>({ b -> episodes.firstOrNull { it.id == b.key }?.let { it.season * 10_000 + it.number } ?: 0 }, { it.t }))
+                        }
+                    }.map { Bookmark176.of(it) }
+                }
+                MomentsRow(moments, showTitle = target is DetailTarget.SeriesT) { b ->
+                    when (target) {
+                        is DetailTarget.MovieT -> AppState.play(Playables.movie(target.movie, imdb).copy(startAt = b.t.toDouble()))
+                        is DetailTarget.SeriesT -> episodes.firstOrNull { it.id == b.key }?.let { e ->
+                            AppState.play(Playables.episode(e, target.series, imdb).copy(startAt = b.t.toDouble()))
+                        } ?: playMoment(b)
+                    }
+                }
+            }
+
             // MARK: afleveringen
             if (target is DetailTarget.SeriesT) {
                 val s = target.series
@@ -1117,6 +1141,8 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                 seriesDownloadAction(),
             ) + movieDownloadActions() + listOfNotNull(
                 S2Action(L("Share"), Icons.Default.Share) { share() },
+                // build 176: vergrendelen met de pincode van het hoofdprofiel
+                if (!target.id.startsWith("rec-") && !DiscoverItem.isExternal(target.id)) titleLockAction(target, pid) else null,
                 if (Store.activeProfile?.kids != true && pid != null) S2Action(L("Hide for this profile"), Icons.Default.VisibilityOff, destructive = true) { blockConfirm = true } else null,
             ), onDismiss = { moreMenu = false })
         }

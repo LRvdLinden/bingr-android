@@ -121,3 +121,51 @@ fun BlockedTitleNotice(onClose: () -> Unit) {
         }
     }
 }
+
+/**
+ * Build 176: Instellingen > Profiel > "Vergrendeld": zenders en titels die de pincode van het hoofdprofiel vragen
+ * (`profile.<id>.lockedChannels` / `lockedTitles`). Ontgrendelen (uit de lijst halen) vraagt altijd die pincode.
+ */
+@Composable
+fun LockedItemsScreen(onClose: () -> Unit) {
+    val (pid, picker) = profileChoice()
+    var tick by remember { mutableIntStateOf(0) }
+    val sets = remember(pid, tick, Store.lockedChannels, Store.lockedTitles) {
+        if (pid == null) emptySet<String>() to emptySet() else Store.lockedSets(pid)
+    }
+    val channels = remember(sets) { sets.first.sortedBy { channelName(it).lowercase() } }
+    val titles = remember(sets) { sets.second.sortedBy { titleName(it).first.lowercase() } }
+    S2Page(L("Locked"), onClose = onClose) {
+        if (picker != null) item { picker() }
+        item {
+            S2Section(footer = L("Locked channels and titles stay visible, but opening them asks for the PIN of the main profile. After the PIN they stay open for 4 hours on this device. Hold a channel or title and choose Lock with PIN.")) {
+                if (channels.isEmpty() && titles.isEmpty()) S2Row(L("Nothing locked"), tint = Theme.secondary)
+            }
+        }
+        if (channels.isNotEmpty()) item { S2Header(L("Channels")) }
+        itemsIndexed(channels, key = { _, k -> "c$k" }) { i, k ->
+            Column(Modifier.s2Cell(i, channels.size)) {
+                if (i > 0) S2Divider()
+                S2Row(channelName(k), subtitle = Build171Logic.ProfileSets.split(k)?.first?.let { s ->
+                    Store.playlists.firstOrNull { it.id.equals(s, ignoreCase = true) }?.displayName },
+                    trailing = {
+                        DeviceSmallButton(L("Unlock"), androidx.compose.ui.graphics.Color.White, null, true) {
+                            Locks.unlockWithPin { Store.setChannelKeyLocked(k, false, pid); tick++ }
+                        }
+                    })
+            }
+        }
+        if (titles.isNotEmpty()) item { S2Header(L("Titles")) }
+        itemsIndexed(titles, key = { _, k -> "t$k" }) { i, k ->
+            Column(Modifier.s2Cell(i, titles.size)) {
+                if (i > 0) S2Divider()
+                val (title, sub) = titleName(k)
+                S2Row(title, subtitle = sub, trailing = {
+                    DeviceSmallButton(L("Unlock"), androidx.compose.ui.graphics.Color.White, null, true) {
+                        Locks.unlockWithPin { Store.setTitleKeyLocked(k, false, pid); tick++ }
+                    }
+                })
+            }
+        }
+    }
+}

@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.automirrored.filled.List
@@ -94,9 +95,13 @@ private fun s2LiveGroupTitle(g: String): String = when {
 private fun s2SearchChannels(lib: Library, q: String): List<Channel> {
     val byName = lib.channels.filter { it.name.contains(q, ignoreCase = true) || (it.number?.toString() == q) }
     val nameIDs = byName.mapTo(HashSet()) { it.id }
+    // build 176: ook de beschrijving van wat er nu speelt (zelfde regel als Zoeken: elk woord, zonder accenten)
+    val words = Build176Logic.EpgSearch.words(q)
     val byOther = lib.channels.filter { c ->
         c.id !in nameIDs && (c.group.contains(q, ignoreCase = true) ||
-            (lib.nowPlaying(c)?.title?.contains(q, ignoreCase = true) ?: false))
+            (lib.nowPlaying(c)?.let { p -> p.title.contains(q, ignoreCase = true) ||
+                (words != null && Build176Logic.EpgSearch.matchFolded(words, Build176Logic.EpgSearch.fold(p.title),
+                    p.description?.let { Build176Logic.EpgSearch.fold(it) }) != null) } ?: false))
     }
     return byName + byOther
 }
@@ -321,7 +326,7 @@ fun LiveTVScreen() {
         ) + (if (Store.activeProfile?.kids != true) listOf(
             // build 171: zender verbergen voor dit profiel (Instellingen > Profiel > Verborgen zenders)
             S2Action(L("Hide channel"), Icons.Default.VisibilityOff) { Store.setChannelHidden(c.sourceID ?: pid, c.id, true) }
-        ) else emptyList()) + (if (c.catchupDays > 0) listOf(S2Action(L("Catch-up offset…") + catchupOffsetLabel(pid, c), Icons.Default.History) { offsetFor = c })
+        ) else emptyList()) + listOfNotNull(channelLockAction(c, pid)) + (if (c.catchupDays > 0) listOf(S2Action(L("Catch-up offset…") + catchupOffsetLabel(pid, c), Icons.Default.History) { offsetFor = c })
             else emptyList()), onDismiss = { menuFor = null })
     }
     collectFor?.let { c -> AddToCollectionDialog(Collections.ref(c), c.name, c.logo) { collectFor = null } }
@@ -486,6 +491,11 @@ private fun S2ChannelRow(
                 if (channel.catchupDays > 0) {
                     Spacer(Modifier.width(6.dp))
                     Icon(Icons.Default.History, null, tint = Theme.secondary, modifier = Modifier.size(tvs(12)))
+                }
+                // build 176: vergrendeld met de pincode van het hoofdprofiel
+                if (Store.lockedChannels.isNotEmpty() && Store.isChannelLocked(channel.sourceID, channel.id)) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.Default.Lock, L("Locked"), tint = Theme.secondary, modifier = Modifier.size(tvs(12)))
                 }
             }
             if (now != null) {

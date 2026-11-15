@@ -209,6 +209,8 @@ class ExoEngine(ctx: Context) : PlaybackEngine {
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setPreferredAudioLanguage(audioPref)
             .build()
+        // build 176: data besparen op een mobiel netwerk (max. 1,5 Mbit/s en 576 lijnen; wifi zonder grens)
+        DataSaver.apply(player)
         val startMs = startSeconds?.takeIf { !live && it > 1 }?.let { (it * 1000).toLong() }
         if (startMs != null) player.setMediaItem(b.build(), startMs) else player.setMediaItem(b.build())
         player.setPlaybackSpeed(rate)
@@ -421,6 +423,8 @@ class VlcEngine(ctx: Context) : PlaybackEngine {
         }
         media.addOption(":http-user-agent=${Http.USER_AGENT}")
         media.addOption(":http-reconnect")
+        // build 176: data besparen op een mobiel netwerk: HLS/DASH-variant tot 576 lijnen en ~1,5 Mbit/s
+        if (DataSaver.active()) { media.addOption(":adaptive-maxheight=${Build176Logic.DataMode.MAX_HEIGHT}"); media.addOption(":adaptive-logic=lowest") }
         // deinterlacen (build 52): Uit = 0, Automatisch = -1 (alleen bij geïnterlinieerd beeld), Aan = 1
         when (PlayerSettings.deinterlace) {
             "off" -> media.addOption(":deinterlace=0")

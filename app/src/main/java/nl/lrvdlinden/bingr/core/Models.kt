@@ -279,6 +279,8 @@ data class PlayableItem(
     /** Build 154: TMDB-id (film of serie) en jaar, voor de inhoudssleutels van "gezien" en `ids` naar Trakt */
     val tmdbID: String? = null,
     val year: Int? = null,
+    /** Build 176: starten op precies deze plek (seconden), bijv. een bewaard moment; eenmalig (daarna gewoon hervatten). */
+    val startAt: Double? = null,
 ) {
     /** Build 153: titel zoals de app hem toont (zender: opgeschoonde zendernaam); [title] blijft voor sleutels. */
     val displayTitle: String get() = if (type == MediaType.LIVE) ContentLanguage.channelTitle(title) else ContentLanguage.displayTitle(title)
@@ -384,13 +386,22 @@ data class ProgramReminder(
     val matchKey: String? = null,
     /** Build 172: automatisch gezet (favoriet team of competitie) */
     val auto: Boolean? = null,
+    /** Build 176 (docs/ACCOUNT.md "Build 176", 4): "release" = belletje op de releasedatum van een titel (TMDB) */
+    val kind: String? = null,
+    val tmdb: Int? = null,
+    /** "movie" of "tv" */
+    val mediaType: String? = null,
+    /** Alleen bij een nieuw seizoen */
+    val season: Int? = null,
 ) {
     val isSport: Boolean get() = matchKey != null
+    /** Build 176: herinnering op de releasedatum (melding precies op [start], 09:00 lokale tijd). */
+    val isRelease: Boolean get() = kind == "release"
     /**
      * Moment van de melding: sport `leadMin` minuten vooraf (0/5/15, anders 5; zelfde regel als Build173Logic.lead, hier
      * zonder die afhankelijkheid: Models.kt wordt in de belastingtest los gebouwd), anders 2 minuten.
      */
-    val notifyAt: Long get() = start - (if (isSport) (leadMin?.takeIf { it == 0 || it == 5 || it == 15 } ?: 5) else 2) * 60_000L
+    val notifyAt: Long get() = if (isRelease) start else start - (if (isSport) (leadMin?.takeIf { it == 0 || it == 5 || it == 15 } ?: 5) else 2) * 60_000L
     /** Build 153: zendernaam zoals de app hem toont. */
     val displayChannelName: String get() = ContentLanguage.channelTitle(channelName)
 }

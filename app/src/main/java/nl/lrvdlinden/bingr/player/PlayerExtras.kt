@@ -87,6 +87,8 @@ object ChannelPreview {
         // screenshotmodus (alleen de screenshot-build): beeld uit de demo in plaats van een stream
         if (Screenshots.isActive) { channel = c; playing = true; return }
         if (!PlayerSettings.previewAllowed(tapped = tapped) || AppState.playing != null) return
+        // build 176: geen voorbeeld van een vergrendelde zender
+        if (Store.lockedChannels.isNotEmpty() && Store.isChannelLocked(c.sourceID, c.id)) return
         // build 164: net op de streamlimiet gestuit: geen nieuw voorbeeld (het stilstaande beeld of logo blijft)
         if (!Build164Logic.Preview.mayTry(blockedAt, System.currentTimeMillis())) return
         // naar de achtergrond (ook vanuit de gids): voorbeeld stoppen, zodat de providerverbinding niet open blijft

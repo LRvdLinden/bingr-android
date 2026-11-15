@@ -165,6 +165,8 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit, initialQuery: String? = nu
     var searching by remember { mutableStateOf(false) }
     var program by remember { mutableStateOf<ProgramHit?>(null) }
     var people by remember { mutableStateOf(emptyList<TMDB.PersonHit>()) }
+    // build 176: treffers in de beschrijvingen van de tv-gids (index op de achtergrond, na 250 ms stilte)
+    var descHits by remember { mutableStateOf(emptyList<GuideIndex176.Hit>()) }
     val focusManager = LocalFocusManager.current
 
     BackHandler(enabled = modal && program == null) { onClose() }
@@ -197,6 +199,16 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit, initialQuery: String? = nu
         programs = p
         groupHits = g
         searching = false
+    }
+
+    LaunchedEffect(query) {
+        val q = query.trim()
+        if (Build176Logic.EpgSearch.words(q) == null) { descHits = emptyList(); return@LaunchedEffect }
+        delay(Build176Logic.EpgSearch.DEBOUNCE_MS)
+        val r = screensSafe { GuideIndex176.search(q, Playlists.library) } ?: emptyList()
+        if (q != query.trim()) return@LaunchedEffect
+        // alleen wat in de beschrijving staat: titeltreffers staan al onder "Tv-gids"
+        descHits = r.filter { it.field == Build176Logic.EpgSearch.Field.DESCRIPTION }
     }
 
     // personen (TMDB) vanaf 3 tekens; nieuwe invoer annuleert de vorige zoekopdracht
@@ -279,7 +291,7 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit, initialQuery: String? = nu
                         }
                     }
                 } else if (results.channels.isEmpty() && results.movies.isEmpty() && results.series.isEmpty() &&
-                    programs.isEmpty() && groupHits.isEmpty() && people.isEmpty() && !searching) {
+                    programs.isEmpty() && groupHits.isEmpty() && people.isEmpty() && descHits.isEmpty() && !searching) {
                     full {
                         Text(
                             L("Nothing found for “%@”.", q), color = Theme.secondary, fontSize = tsp(15), textAlign = TextAlign.Center,
@@ -353,10 +365,12 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit, initialQuery: String? = nu
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                             PosterCard(
                                 m.title, m.poster,
-                                modifier = Modifier.focusLift { ScreensNav.detail(DetailTarget.MovieT(m)) },
+                                modifier = Modifier.cardPreviewFocus(DetailTarget.MovieT(m)).focusLift { ScreensNav.detail(DetailTarget.MovieT(m)) },
                                 watched = Playables.isWatched(m, Trakt.imdb(m)),
                                 accent = accent,
-                                language = languageLabel(m)
+                                language = languageLabel(m),
+                                locked = Store.isTitleLocked(m.sourceID, false, m.id),
+                                preview = { CardPreviewSlot(DetailTarget.MovieT(m)) },
                             )
                         }
                     }
@@ -369,10 +383,12 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit, initialQuery: String? = nu
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                             PosterCard(
                                 s.title, s.poster,
-                                modifier = Modifier.focusLift { ScreensNav.detail(DetailTarget.SeriesT(s)) },
+                                modifier = Modifier.cardPreviewFocus(DetailTarget.SeriesT(s)).focusLift { ScreensNav.detail(DetailTarget.SeriesT(s)) },
                                 accent = accent,
                                 language = languageLabel(s),
-                                watchedEpisodes = Playables.seriesCardCount(s)
+                                watchedEpisodes = Playables.seriesCardCount(s),
+                                locked = Store.isTitleLocked(s.sourceID, true, s.id),
+                                preview = { CardPreviewSlot(DetailTarget.SeriesT(s)) },
                             )
                         }
                     }
@@ -433,6 +449,37 @@ fun SearchScreen(modal: Boolean, onClose: () -> Unit, initialQuery: String? = nu
                         }
                     }
                 }
+
+                // build 176: in de beschrijvingen van de tv-gids (nu en de komende 7 dagen), met het gevonden woord gemarkeerd
+                if (descHits.isNotEmpty()) {
+                    full { SearchSectionTitle(L("In the TV guide")) }
+                    items(descHits, span = { GridItemSpan(maxLineSpan) }) { h ->
+                        Row(
+                            Modifier.fillMaxWidth().focusLift(1.02f) { program = ProgramHit(h.channel, h.program) }.padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            RemoteImage(
+                                h.channel.logo,
+                                Modifier.width(tvs(56)).height(tvs(36)).clip(RoundedCornerShape(4.dp)),
+                                placeholder = h.channel.displayName.take(3), fit = true
+                            )
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    if (h.program.isNow) Text(L("NOW"), color = Theme.red, fontSize = tsp(10), fontWeight = FontWeight.Black)
+                                    Text(h.program.displayTitle, color = Color.White, fontSize = tsp(14), fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                Text(descSnippet(h.program.description ?: "", h.start, h.length), color = Theme.secondary, fontSize = tsp(12),
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    "${h.channel.displayName} · ${programTime(h.program.start)}", color = Theme.secondary, fontSize = tsp(11),
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -450,4 +497,19 @@ private fun LazyGridScope.full(content: @Composable () -> Unit) {
 @Composable
 private fun SearchSectionTitle(t: String, modifier: Modifier = Modifier) {
     Text(t, color = Color.White, fontSize = Theme.titleSize, fontWeight = FontWeight.Bold, modifier = modifier.padding(top = 6.dp))
+}
+
+
+/** Build 176: stuk van de beschrijving rond het gevonden woord, met dat woord vet en wit. */
+private fun descSnippet(desc: String, start: Int, length: Int): androidx.compose.ui.text.AnnotatedString {
+    if (start < 0 || start + length > desc.length) return androidx.compose.ui.text.AnnotatedString(desc)
+    val from = if (start > 50) desc.lastIndexOf(' ', start - 40).let { if (it < 0) start - 40 else it + 1 } else 0
+    val prefix = if (from > 0) "…" else ""
+    return androidx.compose.ui.text.buildAnnotatedString {
+        append(prefix + desc.substring(from, start))
+        pushStyle(androidx.compose.ui.text.SpanStyle(color = Color.White, fontWeight = FontWeight.Bold))
+        append(desc.substring(start, start + length))
+        pop()
+        append(desc.substring(start + length))
+    }
 }

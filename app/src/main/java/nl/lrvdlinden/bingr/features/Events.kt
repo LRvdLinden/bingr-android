@@ -217,7 +217,8 @@ object PlayerSettings {
 
     /** Voorbeeld nu tonen: instelling aan, en op een telefoon bij Alleen wifi niet via een netwerk met datalimiet. */
     fun previewAllowed(ctx: Context = AppState.appContext, tapped: Boolean = false): Boolean =
-        Build164Logic.Preview.mayStart(previewStart(ctx), tapped)
+        // build 176: geen live voorbeeld bij Data besparen op een mobiel netwerk
+        !DataSaver.active(ctx) && Build164Logic.Preview.mayStart(previewStart(ctx), tapped)
 
     var matchFrameRate: Boolean
         get() = Prefs.bool("player.matchFrameRate", true)

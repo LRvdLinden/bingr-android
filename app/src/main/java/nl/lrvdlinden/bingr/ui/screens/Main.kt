@@ -272,6 +272,8 @@ fun MainScreen() {
         }
     }
     SupportDialogHost()
+    // build 176: pincode voor vergrendelde zenders en titels
+    LockGateHost()
     KidsGateHost()
     // build 145: "Servers bijwerken?" na het kiezen van een profiel (instelling "Servers laden bij openen": Vragen)
     UpdateAskHost()

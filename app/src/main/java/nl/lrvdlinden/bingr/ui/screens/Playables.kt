@@ -94,7 +94,7 @@ data class ResumeChoice(
 /** Speelt een film of aflevering af op basis van de voortgangssleutel (= ResumePlayer in ContinueWatching.swift). */
 object ResumePlayer {
     /** Lukt afspelen niet, dan de serie/film om te openen (anders null). */
-    suspend fun play(key: String, title: String, restart: Boolean, sourceID: String? = null): DetailTarget? {
+    suspend fun play(key: String, title: String, restart: Boolean, sourceID: String? = null, startAt: Double? = null): DetailTarget? {
         // build 128: van een andere (of verwijderde) server, zonder te wisselen
         if (sourceID != null && !AllServers.isActive(sourceID)) return AllServers.resume(sourceID, key, title, restart)
         val lib = Playlists.library
@@ -102,6 +102,7 @@ object ResumePlayer {
         if (m != null) {
             var item = Playables.movie(m, Trakt.imdb(m))
             if (restart) item = item.copy(resumeAt = 0.0)
+            if (startAt != null) item = item.copy(startAt = startAt)
             AppState.play(item)
             return null
         }
@@ -114,6 +115,7 @@ object ResumePlayer {
             val e = eps.firstOrNull { it.id == key } ?: continue
             var item = Playables.episode(e, s, Trakt.imdb(s))
             if (restart) item = item.copy(resumeAt = 0.0)
+            if (startAt != null) item = item.copy(startAt = startAt)
             AppState.play(item)
             return null
         }

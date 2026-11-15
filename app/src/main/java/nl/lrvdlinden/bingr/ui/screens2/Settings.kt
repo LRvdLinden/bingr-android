@@ -130,7 +130,7 @@ private fun S2AppFooter() {
     }
 }
 
-private enum class S2SettingsSub { CATEGORIES, MANAGE, CLEANUP, HISTORY, NAS, CHECK, COLLECTIONS, HOME_SCREEN, WATCHING, WATCH_LOG, STATS, HIDDEN_CHANNELS, BLOCKED_TITLES }
+private enum class S2SettingsSub { CATEGORIES, MANAGE, CLEANUP, HISTORY, NAS, CHECK, COLLECTIONS, HOME_SCREEN, WATCHING, WATCH_LOG, STATS, HIDDEN_CHANNELS, BLOCKED_TITLES, LOCKED }
 private enum class S2PinMode { SET, UNLOCK, DISABLE }
 
 private const val S2_FILE_AUTHORITY = "nl.lrvdlinden.bingr.files"
@@ -226,6 +226,9 @@ fun SettingsScreen() {
     var rewindSubs by remember { mutableStateOf(PlayerSettings.rewindSubtitles) }
     var stillHours by remember { mutableIntStateOf(StillWatchingPrefs.hours) }
     var crashShare by remember { mutableStateOf(CrashReports.enabled) }
+    // build 176: automatisch volgende aflevering (per profiel), data besparen en voorvertoning (per apparaat)
+    var dataMode by remember { mutableStateOf(DataSaver.mode) }
+    var posterPreview by remember { mutableStateOf(PosterPreview.enabled) }
 
     // build 141 (M7): deelmenu voor de export; als het dicht is, het tijdelijke bestand weghalen
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -283,6 +286,7 @@ fun SettingsScreen() {
         S2SettingsSub.STATS -> { StatsScreen { sub = null }; return }
         S2SettingsSub.HIDDEN_CHANNELS -> { HiddenChannelsScreen { sub = null }; return }
         S2SettingsSub.BLOCKED_TITLES -> { BlockedTitlesScreen { sub = null }; return }
+        S2SettingsSub.LOCKED -> { LockedItemsScreen { sub = null }; return }
         null -> {}
     }
     val editingNow = editing
@@ -598,6 +602,11 @@ fun SettingsScreen() {
                     S2Dropdown(L("Live preview in the guide"), PlayerSettings.livePreviewOptions, livePreview) {
                         livePreview = it; PlayerSettings.livePreview = it
                     }
+                    // build 176: automatisch de volgende aflevering (per profiel, gesynct; kinderprofiel standaard uit)
+                    S2Toggle(L("Play next episode automatically"), AutoplayNext.enabled,
+                        subtitle = L("For this profile. When it's off, the Next episode button stays but doesn't start by itself.")) {
+                        Store.setAutoplayNext(it)
+                    }
                     // build 171: Kijk je nog? (per apparaat)
                     S2Toggle(L("Ask if you're still watching"), askStill,
                         subtitle = L("After 3 episodes in a row, or after a while of live TV or a movie without using the remote or screen.")) {
@@ -618,12 +627,22 @@ fun SettingsScreen() {
                     }
                 }
             }
+            // build 176: data besparen op een mobiel netwerk (telefoon/tablet, per apparaat)
+            if (!AppState.isTV) item {
+                S2Section(L("Mobile data"), L("Save data: at most about 1.5 Mbit/s (SD), no live preview, trailers or previews on cellular. Automatic saves data when Data Saver is on. Wi-Fi is never limited.")) {
+                    S2Dropdown(L("On cellular"), DataSaver.options, dataMode) { dataMode = it; DataSaver.mode = it }
+                }
+            }
             // build 82: trailer zonder geluid in de kop van film- en seriepagina's
             item {
                 S2Section(L("Trailers")) {
                     S2Toggle(L("Play trailers automatically"), autoplayTrailers,
                         subtitle = if (autoplayTrailers) L("Muted, on movie and series pages. Not on metered connections or with animations off.") else null
                     ) { autoplayTrailers = it; HeroTrailer.enabled = it }
+                    // build 176: voorvertoning na 2 s op een poster (tv) of in de kop van Home (telefoon/tablet)
+                    S2Toggle(L("Previews"), posterPreview,
+                        subtitle = if (AppState.isTV) L("After 2 seconds on a poster, the trailer plays muted in the card.") else L("The trailer plays muted in the banner at the top of Home.")
+                    ) { posterPreview = it; PosterPreview.enabled = it }
                 }
             }
           }
@@ -791,6 +810,9 @@ fun SettingsScreen() {
                         value = Store.hiddenChannels.size.takeIf { it > 0 }?.toString(), onClick = { kidsGate(S2SettingsSub.HIDDEN_CHANNELS) })
                     S2Row(L("Blocked titles"), icon = Icons.Default.Block,
                         value = Store.blockedTitles.size.takeIf { it > 0 }?.toString(), onClick = { kidsGate(S2SettingsSub.BLOCKED_TITLES) })
+                    // build 176: vergrendelde zenders en titels (pincode van het hoofdprofiel)
+                    S2Row(L("Locked"), icon = Icons.Default.Lock,
+                        value = (Store.lockedChannels.size + Store.lockedTitles.size).takeIf { it > 0 }?.toString(), onClick = { sub = S2SettingsSub.LOCKED })
                     if (isMain) {
                         S2Row(L("Manage profiles"), icon = Icons.Default.People,
                             value = Store.profiles.size.takeIf { it > 0 }?.toString(), onClick = { MyBingrNav.page = MyBingrPage.PROFILES })

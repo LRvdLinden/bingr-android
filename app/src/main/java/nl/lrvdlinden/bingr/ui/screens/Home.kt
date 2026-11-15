@@ -836,6 +836,8 @@ fun HomeScreen(filter: Filter) {
                     if (pool.size < 2) return@LaunchedEffect
                     while (true) {
                         delay(Build140Logic.Picks.HERO_INTERVAL)
+                        // build 176: niet wisselen zolang de voorvertoning in de kop speelt
+                        while (HeroPreview.busy) delay(1_000)
                         heroAt = (heroAt + 1) % pool.size
                     }
                 }
@@ -892,7 +894,13 @@ fun HomeScreen(filter: Filter) {
                             Filter.MOVIES -> if (myMovies.isNotEmpty()) MovieRow(L("My List"), myMovies, myMovies, pid)
                             Filter.SERIES -> if (mySeries.isNotEmpty()) SeriesRow(L("My List"), mySeries, mySeries)
                         }
-                    }.also { shown(myMovies.isNotEmpty() || mySeries.isNotEmpty()) }
+                    }.also {
+                        shown(myMovies.isNotEmpty() || mySeries.isNotEmpty())
+                        // build 176: bewaarde momenten (alle, nieuwste eerst) onder Mijn lijst
+                        if (filter == Filter.ALL && Store.bookmarks.isNotEmpty()) item(key = "moments") { AllMomentsRow() }
+                        // build 176: Nieuw en populair (Binnenkort en nieuwe seizoenen met een belletje; Alles = de pagina)
+                        if (filter == Filter.ALL) item(key = "newpopular") { NewPopularHomeRow() }
+                    }
                     // build 141: "Nieuw toegevoegd" is weg (HomeLayouts.displayed zet Nieuw op Bingr op zijn plek)
                     "recent" -> {}
                     // build 111: Binnenkort op Bingr / Nieuw op Bingr (TMDB)
@@ -1066,9 +1074,11 @@ private fun SeriesPoster(s: Series) {
     var collect by remember { mutableStateOf(false) }
     PosterCard(
         s.title, s.poster,
-        modifier = Modifier.focusLift(onLongClick = { collect = true }) { openDetail(DetailTarget.SeriesT(s)) },
+        modifier = Modifier.cardPreviewFocus(DetailTarget.SeriesT(s)).focusLift(onLongClick = { collect = true }) { openDetail(DetailTarget.SeriesT(s)) },
         language = languageLabel(s),
-        watchedEpisodes = Playables.seriesCardCount(s)
+        watchedEpisodes = Playables.seriesCardCount(s),
+        locked = Store.isTitleLocked(s.sourceID, true, s.id),
+        preview = { CardPreviewSlot(DetailTarget.SeriesT(s)) },
     )
     if (collect) AddToCollectionDialog(Collections.ref(DetailTarget.SeriesT(s)), s.title, s.poster) { collect = false }
 }
@@ -1140,10 +1150,12 @@ private fun MoviePoster(m: Movie, pid: String?) {
     val watched = Playables.isWatched(m, imdb)
     PosterCard(
         m.title, m.poster,
-        modifier = Modifier.focusLift(onLongClick = { menu = true }) { openDetail(DetailTarget.MovieT(m)) },
+        modifier = Modifier.cardPreviewFocus(DetailTarget.MovieT(m)).focusLift(onLongClick = { menu = true }) { openDetail(DetailTarget.MovieT(m)) },
         watched = watched,
         progress = Store.progress[m.id]?.fraction,
-        language = languageLabel(m)
+        language = languageLabel(m),
+        locked = Store.isTitleLocked(m.sourceID, false, m.id),
+        preview = { CardPreviewSlot(DetailTarget.MovieT(m)) },
     )
     if (menu) {
         val actions = buildList {
@@ -1161,6 +1173,8 @@ private fun MoviePoster(m: Movie, pid: String?) {
                     PlusCheck.icon(inList)) { AllServers.setMyList(t, !inList, pid) })
             }
             add(S2Action(L("Add to collection…"), Icons.AutoMirrored.Filled.PlaylistAdd) { collect = true })
+            // build 176: vergrendelen met de pincode van het hoofdprofiel
+            titleLockAction(DetailTarget.MovieT(m), pid)?.let { add(it) }
             // build 171: titel blokkeren voor dit profiel (niet in een kinderprofiel)
             val sid = m.sourceID ?: pid
             if (sid != null && Store.activeProfile?.kids != true) {
@@ -1196,12 +1210,14 @@ private fun ForYouRow(filter: Filter, all: List<DetailTarget>, popular: Boolean 
             // build 75: bekeken-label onder het SERIE/FILM-label, vinkje rechtsboven voor bekeken films
             PosterCard(
                 t.title, t.poster,
-                modifier = Modifier.focusLift { openDetail(t) },
+                modifier = Modifier.cardPreviewFocus(t).focusLift { openDetail(t) },
                 watched = (t as? DetailTarget.MovieT)?.let { Playables.isWatched(it.movie, Trakt.imdb(it.movie)) } ?: false,
                 badge = if (t.isSeries) L("SERIES") else L("MOVIE"),
                 language = languageLabel(t),
                 badgeTopStart = true,
-                watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.seriesCardCount(it.series) } ?: 0
+                watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.seriesCardCount(it.series) } ?: 0,
+                locked = Locks.titleLocked(t),
+                preview = { CardPreviewSlot(t) },
             )
         }
     }
@@ -1218,12 +1234,14 @@ private fun LabeledTargetRow(title: String, items: List<DetailTarget>) {
         keyedItems(items, keys) { t ->
             PosterCard(
                 t.title, t.poster,
-                modifier = Modifier.focusLift { openDetail(t) },
+                modifier = Modifier.cardPreviewFocus(t).focusLift { openDetail(t) },
                 watched = (t as? DetailTarget.MovieT)?.let { Playables.isWatched(it.movie, Trakt.imdb(it.movie)) } ?: false,
                 badge = if (t.isSeries) L("SERIES") else L("MOVIE"),
                 language = languageLabel(t),
                 badgeTopStart = true,
-                watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.seriesCardCount(it.series) } ?: 0
+                watchedEpisodes = (t as? DetailTarget.SeriesT)?.let { Playables.seriesCardCount(it.series) } ?: 0,
+                locked = Locks.titleLocked(t),
+                preview = { CardPreviewSlot(t) },
             )
         }
     }
@@ -1333,6 +1351,8 @@ fun HeroBanner(target: DetailTarget, onPlay: () -> Unit, onInfo: () -> Unit, pla
                     .border(1.dp, Color.White.copy(alpha = 0.12f), shape)
             ) {
                 RemoteImage(poster, Modifier.matchParentSize(), placeholder = target.displayTitle)
+                // build 176: voorvertoning (trailer zonder geluid) na 2 s
+                HeroPreviewSlot(target)
             }
             Box(
                 Modifier.matchParentSize().background(
@@ -1383,6 +1403,8 @@ fun HeroBanner(target: DetailTarget, onPlay: () -> Unit, onInfo: () -> Unit, pla
                     .border(1.dp, Color.White.copy(alpha = 0.12f), shape)
             ) {
                 RemoteImage(poster, Modifier.matchParentSize(), placeholder = target.displayTitle)
+                // build 176: voorvertoning (trailer zonder geluid) na 2 s
+                HeroPreviewSlot(target)
                 Box(Modifier.matchParentSize().background(Brush.verticalGradient(0.5f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.85f))))
                 Column(
                     Modifier.align(Alignment.BottomCenter).padding(16.dp),

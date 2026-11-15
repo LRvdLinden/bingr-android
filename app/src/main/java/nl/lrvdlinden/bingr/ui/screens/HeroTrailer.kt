@@ -74,6 +74,8 @@ object HeroTrailer {
     fun allowed(ctx: Context): Boolean {
         if (!enabled) { log("uit: instelling"); return false }
         if (AppState.isTV) return true
+        // build 176: Data besparen op een mobiel netwerk
+        if (DataSaver.active(ctx)) { log("uit: data besparen"); return false }
         val metered = runCatching {
             (ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager)?.isActiveNetworkMetered ?: false
         }.getOrDefault(false)

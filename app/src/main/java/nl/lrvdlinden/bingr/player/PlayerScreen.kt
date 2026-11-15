@@ -31,6 +31,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Cast
@@ -167,6 +168,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     var langVersions by remember { mutableStateOf(listOf<ContentLanguage.Version>()) }
     val skipFocus = remember { FocusRequester() }
 
+    // build 176: helderheid terugzetten bij het sluiten van de speler
+    DisposableEffect(Unit) { onDispose { SwipeControls.restoreBrightness() } }
     // build 171: Kijk je nog?
     val still = remember { StillWatchingState() }
     var autoNext by remember { mutableStateOf(false) }
@@ -186,6 +189,10 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     fun poke() { showControls = true; pokeID++ }
     fun toggleControls() { showControls = !showControls; if (showControls) poke() }
     fun close() { player.dismissed = true; player.stop(); onClose() }
+    /** Build 176: "Kijk je nog?" staat open of is aan de beurt; dan start er niets vanzelf. */
+    fun stillDue(): Boolean = still.askedAt != null || still.paused ||
+        Build171Logic.StillWatching.ask(still.state, System.currentTimeMillis(), StillWatchingPrefs.enabled, StillWatchingPrefs.hours,
+            Build171Logic.StillWatching.Kind.EPISODE) != null
 
     // vooruit gedeclareerd: bind() verwijst naar playNext(), dat start() aanroept
     var playNextRef: (PlayableItem) -> Unit = {}
@@ -196,7 +203,10 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             val cur = player.item
             val n = nextUp
             when {
-                n != null -> { autoNext = true; playNextRef(n) }   // zoals Netflix: gewoon door naar de volgende aflevering
+                // zoals Netflix: gewoon door naar de volgende aflevering; build 176: niet als het profiel dat uit heeft
+                // (of "Kijk je nog?" aan de beurt is): dan blijft de knop Volgende aflevering staan
+                n != null && AutoplayNext.start(stillDue()) -> { autoNext = true; playNextRef(n) }
+                n != null -> poke()
                 Trakt.askRating && Trakt.isLoggedIn && cur.imdbID != null && cur.type != MediaType.LIVE -> { panel = PlayerPanel.RATE }
                 else -> close()
             }
@@ -403,9 +413,13 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         val wait = PlayerSettings.zapDelay.toLong()
         zapJob = scope.launch {
             if (wait > 0) delay(wait)
-            (next.sourceID ?: Playlists.source?.id)?.let { Store.pushRecentChannel(it, next.id) }
-            player.stop()
-            start(livePlayable(next))
+            // build 176: vergrendelde zender: eerst de pincode; Annuleren = blijven op de huidige zender
+            Locks.guardChannel(next) {
+                (next.sourceID ?: Playlists.source?.id)?.let { Store.pushRecentChannel(it, next.id) }
+                player.stop()
+                start(livePlayable(next))
+            }
+            if (Locks.request != null) zapBanner = null
         }
     }
 
@@ -413,14 +427,27 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     fun tune(c: Channel) {
         if (c.id == player.item.channelID) return
         still.touch()
-        zapJob?.cancel()
-        zapBanner = c
-        zapBannerID++
-        (c.sourceID ?: Playlists.source?.id)?.let { Store.pushRecentChannel(it, c.id) }
-        zapJob = scope.launch { player.stop(); start(livePlayable(c)) }
+        // build 176: vergrendelde zender: eerst de pincode
+        Locks.guardChannel(c) {
+            zapJob?.cancel()
+            zapBanner = c
+            zapBannerID++
+            (c.sourceID ?: Playlists.source?.id)?.let { Store.pushRecentChannel(it, c.id) }
+            zapJob = scope.launch { player.stop(); start(livePlayable(c)) }
+        }
     }
 
     /** Build 173: één tik terug naar de vorige zender (en weer terug). */
+    /** Build 176: moment bewaren op de huidige tijd (sleutel = die van Verder kijken, `bookmarks` in het profiel). */
+    fun saveMoment() {
+        val it = player.item
+        val sid = it.sourceID ?: Store.activePlaylistID ?: Playlists.source?.id ?: return
+        val title = if (it.type == MediaType.EPISODE && it.season != null && it.episode != null)
+            "${it.displayTitle} · S${it.season}:E${it.episode}" else it.displayTitle
+        Store.addBookmark(sid, it.id, title, player.currentTime)
+        flash(L("Moment saved"))
+    }
+
     fun previousChannel() {
         val id = prevChannel.previous ?: return
         val c = Playlists.library.channels.firstOrNull { it.id == id } ?: return
@@ -649,8 +676,10 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         }
     }
     // aftiteling: aftellen en dan de volgende aflevering
-    LaunchedEffect(showCredits, player.item.id) {
-        if (!showCredits) return@LaunchedEffect
+    // build 176: automatisch volgende aflevering uit (per profiel): de kaart blijft, zonder aftellen
+    val autoplayOn = AutoplayNext.enabled
+    LaunchedEffect(showCredits, player.item.id, autoplayOn) {
+        if (!showCredits || !autoplayOn) return@LaunchedEffect
         countdown = 10
         while (countdown > 0) {
             delay(1000)
@@ -658,6 +687,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         }
         // build 173: slaaptimer "na deze aflevering": niet door naar de volgende
         if (player.sleep == Build173PlayerLogic.Sleep.EndOfEpisode) { player.setSleep(Build173PlayerLogic.Sleep.Off); sleepNow(); return@LaunchedEffect }
+        if (!AutoplayNext.start(stillDue())) return@LaunchedEffect
         nextUp?.let { autoNext = true; playNext(it) }
     }
 
@@ -759,13 +789,33 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
             Box(
                 Modifier.fillMaxSize().pointerInput(player) {
                     var dy = 0f
+                    // build 176: linker derde = helderheid, rechter derde = volume, midden = zappen (live); niet als de
+                    // bediening vergrendeld is
+                    var side = Build176Logic.Swipe.Side.MIDDLE
+                    var start = 0f
                     detectVerticalDragGestures(
-                        onDragStart = { dy = 0f },
+                        onDragStart = { o ->
+                            dy = 0f
+                            side = if (locked) Build176Logic.Swipe.Side.MIDDLE else Build176Logic.Swipe.side(o.x, size.width.toFloat())
+                            start = when (side) {
+                                Build176Logic.Swipe.Side.BRIGHTNESS -> SwipeControls.brightness()
+                                Build176Logic.Swipe.Side.VOLUME -> SwipeControls.volume()
+                                Build176Logic.Swipe.Side.MIDDLE -> 0f
+                            }
+                        },
                         onDragEnd = {
                             val min = 60.dp.toPx()
-                            if (player.isLive && kotlin.math.abs(dy) > min) zap(if (dy < 0) 1 else -1)
+                            if (side == Build176Logic.Swipe.Side.MIDDLE && !locked && player.isLive && kotlin.math.abs(dy) > min) zap(if (dy < 0) 1 else -1)
+                            SwipeControls.endSoon()
                         },
-                        onVerticalDrag = { change, amount -> dy += amount; change.consume() }
+                        onDragCancel = { SwipeControls.endSoon() },
+                        onVerticalDrag = { change, amount ->
+                            dy += amount; change.consume()
+                            if (side != Build176Logic.Swipe.Side.MIDDLE) {
+                                val v = Build176Logic.Swipe.apply(start, dy, size.height.toFloat())
+                                if (side == Build176Logic.Swipe.Side.BRIGHTNESS) SwipeControls.setBrightness(v) else SwipeControls.setVolume(v)
+                            }
+                        }
                     )
                 }.pointerInput(player) {
                     // build 173: dubbeltik links/rechts = 10 s; vaker tikken telt op (20, 30 s) met een kleine animatie
@@ -871,6 +921,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                     onZapList = { panel = PlayerPanel.ZAP },
                     onPreviousChannel = if (prevChannel.previous != null) ({ previousChannel() }) else null,
                     onEpisodes = if (player.item.type == MediaType.EPISODE) ({ openEpisodes() }) else null,
+                    onSaveMoment = if (!player.isLive && player.item.channelID == null &&
+                        (player.item.type == MediaType.MOVIE || player.item.type == MediaType.EPISODE)) ({ saveMoment() }) else null,
                 )
             }
 
@@ -905,7 +957,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                         .padding(tvs(14)),
                     verticalArrangement = Arrangement.spacedBy(tvs(10))
                 ) {
-                    Text(L("Next episode in %d s", countdown), color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.Bold)
+                    Text(if (autoplayOn) L("Next episode in %d s", countdown) else L("Next episode"), color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.Bold)
                     nextUp?.displaySubtitle?.let { Text(it, color = Theme.secondary, fontSize = tsp(13), maxLines = 2, overflow = TextOverflow.Ellipsis) }
                     Row(horizontalArrangement = Arrangement.spacedBy(tvs(10))) {
                         NetflixButton(L("Play now"), Icons.Filled.SkipNext, modifier = Modifier.focusRequester(skipFocus)) {
@@ -979,6 +1031,8 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 )
             }
+            // build 176: helderheid/volume tijdens het vegen
+            if (!isTV) SwipeIndicator(Modifier.align(Alignment.Center))
         }
     }
 
@@ -1064,6 +1118,8 @@ private fun PlayerControls(
     onZapList: () -> Unit = {},
     onPreviousChannel: (() -> Unit)? = null,
     onEpisodes: (() -> Unit)? = null,
+    /** Build 176: "Moment bewaren" (films en afleveringen) */
+    onSaveMoment: (() -> Unit)? = null,
 ) {
     val live = player.isLive
     val sleepCountdown = sleepCountdown173(player)
@@ -1183,6 +1239,7 @@ private fun PlayerControls(
                     }
                     buttons.add(Triple(Icons.Filled.Subtitles, L("Audio & subtitles")) { onPanel(PlayerPanel.AUDIO_SUBS) })
                     onEpisodes?.let { f -> buttons.add(Triple(Icons.Filled.Layers, L("Episodes")) { f() }) }
+                    onSaveMoment?.let { f -> buttons.add(Triple(Icons.Filled.BookmarkAdd, L("Save moment")) { f() }) }
                     if (hasSources) buttons.add(Triple(Icons.Filled.VideoLibrary, L("Sources")) { onPanel(PlayerPanel.SOURCES) })
                     if (live && Playlists.library.channels.isNotEmpty()) buttons.add(Triple(Icons.Filled.GridView, "Multiview") { onMultiview() })
                     // build 52: andere bron (live) en intro/aftiteling markeren (afleveringen)

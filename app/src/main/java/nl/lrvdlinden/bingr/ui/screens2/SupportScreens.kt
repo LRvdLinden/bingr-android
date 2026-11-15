@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -86,6 +87,14 @@ internal suspend fun supportDiagnostics(): JsonObject {
 
 /** De inhoud van de tab Support (in de lijst van Instellingen). */
 fun LazyListScope.supportTabItems(onOpen: (Int) -> Unit, onNew: () -> Unit) {
+    // build 176: helpcentrum (artikelen van support.bingr.online/hulp/): telefoon/tablet in de app (Custom Tabs), tv als QR-code
+    item {
+        val ctx = LocalContext.current
+        S2Section(L("Help")) {
+            S2Row(L("Help centre"), icon = Icons.Default.MenuBook, value = "support.bingr.online/hulp",
+                onClick = { HelpCenter.open(ctx) })
+        }
+    }
     item {
         val ctx = LocalContext.current
         if (!Account.isSignedIn || !Account.configured) {

@@ -76,6 +76,12 @@ object Store {
     var favoriteTeams by mutableStateOf(setOf<String>()); private set
     var favoriteCompetitions by mutableStateOf(setOf<String>()); private set
     var sportMuted by mutableStateOf(setOf<String>()); private set
+    /** Build 176: vergrendelde zenders en titels (pincode van het hoofdprofiel), momenten en automatisch volgende aflevering. */
+    var lockedChannels by mutableStateOf(setOf<String>()); private set
+    var lockedTitles by mutableStateOf(setOf<String>()); private set
+    /** Alle momenten van het actieve profiel, ook verwijderingen (`removed`), in de volgorde van [Build176Logic.Bookmarks.merge]. */
+    var bookmarksAll by mutableStateOf(listOf<Bookmark176>()); private set
+    var autoplayNext by mutableStateOf<AutoplayPref176?>(null); private set
     /** Startscherm (build 51) van het actieve profiel */
     var activeHomeLayout by mutableStateOf(HomeLayout()); private set
     var nasServers by mutableStateOf(listOf<NASServer>()); private set
@@ -139,6 +145,11 @@ object Store {
         val favoriteTeams: Set<String> = emptySet(),
         val favoriteCompetitions: Set<String> = emptySet(),
         val sportMuted: Set<String> = emptySet(),
+        /** build 176 (docs/ACCOUNT.md "Build 176") */
+        val lockedChannels: Set<String> = emptySet(),
+        val lockedTitles: Set<String> = emptySet(),
+        val bookmarks: List<Bookmark176> = emptyList(),
+        val autoplayNext: AutoplayPref176? = null,
     )
 
     /** Per-profiel-bestanden (vroeger in store/, nu in store/profile-<id>/) */
@@ -275,6 +286,10 @@ object Store {
         favoriteTeams = readIn(d, "sportteams", emptySet())
         favoriteCompetitions = readIn(d, "sportcomps", emptySet())
         sportMuted = readIn(d, "sportmuted", emptySet())
+        lockedChannels = readIn(d, "lockedchannels", emptySet())
+        lockedTitles = readIn(d, "lockedtitles", emptySet())
+        bookmarksAll = readIn(d, "bookmarks176", emptyList())
+        autoplayNext = readIn<AutoplayPref176?>(d, "autoplay176", null)
         activeHomeLayout = readIn(d, "homelayout", HomeLayout())
     }
 
@@ -1093,12 +1108,16 @@ object Store {
         writeIn(d, "blockedtitles", data.blockedTitles)
         writeIn(d, "sportteams", data.favoriteTeams); writeIn(d, "sportcomps", data.favoriteCompetitions)
         writeIn(d, "sportmuted", data.sportMuted)
+        writeIn(d, "lockedchannels", data.lockedChannels); writeIn(d, "lockedtitles", data.lockedTitles)
+        writeIn(d, "bookmarks176", data.bookmarks)
+        data.autoplayNext?.let { writeIn(d, "autoplay176", it) }
         if (id == activeProfileID) loadProfileData()
     }
 
     private fun readProfileData(id: String): ProfileData {
         if (id == activeProfileID) return ProfileData(favorites, myList, progress, localWatched, recentChannels, history, profileHiddenCats,
-            hiddenChannels, pinnedCategories, blockedTitles, favoriteTeams, favoriteCompetitions, sportMuted)
+            hiddenChannels, pinnedCategories, blockedTitles, favoriteTeams, favoriteCompetitions, sportMuted,
+            lockedChannels, lockedTitles, bookmarksAll, autoplayNext)
         val d = profileDir(id)
         return ProfileData(
             readIn(d, "favorites", emptySet()), readIn(d, "mylist", emptySet()), readIn(d, "progress", emptyMap()),
@@ -1106,6 +1125,8 @@ object Store {
             readIn(d, "hiddencats", emptySet()),
             readIn(d, "hiddenchannels", emptySet()), readIn(d, "pinnedcats", emptySet()), readIn(d, "blockedtitles", emptySet()),
             readIn(d, "sportteams", emptySet()), readIn(d, "sportcomps", emptySet()), readIn(d, "sportmuted", emptySet()),
+            readIn(d, "lockedchannels", emptySet()), readIn(d, "lockedtitles", emptySet()), readIn(d, "bookmarks176", emptyList()),
+            readIn<AutoplayPref176?>(d, "autoplay176", null),
         )
     }
 
@@ -1118,6 +1139,7 @@ object Store {
         val cur: Set<String> = if (pid == activeProfileID) when (file) {
             "hiddenchannels" -> hiddenChannels; "pinnedcats" -> pinnedCategories
             "sportteams" -> favoriteTeams; "sportcomps" -> favoriteCompetitions; "sportmuted" -> sportMuted
+            "lockedchannels" -> lockedChannels; "lockedtitles" -> lockedTitles
             else -> blockedTitles
         } else readIn(d, file, emptySet())
         val n = change(cur)
@@ -1126,6 +1148,7 @@ object Store {
         if (pid == activeProfileID) when (file) {
             "hiddenchannels" -> hiddenChannels = n; "pinnedcats" -> pinnedCategories = n
             "sportteams" -> favoriteTeams = n; "sportcomps" -> favoriteCompetitions = n; "sportmuted" -> sportMuted = n
+            "lockedchannels" -> lockedChannels = n; "lockedtitles" -> lockedTitles = n
             else -> blockedTitles = n
         }
         StateSync.profileDataChanged(pid)
@@ -1169,6 +1192,50 @@ object Store {
     fun setSportMuted(key: String, on: Boolean) = changeProfileSet(null, "sportmuted") { cur ->
         val pruned = Build173Logic.pruneMuted(cur, System.currentTimeMillis()).toSet()
         if (on) pruned + key else pruned - key
+    }
+
+    // MARK: build 176: vergrendelen, momenten, automatisch volgende aflevering (docs/ACCOUNT.md "Build 176")
+
+    fun setChannelLocked(sid: String, channelID: String, locked: Boolean, profileID: String? = null) =
+        changeProfileSet(profileID, "lockedchannels") { Build171Logic.ProfileSets.toggle(it, Build171Logic.ProfileSets.channelKey(sid, channelID), locked) }
+    fun setChannelKeyLocked(key: String, locked: Boolean, profileID: String? = null) =
+        changeProfileSet(profileID, "lockedchannels") { Build171Logic.ProfileSets.toggle(it, key, locked) }
+    fun isChannelLocked(sid: String?, channelID: String): Boolean {
+        val s = sid ?: Playlists.source?.id ?: return false
+        return lockedChannels.isNotEmpty() && Build171Logic.ProfileSets.contains(lockedChannels, Build171Logic.ProfileSets.channelKey(s, channelID))
+    }
+    fun setTitleLocked(sid: String, series: Boolean, id: String, locked: Boolean, profileID: String? = null) =
+        changeProfileSet(profileID, "lockedtitles") { Build171Logic.ProfileSets.toggle(it, Build171Logic.ProfileSets.titleKey(sid, series, id), locked) }
+    fun setTitleKeyLocked(key: String, locked: Boolean, profileID: String? = null) =
+        changeProfileSet(profileID, "lockedtitles") { Build171Logic.ProfileSets.toggle(it, key, locked) }
+    fun isTitleLocked(sid: String?, series: Boolean, id: String): Boolean {
+        val s = sid ?: Playlists.source?.id ?: return false
+        return lockedTitles.isNotEmpty() && Build171Logic.ProfileSets.contains(lockedTitles, Build171Logic.ProfileSets.titleKey(s, series, id))
+    }
+    /** Vergrendelde sets van een (ander) profiel, voor de lijst in Instellingen. */
+    fun lockedSets(id: String): Pair<Set<String>, Set<String>> { val d = readProfileData(id); return d.lockedChannels to d.lockedTitles }
+
+    /** Aanwezige momenten van het actieve profiel (nieuwste eerst). */
+    val bookmarks: List<Bookmark176> get() = bookmarksAll.filter { !it.removed }
+
+    private fun changeBookmarks(change: (List<Build176Logic.Bookmarks.B>) -> List<Build176Logic.Bookmarks.B>) {
+        val pid = activeProfileID ?: return
+        val n = change(bookmarksAll.map { it.logic() }).map { Bookmark176.of(it) }
+        if (n == bookmarksAll) return
+        bookmarksAll = n
+        writeIn(profileDir(pid), "bookmarks176", n)
+        StateSync.profileDataChanged(pid)
+    }
+    fun addBookmark(serverID: String, key: String, title: String, t: Double) =
+        changeBookmarks { Build176Logic.Bookmarks.add(it, serverID, key, title, t, System.currentTimeMillis()) }
+    fun removeBookmark(id: String) = changeBookmarks { Build176Logic.Bookmarks.remove(it, id, System.currentTimeMillis()) }
+
+    fun setAutoplayNext(on: Boolean) {
+        val pid = activeProfileID ?: return
+        val v = AutoplayPref176(on, System.currentTimeMillis())
+        autoplayNext = v
+        writeIn(profileDir(pid), "autoplay176", v)
+        StateSync.profileDataChanged(pid)
     }
 
     /** Sets van een (ander) profiel, voor de lijsten in Instellingen. */

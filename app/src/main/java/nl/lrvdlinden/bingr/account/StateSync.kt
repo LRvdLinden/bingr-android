@@ -82,7 +82,9 @@ object StateSync {
         // build 171: per profiel, zelfde vorm als hiddenCategories (docs/ACCOUNT.md "Build 171")
         "hiddenChannels", "pinnedCategories", "blockedTitles",
         // build 172 (Sport): per profiel, zelfde vorm (docs/ACCOUNT.md "Build 172: Sport")
-        "favoriteTeams", "favoriteCompetitions", "sportMuted")
+        "favoriteTeams", "favoriteCompetitions", "sportMuted",
+        // build 176: vergrendelde zenders en titels, zelfde vorm (docs/ACCOUNT.md "Build 176")
+        "lockedChannels", "lockedTitles")
 
     private val active: Boolean get() = Account.isSignedIn && Account.configured
 
@@ -1158,6 +1160,11 @@ object StateSync {
             r.competition?.takeIf { it.isNotEmpty() }?.let { m["competition"] = JsonPrimitive(it) }
             r.matchKey?.let { m["matchKey"] = JsonPrimitive(it) }
             if (r.auto == true) m["auto"] = JsonPrimitive(true)
+            // build 176: herinnering op de releasedatum
+            r.kind?.let { m["kind"] = JsonPrimitive(it) }
+            r.tmdb?.let { m["tmdb"] = JsonPrimitive(it) }
+            r.mediaType?.let { m["mediaType"] = JsonPrimitive(it) }
+            if (r.isRelease) m["season"] = r.season?.let { JsonPrimitive(it) } ?: JsonNull
             JsonObject(m)
         }
         return JsonObject(base + mapOf(
@@ -1182,6 +1189,11 @@ object StateSync {
                 competition = r.jS("competition")?.takeIf { it.isNotEmpty() },
                 matchKey = r.jS("matchKey")?.takeIf { it.isNotEmpty() },
                 auto = if ((r["auto"] as? JsonPrimitive)?.content == "true") true else null,
+                // build 176: optioneel
+                kind = r.jS("kind")?.takeIf { it.isNotEmpty() },
+                tmdb = (r["tmdb"] as? JsonPrimitive)?.content?.toDoubleOrNull()?.toInt(),
+                mediaType = r.jS("mediaType")?.takeIf { it.isNotEmpty() },
+                season = (r["season"] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content?.toDoubleOrNull()?.toInt(),
             )
         }.distinctBy { it.id }
     }
@@ -1474,7 +1486,33 @@ object StateSync {
         val home: Item<HomeLayout>? = null,
         /** build 146: de server had nog een leesbare pincode (oude app): die is hier gehasht en moet geüpload worden */
         val pinLegacy: Boolean = false,
+        /** build 176: `autoplayNext` {value, at}: de nieuwste wint */
+        val autoplay: Item<Boolean>? = null,
+        /** build 176: `bookmarks` (met verwijderingen), samengevoegd met [Build176Logic.Bookmarks.merge] */
+        val bookmarks: List<Build176Logic.Bookmarks.B>? = null,
     )
+
+    /** Build 176: momenten samenvoegen (null = nergens momenten). */
+    private fun mergeBookmarks(a: List<Build176Logic.Bookmarks.B>?, b: List<Build176Logic.Bookmarks.B>?): List<Build176Logic.Bookmarks.B>? =
+        if (a == null && b == null) null else Build176Logic.Bookmarks.merge(a ?: emptyList(), b ?: emptyList(), System.currentTimeMillis())
+
+    private fun parseBookmarks(e: JsonElement?): List<Build176Logic.Bookmarks.B>? {
+        val a = e as? JsonArray ?: return null
+        val list = a.mapNotNull { x ->
+            val o = x as? JsonObject ?: return@mapNotNull null
+            val id = o.jS("id")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val at = time(o["at"]) ?: return@mapNotNull null
+            Build176Logic.Bookmarks.B(id, o.jS("playlistID"), o.jS("key"), o.jS("title"), o.jD("t")?.toLong() ?: 0L, at,
+                o.jB("removed") == true)
+        }
+        return Build176Logic.Bookmarks.merge(list, emptyList(), System.currentTimeMillis())
+    }
+
+    private fun parseAutoplay(e: JsonElement?): Item<Boolean>? {
+        val o = e as? JsonObject ?: return null
+        val v = o.jB("value") ?: return null
+        return Item(time(o["at"]) ?: 0L, v)
+    }
 
     /**
      * Huidige lokale stand van een profiel vergelijken met het metabestand en verschillen vastleggen (met tijd).
@@ -1516,6 +1554,8 @@ object StateSync {
         record("favoriteTeams", d.favoriteTeams.associateWith { null })
         record("favoriteCompetitions", d.favoriteCompetitions.associateWith { null })
         record("sportMuted", d.sportMuted.associateWith { null })
+        record("lockedChannels", d.lockedChannels.associateWith { null })
+        record("lockedTitles", d.lockedTitles.associateWith { null })
         // recente zenders: volgorde = tijd (nieuwste eerst)
         val known = present["recentChannels"] ?: emptyMap()
         val order = known.entries.sortedByDescending { it.value }.map { it.key }.filter { it in d.recent }
@@ -1564,7 +1604,10 @@ object StateSync {
         }
         val hl = Store.homeLayout(id)
         val home = if (hl.rows.isEmpty() && hl.updatedAt == 0L) null else Item(hl.updatedAt, hl)
-        return PState(sets, progress, history, prefs, pin, home)
+        // build 176
+        val autoplay = d.autoplayNext?.let { Item(it.at, it.value) }
+        val bookmarks = d.bookmarks.takeIf { it.isNotEmpty() }?.map { it.logic() }
+        return PState(sets, progress, history, prefs, pin, home, autoplay = autoplay, bookmarks = bookmarks)
     }
 
     private fun parseHomeLayout(e: JsonElement?): Item<HomeLayout>? {
@@ -1709,7 +1752,8 @@ object StateSync {
             }
             else -> Item(pinAt, null)
         }
-        return PState(sets, progress, history, prefs, pin, parseHomeLayout(o["homeLayout"]), pinLegacy = legacy)
+        return PState(sets, progress, history, prefs, pin, parseHomeLayout(o["homeLayout"]), pinLegacy = legacy,
+            autoplay = parseAutoplay(o["autoplayNext"]), bookmarks = parseBookmarks(o["bookmarks"]))
     }
 
     private fun <T> mergeItems(local: Map<String, Item<T>>, server: Map<String, Item<T>>): Map<String, Item<T>> {
@@ -1842,6 +1886,26 @@ object StateSync {
             out["pin"] = JsonNull
             out["pinUpdatedAt"] = JsonPrimitive(iso(sp.at))
         }
+        // build 176
+        val ap = s.autoplay
+        val apv = ap?.value
+        if (ap != null && apv != null) {
+            out["autoplayNext"] = JsonObject(mapOf("value" to JsonPrimitive(apv), "at" to JsonPrimitive(iso(ap.at))))
+        }
+        s.bookmarks?.let { list ->
+            out["bookmarks"] = JsonArray(list.map { b ->
+                JsonObject(buildMap {
+                    put("id", JsonPrimitive(b.id))
+                    if (b.removed) put("removed", JsonPrimitive(true)) else {
+                        b.playlistID?.let { put("playlistID", JsonPrimitive(it)) }
+                        b.key?.let { put("key", JsonPrimitive(it)) }
+                        b.title?.let { put("title", JsonPrimitive(it)) }
+                        put("t", JsonPrimitive(b.t))
+                    }
+                    put("at", JsonPrimitive(iso(b.at)))
+                })
+            })
+        }
         s.home?.value?.let { h ->
             out["homeLayout"] = JsonObject(mapOf(
                 "rows" to JsonArray(h.rows.map { r -> JsonObject(mapOf("key" to JsonPrimitive(r.key), "visible" to JsonPrimitive(r.visible))) }),
@@ -1970,6 +2034,7 @@ object StateSync {
                     mergeItems(a.progress, s.progress), mergeItems(a.history, s.history),
                     newest(a.prefs, s.prefs), newestPin(a.pin, s.pin), newest(a.home, s.home),
                     pinLegacy = a.pinLegacy || s.pinLegacy,
+                    autoplay = newest(a.autoplay, s.autoplay), bookmarks = mergeBookmarks(a.bookmarks, s.bookmarks),
                 )
             } ?: s
         }
@@ -1979,6 +2044,7 @@ object StateSync {
             mergeItems(local.progress, srv?.progress ?: emptyMap()),
             mergeItems(local.history, srv?.history ?: emptyMap()),
             newest(local.prefs, srv?.prefs), newestPin(local.pin, srv?.pin), newest(local.home, srv?.home),
+            autoplay = newest(local.autoplay, srv?.autoplay), bookmarks = mergeBookmarks(local.bookmarks, srv?.bookmarks),
         )
         // van vóór build 44 (tijd -1) en de server heeft niets: nu stempelen
         val now = System.currentTimeMillis()
@@ -2007,6 +2073,10 @@ object StateSync {
             favoriteTeams = present("favoriteTeams").keys,
             favoriteCompetitions = present("favoriteCompetitions").keys,
             sportMuted = present("sportMuted").keys,
+            lockedChannels = present("lockedChannels").keys.mapTo(HashSet()) { Build171Logic.ProfileSets.norm(it) },
+            lockedTitles = present("lockedTitles").keys.mapTo(HashSet()) { Build171Logic.ProfileSets.norm(it) },
+            bookmarks = merged.bookmarks?.map { Bookmark176.of(it) } ?: emptyList(),
+            autoplayNext = merged.autoplay?.let { a -> a.value?.let { AutoplayPref176(it, a.at) } },
         )
         // build 147: de bestanden van een niet-actief profiel hier lezen (buiten de main thread); op de main thread alleen
         // nog toepassen (een profiel dat intussen actief werd, leest daar uit het geheugen)
@@ -2052,7 +2122,7 @@ object StateSync {
         if (localOnly) return true
 
         val empty = merged.sets.values.all { it.isEmpty() } && merged.progress.isEmpty() && merged.history.isEmpty() &&
-            merged.prefs == null && merged.pin == null && merged.home == null
+            merged.prefs == null && merged.pin == null && merged.home == null && merged.autoplay == null && merged.bookmarks.isNullOrEmpty()
         if (srv == null && empty) return true
         if (srv == merged) return true
         val json = profileJson(base, merged)

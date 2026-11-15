@@ -453,6 +453,35 @@ object Reminders {
         if (!Push.active) schedule(AppState.appContext, r)
     }
 
+    // MARK: build 176: herinnering op de releasedatum (Binnenkort / Nieuw en populair)
+
+    /** Belletje van het actieve profiel voor deze titel (of null). */
+    fun releaseReminder(mediaType: String, tmdb: Int, season: Int?): ProgramReminder? {
+        val owner = currentProfile?.takeUnless { Store.isMain(it) }
+        val id = Build176Logic.Release.id(mediaType, tmdb, season, owner)
+        return Store.reminders.firstOrNull { it.id.equals(id, ignoreCase = true) }
+    }
+
+    /** Belletje aan: melding op de releasedatum om 09:00 lokale tijd ([date] = "yyyy-MM-dd"). false = datum voorbij/onleesbaar. */
+    fun addRelease(mediaType: String, tmdb: Int, season: Int?, title: String, date: String): Boolean {
+        val start = Build176Logic.Release.start(date, java.util.TimeZone.getDefault()) ?: return false
+        if (start <= System.currentTimeMillis()) return false
+        val owner = currentProfile?.takeUnless { Store.isMain(it) }
+        val key = Build176Logic.Release.key(mediaType, tmdb, season)
+        val r = ProgramReminder(id = Build176Logic.Release.id(mediaType, tmdb, season, owner),
+            playlistID = Store.mainSource?.id ?: Build176Logic.Release.NIL_PLAYLIST, channelID = key, channelName = "Bingr",
+            title = title, start = start, profileID = owner?.lowercase(),
+            kind = "release", tmdb = tmdb, mediaType = if (mediaType == "tv") "tv" else "movie", season = season)
+        remove(r.id)
+        Store.addReminder(r)
+        if (!Push.active) schedule(AppState.appContext, r)
+        return true
+    }
+
+    /** Detailpagina van een releaseherinnering: `bingr://title?tmdb=<id>&type=<movie|tv>`. */
+    fun releaseLink(r: ProgramReminder): android.net.Uri = android.net.Uri.Builder().scheme("bingr").authority("title")
+        .appendQueryParameter("tmdb", (r.tmdb ?: 0).toString()).appendQueryParameter("type", r.mediaType ?: "movie").build()
+
     /** Tweede regel van een sportmelding: "Eredivisie · Sport 1. Tik om live te kijken." */
     fun sportLine(r: ProgramReminder): String =
         listOfNotNull(r.competition?.takeIf { it.isNotEmpty() }, ContentLanguage.channelTitle(r.channelName).takeIf { it.isNotEmpty() })
@@ -460,7 +489,8 @@ object Reminders {
 
     /** Tweede regel van de banner in de app. */
     fun bannerLine(r: ProgramReminder): String =
-        if (r.isSport) sportLine(r) else L("Starts now on %@", ContentLanguage.channelTitle(r.channelName))
+        if (r.isRelease) L("Released today. Tap to view.")
+        else if (r.isSport) sportLine(r) else L("Starts now on %@", ContentLanguage.channelTitle(r.channelName))
 
     /** Titel voor melding/banner: met de profielnaam als het account meer profielen heeft ("Voor Emma: Journaal"). */
     fun displayTitle(r: ProgramReminder): String {
@@ -471,6 +501,8 @@ object Reminders {
             val lead = Build173Logic.lead(r.leadMin)
             t = if (lead == 0) L("%@ starts now", t) else L("%@ starts in %d minutes", t, lead)
         }
+        // build 176: "Nu te zien: Fight Club"
+        if (r.isRelease) t = L("Out now: %@", t)
         if (Store.profiles.size <= 1) return t
         val id = owner(r) ?: Store.mainProfileID ?: return t
         val name = Store.profiles.firstOrNull { it.id.equals(id, ignoreCase = true) }?.name?.trim().orEmpty()
@@ -594,7 +626,7 @@ object Reminders {
                 if (visible && due == null && !Push.active) {
                     // build 172: sport op het gekozen moment (bij de start, 5 of 15 min eerder)
                     Store.reminders.firstOrNull {
-                        (if (it.isSport) it.notifyAt <= now else it.start <= now + 60_000) && it.start > now - 300_000
+                        (if (it.isSport || it.isRelease) it.notifyAt <= now else it.start <= now + 60_000) && it.start > now - 300_000
                     }?.let { r ->
                         due = r
                         Store.removeReminder(r.id)
@@ -615,6 +647,7 @@ object Reminders {
         val title = Store.reminders.firstOrNull { it.id == id }?.let { displayTitle(it) } ?: intent.getStringExtra(EXTRA_TITLE) ?: ""
         val channelName = ContentLanguage.channelTitle(intent.getStringExtra(EXTRA_CHANNEL_NAME) ?: "")
         val sport = Store.reminders.firstOrNull { it.id == id }?.takeIf { it.isSport }
+        val release = Store.reminders.firstOrNull { it.id == id }?.takeIf { it.isRelease }
         ensureChannel(ctx)
         // tik: zender openen met profielcontrole, net als een herinnering via push (bingr://live, PushNav)
         val owner = Store.reminders.firstOrNull { it.id == id }?.let { owner(it) } ?: profileFromID(id)
@@ -624,7 +657,8 @@ object Reminders {
             .build()
         val open = Intent(ctx, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            data = live
+            // build 176: releaseherinnering → de detailpagina van de titel
+            data = release?.let { releaseLink(it) } ?: live
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(EXTRA_ITEM_ID, intent.getStringExtra(EXTRA_ITEM_ID))
             putExtra(EXTRA_PLAYLIST_ID, intent.getStringExtra(EXTRA_PLAYLIST_ID))
@@ -634,7 +668,7 @@ object Reminders {
         val n = NotificationCompat.Builder(ctx, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(title)
-            .setContentText(sport?.let { sportLine(it) } ?: L("Starts in 2 minutes on %@", channelName))
+            .setContentText(release?.let { bannerLine(it) } ?: sport?.let { sportLine(it) } ?: L("Starts in 2 minutes on %@", channelName))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)

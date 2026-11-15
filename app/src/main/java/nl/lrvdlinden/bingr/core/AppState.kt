@@ -151,6 +151,17 @@ object AppState {
     fun switchPlaylist() { stage = Stage.PICKER }
 
     fun play(item: PlayableItem, zap: List<Channel> = emptyList()) {
+        // build 176: vergrendelde zender of titel: eerst de pincode van het hoofdprofiel (daarna 4 uur open op dit apparaat)
+        val (key, locked) = Locks.forItem(item)
+        if (Locks.needsPin(key, locked)) {
+            val age = pendingAgeCheck
+            Locks.request = Locks.Request(key ?: "") { pendingAgeCheck = age; playNow(item, zap) }
+            return
+        }
+        playNow(item, zap)
+    }
+
+    private fun playNow(item: PlayableItem, zap: List<Channel>) {
         StartTiming.begin(item.title)
         liveZapList = zap
         // leeftijdscontrole die nog loopt (build 59): hoort bij deze titel, de speler wacht er bij het eerste beeld op

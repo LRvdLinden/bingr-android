@@ -39,6 +39,8 @@ sealed class ScreenEntry {
     /** Build 85: overzicht Categorieën (telefoon/tablet) en één genre of servercategorie. */
     data class Categories(val kind: Filter) : ScreenEntry()
     data class CategoryPage(val ref: CategoryRef, val kind: Filter) : ScreenEntry()
+    /** Build 176: Nieuw en populair (Binnenkort, Nieuwe seizoenen, Populair). */
+    data object NewPopular : ScreenEntry()
 }
 
 /**
@@ -59,7 +61,8 @@ object ScreensNav {
         stack.add(Item(counter, e))
     }
     /** Build 128: een titel van een verwijderde server (of die er niet meer op staat) wordt eerst gezocht ([AllServers]). */
-    fun detail(t: DetailTarget) { if (!AllServers.intercept(t)) push(ScreenEntry.Detail(t)) }
+    // build 176: vergrendelde titel: eerst de pincode van het hoofdprofiel
+    fun detail(t: DetailTarget) { Locks.guardTitle(t) { if (!AllServers.intercept(t)) push(ScreenEntry.Detail(t)) } }
     fun category(t: CategoryTarget) = push(ScreenEntry.Category(t))
     fun search() = push(ScreenEntry.Search)
     fun person(r: PersonRef) = push(ScreenEntry.Person(r))
@@ -115,6 +118,7 @@ fun ScreensStackHost() {
                     is ScreenEntry.Person -> PersonScreen(e.ref, onClose = { ScreensNav.close(item.id) })
                     is ScreenEntry.Categories -> CategoriesScreen(e.kind, onClose = { ScreensNav.close(item.id) })
                     is ScreenEntry.CategoryPage -> CategoryPageScreen(e.ref, e.kind, onClose = { ScreensNav.close(item.id) })
+                    ScreenEntry.NewPopular -> NewPopularScreen(onClose = { ScreensNav.close(item.id) })
                 }
             }
         }

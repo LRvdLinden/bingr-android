@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
@@ -18,6 +19,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,17 +63,30 @@ fun PosterCard(
     watchedEpisodes: Int = 0,
     /** Extra ruimte boven de labels linksboven (Top 10: onder het "TOP 10"-merkje) */
     topStartInset: Dp = 0.dp,
+    /** Build 176: vergrendeld met de pincode van het hoofdprofiel → slotje */
+    locked: Boolean = false,
+    /** Build 176: voorvertoning (trailer zonder geluid) over de poster, zie [PosterPreviewOverlay] */
+    preview: (@Composable BoxScope.() -> Unit)? = null,
 ) {
     Box(modifier.width(width).height(width * 1.5f).clip(RoundedCornerShape(4.dp))) {
         // build 97: TalkBack leest de titel van de poster
         val shown = ContentLanguage.displayTitle(title)
-        RemoteImage(poster, Modifier.matchParentSize(), placeholder = shown, contentDescription = shown)
+        // build 176: de kleinste passende TMDB-maat voor deze kaart (minder bytes, Coil decodeert op kaartgrootte)
+        val px = with(androidx.compose.ui.platform.LocalDensity.current) { width.roundToPx() }
+        val sized = androidx.compose.runtime.remember(poster, px) { Build176Logic.Posters.sized(poster, px) }
+        RemoteImage(sized, Modifier.matchParentSize(), placeholder = shown, contentDescription = shown)
+        preview?.invoke(this)
         if (accent != null) Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(tvs(4)).background(accent))
         // build 154: serie helemaal gezien (`w:s:`) → vinkje in plaats van "N BEKEKEN"
         val seriesDone = watchedEpisodes == Playables.SERIES_WATCHED
-        if (watched || seriesDone) {
-            Box(Modifier.align(Alignment.TopEnd).padding(6.dp).size(tvs(20)).clip(CircleShape).background(Theme.red),
+        // build 176: het vinkje "Gezien" springt kort in beeld (kleine animatie, geen extra bestanden)
+        PopIn(watched || seriesDone, Modifier.align(Alignment.TopEnd).padding(6.dp)) {
+            Box(Modifier.size(tvs(20)).clip(CircleShape).background(Theme.red),
                 contentAlignment = Alignment.Center) { Icon(Icons.Default.Check, null, tint = Theme.onAccent, modifier = Modifier.size(tvs(13))) }
+        }
+        if (locked) {
+            Box(Modifier.align(Alignment.BottomEnd).padding(6.dp).size(tvs(20)).clip(CircleShape).background(Color.Black.copy(alpha = 0.7f)),
+                contentAlignment = Alignment.Center) { Icon(Icons.Default.Lock, L("Locked"), tint = Color.White, modifier = Modifier.size(tvs(12))) }
         }
         if (rating != null && rating > 0) {
             Row(Modifier.align(Alignment.TopEnd).padding(5.dp).clip(RoundedCornerShape(4.dp)).background(Theme.imdb)
@@ -192,6 +210,9 @@ fun ChannelCard(channel: Channel, now: EPGProgram?, favorite: Boolean = false, m
         Box(Modifier.fillMaxWidth().height(tvs(60))) {
             RemoteImage(channel.logo, Modifier.matchParentSize(), placeholder = channel.displayName.take(3), fit = true)
             if (favorite) Icon(Icons.Default.Star, null, tint = Theme.imdb, modifier = Modifier.align(Alignment.TopEnd).size(14.dp))
+            // build 176: vergrendeld met de pincode van het hoofdprofiel
+            if (Store.lockedChannels.isNotEmpty() && Store.isChannelLocked(channel.sourceID, channel.id))
+                Icon(Icons.Default.Lock, L("Locked"), tint = Color.White, modifier = Modifier.align(Alignment.TopStart).size(14.dp))
         }
         Spacer(Modifier.height(6.dp))
         Text(channel.displayName, color = Color.White, fontSize = tsp(13), fontWeight = FontWeight.SemiBold, maxLines = 1)
@@ -312,4 +333,35 @@ fun SourceBadge(p: PlaylistSource) {
         Spacer(Modifier.width(5.dp))
         Text(p.name, color = Color.White, fontSize = tsp(10), fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
+}
+
+
+/**
+ * Build 176: kleine animatie voor een vinkje, belletje of plus/vinkje (Gezien, herinnering, Mijn lijst): springt met een
+ * veer in beeld en krimpt weg. Compose-animatie, geen Lottie-bestanden (lichter, geen extra bibliotheek).
+ */
+@Composable
+fun PopIn(visible: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    androidx.compose.animation.AnimatedVisibility(
+        visible, modifier,
+        enter = androidx.compose.animation.scaleIn(androidx.compose.animation.core.spring(dampingRatio = 0.45f, stiffness = 500f), initialScale = 0.3f) +
+            androidx.compose.animation.fadeIn(),
+        exit = androidx.compose.animation.scaleOut(targetScale = 0.6f) + androidx.compose.animation.fadeOut(),
+    ) { content() }
+}
+
+/** Build 176: een icoon dat bij elke wissel (bijv. belletje aan/uit, plus → vinkje) even opveert en kantelt. */
+@Composable
+fun Modifier.bounceOnChange(key: Any?): Modifier {
+    val scale = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(1f) }
+    val rot = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(0f) }
+    var first by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
+    androidx.compose.runtime.LaunchedEffect(key) {
+        if (first) { first = false; return@LaunchedEffect }
+        kotlinx.coroutines.coroutineScope {
+            launch { scale.snapTo(0.7f); scale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.35f, stiffness = 600f)) }
+            launch { rot.animateTo(0f, androidx.compose.animation.core.keyframes { durationMillis = 420; -14f at 80; 12f at 180; -6f at 280; 0f at 420 }) }
+        }
+    }
+    return this.graphicsLayer { scaleX = scale.value; scaleY = scale.value; rotationZ = rot.value }
 }
