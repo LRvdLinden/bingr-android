@@ -386,8 +386,11 @@ data class ProgramReminder(
     val auto: Boolean? = null,
 ) {
     val isSport: Boolean get() = matchKey != null
-    /** Moment van de melding: sport `leadMin` minuten vooraf, anders 2 minuten. */
-    val notifyAt: Long get() = start - (if (isSport) Build173Logic.lead(leadMin) else 2) * 60_000L
+    /**
+     * Moment van de melding: sport `leadMin` minuten vooraf (0/5/15, anders 5; zelfde regel als Build173Logic.lead, hier
+     * zonder die afhankelijkheid: Models.kt wordt in de belastingtest los gebouwd), anders 2 minuten.
+     */
+    val notifyAt: Long get() = start - (if (isSport) (leadMin?.takeIf { it == 0 || it == 5 || it == 15 } ?: 5) else 2) * 60_000L
     /** Build 153: zendernaam zoals de app hem toont. */
     val displayChannelName: String get() = ContentLanguage.channelTitle(channelName)
 }
