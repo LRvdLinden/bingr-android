@@ -16,24 +16,31 @@ import java.util.zip.GZIPInputStream
 object XMLTVParser {
 
     /** Download + parse in één keer (zonder het hele bestand in het geheugen te houden). */
-    suspend fun load(url: String, daysBack: Int = 1, daysAhead: Int = 3): Map<String, List<EPGProgram>> =
+    /**
+     * Build 178: vooruit tot 7 dagen (was 3), terug 1 dag; zenders met terugkijken ([back]: gids-id → dagen) tot hun
+     * termijn (hooguit 14 dagen), zodat de dagbalk die dagen kan tonen.
+     */
+    suspend fun load(url: String, daysBack: Int = 1, daysAhead: Int = Build178Logic.MAX_AHEAD,
+                     back: Map<String, Int> = emptyMap()): Map<String, List<EPGProgram>> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val req = Request.Builder().url(url.trim()).header("User-Agent", Http.USER_AGENT).build()
                 Http.client.newCall(req).execute().use { r ->
                     if (!r.isSuccessful) return@use emptyMap<String, List<EPGProgram>>()
                     val body = r.body ?: return@use emptyMap<String, List<EPGProgram>>()
-                    parse(body.byteStream(), daysBack, daysAhead)
+                    parse(body.byteStream(), daysBack, daysAhead, back)
                 }
             }.getOrDefault(emptyMap<String, List<EPGProgram>>())
         }
 
-    fun parse(data: ByteArray, daysBack: Int = 1, daysAhead: Int = 3): Map<String, List<EPGProgram>> =
+    fun parse(data: ByteArray, daysBack: Int = 1, daysAhead: Int = Build178Logic.MAX_AHEAD): Map<String, List<EPGProgram>> =
         parse(data.inputStream(), daysBack, daysAhead)
 
-    fun parse(input: InputStream, daysBack: Int = 1, daysAhead: Int = 3): Map<String, List<EPGProgram>> {
+    fun parse(input: InputStream, daysBack: Int = 1, daysAhead: Int = Build178Logic.MAX_AHEAD,
+              back: Map<String, Int> = emptyMap()): Map<String, List<EPGProgram>> {
         val now = System.currentTimeMillis()
-        val lower = now - daysBack * 86_400_000L
+        val most = maxOf(daysBack, minOf(back.values.maxOrNull() ?: 0, Build178Logic.MAX_BACK))
+        val lower = now - most * 86_400_000L
         val upper = now + daysAhead * 86_400_000L
         val programs = HashMap<String, MutableList<EPGProgram>>()
 
@@ -74,7 +81,8 @@ object XMLTVParser {
                         "desc" -> if (channel != null && desc.isEmpty()) desc = text.toString().trim()
                         "programme" -> {
                             val c = channel
-                            if (c != null && end >= lower && start <= upper) {
+                            if (c != null && end >= lower && start <= upper &&
+                                Build178Logic.keep(start, end, now, maxOf(daysBack, minOf(back[c] ?: 0, Build178Logic.MAX_BACK)), daysAhead)) {
                                 programs.getOrPut(c) { ArrayList() }.add(
                                     EPGProgram(channelID = c, title = title, description = desc.ifEmpty { null }, start = start, end = end)
                                 )

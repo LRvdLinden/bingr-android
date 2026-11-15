@@ -1288,7 +1288,10 @@
   "Save moment": "حفظ اللحظة",
   "Set a PIN for the main profile first": "عيّن أولًا رمز PIN للملف الشخصي الرئيسي",
   "The trailer plays muted in the banner at the top of Home.": "يُعرض المقطع الدعائي دون صوت في الشريط أعلى الصفحة الرئيسية.",
-  "Titles": "العناوين"
+  "Titles": "العناوين",
+  "Catch-up": "إعادة المشاهدة",
+  "No channels with catch-up": "لا توجد قنوات مع المشاهدة لاحقاً",
+  "%d channels, up to %d days": "%d قناة، حتى %d أيام"
  },
  "de": {
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
@@ -2579,7 +2582,10 @@
   "Save moment": "Moment speichern",
   "Set a PIN for the main profile first": "Lege zuerst eine PIN für das Hauptprofil fest",
   "The trailer plays muted in the banner at the top of Home.": "Der Trailer läuft ohne Ton im Banner oben auf der Startseite.",
-  "Titles": "Titel"
+  "Titles": "Titel",
+  "Catch-up": "Nachträglich ansehen",
+  "No channels with catch-up": "Keine Sender mit Replay",
+  "%d channels, up to %d days": "%d Sender, bis zu %d Tage"
  },
  "es": {
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
@@ -3870,7 +3876,10 @@
   "Save moment": "Guardar momento",
   "Set a PIN for the main profile first": "Primero configura un PIN para el perfil principal",
   "The trailer plays muted in the banner at the top of Home.": "El tráiler se reproduce sin sonido en el banner de la parte superior de Inicio.",
-  "Titles": "Títulos"
+  "Titles": "Títulos",
+  "Catch-up": "Ver de nuevo",
+  "No channels with catch-up": "Ningún canal con reproducción diferida",
+  "%d channels, up to %d days": "%d canales, hasta %d días"
  },
  "fr": {
   "%@ is now signed in.": "%@ est maintenant connecté.",
@@ -5161,7 +5170,10 @@
   "Save moment": "Enregistrer le moment",
   "Set a PIN for the main profile first": "Définissez d'abord un code pour le profil principal",
   "The trailer plays muted in the banner at the top of Home.": "La bande-annonce se lance sans son dans la bannière en haut de l'accueil.",
-  "Titles": "Titres"
+  "Titles": "Titres",
+  "Catch-up": "Replay",
+  "No channels with catch-up": "Aucune chaîne avec replay",
+  "%d channels, up to %d days": "%d chaînes, jusqu’à %d jours"
  },
  "it": {
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
@@ -6452,7 +6464,10 @@
   "Save moment": "Salva momento",
   "Set a PIN for the main profile first": "Imposta prima un PIN per il profilo principale",
   "The trailer plays muted in the banner at the top of Home.": "Il trailer parte senza audio nel banner in cima alla Home.",
-  "Titles": "Titoli"
+  "Titles": "Titoli",
+  "Catch-up": "Rivedi",
+  "No channels with catch-up": "Nessun canale con replay",
+  "%d channels, up to %d days": "%d canali, fino a %d giorni"
  },
  "nl": {
   "%@ is now signed in.": "%@ is nu ingelogd.",
@@ -7757,7 +7772,10 @@
   "Save moment": "Moment bewaren",
   "Set a PIN for the main profile first": "Stel eerst een pincode in voor het hoofdprofiel",
   "The trailer plays muted in the banner at the top of Home.": "De trailer speelt zonder geluid in de kop van Home.",
-  "Titles": "Titels"
+  "Titles": "Titels",
+  "Catch-up": "Terugkijken",
+  "No channels with catch-up": "Geen zenders met terugkijken",
+  "%d channels, up to %d days": "%d zenders, tot %d dagen"
  },
  "pl": {
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
@@ -9048,7 +9066,10 @@
   "Save moment": "Zapisz moment",
   "Set a PIN for the main profile first": "Najpierw ustaw PIN dla profilu głównego",
   "The trailer plays muted in the banner at the top of Home.": "Zwiastun odtwarza się bez dźwięku w banerze u góry strony głównej.",
-  "Titles": "Tytuły"
+  "Titles": "Tytuły",
+  "Catch-up": "Oglądaj ponownie",
+  "No channels with catch-up": "Brak kanałów z odtwarzaniem wstecz",
+  "%d channels, up to %d days": "%d kanałów, do %d dni"
  },
  "pt": {
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
@@ -10339,7 +10360,10 @@
   "Save moment": "Guardar momento",
   "Set a PIN for the main profile first": "Defina primeiro um PIN para o perfil principal",
   "The trailer plays muted in the banner at the top of Home.": "O trailer é reproduzido sem som no destaque no topo do Início.",
-  "Titles": "Títulos"
+  "Titles": "Títulos",
+  "Catch-up": "Rever",
+  "No channels with catch-up": "Nenhum canal com catch-up",
+  "%d channels, up to %d days": "%d canais, até %d dias"
  },
  "tr": {
   "%@ is now signed in.": "%@ artık oturum açtı.",
@@ -11630,7 +11654,10 @@
   "Save moment": "Anı kaydet",
   "Set a PIN for the main profile first": "Önce ana profil için bir PIN belirleyin",
   "The trailer plays muted in the banner at the top of Home.": "Fragman, Ana sayfanın üstündeki afişte sessiz oynatılır.",
-  "Titles": "Başlıklar"
+  "Titles": "Başlıklar",
+  "Catch-up": "Tekrar izle",
+  "No channels with catch-up": "Tekrar izleme olan kanal yok",
+  "%d channels, up to %d days": "%d kanal, %d güne kadar"
  },
  "zh-Hans": {
   "%@ is now signed in.": "%@ 现已登录。",
@@ -12921,6 +12948,9 @@
   "Save moment": "保存片段",
   "Set a PIN for the main profile first": "请先为主个人资料设置 PIN 码",
   "The trailer plays muted in the banner at the top of Home.": "预告片会在首页顶部横幅中静音播放。",
-  "Titles": "影片"
+  "Titles": "影片",
+  "Catch-up": "回看",
+  "No channels with catch-up": "没有支持回看的频道",
+  "%d channels, up to %d days": "%d 个频道，最多 %d 天"
  }
 }

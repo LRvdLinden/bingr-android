@@ -125,6 +125,9 @@ data class Channel(
     val sourceID: String? = null,
     /** Build 171: radiozender volgens de server (Xtream `radio_streams`, M3U `radio="true"`). */
     val radio: Boolean = false,
+    /** Build 178: M3U-terugkijken: catchup-type (kleine letters) en catchup-source (sjabloon); null = niet opgegeven */
+    val catchupType: String? = null,
+    val catchupSource: String? = null,
 ) {
     /** Build 153: naam zoals de app hem toont ("┃NL┃ NPO 1 HD" → "NPO 1"); [name] blijft voor sleutels, id's en afspelen. */
     val displayName: String get() = ContentLanguage.channelTitle(name)
@@ -202,6 +205,8 @@ data class EPGProgram(
     val description: String? = null,
     val start: Long,
     val end: Long,
+    /** Build 178: terug te kijken volgens de server (Xtream has_archive); null = onbekend (dan de termijn van de zender) */
+    val archive: Boolean? = null,
 ) {
     val id: String get() = "$channelID-${start / 1000}"
     /** Build 153: titel zoals de app hem toont (taal- en pipe-aanduidingen weg). */

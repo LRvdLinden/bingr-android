@@ -214,8 +214,19 @@ fun GuideSheet(channel: Channel, onDismiss: () -> Unit) {
     LaunchedEffect(channel.id) {
         val all = Playlists.epgFor(channel)   // build 128: ook van een andere server
         val from = System.currentTimeMillis() - maxOf(channel.catchupDays, 0) * 86_400_000L
-        programs = if (all.isEmpty() && channel.sourceID == null) runCatching { Playlists.shortEPG(channel) }.getOrDefault(emptyList())
+        val base = if (all.isEmpty() && channel.sourceID == null) runCatching { Playlists.shortEPG(channel) }.getOrDefault(emptyList())
         else all.filter { it.end > from }
+        programs = base
+        // build 178: programma's van vroeger uit het archief van de server erbij (met has_archive)
+        if (channel.catchupDays > 0) {
+            val arch = runCatching { Playlists.archiveEPG(channel) }.getOrDefault(emptyList()).filter { it.end > from }
+            if (arch.isNotEmpty()) {
+                val tp = arch.map { Build178Logic.TableProgram(it.title, it.description, it.start, it.end, it.archive) }
+                programs = Build178Logic.merge(base.map { Triple(it.title, it.start, it.end) }, tp).map { x ->
+                    if (x.source >= 0) base[x.source].let { if (x.archive != null) it.copy(archive = x.archive) else it } else arch[-1 - x.source]
+                }
+            }
+        }
     }
     S2FullDialog(onDismiss) {
         val list = programs
@@ -246,7 +257,7 @@ fun GuideSheet(channel: Channel, onDismiss: () -> Unit) {
                             },
                             trailing = {
                                 if (p.isNow) Text(L("NOW"), color = Theme.red, fontSize = tsp(11), fontWeight = FontWeight.Bold)
-                                if (p.end < n && channel.catchupDays > 0) {
+                                if (guideReplay(channel, p, n)) {
                                     Icon(Icons.Default.History, null, tint = Theme.secondary, modifier = Modifier.size(tvs(14)))
                                 }
                                 if (Store.hasReminder(s2ReminderID(channel, p))) {
@@ -275,8 +286,8 @@ private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss:
                                fromGuide: Boolean = false) {
     val now = System.currentTimeMillis()
     val rid = s2ReminderID(channel, program)
-    val canCatchup = program.end < now && channel.catchupDays > 0 &&
-        program.start > now - channel.catchupDays * 86_400_000L
+    // build 178: ook volgens de server (has_archive uit het archief)
+    val canCatchup = guideReplay(channel, program, now)
     // build 128: zender van een andere server: terugkijken met de inloggegevens en correctie van die server
     val pid = channel.sourceID ?: Playlists.source?.id ?: ""
     var offsetOpen by remember { mutableStateOf(false) }

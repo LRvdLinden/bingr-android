@@ -65,6 +65,8 @@ object M3UParser {
         var number = 0
         val other = L("Other")
         val prefix = playlistID.take(8)
+        // build 178: standaard-attributen van #EXTM3U (o.a. catchup, catchup-days, catchup-source) voor alle zenders
+        val header = headerAttributes(text)
 
         for (e in entries(text)) {
             val group = e.attrs["group-title"]?.takeIf { it.isNotEmpty() } ?: other
@@ -95,13 +97,16 @@ object M3UParser {
                     streamURL = Net.urlValue(e.url)))
                 else -> {
                     number += 1
-                    val catchup = (e.attrs["catchup-days"] ?: e.attrs["timeshift"] ?: "").toIntOrNull() ?: 0
+                    // build 178: alle varianten (catchup, catchup-days, tvg-rec, timeshift, tv_archive …), ook op #EXTM3U
+                    val catchup = Build178Logic.m3u(e.attrs, header)
                     channels.add(Channel(id = id, name = e.name, logo = logo, group = group,
                         streamURL = Net.urlValue(e.url),
                         epgID = e.attrs["tvg-id"]?.takeIf { it.isNotEmpty() },
                         number = (e.attrs["tvg-chno"] ?: "").toIntOrNull() ?: number,
-                        catchupDays = catchup,
-                        radio = e.attrs["radio"].equals("true", ignoreCase = true)))
+                        catchupDays = catchup.days,
+                        radio = e.attrs["radio"].equals("true", ignoreCase = true),
+                        catchupType = if (catchup.days > 0) catchup.type else null,
+                        catchupSource = if (catchup.days > 0) catchup.source else null))
                 }
             }
         }
@@ -110,6 +115,15 @@ object M3UParser {
                 .sortedWith(compareBy<Episode>({ it.season }, { it.number })))
         }
         return Library(channels = channels, movies = movies, series = series)
+    }
+
+    /** Build 178: de attributen op de regel #EXTM3U (sleutels in kleine letters) */
+    fun headerAttributes(text: String): Map<String, String> {
+        val first = text.lineSequence().map { it.trimStart('\uFEFF').trim() }.firstOrNull { it.isNotEmpty() } ?: return emptyMap()
+        if (!first.startsWith("#EXTM3U")) return emptyMap()
+        val out = HashMap<String, String>()
+        for (m in Regex("([\\w-]+)=\"([^\"]*)\"").findAll(first)) out[m.groupValues[1].lowercase()] = m.groupValues[2]
+        return out
     }
 
     fun epgURL(fromHeader: String): String? {

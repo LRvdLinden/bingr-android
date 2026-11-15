@@ -419,6 +419,11 @@ fun LazyListScope.diagnoseTabItems() {
                 val rows = Diagnostics.fetchRows().groupBy { it.server }
                 Diagnostics.serverUpdates().forEachIndexed { i, (kind, at) ->
                     S2Row(L("Server %d (%@)", i + 1, kind), value = if (at > 0) s2DateTime(at) else L("Never updated"))
+                    // build 178: wat Bingr aan terugkijken herkent op deze server
+                    Store.playlists.getOrNull(i)?.let { pl -> CatchupLog178.get(pl.id) }?.let { (n, days) ->
+                        S2Row(L("Catch-up"), value = if (n == 0) L("No channels with catch-up") else L("%d channels, up to %d days", n, days),
+                            tint = Theme.secondary)
+                    }
                     val sn = Build147Logic.Fetch.serverName(i)
                     // build 148: geleverd naast zichtbaar (open server), anders zoals in build 147
                     val fx = d.jList("fetch").filter { it.jS("server") == sn && it.jObj?.get("visible") != null }

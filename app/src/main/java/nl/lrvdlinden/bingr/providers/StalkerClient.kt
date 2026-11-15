@@ -85,7 +85,7 @@ class StalkerClient(source: PlaylistSource) {
                 Channel(id = "st$id", name = ch.jS("name") ?: "Channel", logo = Net.urlValue(ch.jS("logo")),
                     group = gMap[ch.jS("tv_genre_id") ?: ""] ?: other,
                     streamURL = directURL(ch.jS("cmd")), epgID = ch.jS("xmltv_id"), number = ch.jI("number"),
-                    catchupDays = (ch.jI("tv_archive_duration") ?: 0) / 24, stalkerCmd = ch.jS("cmd"))
+                    catchupDays = Build178Logic.stalkerDays(ch.jS("tv_archive") ?: ch.jS("archive"), ch.jS("tv_archive_duration")), stalkerCmd = ch.jS("cmd"))
             }
         }
 

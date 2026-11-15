@@ -384,6 +384,7 @@ object Playlists {
                 // build 149: geleverd = ingelezen + niet ingelezen (verborgen categorieën)
                 FetchLog.delivered(s.id, it.channels.size + it.hiddenCount("live"), it.movies.size + it.hiddenCount("movie"),
                     it.series.size + it.hiddenCount("series"), errs)
+                CatchupLog178.note(s.id, it.channels)   // build 178
             }
         } catch (e: CancellationException) {
             throw e
@@ -409,7 +410,7 @@ object Playlists {
                 // build 148: de tekst van de lijst niet vasthouden tijdens het laden van de gids
                 text = ""
                 UpdateLog.phase(rec, "parse")
-                if (epg != null) { status(L("Loading TV guide…")); lib = lib.copy(epg = XMLTVParser.load(epg)); UpdateLog.phase(rec, "fetch") }
+                if (epg != null) { status(L("Loading TV guide…")); lib = lib.copy(epg = XMLTVParser.load(epg, back = catchupBack(lib.channels))); UpdateLog.phase(rec, "fetch") }
             }
             PlaylistKind.XTREAM -> {
                 status(L("Signing in to server…"))
@@ -420,7 +421,7 @@ object Playlists {
                 UpdateLog.phase(rec, "parse")
                 errs.putAll(x.kindErrors())
                 val epg = Net.urlValue(s.epgURL) ?: x.xmltvURL
-                if (epg != null) { status(L("Loading TV guide…")); lib = lib.copy(epg = XMLTVParser.load(epg)); UpdateLog.phase(rec, "fetch") }
+                if (epg != null) { status(L("Loading TV guide…")); lib = lib.copy(epg = XMLTVParser.load(epg, back = catchupBack(lib.channels))); UpdateLog.phase(rec, "fetch") }
             }
             PlaylistKind.STALKER -> {
                 status(L("Connecting to portal…"))
@@ -428,7 +429,7 @@ object Playlists {
                 st.connect()
                 status(L("Fetching channels and videos…"))
                 lib = st.library()
-                Net.urlValue(s.epgURL)?.let { lib = lib.copy(epg = XMLTVParser.load(it)) }
+                Net.urlValue(s.epgURL)?.let { lib = lib.copy(epg = XMLTVParser.load(it, back = catchupBack(lib.channels))) }
             }
             PlaylistKind.JELLYFIN, PlaylistKind.EMBY -> {
                 status(L("Fetching your library…"))
@@ -576,6 +577,7 @@ object Playlists {
     private fun setRaw(lib: Library) {
         // build 141: een vervangen gids op schijf straks dichtdoen
         if (rawLibrary.epg !== lib.epg) retireEpg(rawLibrary.epg)
+        source?.id?.let { if (lib.channels.isNotEmpty()) CatchupLog178.note(it, lib.channels) }   // build 178
         rawLibrary = lib
         applyCustomizations()
     }
@@ -875,8 +877,40 @@ object Playlists {
         val shift = (s.catchupOffsets[channelID] ?: 0) * 60_000L
         // build 129: MAC-portal: de link komt pas bij het afspelen ([resolveArchive]), met een eigen portalverbinding
         if (s.kind == PlaylistKind.STALKER) return AllServersLogic.archiveURL(s.id, channelID, start + shift, end + shift)
+        if (s.kind == PlaylistKind.M3U) return m3uCatchupURL(ch, start + shift, end + shift)   // build 178
         if (s.kind != PlaylistKind.XTREAM) return null
         return XtreamClient(s, Store.secret(s.passwordKey) ?: "").catchupURL(ch, start + shift, end + shift)
+    }
+
+    /** Build 178: terugkijken van een M3U-zender (catchup-type/-source, of een Xtream-achtige stream-URL) */
+    private fun m3uCatchupURL(ch: Channel, start: Long, end: Long): String? {
+        val stream = ch.streamURL ?: return null
+        val x = Build178Logic.xtreamParts(stream)
+        val tz = if (x != null) XtreamTimeZone178.zone(x.server, x.user) else java.util.TimeZone.getDefault()
+        return Build178Logic.m3uURL(stream, ch.catchupType, ch.catchupSource, start, end, System.currentTimeMillis(), tz)
+    }
+
+    /** Build 178: per gids-id de terugkijkdagen van de zenders (alleen die met terugkijken) */
+    private fun catchupBack(channels: List<Channel>): Map<String, Int> {
+        val out = HashMap<String, Int>()
+        for (c in channels) if (c.catchupDays > 0) { val k = c.epgID ?: c.id; out[k] = maxOf(out[k] ?: 0, c.catchupDays) }
+        return out
+    }
+
+    /** Build 178: de gids met archief van één zender (Xtream get_simple_data_table), 20 minuten in het geheugen. */
+    private val archiveCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<EPGProgram>>>()
+
+    suspend fun archiveEPG(c: Channel): List<EPGProgram> {
+        val s = (if (foreign(c.sourceID)) sourceFor(c.sourceID) else source) ?: return emptyList()
+        if (s.kind != PlaylistKind.XTREAM || c.catchupDays <= 0) return emptyList()
+        val key = "${s.id}|${c.id}"
+        archiveCache[key]?.let { if (System.currentTimeMillis() - it.first < 1_200_000) return it.second }
+        val list = try {
+            XtreamClient(s, Store.secret(s.passwordKey) ?: "").archiveEPG(c)
+        } catch (e: CancellationException) { throw e } catch (_: Exception) { emptyList() }
+        if (archiveCache.size > 300) archiveCache.clear()
+        archiveCache[key] = System.currentTimeMillis() to list
+        return list
     }
 
     /** Build 129: MAC-portalverbindingen van andere servers (terugkijken), zodat niet elke keer opnieuw ingelogd wordt. */
@@ -909,12 +943,13 @@ object Playlists {
      */
     fun catchupURL(channelID: String, start: Long, end: Long): String? {
         val s = source ?: return null
-        if (s.kind != PlaylistKind.XTREAM && s.kind != PlaylistKind.STALKER) return null
+        if (s.kind != PlaylistKind.XTREAM && s.kind != PlaylistKind.STALKER && s.kind != PlaylistKind.M3U) return null
         val ch = rawLibrary.channels.firstOrNull { it.id == channelID } ?: return null
         if (ch.catchupDays <= 0) return null
         val shift = (Store.playlists.firstOrNull { it.id == s.id }?.catchupOffsets?.get(channelID) ?: 0) * 60_000L
         // build 129: MAC-portal (ook de actieve server): de link komt pas bij het afspelen ([resolveArchive])
         if (s.kind == PlaylistKind.STALKER) return AllServersLogic.archiveURL(s.id, channelID, start + shift, end + shift)
+        if (s.kind == PlaylistKind.M3U) return m3uCatchupURL(ch, start + shift, end + shift)   // build 178
         return XtreamClient(s, Store.secret(s.passwordKey) ?: "").catchupURL(ch, start + shift, end + shift)
     }
 
@@ -1262,4 +1297,25 @@ object MemoryGuard {
     fun used(): Long = rt.totalMemory() - rt.freeMemory()
     val check: (Int) -> Unit = Build149Logic.Stream.memoryCheck(0.85, { used() }, { rt.maxMemory() }, { System.gc() })
     fun tooLarge(): ServiceException = ServiceException(L("This server is very large. Hide categories you don't use and it will load faster."))
+}
+
+
+/** Build 178: diagnose: per server hoeveel zenders terugkijken hebben en tot hoeveel dagen (geen namen of adressen) */
+object CatchupLog178 {
+    private val prefs get() = runCatching {
+        AppState.appContext.getSharedPreferences("bingr.catchup178", android.content.Context.MODE_PRIVATE)
+    }.getOrNull()
+
+    fun note(server: String, channels: List<Channel>) {
+        val (n, d) = Build178Logic.summary(channels.map { it.catchupDays })
+        val v = "$n,$d"
+        val p = prefs ?: return
+        if (p.getString(server.lowercase(), null) != v) p.edit().putString(server.lowercase(), v).apply()
+    }
+
+    fun get(server: String): Pair<Int, Int>? {
+        val v = prefs?.getString(server.lowercase(), null)?.split(',') ?: return null
+        if (v.size != 2) return null
+        return (v[0].toIntOrNull() ?: return null) to (v[1].toIntOrNull() ?: return null)
+    }
 }

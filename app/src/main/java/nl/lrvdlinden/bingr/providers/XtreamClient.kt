@@ -61,6 +61,7 @@ class XtreamClient(source: PlaylistSource, val password: String) {
         val r = Net.json(u)
         if (r.jO("user_info").jI("auth") != 1) throw authError
         ProviderConnections.from(r.jO("user_info"))?.let { ProviderLimit.store(server, username, it) }
+        XtreamTimeZone178.store(r.jO("server_info").jS("timezone"), server, username)   // build 178
     }
 
     /**
@@ -191,7 +192,7 @@ class XtreamClient(source: PlaylistSource, val password: String) {
                 streamURL = "$server/live/$username/$password/$sid.$liveExt",
                 epgID = l["epg_channel_id"]?.takeIf { it.isNotEmpty() },
                 number = l.int("num"),
-                catchupDays = if (l.int("tv_archive") == 1) (l.int("tv_archive_duration") ?: 0) else 0,
+                catchupDays = Build178Logic.xtreamDays(l["tv_archive"], l["tv_archive_duration"]),
                 radio = l["stream_type"] == "radio_streams")
         }
         out.trimToSize(); return out
@@ -263,7 +264,7 @@ class XtreamClient(source: PlaylistSource, val password: String) {
                 streamURL = "$server/live/$username/$password/$sid.$liveExt",
                 epgID = l.jS("epg_channel_id")?.takeIf { it.isNotEmpty() },
                 number = l.jI("num"),
-                catchupDays = if (l.jI("tv_archive") == 1) (l.jI("tv_archive_duration") ?: 0) else 0,
+                catchupDays = Build178Logic.xtreamDays(l.jS("tv_archive"), l.jS("tv_archive_duration")),
                 radio = l.jS("stream_type") == "radio_streams")
         }
 
@@ -328,13 +329,30 @@ class XtreamClient(source: PlaylistSource, val password: String) {
 
     val xmltvURL: String? get() = Net.url("$server/xmltv.php", listOf("username" to username, "password" to password))
 
-    /** Catch-up / terugkijken (tv_archive). */
+    /**
+     * Catch-up / terugkijken (tv_archive). Build 178: de tijd in de tijdzone van de server (server_info.timezone;
+     * onbekend = die van het apparaat, zoals voorheen) en de duur naar boven afgerond.
+     */
     fun catchupURL(channel: Channel, start: Long, end: Long): String? {
         if (!channel.id.startsWith("x")) return null
-        val sid = channel.id.drop(1)
-        val f = Build149Logic.Dates.fmt("yyyy-MM-dd:HH-mm")
-        val minutes = ((end - start) / 60_000).toInt()
-        return "$server/timeshift/$username/$password/$minutes/${f.format(java.util.Date(start))}/$sid.ts"
+        return Build178Logic.xtreamURL(server, username, password, channel.id.drop(1), start, end, XtreamTimeZone178.zone(server, username))
+    }
+
+    /** Build 178: de gids van één zender met archief (get_simple_data_table, met has_archive). Leeg bij een fout. */
+    suspend fun archiveEPG(channel: Channel): List<EPGProgram> {
+        if (!channel.id.startsWith("x")) return emptyList()
+        val u = api("get_simple_data_table", listOf("stream_id" to channel.id.drop(1))) ?: return emptyList()
+        val r = runCatching { withTimeoutOrNull(20_000) { Net.json(u) } }.getOrNull() ?: return emptyList()
+        val o = r.jObj ?: return emptyList()
+        val raw = o["epg_listings"]
+        val items: List<JsonElement> = when (raw) {
+            is kotlinx.serialization.json.JsonArray -> raw.toList()
+            is kotlinx.serialization.json.JsonObject -> raw.values.toList()
+            else -> emptyList()
+        }
+        val maps = items.mapNotNull { it.jObj }.map { m -> m.keys.associateWith { k -> m.jS(k) } }
+        val key = channel.epgID ?: channel.id
+        return Build178Logic.simpleTable(maps).map { EPGProgram(key, it.title, it.description, it.start, it.end, archive = it.archive) }
     }
 }
 
@@ -367,6 +385,32 @@ data class ProviderConnections(
 }
 
 /** Laatst bekende providerlimiet per server + gebruikersnaam (geheugen, niet bewaard). */
+/**
+ * Build 178: tijdzone van een Xtream-server (server_info.timezone bij het inloggen), bewaard per server en gebruiker
+ * (sleutel gehasht, alleen de naam van de tijdzone). Onbekend = de tijdzone van het apparaat.
+ */
+object XtreamTimeZone178 {
+    private val memory = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private fun key(server: String, username: String) = "tz." + (server + "|" + username).hashCode().toUInt().toString(36)
+    private val prefs get() = runCatching {
+        nl.lrvdlinden.bingr.AppState.appContext.getSharedPreferences("bingr.xtreamtz", android.content.Context.MODE_PRIVATE)
+    }.getOrNull()
+
+    fun store(name: String?, server: String, username: String) {
+        val n = name?.trim().orEmpty()
+        if (n.isEmpty() || !java.util.TimeZone.getAvailableIDs().contains(n)) return
+        val k = key(server, username)
+        memory[k] = n
+        prefs?.edit()?.putString(k, n)?.apply()
+    }
+
+    fun zone(server: String, username: String): java.util.TimeZone {
+        val k = key(server, username)
+        val n = memory[k] ?: prefs?.getString(k, null)?.also { memory[k] = it }
+        return Build178Logic.zone(n)
+    }
+}
+
 object ProviderLimit {
     private val cache = java.util.concurrent.ConcurrentHashMap<String, Pair<ProviderConnections, Long>>()
 

@@ -131,19 +131,54 @@ private fun guideClean(day: List<EPGProgram>): List<EPGProgram> =
     Build177Logic.clean(day, { it.title }, { it.start }, { it.end }) { p, s, e -> p.copy(start = s, end = e) }
 
 /**
- * Build 166: dagen in de dagbalk/dagkiezer: alleen dagen waarop de zenders van [sample] programma's hebben (vandaag altijd;
- * gisteren en eerder alleen met terugkijken). Pure logica: Build166Logic.GuideDays.
+ * Dagen in de dagbalk/dagkiezer. Build 178: terug tot de terugkijktermijn ([maxCatchup], hooguit 14 dagen; ook zonder
+ * gids van die dag, die komt uit het archief van de server), vooruit de dagen waarop de zenders van [sample] programma's
+ * hebben (hooguit 7). Pure logica: Build178Logic.dayOffsets.
  */
-private fun guideAvailableDays(sample: List<Channel>, now: Long): List<Int> {
-    val lists = sample.map { it to guidePrograms(it) }
-    val candidates = Build164Logic.Days.offsets(sample.maxOfOrNull { it.catchupDays } ?: 0)
-    val bounds = candidates.associateWith { Build164Logic.Days.start(now, it) to Build164Logic.Days.end(now, it) }
-    return Build166Logic.GuideDays.available(candidates, lists,
-        hasGuide = { (_, l), o ->
-            val (a, b) = bounds.getValue(o)
-            !Build164Logic.Index.window(l, a, b, { it.start }, { it.end }).isEmpty()
-        },
-        catchupDays = { it.first.catchupDays })
+private fun guideAvailableDays(sample: List<Channel>, now: Long, maxCatchup: Int = sample.maxOfOrNull { it.catchupDays } ?: 0): List<Int> {
+    val lists = sample.map { guidePrograms(it) }
+    val future = (1..Build178Logic.MAX_AHEAD).filter { o ->
+        val a = Build164Logic.Days.start(now, o)
+        val b = Build164Logic.Days.end(now, o)
+        lists.any { l -> !Build164Logic.Index.window(l, a, b, { it.start }, { it.end }).isEmpty() }
+    }
+    return Build178Logic.dayOffsets(maxCatchup, future)
+}
+
+/** Build 178: gids en archief van de server samen (zelfde begin = zelfde programma, met has_archive uit het archief) */
+private fun guideMerge(base: List<EPGProgram>, arch: List<EPGProgram>): List<EPGProgram> {
+    if (arch.isEmpty()) return base
+    val tp = arch.map { Build178Logic.TableProgram(it.title, it.description, it.start, it.end, it.archive) }
+    return Build178Logic.merge(base.map { Triple(it.title, it.start, it.end) }, tp).map { x ->
+        if (x.source >= 0) base[x.source].let { if (x.archive != null) it.copy(archive = x.archive) else it } else arch[-1 - x.source]
+    }
+}
+
+/** Build 178: het archief van de server voor deze zender (Xtream get_simple_data_table; leeg zonder terugkijken) */
+@Composable
+private fun rememberGuideArchive(c: Channel, enabled: Boolean): List<EPGProgram> {
+    var arch by remember(c.id, c.sourceID) { mutableStateOf<List<EPGProgram>>(emptyList()) }
+    LaunchedEffect(c.id, c.sourceID, enabled) {
+        if (enabled && c.catchupDays > 0) arch = runCatching { Playlists.archiveEPG(c) }.getOrDefault(emptyList())
+    }
+    return arch
+}
+
+/** Build 178: terug te kijken (voorbij, en volgens de server of binnen de termijn van de zender) */
+internal fun guideReplay(c: Channel, p: EPGProgram, now: Long): Boolean =
+    Build178Logic.replayable(p.start, p.end, now, c.catchupDays, p.archive)
+
+/**
+ * Build 178: een programma openen: terug te kijken = meteen afspelen vanaf het begin (zoals NLZIET), anders het
+ * programmablad ([sheet]).
+ */
+private fun guideOpen(c: Channel, p: EPGProgram, sheet: () -> Unit) {
+    val now = System.currentTimeMillis()
+    val u = if (guideReplay(c, p, now)) Playlists.catchupURL(c.id, p.start, p.end, c.sourceID) else null
+    if (u == null) { sheet(); return }
+    ChannelPreview.stop()
+    AppState.play(PlayableItem(id = "${c.id}-cu-${p.start / 1000}", title = p.title, subtitle = c.name, url = u,
+        type = MediaType.LIVE, artwork = c.logo, sourceID = c.sourceID))
 }
 
 /** Zenderlogo van de server op een donker vlak met een dunne rand; zonder (werkend) logo de opgeschoonde zendernaam. */
@@ -334,7 +369,8 @@ fun GuidePhone(
             return@Column
         }
         GuidePhoneLiveBox(sel, now, onPlay)
-        val all = remember(sel.id, Playlists.library.epg, AllServers.version) { guidePrograms(sel) }
+        val arch = rememberGuideArchive(sel, true)
+        val all = remember(sel.id, Playlists.library.epg, AllServers.version, arch) { guideMerge(guidePrograms(sel), arch) }
         val nowProg = remember(all, now) { Build164Logic.Index.at(all, now, { it.start }, { it.end }).let { if (it >= 0) all[it] else null } }
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
             Text(nowProg?.displayTitle ?: sel.displayName, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
@@ -352,7 +388,7 @@ fun GuidePhone(
         Row(Modifier.fillMaxSize()) {
             GuidePhoneRail(channels, sel) { selID = it.id }
             Box(Modifier.width(1.dp).fillMaxHeight().background(G_LINE))
-            GuidePhoneList(sel, all, Build166Logic.GuideDays.keep(dayOffset, phoneDays), now) { p -> program = sel to p }
+            GuidePhoneList(sel, all, Build166Logic.GuideDays.keep(dayOffset, phoneDays), now) { p -> guideOpen(sel, p) { program = sel to p } }
         }
     }
 
@@ -456,7 +492,7 @@ private fun GuidePhoneList(c: Channel, all: List<EPGProgram>, dayOffset: Int, no
 @Composable
 private fun GuidePhoneRow(c: Channel, p: EPGProgram, now: Long, onClick: () -> Unit) {
     val kind = Build164Logic.kind(p.start, p.end, now)
-    val replay = kind == Build164Logic.Kind.PAST && Build164Logic.canReplay(p.start, p.end, now, c.catchupDays)
+    val replay = kind == Build164Logic.Kind.PAST && guideReplay(c, p, now)
     val bell = kind == Build164Logic.Kind.FUTURE && Store.hasReminder(Reminders.idFor(c.id, p.start))
     Column(Modifier.fillMaxWidth().focusLift(1f, onClick = onClick)) {
         Row(Modifier.fillMaxWidth().height(54.dp).background(if (kind == Build164Logic.Kind.NOW) G_NOW_ROW else Color.Transparent)) {
@@ -518,7 +554,7 @@ fun GuideTV(
     val inView by remember { derivedStateOf { rowState.layoutInfo.visibleItemsInfo.map { it.index } } }
     val offsets = remember(channels, inView, Playlists.library.epg, AllServers.version, now / 3_600_000L) {
         val idx = Build166Logic.GuideDays.sample(channels.size, inView)
-        guideAvailableDays(idx.map { channels[it] }, now)
+        guideAvailableDays(idx.map { channels[it] }, now, channels.maxOfOrNull { it.catchupDays } ?: 0)
     }
     val day = Build166Logic.GuideDays.keep(dayOffset, offsets)
     val keys = remember(channels) {
@@ -577,7 +613,7 @@ fun GuideTV(
             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(channels.size, key = { keys[it] }, contentType = { "col" }) { i ->
                 val c = channels[i]
-                GuideTVColumn(c, day, now, colW, onPlay = { onPlay(c) }, onProgram = { p -> program = c to p })
+                GuideTVColumn(c, day, now, colW, onPlay = { onPlay(c) }, onProgram = { p -> guideOpen(c, p) { program = c to p } })
             }
         }
     }
@@ -593,7 +629,8 @@ fun GuideTV(
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun GuideTVColumn(c: Channel, dayOffset: Int, now: Long, width: Dp, onPlay: () -> Unit, onProgram: (EPGProgram) -> Unit) {
-    val all = remember(c.id, Playlists.library.epg, AllServers.version) { guidePrograms(c) }
+    val arch = rememberGuideArchive(c, dayOffset <= 0)
+    val all = remember(c.id, Playlists.library.epg, AllServers.version, arch) { guideMerge(guidePrograms(c), arch) }
     val dayStart = Build164Logic.Days.start(now, dayOffset)
     val progs = remember(all, dayStart) { guideDay(all, dayOffset, now).first }
     val today = dayOffset == 0
@@ -640,7 +677,7 @@ private fun GuideTVColumn(c: Channel, dayOffset: Int, now: Long, width: Dp, onPl
                     GuideTVNowCard(c, p, now, live = today, modifier = m, onClick = onPlay)
                 } else {
                     val p = progs[row.index]
-                    GuideTVLine(p, dim = p.end <= now, modifier = m) { onProgram(p) }
+                    GuideTVLine(p, dim = p.end <= now, replay = p.end <= now && guideReplay(c, p, now), modifier = m) { onProgram(p) }
                 }
             }
         }
@@ -648,7 +685,7 @@ private fun GuideTVColumn(c: Channel, dayOffset: Int, now: Long, width: Dp, onPl
 }
 
 @Composable
-private fun GuideTVLine(p: EPGProgram, dim: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun GuideTVLine(p: EPGProgram, dim: Boolean, replay: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Row(modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }.focusLift(1.04f, onClick = onClick)
         .clip(RoundedCornerShape(6.dp)).background(if (focused) Color.White else Color.Transparent)
@@ -656,7 +693,10 @@ private fun GuideTVLine(p: EPGProgram, dim: Boolean, modifier: Modifier = Modifi
         Text(s2Time(p.start), fontSize = 11.sp, maxLines = 1, modifier = Modifier.width(36.dp),
             color = if (focused) Color.DarkGray else if (dim) G_DIM else Theme.secondary)
         Text(p.displayTitle, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            color = if (focused) Color.Black else if (dim) G_DIM else Color(0xFFE6E6E6))
+            color = if (focused) Color.Black else if (dim) G_DIM else Color(0xFFE6E6E6), modifier = Modifier.weight(1f))
+        // build 178: terug te kijken = klokje
+        if (replay) Icon(Icons.Default.History, L("Watch from the start"), tint = if (focused) Color.DarkGray else Theme.secondary,
+            modifier = Modifier.size(12.dp).align(Alignment.CenterVertically))
     }
 }
 
