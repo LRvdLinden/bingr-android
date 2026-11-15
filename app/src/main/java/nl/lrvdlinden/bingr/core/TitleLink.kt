@@ -43,8 +43,7 @@ data class TitleLink(val kind: Kind?, val tmdbID: Int?, val query: String, val y
                 "tv", "series", "serie", "show" -> Kind.TV
                 else -> null
             }
-            // build 176: herinnering op de releasedatum gebruikt `bingr://title?tmdb=<id>&type=<movie|tv>`
-            val id = (q("id") ?: q("tmdb"))?.toIntOrNull()?.takeIf { it > 0 }
+            val id = q("id")?.toIntOrNull()?.takeIf { it > 0 }
             val query = (q("q") ?: "").take(200)
             val year = q("y")?.take(4)?.toIntOrNull()?.takeIf { it in 1870..2200 }
             if (query.isEmpty() && id == null) return null
@@ -62,15 +61,7 @@ data class TitleLink(val kind: Kind?, val tmdbID: Int?, val query: String, val y
                 pick(hits, pref)?.let { return Resolution.Detail(it) }
             }
             // 2. titel (+ jaar), genormaliseerd zoals de rest van de app (taallabels en jaartal uit de titel weg)
-            // build 176: alleen een TMDB-id (herinnering op de releasedatum) en niet in de bibliotheek: de TMDB-pagina
-            // (met Mijn lijst); de titel komt daar uit TMDB
-            if (link.query.isEmpty() && link.tmdbID != null) {
-                val show = link.kind == Kind.TV
-                val known = DiscoverKnown.item(DiscoverItem.externalID(link.tmdbID, show))
-                val t = known?.target ?: if (show) DetailTarget.SeriesT(Series(id = DiscoverItem.externalID(link.tmdbID, true), title = ""))
-                    else DetailTarget.MovieT(Movie(id = DiscoverItem.externalID(link.tmdbID, false), title = ""))
-                return Resolution.Detail(t)
-            }
+            if (link.query.isEmpty() && link.tmdbID != null && link.kind != null) return Resolution.Detail(external(link, link.tmdbID))
             val wanted = Net.normTitle(link.query)
             val wantedClean = Net.normTitle(TitleCleaner.parse(ContentLanguage.displayTitle(link.query)).title)
             if (wanted.length <= 1 && wantedClean.length <= 1) return Resolution.Search(link.query)
@@ -93,7 +84,19 @@ data class TitleLink(val kind: Kind?, val tmdbID: Int?, val query: String, val y
             pick(strong, pref)?.let { return Resolution.Detail(it) }
             // zonder (passend) jaar alleen als het er precies één is: anders kan het een andere titel met dezelfde naam zijn
             if (strong.isEmpty() && weak.size == 1) return Resolution.Detail(weak[0])
+            // build 176: niet op een server maar wel een TMDB-id en soort (herinnering op de releasedatum, e-mail): de
+            // TMDB-detailpagina met Mijn lijst in plaats van het zoekscherm
+            if (link.tmdbID != null && link.kind != null) return Resolution.Detail(external(link, link.tmdbID))
             return Resolution.Search(link.query)
+        }
+
+        /** Build 176: de TMDB-pagina van een titel die niet in de bibliotheek staat. */
+        private fun external(link: TitleLink, tmdb: Int): DetailTarget {
+            val show = link.kind == Kind.TV
+            val id = DiscoverItem.externalID(tmdb, show)
+            DiscoverKnown.item(id)?.let { return it.target }
+            return if (show) DetailTarget.SeriesT(Series(id = id, title = link.query, year = link.year))
+            else DetailTarget.MovieT(Movie(id = id, title = link.query, year = link.year))
         }
 
         /**

@@ -478,9 +478,10 @@ object Reminders {
         return true
     }
 
-    /** Detailpagina van een releaseherinnering: `bingr://title?tmdb=<id>&type=<movie|tv>`. */
+    /** Detailpagina van een releaseherinnering: de titel-link van build 120, `bingr://title?type=<movie|tv>&id=<tmdb-id>&q=<titel>`. */
     fun releaseLink(r: ProgramReminder): android.net.Uri = android.net.Uri.Builder().scheme("bingr").authority("title")
-        .appendQueryParameter("tmdb", (r.tmdb ?: 0).toString()).appendQueryParameter("type", r.mediaType ?: "movie").build()
+        .appendQueryParameter("type", r.mediaType ?: "movie").appendQueryParameter("id", (r.tmdb ?: 0).toString())
+        .appendQueryParameter("q", r.title.substringBefore(" · ")).build()
 
     /** Tweede regel van een sportmelding: "Eredivisie · Sport 1. Tik om live te kijken." */
     fun sportLine(r: ProgramReminder): String =
