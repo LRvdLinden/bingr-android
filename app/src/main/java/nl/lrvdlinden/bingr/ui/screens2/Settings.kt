@@ -401,7 +401,7 @@ fun SettingsScreen() {
                     // build 88: abonnement (Gratis / Lifetime); tik = vergelijking en upgraden
                     Entitlements.current?.let { e ->
                         S2NavRow(L("Subscription"), leading = { LifetimeMark(tvs(20)) },
-                            value = if (e.isFree) L("Free") else L("Lifetime")) { Upgrade.show(null) }
+                            value = Premium.subscriptionValue(e.isFree)) { Upgrade.show(null) }
                     }
                 }
                 // build 146: Support als tab in Instellingen (tickets, reageren, nieuw ticket, diagnose)
@@ -898,7 +898,7 @@ fun SettingsScreen() {
                     // build 88: abonnement (Gratis / Lifetime); tik = vergelijking en upgraden
                     Entitlements.current?.let { e ->
                         S2Row(L("Subscription"), leading = { LifetimeMark(tvs(20)) },
-                            value = if (e.isFree) L("Free") else L("Lifetime"), onClick = { Upgrade.show(null) })
+                            value = Premium.subscriptionValue(e.isFree), onClick = { Upgrade.show(null) })
                     }
                     if (!AppState.isTV) S2Row(L("Link a TV"), icon = Icons.Default.Tv, onClick = { linkingTv = true })
                     S2Row(L("Devices"), icon = Icons.Default.Devices, onClick = { showDevices = true })

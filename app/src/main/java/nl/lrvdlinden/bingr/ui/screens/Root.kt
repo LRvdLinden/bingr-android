@@ -97,7 +97,7 @@ fun BingrRoot() {
             FullLayer { TooManyDevicesScreen(limit) }
         }
         if (activate) {
-            FullLayer { ActivateLifetimeScreen() }
+            FullLayer { if (Activation.premiumPaywall) PremiumPaywallScreen() else ActivateLifetimeScreen() }
         }
         // beheerberichten komen als pushmelding (docs/PUSH.md in iptv-ios-appletv); de in-app mededelingen van build 62 zijn weg.
         // In het hoofdscherm: één keer uitleg + toestemming voor meldingen (Android 13+), daarna een tik op een melding afhandelen

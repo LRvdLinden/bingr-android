@@ -42,6 +42,8 @@ object Entitlements {
         val access: String = Build167Logic.FULL,
         /** Build 167: blok `lifetime_only` (alleen als de server het aan heeft staan). */
         val lifetimeOnly: Build167Logic.LifetimeOnly? = null,
+        /** Build 181: blok `premium` (Bingr Premium); null = oudere server (alles zoals build 180). */
+        val premium: Build181Logic.Premium? = null,
     ) {
         val isFree: Boolean get() = plan == "free"
     }
@@ -112,6 +114,16 @@ object Entitlements {
 
     /** Build 167: "full" of "activate"; onbekend (geen cache, oudere server) = "full". */
     val access: String get() = Build167Logic.Access.parse(current?.access)
+    /** Build 181: `premium` (null = oudere server of nog nooit opgehaald). */
+    val premium: Build181Logic.Premium? get() = current?.premium
+    /** Build 181: de laatste poging om het abonnement op te halen kreeg geen antwoord (offline) en er is sinds het starten
+     *  nog geen antwoord geweest. Dan blokkeert een opgezegd, verlopen abonnement ook zonder server (§10). */
+    var offline by mutableStateOf(false)
+        private set
+    /** Build 181: wat de app toont (blokkeren, paywall, beheren); pure logica in Build181Logic.screen. */
+    val premiumScreen: Build181Logic.Screen
+        get() = Build181Logic.screen(access, premium, System.currentTimeMillis(), offline)
+
     /** Build 167: `lifetime_only` (null = uit of oudere server). */
     val lifetimeOnly: Build167Logic.LifetimeOnly? get() = current?.lifetimeOnly
     /** Build 167: eigen kortingscode (alleen gratis account, ongebruikt en nog geldig); Android mag hem tonen. */
@@ -154,7 +166,7 @@ object Entitlements {
     }
 
     fun signedOut() {
-        owner = null; current = null; lastFetch = 0L
+        owner = null; current = null; lastFetch = 0L; offline = false
         job?.cancel(); job = null
         Activation.cleared()
     }
@@ -189,6 +201,17 @@ object Entitlements {
             code = lo.jS("code"), codeValidUntil = lo.jS("code_valid_until"), discountPct = lo.jI("discount_pct"),
             trialUntil = lo.jS("trial_until"), parseTime = { Net.parseISODate(it) },
         )
+        // build 181: Bingr Premium (contract docs/ACCOUNT.md, "Build 181: Bingr Premium" §4)
+        val pm = o["premium"] as? JsonObject
+        val pmPrices = pm?.get("prices") as? JsonObject
+        val premium = Build181Logic.parse(
+            present = pm != null, enabled = pm.jB("enabled"), active = pm.jB("active"), source = pm.jS("source"), plan = pm.jS("plan"),
+            status = pm.jS("status"), expiresAt = pm.jS("expires_at"), trialUntil = pm.jS("trial_until"), willRenew = pm.jB("will_renew"),
+            required = pm.jB("required"), trialEligible = pm.jB("trial_eligible"), legacyOffer = pm.jB("legacy_offer"),
+            manage = pm.jS("manage"), test = pm.jB("test"),
+            priceMonth = pmPrices.jI("month"), priceHalf = pmPrices.jI("half"), priceYear = pmPrices.jI("year"),
+            priceLifetime = pmPrices.jI("lifetime"), parseTime = { Net.parseISODate(it) },
+        )
         val servers = if (limits?.containsKey("servers") == true) limits.jI("servers") else (if (free) FREE_SERVERS else null)
         return Info(
             plan = plan,
@@ -211,6 +234,7 @@ object Entitlements {
             priceEn = upgrade.jS("price_en")?.takeIf { it.isNotBlank() } ?: DEFAULT_PRICE_EN,
             access = Build167Logic.Access.parse(o.jS("access")),
             lifetimeOnly = lifetimeOnly,
+            premium = premium,
         )
     }
 
@@ -220,6 +244,7 @@ object Entitlements {
         if (owner == null) owner = Account.userId
         val wasFree = current?.isFree
         current = info
+        offline = false
         lastFetch = System.currentTimeMillis()
         save(j!!)
         if (wasFree == true && !info.isFree) Upgrade.upgraded()
@@ -258,7 +283,12 @@ object Entitlements {
     suspend fun fetch(): Boolean {
         if (!Account.isSignedIn || !Account.configured) return false
         onAccount(Account.userId)
-        val j = Account.entitlementsJson(platform) ?: return false
+        val j = Account.entitlementsJson(platform)
+        if (j == null) {
+            // build 181: geen antwoord en sinds het starten nog nooit een: offline (zie [offline])
+            if (lastFetch == 0L) offline = true
+            return false
+        }
         return apply(j)
     }
 

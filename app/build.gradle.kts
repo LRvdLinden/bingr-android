@@ -119,6 +119,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.15.0")
+    // build 181: Bingr Premium, Stripe Checkout en de Customer Portal in een Custom Tab
+    implementation("androidx.browser:browser:1.8.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     // build 97: lifecycle-viewmodel-compose weg (nergens gebruikt)

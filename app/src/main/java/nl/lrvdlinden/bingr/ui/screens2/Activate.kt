@@ -71,7 +71,15 @@ object Activation {
 
     /** Het scherm Activeer Lifetime staat erover. */
     val required: Boolean
-        get() = Build167Logic.Access.mustActivate(Account.isSignedIn && Account.configured, Entitlements.access, blocked)
+        get() {
+            val signed = Account.isSignedIn && Account.configured
+            if (Build167Logic.Access.mustActivate(signed, Entitlements.access, blocked)) return true
+            // build 181: offline met een opgezegd abonnement waarvan de periode voorbij is (tot de server weer antwoordt)
+            return signed && Entitlements.premiumScreen.blocked
+        }
+
+    /** Build 181: Bingr Premium doet mee voor dit account: het scherm Kies je plan in plaats van Activeer Lifetime. */
+    val premiumPaywall: Boolean get() = Entitlements.premium?.enabled == true
 
     fun streamBlocked() {
         blocked = true

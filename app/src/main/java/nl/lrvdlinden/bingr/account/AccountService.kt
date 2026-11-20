@@ -193,6 +193,36 @@ object Account {
         return if (r.ok) r.json else null
     }
 
+    /**
+     * Build 181 (Bingr Premium, docs/ACCOUNT.md §6): ingelogde `billing`-aanroepen. Antwoord: (url of null, foutcode of null);
+     * (null, null) = geen antwoord (offline).
+     */
+    data class BillingLink(val url: String?, val error: String?)
+
+    /** Stripe Checkout voor [plan] (`month`|`half`|`year`|`lifetime`); [waiver] = vinkje directe levering. */
+    suspend fun billingCheckout(plan: String, lang: String, waiver: Boolean): BillingLink {
+        val r = authedCall("/functions/v1/billing", buildJsonObject {
+            put("action", "checkout"); put("plan", plan); put("lang", lang); put("waiver", waiver); put("platform", Entitlements.platform)
+        }) ?: return BillingLink(null, null)
+        val url = r.json.jS("url")
+        return if (r.ok && Build181Logic.Links.isCheckout(url)) BillingLink(url, null) else BillingLink(null, r.errorCode ?: "error")
+    }
+
+    /** Stripe Customer Portal (Abonnement beheren). */
+    suspend fun billingPortal(lang: String): BillingLink {
+        val r = authedCall("/functions/v1/billing", buildJsonObject {
+            put("action", "portal"); put("lang", lang); put("return_url", Build181Logic.Links.PORTAL_RETURN)
+        }) ?: return BillingLink(null, null)
+        val url = r.json.jS("url")
+        return if (r.ok && Build181Logic.Links.isPortal(url)) BillingLink(url, null) else BillingLink(null, r.errorCode ?: "error")
+    }
+
+    /** Na terugkeer van Checkout of de portal: Stripe opnieuw laten ophalen; geeft `entitlements` (of null). */
+    suspend fun billingRefreshJson(platform: String): JsonElement? {
+        val r = authedCall("/functions/v1/billing", buildJsonObject { put("action", "refresh"); put("platform", platform) }) ?: return null
+        return if (r.ok) r.json.jO("entitlements") else null
+    }
+
     /** Melding bij een geblokkeerd account (build 82, = iOS). */
     val bannedMessage: String
         get() = L("Your account has been blocked. You received an email with the reason and until when. Questions? Go to support.bingr.online.")
@@ -975,11 +1005,13 @@ object Account {
     data class SourcesData(val sources: List<JsonObject>, val mainSourceID: String?, val updatedAt: String?)
 
     /** device-auth-aanvraag met een geldig access_token; bij 401 één keer vernieuwen. null = netwerkfout of geen sessie. */
-    private suspend fun authedDeviceAuth(body: JsonElement): Reply? {
+    private suspend fun authedDeviceAuth(body: JsonElement): Reply? = authedCall("/functions/v1/device-auth", body)
+
+    private suspend fun authedCall(path: String, body: JsonElement): Reply? {
         if (!isSignedIn || !configured) return null
         var token = runCatching { validAccessToken() }.getOrNull() ?: return null
         repeat(2) { attempt ->
-            val r = try { post("/functions/v1/device-auth", body, bearer = token) } catch (e: AccountException) { return null }
+            val r = try { post(path, body, bearer = token) } catch (e: AccountException) { return null }
             // build 97: geblokkeerd → uitloggen met de melding (zoals bij de heartbeat)
             if (isBanned(r)) { bannedSignOut(); return null }
             if (r.code != 401 || attempt == 1) return r

@@ -159,12 +159,16 @@ fun UpgradeDialogHost() {
     }
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         val fr = remember { FocusRequester() }
-        val thanks = Upgrade.thanks || Entitlements.isLifetime && Upgrade.feature == null
+        // build 181: Bingr Premium: een abonnement (naam, verlengt op, beheren) of, als de groep meedoet, de plannen
+        val pm = Entitlements.premium
+        val premiumSub = Build181Logic.isSubscription(pm)
+        val premiumOffer = !premiumSub && Build181Logic.offerPlans(pm) && Entitlements.upgradeLink
+        val thanks = !premiumSub && (Upgrade.thanks || Entitlements.isLifetime && Upgrade.feature == null)
         val link = Entitlements.upgradeLink
         val showQR = link && (tv || Upgrade.forceQR) && !thanks
         Box(
             Modifier.padding(horizontal = 16.dp, vertical = 24.dp)
-                .widthIn(min = 280.dp, max = if (showQR && tv) 900.dp else 520.dp)
+                .widthIn(min = 280.dp, max = if ((showQR || premiumOffer) && tv) 960.dp else 520.dp)
                 .clip(RoundedCornerShape(16.dp)).background(Theme.elevated)
         ) {
             Column(
@@ -175,9 +179,21 @@ fun UpgradeDialogHost() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     LifetimeMark(tvs(30))
                     Spacer(Modifier.width(tvs(10)))
-                    Text(L("Bingr Lifetime"), color = Color.White, fontSize = tsp(22), fontWeight = FontWeight.Bold)
+                    Text(if (premiumOffer) L("Choose your plan") else if (premiumSub) L("Subscription") else L("Bingr Lifetime"),
+                        color = Color.White, fontSize = tsp(22), fontWeight = FontWeight.Bold)
                 }
-                if (thanks) {
+                if (premiumSub && pm != null) {
+                    PremiumStatusBlock(pm)
+                    PlanComparison()
+                    NetflixButton(L("Close"), Icons.Default.Close, kind = NetflixKind.PRIMARY,
+                        modifier = Modifier.fillMaxWidth().focusRequester(fr)) { close() }
+                } else if (premiumOffer && pm != null) {
+                    Upgrade.feature?.let { Text(Upgrade.reason(it).replace("Lifetime", "Premium"), color = Theme.secondary,
+                        fontSize = tsp(14), textAlign = TextAlign.Center) }
+                    PremiumOffer(pm)
+                    NetflixButton(L("Close"), Icons.Default.Close, kind = NetflixKind.SECONDARY,
+                        modifier = Modifier.fillMaxWidth().focusRequester(fr)) { close() }
+                } else if (thanks) {
                     Text(L("You have Bingr Lifetime. Thank you!"), color = Color.White, fontSize = tsp(15), textAlign = TextAlign.Center)
                     NetflixButton(L("Close"), Icons.Default.Check, kind = NetflixKind.PRIMARY,
                         modifier = Modifier.fillMaxWidth().focusRequester(fr)) { close() }
