@@ -1,0 +1,537 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.10.2/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :app:buildKotlinToolingMetadata
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:generateReleaseBuildConfig
+> Task :app:generateReleaseResValues
+> Task :app:processReleaseGoogleServices
+> Task :app:checkReleaseAarMetadata
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:generateReleaseResources
+> Task :app:packageReleaseResources
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease
+> Task :app:parseReleaseLocalResources
+> Task :app:mergeReleaseResources
+
+> Task :app:processReleaseMainManifest
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:156:9-159:34 Warning:
+	service#androidx.work.impl.foreground.SystemForegroundService@android:foregroundServiceType was tagged at AndroidManifest.xml:156 to remove other declarations but no other declaration present
+
+> Task :app:processReleaseManifest
+> Task :app:javaPreCompileRelease
+> Task :app:extractProguardFiles
+> Task :app:mergeReleaseJniLibFolders
+> Task :app:processReleaseManifestForPackage
+> Task :app:mergeReleaseNativeLibs
+
+> Task :app:stripReleaseDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so, libc++_shared.so, libvlc.so, libvlcjni.so.
+
+> Task :app:processReleaseResources
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:extractReleaseNativeSymbolTables
+> Task :app:mergeReleaseArtProfile
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:mergeReleaseStartupProfile
+> Task :app:mergeReleaseShaders
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseAssets
+> Task :app:compressReleaseAssets
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:collectReleaseDependencies
+> Task :app:sdkReleaseDependencyData
+> Task :app:validateSigningRelease
+> Task :app:writeReleaseAppMetadata
+> Task :app:writeReleaseSigningConfigVersions
+> Task :app:optimizeReleaseResources
+> Task :app:compileReleaseKotlin
+w: file:///home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/Diagnostics.kt:170:39 Condition is always 'true'.
+w: file:///home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/Localization.kt:93:90 'constructor(p0: String!): Locale' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/parental/ParentalAndReminders.kt:104:30 Condition is always 'true'.
+w: file:///home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/LiveSession179.kt:113:42 'constructor(p0: Int, p1: CharSequence!, p2: PendingIntent?): Notification.Action.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/TrackPreferences.kt:110:17 'constructor(p0: String!): Locale' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/TrackPreferences.kt:167:21 'constructor(p0: String!): Locale' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/TrackPreferences.kt:167:53 'constructor(p0: String!): Locale' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/SupportScreens.kt:94:58 'val Icons.Filled.MenuBook: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.MenuBook.
+
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:mergeReleaseGeneratedProguardFiles
+> Task :app:processReleaseJavaRes
+> Task :app:expandReleaseArtProfileWildcards
+> Task :app:mergeReleaseJavaResource
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:minifyReleaseWithR8
+> Task :app:lintVitalReportRelease SKIPPED
+> Task :app:lintVitalRelease SKIPPED
+> Task :app:compileReleaseArtProfile
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+> Task :app:generateReleaseLintReportModel
+> Task :app:preReleaseUnitTestBuild UP-TO-DATE
+> Task :app:bundleReleaseClassesToCompileJar
+> Task :app:generateReleaseUnitTestLintModel
+> Task :app:lintAnalyzeReleaseUnitTest
+> Task :app:lintAnalyzeRelease
+
+> Task :app:lintReportRelease
+Wrote HTML report to file:///home/runner/work/bingr-android/bingr-android/app/build/reports/lint-results-release.html
+
+> Task :app:lintRelease
+
+> Task :app:copyReleaseLintReports
+Copying lint text report to /home/runner/work/bingr-android/bingr-android/app/build/reports/lint-results-release.txt
+
+> Task :app:printLintReport
+=== Lint ===
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens/HeroTrailer.kt:265: Warning: Consider using WebViewCompat.getCurrentWebViewPackage instead which will support more devices. [WebViewApiAvailability]
+            HeroTrailer.log("WebView ${WebView.getCurrentWebViewPackage()?.let { it.packageName + " " + it.versionName } ?: "?"}")
+                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/Prefs.kt:49: Warning: Consider using apply() instead; commit writes its data to persistent storage immediately, whereas apply will handle it in the background [ApplySharedPref]
+        }.commit()
+          ~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/StartDiagnostics.kt:151: Warning: Consider using apply() instead; commit writes its data to persistent storage immediately, whereas apply will handle it in the background [ApplySharedPref]
+            if (sync) e.commit() else e.apply()
+                        ~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/account/AccountService.kt:547: Warning: Field requires API level 25 (current min is 24): android.provider.Settings.Global#DEVICE_NAME [InlinedApi]
+            android.provider.Settings.Global.getString(AppState.appContext.contentResolver, android.provider.Settings.Global.DEVICE_NAME)
+                                                                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:32: Error: Missing intent-filter for action android.media.action.MEDIA_PLAY_FROM_SEARCH. [MissingIntentFilterForMediaSearch]
+    <application
+    ^
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/LiveSession179.kt:47: Error: This class does not override onPlayFromSearch from MediaSession.Callback The method should be overridden and implemented to support Voice search on Android Auto. [MissingOnPlayFromSearch]
+        s.setCallback(object : MediaSession.Callback() {
+                      ~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:161: Error: <nl.lrvdlinden.bingr.DownloadJobService> requires API level 34 (current min is 24) [NewApi]
+        <service
+        ^
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/Build154Logic.kt:246: Error: Call requires API level 26, or core library desugaring (current min is 24): java.util.Base64#getEncoder [NewApi]
+        private fun b64(s: String) = Base64.getEncoder().encodeToString(s.toByteArray(Charsets.UTF_8))
+                                            ~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/Build154Logic.kt:246: Error: Call requires API level 26, or core library desugaring (current min is 24): java.util.Base64.Encoder#encodeToString [NewApi]
+        private fun b64(s: String) = Base64.getEncoder().encodeToString(s.toByteArray(Charsets.UTF_8))
+                                                         ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/Build154Logic.kt:247: Error: Call requires API level 26, or core library desugaring (current min is 24): java.util.Base64#getDecoder [NewApi]
+        private fun unb64(s: String) = String(Base64.getDecoder().decode(s), Charsets.UTF_8)
+                                                     ~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/Build154Logic.kt:247: Error: Call requires API level 26, or core library desugaring (current min is 24): java.util.Base64.Decoder#decode [NewApi]
+        private fun unb64(s: String) = String(Base64.getDecoder().decode(s), Charsets.UTF_8)
+                                                                  ~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/trakt/Trakt.kt:745: Error: Call requires API level 26, or core library desugaring (current min is 24): java.time.Instant#ofEpochMilli [NewApi]
+        java.time.Instant.ofEpochMilli(at).toString()
+                          ~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/xml/radio_widget_info.xml:6: Warning: Attribute targetCellWidth is only used in API level 31 and higher (current min is 24) [UnusedAttribute]
+    android:targetCellWidth="4"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/xml/radio_widget_info.xml:7: Warning: Attribute targetCellHeight is only used in API level 31 and higher (current min is 24) [UnusedAttribute]
+    android:targetCellHeight="2"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/Radio.kt:253: Error: Must be one of: LibraryResult.RESULT_SUCCESS, SessionError.INFO_CANCELLED, SessionError.ERROR_UNKNOWN, SessionError.ERROR_INVALID_STATE, SessionError.ERROR_BAD_VALUE, SessionError.ERROR_PERMISSION_DENIED, SessionError.ERROR_IO, SessionError.ERROR_SESSION_DISCONNECTED, SessionError.ERROR_NOT_SUPPORTED, SessionError.ERROR_SESSION_AUTHENTICATION_EXPIRED, SessionError.ERROR_SESSION_PREMIUM_ACCOUNT_REQUIRED, SessionError.ERROR_SESSION_CONCURRENT_STREAM_LIMIT, SessionError.ERROR_SESSION_PARENTAL_CONTROL_RESTRICTED, SessionError.ERROR_SESSION_NOT_AVAILABLE_IN_REGION, SessionError.ERROR_SESSION_SKIP_LIMIT_REACHED, SessionError.ERROR_SESSION_SETUP_REQUIRED [WrongConstant]
+            return Futures.immediateFuture(if (c != null) LibraryResult.ofItem(station(c), null) else LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE))
+                                                                                                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Guide164.kt:246: Warning: Avoid passing null as the view root (needed to resolve layout parameters on the inflated layout's root element) [InflateParams]
+            (LayoutInflater.from(ctx).inflate(R.layout.guide_live_view, null) as PlayerView).apply {
+                                                                        ~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:64: Warning: Consider splitting data tag into multiple tags with individual attributes to avoid confusion [IntentFilterUniqueDataAttributes]
+                <data android:scheme="bingr" android:host="changelog" />
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:65: Warning: Consider splitting data tag into multiple tags with individual attributes to avoid confusion [IntentFilterUniqueDataAttributes]
+                <data android:scheme="bingr" android:host="live" />
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:67: Warning: Consider splitting data tag into multiple tags with individual attributes to avoid confusion [IntentFilterUniqueDataAttributes]
+                <data android:scheme="bingr" android:host="title" />
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:69: Warning: Consider splitting data tag into multiple tags with individual attributes to avoid confusion [IntentFilterUniqueDataAttributes]
+                <data android:scheme="bingr" android:host="support" />
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:71: Warning: Consider splitting data tag into multiple tags with individual attributes to avoid confusion [IntentFilterUniqueDataAttributes]
+                <data android:scheme="bingr" android:host="continue" />
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:72: Warning: Consider splitting data tag into multiple tags with individual attributes to avoid confusion [IntentFilterUniqueDataAttributes]
+                <data android:scheme="bingr" android:host="open" />
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:8: Warning: Requiring Wifi permissions limits app availability on TVs that support only Ethernet [LeanbackUsesWifi]
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:32: Warning: An activity in this app supports picture-in-picture and the targetSdkVersion is 31 or above; it is therefore strongly recommended to call both setAutoEnterEnabled(true) and setSourceRectHint(...) [PictureInPictureIssue]
+    <application
+     ~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/Downloads.kt:580: Warning: Specify a valid range of job id's for WorkManager to use. [SpecifyJobSchedulerIdRange from androidx.work]
+class DownloadJobService : JobService() {
+      ~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:120: Warning: A newer version of androidx.activity:activity-compose than 1.9.3 is available: 1.13.0 [GradleDependency]
+    implementation("androidx.activity:activity-compose:1.9.3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:121: Warning: A newer version of androidx.core:core-ktx than 1.15.0 is available: 1.19.1 [GradleDependency]
+    implementation("androidx.core:core-ktx:1.15.0")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:123: Warning: A newer version of androidx.browser:browser than 1.8.0 is available: 1.10.0 [GradleDependency]
+    implementation("androidx.browser:browser:1.8.0")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:124: Warning: A newer version of androidx.lifecycle:lifecycle-runtime-ktx than 2.8.7 is available: 2.11.1 [GradleDependency]
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:125: Warning: A newer version of androidx.lifecycle:lifecycle-runtime-compose than 2.8.7 is available: 2.11.1 [GradleDependency]
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:127: Warning: A newer version of androidx.lifecycle:lifecycle-process than 2.8.7 is available: 2.11.1 [GradleDependency]
+    implementation("androidx.lifecycle:lifecycle-process:2.8.7")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:136: Warning: A newer version of androidx.media3:media3-exoplayer than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-exoplayer:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:137: Warning: A newer version of androidx.media3:media3-exoplayer-hls than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-exoplayer-hls:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:138: Warning: A newer version of androidx.media3:media3-exoplayer-dash than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-exoplayer-dash:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:139: Warning: A newer version of androidx.media3:media3-ui than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-ui:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:141: Warning: A newer version of androidx.media3:media3-session than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-session:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:143: Warning: A newer version of androidx.media3:media3-datasource than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-datasource:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:144: Warning: A newer version of androidx.media3:media3-database than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-database:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:145: Warning: A newer version of androidx.media3:media3-datasource-okhttp than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-datasource-okhttp:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:148: Warning: A newer version of androidx.media3:media3-datasource-cronet than 1.5.1 is available: 1.11.1 [GradleDependency]
+    implementation("androidx.media3:media3-datasource-cronet:$media3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:149: Warning: A newer version of com.google.android.gms:play-services-cronet than 18.1.0 is available: 18.1.1 [GradleDependency]
+    implementation("com.google.android.gms:play-services-cronet:18.1.0")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:152: Warning: A newer version of androidx.tvprovider:tvprovider than 1.0.0 is available: 1.1.0 [GradleDependency]
+    implementation("androidx.tvprovider:tvprovider:1.0.0")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:155: Warning: A newer version of com.google.android.gms:play-services-cast-framework than 21.5.0 is available: 23.0.0 [GradleDependency]
+    implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:156: Warning: A newer version of androidx.mediarouter:mediarouter than 1.7.0 is available: 1.9.0 [GradleDependency]
+    implementation("androidx.mediarouter:mediarouter:1.7.0")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:159: Warning: A newer version of androidx.activity:activity-ktx than 1.9.3 is available: 1.13.0 [GradleDependency]
+    implementation("androidx.activity:activity-ktx:1.9.3")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:162: Warning: A newer version of androidx.work:work-runtime-ktx than 2.9.1 is available: 2.12.0 [GradleDependency]
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/build.gradle.kts:165: Warning: A newer version of com.google.firebase:firebase-bom than 33.7.0 is available: 35.2.0 [GradleDependency]
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:91: Error: WatchNextProgram.PROJECTION can only be accessed from within the same library group (referenced groupId=androidx.tvprovider from groupId=Bingr) [RestrictedApi]
+        cr.query(TvContractCompat.WatchNextPrograms.CONTENT_URI, WatchNextProgram.PROJECTION, null, null, null)?.use { c ->
+                                                                                  ~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:94: Error: BasePreviewProgram.getInternalProviderId can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                existing += Logic.Existing(p.id, p.internalProviderId, p.lastEngagementTimeUtcMillis, p.isBrowsable)
+                                                   ~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:94: Error: BasePreviewProgram.getInternalProviderId can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                existing += Logic.Existing(p.id, p.internalProviderId, p.lastEngagementTimeUtcMillis, p.isBrowsable)
+                                                   ~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:94: Error: BasePreviewProgram.isBrowsable can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                existing += Logic.Existing(p.id, p.internalProviderId, p.lastEngagementTimeUtcMillis, p.isBrowsable)
+                                                                                                        ~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:94: Error: BasePreviewProgram.isBrowsable can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                existing += Logic.Existing(p.id, p.internalProviderId, p.lastEngagementTimeUtcMillis, p.isBrowsable)
+                                                                                                        ~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:94: Error: BaseProgram.getId can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                existing += Logic.Existing(p.id, p.internalProviderId, p.lastEngagementTimeUtcMillis, p.isBrowsable)
+                                             ~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:94: Error: BaseProgram.getId can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                existing += Logic.Existing(p.id, p.internalProviderId, p.lastEngagementTimeUtcMillis, p.isBrowsable)
+                                             ~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:107: Error: Builder.setType can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+        b.setType(if (c.isMovie) TvContractCompat.WatchNextPrograms.TYPE_MOVIE else TvContractCompat.WatchNextPrograms.TYPE_TV_EPISODE)
+          ~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:107: Error: Builder.setType can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+        b.setType(if (c.isMovie) TvContractCompat.WatchNextPrograms.TYPE_MOVIE else TvContractCompat.WatchNextPrograms.TYPE_TV_EPISODE)
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:107: Error: PreviewProgramColumns.TYPE_MOVIE can only be accessed from within the same library group (referenced groupId=androidx.tvprovider from groupId=Bingr) [RestrictedApi]
+        b.setType(if (c.isMovie) TvContractCompat.WatchNextPrograms.TYPE_MOVIE else TvContractCompat.WatchNextPrograms.TYPE_TV_EPISODE)
+                                                                    ~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:107: Error: PreviewProgramColumns.TYPE_TV_EPISODE can only be accessed from within the same library group (referenced groupId=androidx.tvprovider from groupId=Bingr) [RestrictedApi]
+        b.setType(if (c.isMovie) TvContractCompat.WatchNextPrograms.TYPE_MOVIE else TvContractCompat.WatchNextPrograms.TYPE_TV_EPISODE)
+                                                                                                                       ~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:110: Error: Builder.setTitle can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+            .setTitle(ContentLanguage.displayTitle(c.title))
+             ~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:111: Error: Builder.setDescription can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+            .setDescription(c.subtitle)
+             ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:112: Error: Builder.setPosterArtAspectRatio can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+            .setPosterArtAspectRatio(TvContractCompat.PreviewProgramColumns.ASPECT_RATIO_2_3)
+             ~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:112: Error: Builder.setPosterArtAspectRatio can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+            .setPosterArtAspectRatio(TvContractCompat.PreviewProgramColumns.ASPECT_RATIO_2_3)
+                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:112: Error: PreviewProgramColumns.ASPECT_RATIO_2_3 can only be accessed from within the same library group (referenced groupId=androidx.tvprovider from groupId=Bingr) [RestrictedApi]
+            .setPosterArtAspectRatio(TvContractCompat.PreviewProgramColumns.ASPECT_RATIO_2_3)
+                                                                            ~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:113: Error: Builder.setIntentUri can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+            .setIntentUri(Uri.parse(Logic.continueLink(c.id, c.sourceID, c.title, profile)))
+             ~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:114: Error: Builder.setInternalProviderId can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+            .setInternalProviderId(key)
+             ~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:115: Error: Builder.setPosterArtUri can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+        c.artwork?.takeIf { it.startsWith("http") }?.let { b.setPosterArtUri(Uri.parse(it)) }
+                                                             ~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:116: Error: Builder.setLastPlaybackPositionMillis can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+        if (posMs in 1..Int.MAX_VALUE.toLong()) b.setLastPlaybackPositionMillis(posMs.toInt())
+                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:117: Error: Builder.setDurationMillis can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+        if (durMs in 1..Int.MAX_VALUE.toLong()) b.setDurationMillis(durMs.toInt())
+                                                  ~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:173: Error: Builder.setType can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                    .setType(TvContractCompat.PreviewPrograms.TYPE_CHANNEL)
+                     ~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:173: Error: Builder.setType can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                    .setType(TvContractCompat.PreviewPrograms.TYPE_CHANNEL)
+                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:173: Error: PreviewProgramColumns.TYPE_CHANNEL can only be accessed from within the same library group (referenced groupId=androidx.tvprovider from groupId=Bingr) [RestrictedApi]
+                    .setType(TvContractCompat.PreviewPrograms.TYPE_CHANNEL)
+                                                              ~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:174: Error: Builder.setTitle can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                    .setTitle(ContentLanguage.displayTitle(ch.name))
+                     ~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:175: Error: Builder.setLive can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                    .setLive(true)
+                     ~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:176: Error: Builder.setPosterArtAspectRatio can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                    .setPosterArtAspectRatio(TvContractCompat.PreviewProgramColumns.ASPECT_RATIO_16_9)
+                     ~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:176: Error: Builder.setPosterArtAspectRatio can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                    .setPosterArtAspectRatio(TvContractCompat.PreviewProgramColumns.ASPECT_RATIO_16_9)
+                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:176: Error: PreviewProgramColumns.ASPECT_RATIO_16_9 can only be accessed from within the same library group (referenced groupId=androidx.tvprovider from groupId=Bingr) [RestrictedApi]
+                    .setPosterArtAspectRatio(TvContractCompat.PreviewProgramColumns.ASPECT_RATIO_16_9)
+                                                                                    ~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:177: Error: Builder.setPosterArtUri can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                    .setPosterArtUri(Uri.parse(ch.logo?.takeIf { it.startsWith("http") } ?: "android.resource://${app.packageName}/drawable/tv_banner"))
+                     ~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:178: Error: Builder.setIntentUri can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                    .setIntentUri(Uri.parse(Logic.liveLink(ch.id, profile)))
+                     ~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:179: Error: Builder.setInternalProviderId can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                    .setInternalProviderId(ch.id)
+                     ~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:181: Error: Builder.setDescription can only be called from within the same library (androidx.tvprovider:tvprovider) [RestrictedApi]
+                now?.let { b.setDescription(it) }
+                             ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/SourceCheck.kt:309: Warning: Modifier factory functions should be extensions on Modifier [ModifierFactoryExtensionFunction from androidx.compose.ui]
+private fun checkRowModifier(): Modifier {
+            ~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens/Categories.kt:467: Warning: Optional Modifier parameter should have a default value of Modifier [ModifierParameter from androidx.compose.ui]
+    modifier: Modifier = Modifier.fillMaxWidth(), compact: Boolean = false, chips: String = "", onLongClick: (() -> Unit)? = null,
+    ~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Guide164.kt:688: Warning: Modifier parameter should be the first optional parameter [ModifierParameter from androidx.compose.ui]
+private fun GuideTVLine(p: EPGProgram, dim: Boolean, replay: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
+                                                                              ~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerPanels.kt:121: Warning: Modifier parameter should be the first optional parameter [ModifierParameter from androidx.compose.ui]
+fun PlayerSheetItem(enabled: Boolean = true, onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
+                                                                  ~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerPanels.kt:146: Warning: Modifier parameter should be the first optional parameter [ModifierParameter from androidx.compose.ui]
+    modifier: Modifier = Modifier,
+    ~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerScreen.kt:1328: Warning: Modifier parameter should be named modifier [ModifierParameter from androidx.compose.ui]
+    barModifier: Modifier = Modifier,
+    ~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/Theme.kt:143: Warning: Modifier parameter should be the first optional parameter [ModifierParameter from androidx.compose.ui]
+    modifier: Modifier = Modifier,
+    ~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens/DiscoverCategories.kt:56: Error: produceState calls should assign value inside the producer lambda [ProduceStateDoesNotAssignValue from androidx.compose.runtime]
+    val logos by produceState<Map<String, String>>(ProviderLogos.cached(), Unit) { value = ProviderLogos.load() }
+                 ~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Manage.kt:123: Error: produceState calls should assign value inside the producer lambda [ProduceStateDoesNotAssignValue from androidx.compose.runtime]
+    val byName by androidx.compose.runtime.produceState(initialValue = linkedMapOf<String, List<String>>(), kind, raw, servers) {
+                                           ~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Sport179.kt:183: Error: produceState calls should assign value inside the producer lambda [ProduceStateDoesNotAssignValue from androidx.compose.runtime]
+        val hb by produceState(SportLogos.memory(SportArt.Team(m.home, m.sport, m.competitionId)), m.home) {
+                  ~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Sport179.kt:186: Error: produceState calls should assign value inside the producer lambda [ProduceStateDoesNotAssignValue from androidx.compose.runtime]
+        val ab by produceState(SportLogos.memory(SportArt.Team(m.away, m.sport, m.competitionId)), m.away) {
+                  ~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/SportLogos.kt:269: Error: produceState calls should assign value inside the producer lambda [ProduceStateDoesNotAssignValue from androidx.compose.runtime]
+    val bmp by produceState(SportLogos.memory(art), art) { if (value == null) value = SportLogos.bitmap(art) }
+               ~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens/Auth.kt:68: Error: remember calls must not return Unit [RememberReturnType from androidx.compose.runtime]
+    remember { LifetimeWelcome.load() }
+    ~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerScreen.kt:1340: Error: BoxWithConstraints scope is not used [UnusedBoxWithConstraintsScope from androidx.compose.foundation]
+            BoxWithConstraints(Modifier.weight(1f)) {
+                                                    ^
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/layout/widget_radio.xml:51: Error: Must use app:tint instead of android:tint [UseAppTint from androidx.appcompat]
+            android:tint="#FFFFFF" />
+            ~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/AndroidManifest.xml:182: Warning: Exported service does not require permission [ExportedService]
+        <service
+         ~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/xml/network_security_config.xml:10: Warning: Insecure Base Configuration [InsecureBaseConfiguration]
+    <base-config cleartextTrafficPermitted="true">
+                                            ~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/AudioOutput.kt:36: Warning: Unnecessary; SDK_INT is never < 24 [ObsoleteSdkInt]
+        if (Build.VERSION.SDK_INT < 23) return AudioOut.Kind.SPEAKER
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/AudioOutput.kt:65: Warning: Unnecessary; SDK_INT is always >= 24 [ObsoleteSdkInt]
+        val cb = if (Build.VERSION.SDK_INT >= 23 && am != null) object : AudioDeviceCallback() {
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerExtras.kt:300: Warning: Unnecessary; SDK_INT is never < 24 [ObsoleteSdkInt]
+        if (Build.VERSION.SDK_INT < 23) return
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerExtras.kt:332: Warning: Unnecessary; SDK_INT is never < 24 [ObsoleteSdkInt]
+        if (!changedMode || Build.VERSION.SDK_INT < 23) return
+                            ~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/Downloads.kt:83: Warning: Do not place Android context classes in static fields (static reference to Downloads which has field ctx pointing to Context); this is a memory leak [StaticFieldLeak]
+/**
+^
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/Downloads.kt:106: Warning: Do not place Android context classes in static fields; this is a memory leak [StaticFieldLeak]
+    private lateinit var ctx: Context
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerExtras.kt:79: Warning: Do not place Android context classes in static fields (static reference to PlayerView which has field shutterView pointing to View); this is a memory leak [StaticFieldLeak]
+    /** Build 164: het beeld waarin het voorbeeld nu speelt (voor de momentopname van het stilstaande beeld). */
+    ^
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens/PosterPreview176.kt:26: Warning: Do not place Android context classes in static fields (static reference to HeroTrailerState which has field webView pointing to WebView); this is a memory leak [StaticFieldLeak]
+    val state = HeroTrailerState()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:24: Warning: Do not place Android context classes in static fields (static reference to TvHome which has field app pointing to Context); this is a memory leak [StaticFieldLeak]
+/**
+^
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/TvHome.kt:42: Warning: Do not place Android context classes in static fields; this is a memory leak [StaticFieldLeak]
+    private lateinit var app: Context
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/AllServers.kt:43: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var version by mutableStateOf(0); private set
+                   ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/CatalogMeta.kt:26: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var version by mutableStateOf(0); private set
+                   ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens/Categories.kt:581: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var sortVersion by remember { mutableStateOf(Metadata.version) }
+                                  ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/ContinueCovers.kt:30: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var version by mutableStateOf(0); private set
+                   ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens/HeroTrailer.kt:135: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var token by mutableStateOf(0)
+                 ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens/Home.kt:780: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var knownTick by remember { mutableStateOf(0) }
+                                ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/meta/Metadata.kt:27: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var version by mutableStateOf(0); private set
+                   ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/features/NewOnBingr.kt:30: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var version by mutableStateOf(0); private set
+                   ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/parental/ParentalAndReminders.kt:35: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var pinVersion by mutableStateOf(0); private set
+                      ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/parental/ParentalAndReminders.kt:156: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var lockoutVersion by mutableStateOf(0); private set
+                          ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Pin.kt:75: Information: Prefer mutableLongStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var wait by remember { mutableStateOf(if (guarded) ParentalControl.lockoutRemaining() else 0L) }
+                           ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:59: Information: Prefer mutableDoubleStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var position by mutableStateOf(0.0); private set
+                    ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:60: Information: Prefer mutableDoubleStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var currentTime by mutableStateOf(0.0); private set
+                       ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:61: Information: Prefer mutableDoubleStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var duration by mutableStateOf(0.0); private set
+                    ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:65: Information: Prefer mutableDoubleStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var behindLive by mutableStateOf(0.0); private set
+                      ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:68: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var tracksVersion by mutableStateOf(0); private set
+                         ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:70: Information: Prefer mutableFloatStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    private var _rate by mutableStateOf(1f)
+                         ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerController.kt:1058: Information: Prefer mutableDoubleStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    private var _subtitleDelay by mutableStateOf(0.0)
+                                  ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/PlayerOverlays173.kt:356: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var season by remember(series?.id, currentSeason, seasons) { mutableStateOf(currentSeason ?: seasons.firstOrNull() ?: 0) }
+                                                                 ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/providers/PlaylistService.kt:77: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var catalogVersion by mutableStateOf(0); private set
+                          ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/Secrets.kt:25: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var revision by mutableStateOf(0)
+                    ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Settings.kt:558: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+                var lead by remember { mutableStateOf(SportCenter.defaultLead) }
+                                       ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Sport.kt:581: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var lead by remember { mutableStateOf(reminder?.leadMin?.let { Build173Logic.lead(it) } ?: SportCenter.defaultLead) }
+                           ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/core/Store.kt:91: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var photoVersion by mutableStateOf(0); private set
+                        ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/SupportScreens.kt:243: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    var reload by remember { mutableStateOf(0) }
+                             ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/player/TrackPreferences.kt:21: Information: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
+    private var version by mutableStateOf(0)
+                           ~~~~~~~~~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Guide.kt:117: Warning: State backed values should use the lambda overload of Modifier.offset [UseOfNonLambdaOffsetOverload from androidx.compose.foundation]
+                    Box(Modifier.offset(x = x(now)).width(2.dp).fillMaxHeight().background(Theme.red))
+                                 ~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Guide.kt:139: Warning: State backed values should use the lambda overload of Modifier.offset [UseOfNonLambdaOffsetOverload from androidx.compose.foundation]
+                                    modifier = Modifier.offset(x = x(now) + 8.dp).align(Alignment.CenterStart))
+                                                        ~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/Guide.kt:148: Warning: State backed values should use the lambda overload of Modifier.offset [UseOfNonLambdaOffsetOverload from androidx.compose.foundation]
+                            Box(Modifier.offset(x = x(now)).width(2.dp).fillMaxHeight().background(Theme.red))
+                                         ~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/java/nl/lrvdlinden/bingr/ui/screens2/KidsGate.kt:180: Warning: State backed values should use the lambda overload of Modifier.offset [UseOfNonLambdaOffsetOverload from androidx.compose.foundation]
+                    modifier = Modifier.offset(x = shake.value.dp))
+                                        ~~~~~~
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-hdpi/ic_launcher.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-mdpi/ic_launcher.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xhdpi/ic_launcher.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-hdpi/ic_launcher_blue.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-mdpi/ic_launcher_blue.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xhdpi/ic_launcher_blue.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_blue.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_blue.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-hdpi/ic_launcher_dark.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-mdpi/ic_launcher_dark.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xhdpi/ic_launcher_dark.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_dark.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_dark.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-hdpi/ic_launcher_gold.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-mdpi/ic_launcher_gold.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xhdpi/ic_launcher_gold.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_gold.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_gold.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-hdpi/ic_launcher_light.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-mdpi/ic_launcher_light.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xhdpi/ic_launcher_light.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_light.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_light.png: Warning: Launcher icon used as round icon did not have a circular shape [IconLauncherShape]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/drawable/tv_banner.png: Warning: Found bitmap drawable res/drawable/tv_banner.png in densityless folder [IconLocation]
+/home/runner/work/bingr-android/bingr-android/app/src/main/res/layout/widget_radio.xml:43: Warning: Missing contentDescription attribute on image [ContentDescription]
+        <ImageButton
+         ~~~~~~~~~~~
+50 errors, 88 warnings
+
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_6-1795198546103.json
+
+BUILD SUCCESSFUL in 6m 54s
+56 actionable tasks: 56 executed
