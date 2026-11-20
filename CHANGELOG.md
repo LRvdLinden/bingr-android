@@ -4,6 +4,36 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.0.8 · Build 180
+_20 november 2026_
+
+### Android
+
+**Nieuw**
+
+- Live tv in de mediamelding met wat er nu is en wat er straks komt
+
+### Android en Android TV
+
+**Nieuw**
+
+- Zenders, films, series en de tv-gids verversen vanzelf, met een eigen termijn
+- Live scores, standen en teamkleuren in Sport
+- Meer beoordelingen op de detailpagina, en intro en samenvatting overslaan met tijden van IntroDB
+- Duim omhoog of omlaag en een rij Voor jou
+- Sorteren per categorie, en titels die je aanbieder verwijderde worden opgeruimd
+- WebDAV als bron
+
+**Verbeterd**
+
+- Start een stream niet, dan probeert Bingr vanzelf een andere speler en onthoudt die
+- Zaplijst met categorieën en zoeken
+
+**Opgelost**
+
+- Live tv verbindt vanzelf opnieuw als de server de stream afsluit, nooit twee verbindingen tegelijk; Diagnose toont waarom de laatste stream stopte
+- Crash bij het openen van Opties in de speler opgelost
+
 ## Versie 1.0.8 · Build 178
 _15 november 2026_
 
