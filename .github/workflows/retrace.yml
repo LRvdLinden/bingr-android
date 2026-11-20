@@ -40,9 +40,13 @@ jobs:
           [[ "$C" =~ ^[A-Za-z0-9._/-]{1,80}$ ]] || { echo "::error::ongeldige commit/tag"; exit 1; }
           echo "RETRACE_COMMIT=$C" >> "$GITHUB_ENV"
 
+      # hele geschiedenis, zodat ook een korte sha of een tag werkt
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (v5.1.0)
         with:
-          ref: ${{ env.RETRACE_COMMIT }}
+          fetch-depth: 0
+
+      - name: Commit van de build klaarzetten
+        run: git checkout -q --detach "$RETRACE_COMMIT^{commit}" || { echo "::error::commit/tag niet gevonden"; exit 1; }
 
       - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
         with:
