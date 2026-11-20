@@ -88,7 +88,7 @@ object Scores179 {
         val l = S.league(g.match.competitionId)
         val pool = if (l != null) boards[l]?.second.orEmpty() else boards.values.flatMap { it.second }
         if (pool.isEmpty()) return null
-        val id = S.link(g.match.home, g.match.away, g.start / 1000, pool.map { S.Link(it.id, it.home.names, it.away.names, it.start / 1000) })
+        val id = S.link(g.match.home, g.match.away, g.start / 1000, pool.map { Build179Logic.Scores.Link(it.id, it.home.names, it.away.names, it.start / 1000) })
             ?: return null
         return pool.firstOrNull { it.id == id }
     }
@@ -97,7 +97,7 @@ object Scores179 {
     fun cachedText(title: String, start: Long): String? {
         val d = Build173Logic.parseDuel(title) ?: return null
         val pool = boards.values.flatMap { it.second }
-        val id = S.link(d.first, d.second, start / 1000, pool.map { S.Link(it.id, it.home.names, it.away.names, it.start / 1000) }) ?: return null
+        val id = S.link(d.first, d.second, start / 1000, pool.map { Build179Logic.Scores.Link(it.id, it.home.names, it.away.names, it.start / 1000) }) ?: return null
         return pool.firstOrNull { it.id == id }?.text
     }
 
