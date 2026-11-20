@@ -105,6 +105,19 @@ fun main(args: Array<String>) {
             else mapOf("kind" to "episode", "title" to p.title, "year" to p.year?.toDouble(), "season" to p.season?.toDouble(), "episode" to p.episode?.toDouble())
         eq("webdavParse ${m["path"]}", got, e) }
 
+    // X2: herverbinden (eigen gevallen, gelijk aan de Apple-zelftest)
+    eq("retry live 0", B.Stream.retryDelay(0, true, true), 0.5)
+    eq("retry live 4", B.Stream.retryDelay(4, true, true), 8.0)
+    eq("retry live 5", B.Stream.retryDelay(5, true, true), null)
+    eq("retry cold 1", B.Stream.retryDelay(1, true, false), 3.0)
+    eq("retry cold 2", B.Stream.retryDelay(2, true, false), null)
+    eq("retry vod 1", B.Stream.retryDelay(1, false, true), null)
+    eq("retry outage", B.Stream.retryDelay(0, true, true, 46.0), null)
+    eq("stale", B.Stream.terminalIsStale(2.0, false), true)
+    eq("stale left", B.Stream.terminalIsStale(2.0, true), false)
+    eq("reason ended", B.Stream.reason(false, true, true, 0.0), "serverClosed")
+    eq("reason timeout", B.Stream.reason(false, false, true, 16.0), "timeout")
+
     println("Build179LogicTest: $checks controles, $failures fouten")
     if (failures > 0) kotlin.system.exitProcess(1)
 }

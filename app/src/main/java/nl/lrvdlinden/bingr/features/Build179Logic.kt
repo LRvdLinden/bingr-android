@@ -122,6 +122,34 @@ object Build179Logic {
         }
     }
 
+    // MARK: X2. Stream stopt na ±27 s: opnieuw verbinden (gelijk aan Apple Shared/Player/Build179Stream.swift)
+
+    object Stream {
+        val LIVE_DELAYS = listOf(0.5, 1.5, 3.0, 5.0, 8.0)
+        val COLD_DELAYS = listOf(1.5, 3.0)
+        val VOD_DELAYS = listOf(1.5)
+        const val OUTAGE_MAX = 45.0
+        const val STALE_GRACE = 4.0
+
+        /** Wachttijd (s) vóór poging [attempt] (0 = eerste); null = opgeven (reservebron of foutmelding). */
+        fun retryDelay(attempt: Int, live: Boolean, hadPicture: Boolean, outage: Double = 0.0): Double? {
+            if (outage > OUTAGE_MAX) return null
+            val list = if (!live) VOD_DELAYS else if (hadPicture) LIVE_DELAYS else COLD_DELAYS
+            return list.getOrNull(attempt)
+        }
+
+        /** "Afgelopen"/"fout" vlak na het laden zonder die status te verlaten = de vorige stream. */
+        fun terminalIsStale(sinceLoad: Double, leftTerminal: Boolean): Boolean = !leftTerminal && sinceLoad >= 0 && sinceLoad < STALE_GRACE
+
+        /** "serverClosed", "error", "timeout" of null. */
+        fun reason(error: Boolean, ended: Boolean, live: Boolean, stalledFor: Double): String? = when {
+            error -> "error"
+            ended && live -> "serverClosed"
+            live && stalledFor > 15 -> "timeout"
+            else -> null
+        }
+    }
+
     // MARK: 5. Zappen-lijst
 
     object Zap {

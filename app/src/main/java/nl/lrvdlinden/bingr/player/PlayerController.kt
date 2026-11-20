@@ -114,6 +114,11 @@ class PlayerController(item: PlayableItem) {
     private var played179 = 0.0
     private var stallAt179: Long? = null
     private var memoKey179: String? = null
+    // build 179 (X2): herverbinden bij live met oplopende wachttijd; oude status vlak na het laden telt niet
+    private var outageAt179 = 0L
+    private var loadAt179 = 0L
+    private var leftTerminal179 = true
+    private var playStart179 = 0L
     /** Foutherstel (build 52): er staat al een stille nieuwe poging klaar. */
     private var retryPending = false
     /** Deze stream heeft al gespeeld (dan is een fout eerder een netwerkprobleem dan een formaatprobleem). */
@@ -214,6 +219,8 @@ class PlayerController(item: PlayableItem) {
             }
             return
         }
+        // build 179: WebDAV: afspelen met de inloggegevens van de bron (VLC, Basic/Digest)
+        WebDAVClient.playURL(url)?.let { start(it, forceExo = false); return }
         this.url = url
         errorText = null; didScrobbleStart = false; stallSince = null
         tracksApplied = false; playingTicks = 0
@@ -222,6 +229,7 @@ class PlayerController(item: PlayableItem) {
         // build 179: nieuwe stream (ook na zappen of een andere bron): weer één keer automatisch wisselen
         if (url != this.lastStartedURL || forceExo == null) { switched179 = false; startedWith179 = null }
         startAt179 = android.os.SystemClock.elapsedRealtime(); firstFrame179 = false; played179 = 0.0; stallAt179 = null
+        loadAt179 = startAt179; leftTerminal179 = false; playStart179 = 0L
         memoKey179 = if (engineSwitch179Allowed(url)) EngineMemo179.key(item) else null
         lastStartedURL = url
         retryPending = false
@@ -346,15 +354,25 @@ class PlayerController(item: PlayableItem) {
 
         // build 179: automatisch een andere speler proberen (eén keer per stream), daarna het bestaande herstel
         if (autoSwitch179(st)) return
+        // build 179 (X2): "afgelopen"/"fout" vlak na het (her)laden is nog de vorige stream
+        val terminal = st == EngineState.ERROR || st == EngineState.ENDED
+        if (!terminal) leftTerminal179 = true
+        val stale = terminal && Build179Logic.Stream.terminalIsStale((android.os.SystemClock.elapsedRealtime() - loadAt179) / 1000.0, leftTerminal179)
         // automatisch herverbinden
-        if (st == EngineState.ERROR || (isLive && st == EngineState.ENDED)) {
+        if (!stale && (st == EngineState.ERROR || (isLive && st == EngineState.ENDED))) {
+            if (attempts == 0) LastStop179.record(Build179Logic.Stream.reason(st == EngineState.ERROR, st == EngineState.ENDED, isLive, 0.0) ?: "error",
+                playedSeconds179(), usingExo, url, isLive)
             reconnect()
         } else if (isBuffering && isLive) {
             val now = System.currentTimeMillis()
             if (stallSince == null) stallSince = now
-            stallSince?.let { if (now - it > 15_000) reconnect() }
+            stallSince?.let { if (now - it > 15_000) {
+                if (attempts == 0) LastStop179.record("timeout", playedSeconds179(), usingExo, url, isLive)
+                reconnect()
+            } }
         } else if (st == EngineState.PLAYING) {
-            stallSince = null; attempts = 0; reconnecting = false; everPlayed = true
+            if (playStart179 == 0L) playStart179 = android.os.SystemClock.elapsedRealtime()
+            stallSince = null; attempts = 0; outageAt179 = 0L; reconnecting = false; everPlayed = true
             if (!isLive && duration > 0 && position > 0) lastGoodPosition = position
         }
 
@@ -402,10 +420,18 @@ class PlayerController(item: PlayableItem) {
      * naar dezelfde zender op een andere server ([onLiveFailure]), en anders de foutmelding met
      * "Opnieuw", "Andere bron" en "Andere speler". Films en afleveringen gaan verder op de laatste goede positie.
      */
+    private fun playedSeconds179(): Double =
+        if (playStart179 == 0L) 0.0 else (android.os.SystemClock.elapsedRealtime() - playStart179) / 1000.0
+
     private fun reconnect() {
         val u = url ?: return
         if (retryPending || backupPending || errorText != null) return
-        if (attempts >= 1) {
+        // build 179 (X2): live tot 5 pogingen (0,5/1,5/3/5/8 s) als er al beeld was, anders 2; films 1; hooguit 45 s storing
+        val nowE = android.os.SystemClock.elapsedRealtime()
+        if (attempts == 0) outageAt179 = nowE
+        val wait = Build179Logic.Stream.retryDelay(attempts, isLive && timeshiftStart == null, everPlayed, (nowE - outageAt179) / 1000.0)
+        if (wait == null) {
+            LastStop179.record("gaveUp", playedSeconds179(), usingExo, u, isLive)
             val hook = onLiveFailure
             if (isLive && !triedBackup && hook != null && !isPreview) {
                 triedBackup = true
@@ -436,17 +462,21 @@ class PlayerController(item: PlayableItem) {
         retryPending = true
         stallSince = System.currentTimeMillis() + 4_000L
         val resumeSecs = resume?.let { if (duration > 60) it * duration else null }
+        // eerst de oude verbinding echt dicht (nooit twee tegelijk naar de server), dan na de wachttijd opnieuw
+        runCatching { engine.stop() }
         scope.launch {
-            delay(1_500)
+            delay((wait * 1000).toLong())
             retryPending = false
             if (stopped || dismissed) return@launch
+            loadAt179 = android.os.SystemClock.elapsedRealtime(); leftTerminal179 = false; playStart179 = 0L
             engine.load(u, live = isLive && timeshiftStart == null, startFraction = resume, startSeconds = resumeSecs)
         }
     }
 
     /** Build 179: mag deze stream automatisch van speler wisselen (niet bij downloads, één-engine-adressen, casten, voorbeelden)? */
     private fun engineSwitch179Allowed(u: String): Boolean =
-        !isPreview && canUseExo(u) && !Downloads.isOffline(u) && !u.contains(".movpkg", ignoreCase = true)
+        !isPreview && canUseExo(u) && !Downloads.isOffline(u) && !u.contains(".movpkg", ignoreCase = true) &&
+            Uri.parse(u).userInfo == null   // WebDAV met inloggegevens: alleen VLC
 
     /** Build 179 (engineSwitch, engineMemo): true = er is net gewisseld. */
     private fun autoSwitch179(st: EngineState): Boolean {
@@ -463,6 +493,8 @@ class PlayerController(item: PlayableItem) {
         }
         stallAt179 = if (firstFrame179 && isBuffering) (stallAt179 ?: now) else null
         if (!engineSwitch179Allowed(u) || Casting.connected || holdingForAge || retryPending || backupPending || errorText != null) return false
+        // alleen bij echt vastlopen: een fout, of laden/bufferen zonder beeld (niet bij pauze door de gebruiker)
+        if (st == EngineState.PAUSED || st == EngineState.ENDED || pauseWhenReady) return false
         val go = Build179Logic.Engine.shouldSwitch(error = st == EngineState.ERROR, firstFrame = firstFrame179,
             sinceStart = (now - startAt179) / 1000.0, stalled = stallAt179?.let { (now - it) / 1000.0 } ?: 0.0,
             played = played179, switched = switched179 || triedOtherEngine)
@@ -471,7 +503,18 @@ class PlayerController(item: PlayableItem) {
         switched179 = true; triedOtherEngine = true
         notice = L("Tried another player")
         if (!isLive) item = item.copy(resumeAt = lastGoodPosition.takeIf { it > 0.0 } ?: position)
-        start(u, forceExo = next == "exo")
+        // eerst de eerste speler helemaal sluiten (verbinding met de aanbieder vrij), dan pas de andere openen:
+        // nooit twee verbindingen tegelijk naar de server
+        // (stop sluit de stream; start() geeft de oude engine daarna vrij vóór de nieuwe laadt)
+        runCatching { engine.stop() }
+        retryPending = true
+        reconnecting = true
+        scope.launch {
+            delay(800)
+            retryPending = false
+            if (stopped || dismissed || url != u) return@launch
+            start(u, forceExo = next == "exo")
+        }
         return true
     }
 

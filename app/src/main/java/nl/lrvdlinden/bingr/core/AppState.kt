@@ -169,6 +169,8 @@ object AppState {
         pendingAgeCheck = null
         // build 171: één stream per apparaat: de radio stopt als er video start
         Radio.stopForVideo()
+        // build 179 (X2): eerst het voorbeeld (gids, Sport, Home) echt dicht: nooit twee verbindingen tegelijk naar de server
+        runCatching { ChannelPreview.stop() }
         playing = item
     }
 

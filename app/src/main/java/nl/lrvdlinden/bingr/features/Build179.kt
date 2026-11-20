@@ -273,3 +273,30 @@ object Cleanup179 {
         }
     }
 }
+
+// MARK: X2. Reden van de laatste stop (Diagnose)
+
+object LastStop179 {
+    private const val PREF = "diag.lastStop179"
+
+    /** [reason]: serverClosed, error, timeout, gaveUp. Zonder adres of namen: alleen het formaat. */
+    fun record(reason: String, after: Double, exo: Boolean, url: String?, live: Boolean) {
+        val ext = url?.substringBefore('?')?.substringAfterLast('/')?.substringAfterLast('.', "")?.lowercase(java.util.Locale.ROOT)
+            ?.takeIf { it.length in 1..5 } ?: "?"
+        Prefs.put(PREF, listOf(System.currentTimeMillis(), reason, Math.round(after), if (exo) "ExoPlayer" else "VLC", ext, live).joinToString("|"))
+    }
+
+    /** "Server sloot de verbinding na 27 s · VLC · ts · live" met tijdstip, of null. */
+    fun line(): Pair<Long, String>? {
+        val p = Prefs.string(PREF)?.split('|') ?: return null
+        if (p.size < 6) return null
+        val at = p[0].toLongOrNull() ?: return null
+        val why = when (p[1]) {
+            "serverClosed" -> L("Server closed the connection after %@ s", p[2])
+            "timeout" -> L("No picture for 15 s (after %@ s)", p[2])
+            "gaveUp" -> L("Reconnecting failed (after %@ s)", p[2])
+            else -> L("Player error (after %@ s)", p[2])
+        }
+        return at to listOf(why, p[3], p[4], if (p[5] == "true") L("Live") else L("On demand")).joinToString(" · ")
+    }
+}

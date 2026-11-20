@@ -1488,7 +1488,35 @@ object StateSync {
         val pinLegacy: Boolean = false,
         /** build 176: `autoplayNext` {value, at}: de nieuwste wint */
         val autoplay: Item<Boolean>? = null,
+        /** build 179: `ratings` (duimen: 1, -1, 0 = weggehaald) en `categorySort`: per sleutel de nieuwste `at` */
+        val thumbs: Map<String, Item<Int>> = emptyMap(),
+        val sorts: Map<String, Item<String>> = emptyMap(),
     )
+
+    /** build 179: `ratings`: [{key, value, at}] */
+    private fun parseThumbs(e: JsonElement?): Map<String, Item<Int>> {
+        val out = HashMap<String, Item<Int>>()
+        (e as? JsonArray)?.forEach { r ->
+            val o = r as? JsonObject ?: return@forEach
+            val k = o.jS("key")?.takeIf { it.isNotBlank() } ?: return@forEach
+            val v = o.jI("value") ?: return@forEach
+            val at = time(o["at"]) ?: 0L
+            val cur = out[k]
+            if (cur == null || at > cur.at) out[k] = Item(at, v.coerceIn(-1, 1))
+        }
+        return out
+    }
+
+    /** build 179: `categorySort`: {sleutel: {value, at}} */
+    private fun parseSorts(e: JsonElement?): Map<String, Item<String>> {
+        val out = HashMap<String, Item<String>>()
+        (e as? JsonObject)?.forEach { (k, v) ->
+            val o = v as? JsonObject ?: return@forEach
+            val value = o.jS("value") ?: return@forEach
+            out[k] = Item(time(o["at"]) ?: 0L, value)
+        }
+        return out
+    }
 
     private fun parseAutoplay(e: JsonElement?): Item<Boolean>? {
         val o = e as? JsonObject ?: return null
@@ -1588,7 +1616,9 @@ object StateSync {
         val home = if (hl.rows.isEmpty() && hl.updatedAt == 0L) null else Item(hl.updatedAt, hl)
         // build 176
         val autoplay = d.autoplayNext?.let { Item(it.at, it.value) }
-        return PState(sets, progress, history, prefs, pin, home, autoplay = autoplay)
+        return PState(sets, progress, history, prefs, pin, home, autoplay = autoplay,
+            thumbs = d.thumbs.mapValues { Item(it.value.at, it.value.value) },
+            sorts = d.categorySort.mapValues { Item(it.value.at, it.value.value) })
     }
 
     private fun parseHomeLayout(e: JsonElement?): Item<HomeLayout>? {
@@ -1734,7 +1764,8 @@ object StateSync {
             else -> Item(pinAt, null)
         }
         return PState(sets, progress, history, prefs, pin, parseHomeLayout(o["homeLayout"]), pinLegacy = legacy,
-            autoplay = parseAutoplay(o["autoplayNext"]))
+            autoplay = parseAutoplay(o["autoplayNext"]),
+            thumbs = parseThumbs(o["ratings"]), sorts = parseSorts(o["categorySort"]))
     }
 
     private fun <T> mergeItems(local: Map<String, Item<T>>, server: Map<String, Item<T>>): Map<String, Item<T>> {
@@ -1873,6 +1904,13 @@ object StateSync {
         if (ap != null && apv != null) {
             out["autoplayNext"] = JsonObject(mapOf("value" to JsonPrimitive(apv), "at" to JsonPrimitive(iso(ap.at))))
         }
+        // build 179: duimen en sorteren per categorie (leeg = sleutel met rust laten)
+        if (s.thumbs.isNotEmpty()) out["ratings"] = JsonArray(s.thumbs.entries.sortedBy { it.key }.map { (k, v) ->
+            JsonObject(mapOf("key" to JsonPrimitive(k), "value" to JsonPrimitive(v.value ?: 0), "at" to JsonPrimitive(iso(v.at))))
+        })
+        if (s.sorts.isNotEmpty()) out["categorySort"] = JsonObject(s.sorts.entries.sortedBy { it.key }.associate { (k, v) ->
+            k to JsonObject(mapOf("value" to JsonPrimitive(v.value ?: "server"), "at" to JsonPrimitive(iso(v.at))))
+        })
         s.home?.value?.let { h ->
             out["homeLayout"] = JsonObject(mapOf(
                 "rows" to JsonArray(h.rows.map { r -> JsonObject(mapOf("key" to JsonPrimitive(r.key), "visible" to JsonPrimitive(r.visible))) }),
@@ -2002,6 +2040,7 @@ object StateSync {
                     newest(a.prefs, s.prefs), newestPin(a.pin, s.pin), newest(a.home, s.home),
                     pinLegacy = a.pinLegacy || s.pinLegacy,
                     autoplay = newest(a.autoplay, s.autoplay),
+                    thumbs = mergeItems(a.thumbs, s.thumbs), sorts = mergeItems(a.sorts, s.sorts),
                 )
             } ?: s
         }
@@ -2012,6 +2051,7 @@ object StateSync {
             mergeItems(local.history, srv?.history ?: emptyMap()),
             newest(local.prefs, srv?.prefs), newestPin(local.pin, srv?.pin), newest(local.home, srv?.home),
             autoplay = newest(local.autoplay, srv?.autoplay),
+            thumbs = mergeItems(local.thumbs, srv?.thumbs ?: emptyMap()), sorts = mergeItems(local.sorts, srv?.sorts ?: emptyMap()),
         )
         // van vóór build 44 (tijd -1) en de server heeft niets: nu stempelen
         val now = System.currentTimeMillis()
@@ -2043,6 +2083,8 @@ object StateSync {
             lockedChannels = present("lockedChannels").keys.mapTo(HashSet()) { Build171Logic.ProfileSets.norm(it) },
             lockedTitles = present("lockedTitles").keys.mapTo(HashSet()) { Build171Logic.ProfileSets.norm(it) },
             autoplayNext = merged.autoplay?.let { a -> a.value?.let { AutoplayPref176(it, a.at) } },
+            thumbs = merged.thumbs.mapValues { Thumb179(it.value.value ?: 0, it.value.at) },
+            categorySort = merged.sorts.mapValues { SortPref179(it.value.value ?: "server", it.value.at) },
         )
         // build 147: de bestanden van een niet-actief profiel hier lezen (buiten de main thread); op de main thread alleen
         // nog toepassen (een profiel dat intussen actief werd, leest daar uit het geheugen)
@@ -2088,7 +2130,8 @@ object StateSync {
         if (localOnly) return true
 
         val empty = merged.sets.values.all { it.isEmpty() } && merged.progress.isEmpty() && merged.history.isEmpty() &&
-            merged.prefs == null && merged.pin == null && merged.home == null && merged.autoplay == null
+            merged.prefs == null && merged.pin == null && merged.home == null && merged.autoplay == null &&
+            merged.thumbs.isEmpty() && merged.sorts.isEmpty()
         if (srv == null && empty) return true
         if (srv == merged) return true
         val json = profileJson(base, merged)

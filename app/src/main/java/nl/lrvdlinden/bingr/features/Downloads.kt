@@ -219,6 +219,8 @@ object Downloads {
     /** Kan dit item (waarschijnlijk) gedownload worden? (MAC-portal en Stremio pas zeker na het opvragen van de link) */
     fun canDownload(item: PlayableItem): Boolean {
         if (!supported || item.type == MediaType.LIVE) return false
+        // build 179: geen downloads van een WebDAV-bron
+        if (item.id.startsWith("dav:")) return false
         val u = item.url
         if (u != null && item.stalkerCmd == null) {
             val scheme = Uri.parse(u).scheme?.lowercase(Locale.ROOT)

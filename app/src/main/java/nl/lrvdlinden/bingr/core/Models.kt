@@ -9,13 +9,15 @@ import java.util.UUID
 @Serializable
 enum class PlaylistKind(val raw: String) {
     M3U("M3U / M3U8"), XTREAM("Xtream Codes"), STALKER("Stalker / MAC-portal"),
-    PLEX("Plex"), JELLYFIN("Jellyfin"), EMBY("Emby"), STREMIO("Stremio");
+    PLEX("Plex"), JELLYFIN("Jellyfin"), EMBY("Emby"), STREMIO("Stremio"),
+    /** Build 179: WebDAV-map als bron (films en series, geen live tv) */
+    WEBDAV("WebDAV");
 
     val title: String
         get() = when (this) {
             M3U -> "M3U"; XTREAM -> "Xtream"; STALKER -> L("MAC portal"); else -> raw
         }
-    val isMediaServer: Boolean get() = this in setOf(PLEX, JELLYFIN, EMBY, STREMIO)
+    val isMediaServer: Boolean get() = this in setOf(PLEX, JELLYFIN, EMBY, STREMIO, WEBDAV)
 }
 
 /**

@@ -45,6 +45,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
@@ -346,6 +347,7 @@ private val PlaylistKind.icon: ImageVector
         PlaylistKind.JELLYFIN -> Icons.Default.Storage
         PlaylistKind.EMBY -> Icons.Default.Cloud
         PlaylistKind.STREMIO -> Icons.Default.Extension
+        PlaylistKind.WEBDAV -> Icons.Default.Folder
     }
 
 private fun isUrl(s: String): Boolean = runCatching {
@@ -419,6 +421,7 @@ fun AddPlaylistScreen(existing: PlaylistSource?, onClose: () -> Unit) {
         PlaylistKind.JELLYFIN, PlaylistKind.EMBY -> isUrl(server) && username.isNotEmpty()
         PlaylistKind.PLEX -> plexToken.isNotBlank() && (server.isBlank() || isUrl(server))
         PlaylistKind.STREMIO -> true
+        PlaylistKind.WEBDAV -> isUrl(server)
     }
 
     fun save() {
@@ -631,6 +634,13 @@ fun AddPlaylistScreen(existing: PlaylistSource?, onClose: () -> Unit) {
                             L("Leave the server empty to use your first Plex server automatically."),
                             color = Theme.secondary, fontSize = tsp(11)
                         )
+                    }
+                    PlaylistKind.WEBDAV -> {
+                        FormSection(L("Server")) { FormField(server, { server = it }, "https://nas.local/webdav/films/", url = true) }
+                        FormSection(L("Username")) { FormField(username, { username = it }, L("username")) }
+                        FormSection(L("Password")) { FormField(password, { password = it }, L("password"), secure = true) }
+                        Text(L("Movies and series are recognised from folder and file names. No live TV or downloads."),
+                            color = Theme.secondary, fontSize = tsp(11))
                     }
                     PlaylistKind.STREMIO -> {
                         FormSection(L("Stremio account (optional)")) {

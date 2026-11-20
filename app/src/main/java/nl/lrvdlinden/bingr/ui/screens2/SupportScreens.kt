@@ -435,6 +435,8 @@ fun LazyListScope.diagnoseTabItems() {
                 d.jObj?.get("playback")?.let { pb ->
                     S2Row(L(Build148Logic.Codes.label("playback_stall")), value = L("%d · longest %@ s", pb.jI("count") ?: 0, s2Sec(pb.jL("longestMs") ?: 0L)))
                 }
+                // build 179 (X2): waarom de laatste stream stopte
+                LastStop179.line()?.let { (at, text) -> S2Row(L("Last stop"), value = s2DateTime(at)); S2Row(text, tint = Theme.secondary) }
                 if (Store.playlists.isEmpty()) S2Row(L("Servers"), value = "0")
                 S2Row(L("Last account sync"), value = st.jS("lastSync")?.let { Net.parseISODate(it) }?.let { s2DateTime(it) }
                     ?.let { if (st.jB("lastSyncOk") == false) "$it · " + L("failed") else it } ?: L("Not yet"))

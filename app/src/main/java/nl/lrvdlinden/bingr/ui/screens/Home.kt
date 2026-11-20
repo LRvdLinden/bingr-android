@@ -326,7 +326,42 @@ private class HomeModel(val filter: Filter) {
      * titels met de kop "Populair" (second = true). Geen willekeur: dezelfde geschiedenis geeft dezelfde rij.
      * Tot build 139 kwamen er ook Trakt-titels van het hoofdaccount en willekeurige titels in (shuffled).
      */
+    /**
+     * Build 179: "Voor jou" met duimen (docs/ACCOUNT.md "Build 179", `forYou`): genres en cast van titels met duim omhoog,
+     * bekeken titels en de TMDB-aanbevelingen daarvan. Uit te zetten (Instellingen, `home.forYou`). Zonder duimen en zonder
+     * score: de rij van build 140 (laatst bekeken als basis, anders "Populair").
+     */
     private suspend fun buildForYou(lib: Library, useNetwork: Boolean, matcher: TitleMatcher?): Pair<List<DetailTarget>, Boolean> {
+        if (!ForYou179.enabled) return emptyList<DetailTarget>() to false
+        val old = buildForYou140(lib, useNetwork, matcher)
+        if (Store.thumbs.values.none { it.value != 0 }) return old
+        val liked = ForYou179.likedTargets(lib)
+        // bekeken: wat de rij van build 140 als basis neemt (voortgang en geschiedenis van dit profiel)
+        val progress = Store.progress.filter { Store.belongsToActive(it.value.profileID) }
+        val historyIDs = Store.historyAll().map { it.itemID }.toSet()
+        val watched = lib.movies.filter { it.id in progress || it.id in historyIDs }.map { DetailTarget.MovieT(it) } +
+            lib.series.filter { it.id in historyIDs }.map { DetailTarget.SeriesT(it) }
+        val recLiked = HashMap<String, Int>(); val recWatched = HashMap<String, Int>()
+        if (useNetwork && matcher != null) {
+            suspend fun recs(list: List<DetailTarget>, into: HashMap<String, Int>) {
+                for (t in list) {
+                    val imdb = when (t) { is DetailTarget.MovieT -> t.movie.imdbID; is DetailTarget.SeriesT -> t.series.imdbID }
+                    val r = screensSafe { TMDB.details(imdb, null, t.title, t.year, t.isSeries) } ?: continue
+                    val ext = r.recommendations.map { ExternalTitle(listOf(it.title), it.year) }
+                    val found: List<DetailTarget> = if (t.isSeries) matcher.series(ext, 20).map { DetailTarget.SeriesT(it) }
+                        else matcher.movies(ext, 20).map { DetailTarget.MovieT(it) }
+                    found.forEach { f -> val k = ForYou179.key(f); into[k] = (into[k] ?: 0) + 1 }
+                }
+            }
+            recs(liked.take(5), recLiked)
+            recs(watched.take(3), recWatched)
+        }
+        val ranked = withContext(Dispatchers.Default) { ForYou179.rank(lib, watched, recLiked, recWatched) }
+            .filter { t -> when (filter) { Filter.MOVIES -> !t.isSeries; Filter.SERIES -> t.isSeries; Filter.ALL -> true } }
+        return if (ranked.isEmpty()) old else ranked to false
+    }
+
+    private suspend fun buildForYou140(lib: Library, useNetwork: Boolean, matcher: TitleMatcher?): Pair<List<DetailTarget>, Boolean> {
         // Compose-state op de main thread lezen, daarna op de achtergrond rekenen
         val progress = Store.progress.filter { Store.belongsToActive(it.value.profileID) }
         val history = Store.historyAll()

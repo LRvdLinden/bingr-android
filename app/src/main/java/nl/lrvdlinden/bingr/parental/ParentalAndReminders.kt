@@ -669,7 +669,10 @@ object Reminders {
         val n = NotificationCompat.Builder(ctx, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(title)
-            .setContentText(release?.let { bannerLine(it) } ?: sport?.let { sportLine(it) } ?: L("Starts in 2 minutes on %@", channelName))
+            .setContentText(release?.let { bannerLine(it) } ?: sport?.let { r ->
+                // build 179: met de stand als die er is (ESPN, alleen uit de cache)
+                sportLine(r) + (runCatching { Scores179.cachedText(r.title, r.start) }.getOrNull()?.let { " \u00B7 $it" } ?: "")
+            } ?: L("Starts in 2 minutes on %@", channelName))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)

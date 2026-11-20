@@ -34,6 +34,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.outlined.ThumbDown
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckCircle
@@ -194,6 +198,11 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
     val isWatchedTitle = (target as? DetailTarget.MovieT)?.let { Playables.isWatched(it.movie, imdb) } ?: false
     // Mijn lijst van dít profiel (de Trakt-watchlist volgt mee, maar bepaalt niet wat er in je lijst staat)
     val inMyList = pid != null && Store.inMyList(pid, target.id)
+    // build 179: duimen (niet voor titels buiten je bibliotheek) en beoordelingen via de server (MDBList)
+    val canThumb179 = !target.id.startsWith("rec-") && !DiscoverItem.isExternal(target.id) && Store.activeProfileID != null
+    @Suppress("UNUSED_VARIABLE") val thumbsVersion179 = Store.thumbs
+    var ratings179 by remember(target.id) { mutableStateOf<List<Ratings179.R>>(emptyList()) }
+    LaunchedEffect(target.id) { ratings179 = runCatching { Ratings179.load(target) }.getOrDefault(emptyList()) }
     val resumeFraction: Double? = when (target) {
         is DetailTarget.MovieT -> Playables.resume(target.movie.id, imdb)
         is DetailTarget.SeriesT -> nextEpisode?.let { progress[it.id]?.fraction }
@@ -706,6 +715,12 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                         }
                         if (trailerToPlay != null) DetailCircleButton(Icons.Default.Theaters) { heroTrailer.stop(); trailerOpen = trailerToPlay }
                         if (isMovie) DetailCircleButton(if (isWatchedTitle) Icons.Default.CheckCircle else Icons.Default.Check) { toggleWatchedMovie() }
+                        // build 179: duim omhoog/omlaag (per profiel, gesynct)
+                        if (canThumb179) {
+                            val th = ForYou179.thumb(target)
+                            DetailCircleButton(if (th == 1) Icons.Default.ThumbUp else Icons.Outlined.ThumbUp, tint = if (th == 1) Theme.red else Color.White) { ForYou179.toggle(target, 1) }
+                            DetailCircleButton(if (th == -1) Icons.Default.ThumbDown else Icons.Outlined.ThumbDown, tint = if (th == -1) Theme.red else Color.White) { ForYou179.toggle(target, -1) }
+                        }
                         // downloaden (build 52): niet op TV
                         val movieItem = (target as? DetailTarget.MovieT)?.let { Playables.movie(it.movie, imdb) }
                         if (movieItem != null && Downloads.canDownload(movieItem)) {
@@ -934,7 +949,12 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
             }
 
             // MARK: beoordelingen
-            val ratings = details?.ratings.orEmpty()
+            // build 179: één rij met korte namen + score (IMDb · RT · Publiek · MC · Letterboxd · Trakt · TMDB)
+            if (ratings179.isNotEmpty()) {
+                Text(ratings179.joinToString("  ·  ") { Ratings179.label(it.source) + " " + it.text }, color = Color.White,
+                    fontSize = tsp(14), fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = Theme.edge))
+            }
+            val ratings = if (ratings179.isNotEmpty()) emptyList() else details?.ratings.orEmpty()
             if (ratings.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(tvs(12))) {
                     DetailSectionTitle(L("Ratings"))
@@ -1117,6 +1137,9 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                 seriesDownloadAction(),
             ) + movieDownloadActions() + listOfNotNull(
                 S2Action(L("Share"), Icons.Default.Share) { share() },
+                // build 179: duim omhoog/omlaag (nog eens = weghalen)
+                if (canThumb179) S2Action(if (ForYou179.thumb(target) == 1) L("Remove thumbs up") else L("I like this"), Icons.Default.ThumbUp) { ForYou179.toggle(target, 1) } else null,
+                if (canThumb179) S2Action(if (ForYou179.thumb(target) == -1) L("Remove thumbs down") else L("Not for me"), Icons.Default.ThumbDown) { ForYou179.toggle(target, -1) } else null,
                 // build 176: vergrendelen met de pincode van het hoofdprofiel
                 if (!target.id.startsWith("rec-") && !DiscoverItem.isExternal(target.id)) titleLockAction(target, pid) else null,
                 if (Store.activeProfile?.kids != true && pid != null) S2Action(L("Hide for this profile"), Icons.Default.VisibilityOff, destructive = true) { blockConfirm = true } else null,

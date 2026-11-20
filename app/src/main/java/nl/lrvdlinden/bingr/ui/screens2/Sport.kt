@@ -234,6 +234,8 @@ private sealed class SportFilter {
     data object All : SportFilter()
     data object Mine : SportFilter()
     data class Of(val sport: String) : SportFilter()
+    /** Build 179: standen per competitie (ESPN) */
+    data object Standings : SportFilter()
 }
 
 private fun Build173Logic.Group.isLive(now: Long) = start <= now && now < end
@@ -250,22 +252,30 @@ fun SportScreen() {
     LaunchedEffect(lib, Store.favoriteTeams, Store.favoriteCompetitions) { SportCenter.refresh() }
     LaunchedEffect(Unit) {
         while (true) {
+            // build 179: scores van ESPN (cache 60 s, Data besparen 300 s)
+            Scores179.refresh(Scores179.leaguesFor(SportCenter.groups))
             delay(30_000)
             now = System.currentTimeMillis()
             SportCenter.refresh()
         }
     }
+    @Suppress("UNUSED_VARIABLE") val scoresVersion = Scores179.version
     DisposableEffect(Unit) { onDispose { ChannelPreview.stop() } }
 
     val groups = SportCenter.groups
     val present = groups.map { it.match.sport }.toSet()
-    val filters = listOf(SportFilter.All, SportFilter.Mine) + Build173Logic.SPORTS.filter { it in present }.map { SportFilter.Of(it) }
+    val filters = listOf(SportFilter.All, SportFilter.Mine) + Build173Logic.SPORTS.filter { it in present }.map { SportFilter.Of(it) } +
+        listOf(SportFilter.Standings)
+    // build 179: competities met scores en standen bij ESPN (in de gids of gevolgd)
+    val leagues = Scores179.leaguesFor(groups)
+    var standingsComp by remember { mutableStateOf<String?>(null) }
     val teams = Store.favoriteTeams; val comps = Store.favoriteCompetitions
     val visible = groups.filter { g ->
         g.end > now && when (val f = filter) {
             SportFilter.All -> true
             SportFilter.Mine -> Build173Logic.isFavorite(g.match, teams, comps) || SportCenter.reminder(g) != null
             is SportFilter.Of -> g.match.sport == f.sport
+            SportFilter.Standings -> false
         }
     }
     val live = visible.filter { it.isLive(now) }
@@ -292,13 +302,29 @@ fun SportScreen() {
                 LazyRow(contentPadding = PaddingValues(horizontal = Theme.edge, vertical = tvs(6)),
                     horizontalArrangement = Arrangement.spacedBy(tvs(8))) {
                     items(filters) { f ->
-                        val title = when (f) { SportFilter.All -> L("All"); SportFilter.Mine -> L("My teams"); is SportFilter.Of -> SportCenter.sportName(f.sport) }
+                        val title = when (f) { SportFilter.All -> L("All"); SportFilter.Mine -> L("My teams"); is SportFilter.Of -> SportCenter.sportName(f.sport)
+                            SportFilter.Standings -> L("Standings") }
                         SportChip(title, f == filter) { filter = f }
                     }
                 }
             }
         }
         when {
+            // build 179: standen per competitie
+            filter == SportFilter.Standings -> {
+                val comps179 = Build173Logic.COMPETITIONS.filter { c -> Build179Logic.Scores.league(c.id)?.let { it in leagues } == true }
+                    .ifEmpty { Build173Logic.COMPETITIONS.filter { Build179Logic.Scores.league(it.id) != null } }
+                val sel = standingsComp?.takeIf { id -> comps179.any { it.id == id } } ?: comps179.firstOrNull()?.id
+                item {
+                    LazyRow(contentPadding = PaddingValues(horizontal = Theme.edge, vertical = tvs(4)),
+                        horizontalArrangement = Arrangement.spacedBy(tvs(8))) {
+                        items(comps179) { c -> SportChip(c.name, c.id == sel) { standingsComp = c.id } }
+                    }
+                }
+                if (sel != null) Build179Logic.Scores.league(sel)?.let { lg ->
+                    item(key = "standings-$lg") { Box(Modifier.padding(horizontal = Theme.edge)) { StandingsTable179(lg) } }
+                }
+            }
             SportCenter.loading && groups.isEmpty() -> item {
                 Row(Modifier.padding(horizontal = Theme.edge, vertical = tvs(30)), verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(tvs(20)), strokeWidth = 2.dp)
@@ -336,6 +362,29 @@ fun SportScreen() {
                         }
                     } else {
                         items(list, key = { it.key }) { g -> SportRow(g) { sheet = g } }
+                    }
+                }
+                // build 179: wedstrijden van gevolgde competities die de gids niet heeft, en de uitslagen van vandaag
+                if (filter == SportFilter.All || filter == SportFilter.Mine) {
+                    val followed = (comps.mapNotNull { Build179Logic.Scores.league(it) }).toSet()
+                    val all179 = Scores179.events(leagues)
+                    val linked = groups.mapNotNull { Scores179.eventFor(it)?.id }.toSet()
+                    val notInGuide = all179.filter { ev ->
+                        ev.id !in linked && ev.state != "post" && ev.start < now + 86_400_000L &&
+                            (ev.league in followed || teams.any { t ->
+                                Build179Logic.Scores.teamMatches(t, ev.home.names) || Build179Logic.Scores.teamMatches(t, ev.away.names) })
+                    }.distinctBy { it.id }.sortedBy { it.start }
+                    val finals = all179.filter { it.state == "post" && (it.league in followed || it.id in linked) && now - it.start < 12 * 3_600_000L }
+                        .distinctBy { it.id }.sortedByDescending { it.start }
+                    if (notInGuide.isNotEmpty()) {
+                        item(key = "nig-h") { Text(L("Not in your guide"), color = Color.White, fontSize = tsp(18), fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.padding(horizontal = Theme.edge).padding(top = tvs(8))) }
+                        items(notInGuide, key = { "nig-" + it.id }) { ev -> EspnMatchRow179(ev, if (ev.state == "in") L("LIVE") else null) }
+                    }
+                    if (finals.isNotEmpty()) {
+                        item(key = "ft-h") { Text(L("Full time"), color = Color.White, fontSize = tsp(18), fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.padding(horizontal = Theme.edge).padding(top = tvs(8))) }
+                        items(finals, key = { "ft-" + it.id }) { ev -> EspnMatchRow179(ev, if (ev.id in linked) null else L("Not in your guide")) }
                     }
                 }
                 // build 178: club- en competitielogo's alleen ter herkenning
@@ -416,11 +465,16 @@ private fun SportLiveCard(g: Build173Logic.Group, now: Long, autoPreview: Boolea
             if (c != null) Text(c.displayName, color = Color.White, fontSize = tsp(11), fontWeight = FontWeight.Bold, maxLines = 1,
                 modifier = Modifier.align(Alignment.TopEnd).padding(10.dp).clip(RoundedCornerShape(4.dp))
                     .background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 7.dp, vertical = 3.dp))
+            // build 179: tussenstand en minuut (ESPN)
+            scoreFor179(g)?.let { sc -> Box(Modifier.align(Alignment.BottomStart).padding(10.dp)) { ScoreBadge179(sc, false) } }
         }
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // build 179: de kaart in de kleuren van de teams (tekst wit)
+        val brush179 = TeamColors179.brush(g.match, Scores179.eventFor(g))
+        Column(Modifier.fillMaxWidth().then(if (brush179 != null) Modifier.background(brush179) else Modifier)
+            .padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 SportCompetitionLogo(g.match, 16)
-                Text(SportCenter.label(g.match), color = Theme.secondary, fontSize = tsp(12))
+                Text(SportCenter.label(g.match), color = if (brush179 != null) Color.White else Theme.secondary, fontSize = tsp(12))
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (g.match.isDuel) SportTeamBadge(g.match.home, 34, g.match)
@@ -437,8 +491,10 @@ private fun SportLiveCard(g: Build173Logic.Group, now: Long, autoPreview: Boolea
 @Composable
 private fun SportRow(g: Build173Logic.Group, onOpen: () -> Unit) {
     val on = SportCenter.reminder(g) != null
+    val brush179 = TeamColors179.brush(g.match, Scores179.eventFor(g))
     Row(
-        Modifier.padding(horizontal = Theme.edge).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF121212))
+        Modifier.padding(horizontal = Theme.edge).fillMaxWidth().clip(RoundedCornerShape(12.dp))
+            .then(if (brush179 != null) Modifier.background(brush179) else Modifier.background(Color(0xFF121212)))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -446,7 +502,7 @@ private fun SportRow(g: Build173Logic.Group, onOpen: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.width(64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(SportCenter.time(g.start), color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.ExtraBold)
-                Text(SportCenter.channel(g)?.displayName ?: "", color = Color(0xFF8A8A8A), fontSize = tsp(11), maxLines = 1,
+                Text(SportCenter.channel(g)?.displayName ?: "", color = if (brush179 != null) Color.White else Color(0xFF8A8A8A), fontSize = tsp(11), maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
             }
             // build 178: logo's van beide teams (of van de competitie bij een evenement)
@@ -461,7 +517,7 @@ private fun SportRow(g: Build173Logic.Group, onOpen: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     if (g.match.isDuel) SportCompetitionLogo(g.match, 14)
-                    Text(SportCenter.label(g.match), color = Theme.secondary, fontSize = tsp(12), maxLines = 1)
+                    Text(SportCenter.label(g.match), color = if (brush179 != null) Color.White else Theme.secondary, fontSize = tsp(12), maxLines = 1)
                 }
                 Text(g.match.title, color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.Bold, maxLines = 1,
                     overflow = TextOverflow.Ellipsis)
@@ -474,7 +530,7 @@ private fun SportRow(g: Build173Logic.Group, onOpen: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(if (on) Icons.Default.Notifications else Icons.Default.NotificationsNone, null,
-                tint = if (on) Theme.brandRed else Theme.secondary, modifier = Modifier.size(22.dp).bounceOnChange(on))
+                tint = if (brush179 != null) Color.White else if (on) Theme.brandRed else Theme.secondary, modifier = Modifier.size(22.dp).bounceOnChange(on))
         }
     }
 }
@@ -484,9 +540,10 @@ private fun SportRow(g: Build173Logic.Group, onOpen: () -> Unit) {
 private fun SportTvCard(g: Build173Logic.Group, now: Long, onMore: () -> Unit) {
     val on = SportCenter.reminder(g) != null
     var focused by remember { mutableStateOf(false) }
+    val brush179 = TeamColors179.brush(g.match, Scores179.eventFor(g))
     Column(
         Modifier.width(300.dp).clip(RoundedCornerShape(12.dp))
-            .background(if (focused) Color(0xFF2A2A2A) else Color(0xFF121212))
+            .then(if (brush179 != null) Modifier.background(brush179) else Modifier.background(if (focused) Color(0xFF2A2A2A) else Color(0xFF121212)))
             .border(if (focused) 3.dp else 0.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(12.dp))
             .onFocusChanged { focused = it.isFocused }
             .focusLift(scale = 1.05f, onLongClick = onMore) {
@@ -502,8 +559,8 @@ private fun SportTvCard(g: Build173Logic.Group, now: Long, onMore: () -> Unit) {
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SportCompetitionLogo(g.match, 20)
-            Text(listOfNotNull(SportCenter.label(g.match), SportCenter.channel(g)?.displayName).filter { it.isNotEmpty() }.joinToString(" · "),
-                color = Theme.secondary, fontSize = tsp(13), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(listOfNotNull(SportCenter.label(g.match), SportCenter.channel(g)?.displayName, scoreFor179(g)).filter { it.isNotEmpty() }.joinToString(" · "),
+                color = if (brush179 != null) Color.White else Theme.secondary, fontSize = tsp(13), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         // build 178: logo's groot genoeg op de tv
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -540,6 +597,8 @@ private fun SportMatchDialog(g: Build173Logic.Group, onDismiss: () -> Unit) {
                 Text(g.match.title, color = Color.White, fontSize = tsp(20), fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f, fill = false))
                 if (g.match.isDuel) SportTeamBadge(g.match.away, 40, g.match)
             }
+            // build 179: stand (ESPN)
+            scoreFor179(g)?.let { sc -> ScoreBadge179(sc, Scores179.eventFor(g)?.state == "post") }
             if (live) {
                 NetflixButton(L("Watch live"), Icons.Default.PlayArrow, kind = NetflixKind.PLAY, modifier = Modifier.fillMaxWidth()) {
                     onDismiss(); SportCenter.channel(g)?.let { SportCenter.play(it) }
@@ -574,6 +633,11 @@ private fun SportMatchDialog(g: Build173Logic.Group, onDismiss: () -> Unit) {
                     SportCenter.setBell(g, !has, lead)
                 }
                 if (has) Text(L("Reminder on"), color = Theme.secondary, fontSize = tsp(13))
+            }
+            // build 179: stand van de competitie
+            Build179Logic.Scores.league(g.match.competitionId)?.let { lg ->
+                Text(L("Standings"), color = Color.White, fontSize = tsp(14), fontWeight = FontWeight.Bold)
+                StandingsTable179(lg)
             }
             if (g.listings.size > 1) {
                 Text(L("Also on"), color = Color.White, fontSize = tsp(14), fontWeight = FontWeight.Bold)

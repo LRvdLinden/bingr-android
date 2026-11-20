@@ -41,22 +41,29 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import java.text.Collator
 
 /** Een categorie die volledig getoond wordt ("Bekijk allemaal"). */
 data class CategoryTarget(val title: String, val items: List<DetailTarget>)
 
-private enum class CategorySort(val raw: String) {
-    STANDARD("standard"), AZ("az"), ZA("za"), NEWEST("newest"), RATING("rating");
+/** Build 179: sorteren per categorie (docs/ACCOUNT.md "Build 179", `sort`), per profiel gesynct (`categorySort`). */
+private fun sortTitle179(mode: String): String = when (mode) {
+    "name" -> L("Name A–Z")
+    "year" -> L("Year (newest)")
+    "added" -> L("Recently added")
+    "rating" -> L("Highest rated")
+    else -> L("Default")
+}
 
-    val title: String
-        get() = when (this) {
-            STANDARD -> L("Default")
-            AZ -> L("Title (A–Z)")
-            ZA -> L("Title (Z–A)")
-            NEWEST -> L("Recently added")
-            RATING -> L("Highest rated")
-        }
+/** Sleutel `"<server>|<movie|series>|<categorie>"` (`*` = over alle servers), of null bij een gemengde lijst. */
+private fun sortKey179(t: CategoryTarget): String? {
+    val items = t.items
+    if (items.isEmpty()) return null
+    val kind = when { items.all { it is DetailTarget.MovieT } -> "movie"; items.all { it is DetailTarget.SeriesT } -> "series"; else -> return null }
+    val sids = items.map { it.sourceID }.toSet()
+    val server = if (sids.size == 1) (sids.first() ?: Playlists.source?.id ?: return null) else "*"
+    val groups = items.map { it.group }.toSet()
+    val cat = if (groups.size == 1 && groups.first().isNotBlank()) groups.first() else t.title
+    return Build179Logic.Sort.key(server, kind, cat)
 }
 
 private fun categoryRating(t: DetailTarget): Double? {
@@ -78,20 +85,18 @@ private fun categoryPoster(t: DetailTarget): String? = when (t) {
 fun CategoryScreen(target: CategoryTarget, onClose: () -> Unit) {
     val tv = AppState.isTV
     BackHandler { onClose() }
-    var sortRaw by remember { mutableStateOf(Prefs.string("category.sort") ?: CategorySort.STANDARD.raw) }
-    val sort = CategorySort.entries.firstOrNull { it.raw == sortRaw } ?: CategorySort.STANDARD
+    val sortKey = remember(target) { sortKey179(target) }
+    var sortLocal by remember { mutableStateOf(Build179Logic.Sort.mode(Prefs.string("category.sort179"))) }
+    val sort = sortKey?.let { Store.categorySortOf(it) } ?: sortLocal
     var menu by remember { mutableStateOf(false) }
     val metaVersion = Metadata.version
     val sorted = remember(target, sort, metaVersion) {
         val items = target.items
-        val collator = Collator.getInstance(Localizer.locale).apply { strength = Collator.PRIMARY }
-        when (sort) {
-            CategorySort.STANDARD -> items
-            CategorySort.AZ -> items.sortedWith { a, b -> collator.compare(a.title, b.title) }
-            CategorySort.ZA -> items.sortedWith { a, b -> collator.compare(b.title, a.title) }
-            CategorySort.NEWEST -> items.sortedByDescending { (it as? DetailTarget.MovieT)?.movie?.addedAt ?: Long.MIN_VALUE }
-            CategorySort.RATING -> items.sortedByDescending { categoryRating(it) ?: -1.0 }
-        }
+        val order = Build179Logic.Sort.order(sort, items.map { t ->
+            Build179Logic.Sort.Item(t.title, t.year, when (t) { is DetailTarget.MovieT -> t.movie.addedAt; is DetailTarget.SeriesT -> t.series.addedAt },
+                categoryRating(t))
+        })
+        order.map { items[it] }
     }
     val firstFocus = rememberInitialFocus()
 
@@ -119,10 +124,9 @@ fun CategoryScreen(target: CategoryTarget, onClose: () -> Unit) {
                     Icon(Icons.Default.SwapVert, L("Sort"), tint = Color.White, modifier = Modifier.size(tvs(22)))
                 }
                 // keuzemenu: het gekozen item krijgt focus (afstandsbediening)
-                S2Menu(menu, CategorySort.entries.map { it to it.title }, sort, onDismiss = { menu = false }) { s ->
+                S2Menu(menu, Build179Logic.Sort.MODES.map { it to sortTitle179(it) }, sort, onDismiss = { menu = false }) { m ->
                     menu = false
-                    sortRaw = s.raw
-                    Prefs.put("category.sort", s.raw)
+                    if (sortKey != null) Store.setCategorySort(sortKey, m) else { sortLocal = m; Prefs.put("category.sort179", m) }
                 }
             }
         }

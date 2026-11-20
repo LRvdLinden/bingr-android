@@ -454,6 +454,10 @@ object Playlists {
                     PlexClient(sess).library()
                 }
             }
+            PlaylistKind.WEBDAV -> {
+                status(L("Fetching your library…"))
+                lib = WebDAVClient(s, password).library()
+            }
             PlaylistKind.STREMIO -> {
                 status(L("Loading Stremio add-ons…"))
                 val addons = loadStremioAddons(s)
@@ -1132,6 +1136,13 @@ object Playlists {
                 } else if (Store.secret(p.passwordKey) == null) {
                     throw JellyfinClient.notLoggedIn
                 }
+            }
+            PlaylistKind.WEBDAV -> {
+                // build 179: wachtwoord alleen in de privé-opslag (en versleuteld via de bronnen-sync)
+                if (!Net.urlValue(p.serverURL).orEmpty().startsWith("http", ignoreCase = true)) throw Net.badURL()
+                val pw = password.ifEmpty { Store.secret(p.passwordKey) ?: "" }
+                WebDAVClient(p, pw).test()
+                Store.setSecret(p.passwordKey, pw)
             }
             PlaylistKind.STREMIO -> {
                 if (p.username.isNotEmpty() && password.isNotEmpty()) {

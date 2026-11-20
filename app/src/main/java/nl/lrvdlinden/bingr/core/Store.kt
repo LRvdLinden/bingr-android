@@ -80,6 +80,10 @@ object Store {
     var lockedChannels by mutableStateOf(setOf<String>()); private set
     var lockedTitles by mutableStateOf(setOf<String>()); private set
     var autoplayNext by mutableStateOf<AutoplayPref176?>(null); private set
+    /** build 179: duim omhoog/omlaag per titel (`profile.<id>.ratings`: sleutel → {value 1/-1/0, at}) */
+    var thumbs by mutableStateOf(mapOf<String, Thumb179>()); private set
+    /** build 179: sortering per categorie (`profile.<id>.categorySort`: sleutel → {value, at}) */
+    var categorySort by mutableStateOf(mapOf<String, SortPref179>()); private set
     /** Startscherm (build 51) van het actieve profiel */
     var activeHomeLayout by mutableStateOf(HomeLayout()); private set
     var nasServers by mutableStateOf(listOf<NASServer>()); private set
@@ -147,6 +151,9 @@ object Store {
         val lockedChannels: Set<String> = emptySet(),
         val lockedTitles: Set<String> = emptySet(),
         val autoplayNext: AutoplayPref176? = null,
+        /** build 179 (docs/ACCOUNT.md "Build 179") */
+        val thumbs: Map<String, Thumb179> = emptyMap(),
+        val categorySort: Map<String, SortPref179> = emptyMap(),
     )
 
     /** Per-profiel-bestanden (vroeger in store/, nu in store/profile-<id>/) */
@@ -286,6 +293,8 @@ object Store {
         lockedChannels = readIn(d, "lockedchannels", emptySet())
         lockedTitles = readIn(d, "lockedtitles", emptySet())
         autoplayNext = readIn<AutoplayPref176?>(d, "autoplay176", null)
+        thumbs = readIn(d, "thumbs179", emptyMap())
+        categorySort = readIn(d, "catsort179", emptyMap())
         activeHomeLayout = readIn(d, "homelayout", HomeLayout())
     }
 
@@ -1106,13 +1115,14 @@ object Store {
         writeIn(d, "sportmuted", data.sportMuted)
         writeIn(d, "lockedchannels", data.lockedChannels); writeIn(d, "lockedtitles", data.lockedTitles)
         data.autoplayNext?.let { writeIn(d, "autoplay176", it) }
+        writeIn(d, "thumbs179", data.thumbs); writeIn(d, "catsort179", data.categorySort)
         if (id == activeProfileID) loadProfileData()
     }
 
     private fun readProfileData(id: String): ProfileData {
         if (id == activeProfileID) return ProfileData(favorites, myList, progress, localWatched, recentChannels, history, profileHiddenCats,
             hiddenChannels, pinnedCategories, blockedTitles, favoriteTeams, favoriteCompetitions, sportMuted,
-            lockedChannels, lockedTitles, autoplayNext)
+            lockedChannels, lockedTitles, autoplayNext, thumbs, categorySort)
         val d = profileDir(id)
         return ProfileData(
             readIn(d, "favorites", emptySet()), readIn(d, "mylist", emptySet()), readIn(d, "progress", emptyMap()),
@@ -1122,6 +1132,7 @@ object Store {
             readIn(d, "sportteams", emptySet()), readIn(d, "sportcomps", emptySet()), readIn(d, "sportmuted", emptySet()),
             readIn(d, "lockedchannels", emptySet()), readIn(d, "lockedtitles", emptySet()),
             readIn<AutoplayPref176?>(d, "autoplay176", null),
+            readIn(d, "thumbs179", emptyMap()), readIn(d, "catsort179", emptyMap()),
         )
     }
 
@@ -1215,6 +1226,37 @@ object Store {
         val v = AutoplayPref176(on, System.currentTimeMillis())
         autoplayNext = v
         writeIn(profileDir(pid), "autoplay176", v)
+        StateSync.profileDataChanged(pid)
+    }
+
+    // MARK: build 179: duimen en sorteren per categorie (per profiel, gesynct)
+
+    /** Duim van het actieve profiel: 1, -1 of 0 (geen). */
+    fun thumb(key: String): Int = thumbs[key]?.value ?: 0
+
+    /** Duim zetten (0 = weghalen: blijft 90 dagen als tombstone staan); max. 2000 per profiel, oudste tombstones eerst weg. */
+    fun setThumb(key: String, value: Int) {
+        val pid = activeProfileID ?: return
+        val now = System.currentTimeMillis()
+        var m = thumbs + (key to Thumb179(value.coerceIn(-1, 1), now))
+        m = m.filter { it.value.value != 0 || now - it.value.at < 90L * 86_400_000L }
+        if (m.size > 2000) {
+            val drop = m.entries.sortedWith(compareBy<Map.Entry<String, Thumb179>> { if (it.value.value == 0) 0 else 1 }.thenBy { it.value.at })
+                .take(m.size - 2000).map { it.key }.toSet()
+            m = m - drop
+        }
+        thumbs = m
+        writeIn(profileDir(pid), "thumbs179", m)
+        StateSync.profileDataChanged(pid)
+    }
+
+    fun categorySortOf(key: String): String = Build179Logic.Sort.mode(categorySort[key]?.value)
+
+    fun setCategorySort(key: String, value: String) {
+        val pid = activeProfileID ?: return
+        val m = categorySort + (key to SortPref179(Build179Logic.Sort.mode(value), System.currentTimeMillis()))
+        categorySort = m
+        writeIn(profileDir(pid), "catsort179", m)
         StateSync.profileDataChanged(pid)
     }
 

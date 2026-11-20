@@ -580,6 +580,22 @@ object Account {
         }
     }
 
+    /**
+     * Build 179: server-functie met device-auth (`ratings`, `introdb`): het JSON-antwoord bij 200, anders null (ook zonder
+     * account, zonder netwerk of bij 429). Niets wordt gelogd.
+     */
+    suspend fun function179(name: String, body: JsonElement): JsonElement? {
+        if (!configured || !isSignedIn) return null
+        return try {
+            var r = post("/functions/v1/$name", body, bearer = validAccessToken())
+            if (r.code == 401 && !isBanned(r) && refresh() == RefreshResult.OK) {
+                val token = accessToken
+                if (token != null) r = post("/functions/v1/$name", body, bearer = token)
+            }
+            if (r.ok) r.json else null
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { null }
+    }
+
     private suspend fun deviceCall(action: String, id: String, extra: Map<String, String> = emptyMap()): Reply {
         val body = buildJsonObject {
             put("action", action); put("device_id", id)

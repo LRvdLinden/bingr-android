@@ -634,10 +634,19 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
     // build 60: één keer per titel opzoeken (zonder serie-id doorzoekt dit de hele bibliotheek), niet bij elke tik
     val markerKey = remember(player.item.id, player.item.seriesID, Playlists.source?.id) { IntroMarkers.keyFor(player.item) }
     val marker = IntroMarkers.get(markerKey)
-    val introRange = if (!player.isLive && player.errorText == null) marker?.intro else null
-    val showSkip = introRange != null && player.currentTime >= introRange.start && player.currentTime < introRange.endInclusive - 1 &&
-        !inPiP && panel == null
-    val creditsAt = marker?.creditsStart
+    // build 179: tijden van IntroDB (via de server) eerst, anders de eigen markeringen (build 52); ook Samenvatting overslaan
+    var seg179 by remember(player.item.id) { mutableStateOf(IntroDB179.cached(player.item)) }
+    LaunchedEffect(player.item.id) { if (seg179 == null) seg179 = runCatching { IntroDB179.load(player.item) }.getOrNull() }
+    val intro179 = seg179?.intro ?: marker?.intro?.let { Build179Logic.Intro.Range(it.start, it.endInclusive) }
+    val active179 = if (!player.isLive && player.errorText == null) Build179Logic.Intro.active(intro179, seg179?.recap, player.currentTime) else null
+    val introRange = when (active179) {
+        "recap" -> seg179?.recap?.let { it.start..it.end }
+        "intro" -> intro179?.let { it.start..it.end }
+        else -> null
+    }
+    val skipLabel179 = if (active179 == "recap") L("Skip recap") else L("Skip intro")
+    val showSkip = introRange != null && !inPiP && panel == null
+    val creditsAt = seg179?.credits ?: marker?.creditsStart
     val showCredits = creditsAt != null && nextUp != null && player.errorText == null && !player.isLive &&
         player.currentTime >= creditsAt && creditsDismissedFor != player.item.id && !inPiP && panel == null
     LaunchedEffect(markerKey, creditsAt) { player.creditsStart = creditsAt }
@@ -946,7 +955,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                 modifier = Modifier.align(Alignment.BottomEnd)
                     .padding(end = tvs(40), bottom = if (showControls) tvs(130) else tvs(50))
             ) {
-                NetflixButton(L("Skip intro"), Icons.Filled.FastForward, modifier = Modifier.focusRequester(skipFocus)) {
+                NetflixButton(skipLabel179, Icons.Filled.FastForward, modifier = Modifier.focusRequester(skipFocus)) {
                     introRange?.let { r -> player.seek(r.endInclusive - player.currentTime); poke() }
                 }
             }
