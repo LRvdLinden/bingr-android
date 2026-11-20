@@ -72,215 +72,6 @@ jobs:
             echo "::warning::Secret GOOGLE_SERVICES_JSON ontbreekt: APK zonder pushmeldingen."
           fi
 
-      # build 128: unit-tests van de pure logica (één lijst over alle servers: normaliseren, matchen, remap, samenvoegen).
-      # Zonder Android-SDK met kotlinc (staat op de runner); ontbreekt kotlinc, dan alleen een waarschuwing.
-      - name: Unit-tests (pure logica)
-        run: |
-          if command -v kotlinc >/dev/null 2>&1; then
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/AllServersLogic.kt tools/test/AllServersLogicTest.kt \
-              -include-runtime -d "$RUNNER_TEMP/logic-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/logic-test.jar" | tee "$RUNNER_TEMP/logic-test.txt"; rc=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests::$(tail -1 "$RUNNER_TEMP/logic-test.txt")"
-            # build 132: deellink (TitleShare)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/core/TitleShare.kt tools/test/TitleShareTest.kt \
-              -include-runtime -d "$RUNNER_TEMP/share-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/share-test.jar" | tee "$RUNNER_TEMP/share-test.txt"; rc2=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests deellink::$(tail -1 "$RUNNER_TEMP/share-test.txt")"
-            # build 140: categorieën per account, kinderfilter, ouderpoort, Voor jou/Nieuw op Bingr/uitgelicht, vernieuwen, Mijn lijst
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/AllServersLogic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build140Logic.kt \
-              tools/test/Build140LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b140-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b140-test.jar" | tee "$RUNNER_TEMP/b140-test.txt"; rc3=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 140::$(tail -1 "$RUNNER_TEMP/b140-test.txt")"
-            # build 141: beveiliging (pincode-limiet, Cast-doorgeefluik, vaste hosts)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build141Logic.kt tools/test/Build141LogicTest.kt \
-              -include-runtime -d "$RUNNER_TEMP/b141-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b141-test.jar" | tee "$RUNNER_TEMP/b141-test.txt"; rc4=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 141::$(tail -1 "$RUNNER_TEMP/b141-test.txt")"
-            # build 141: feedback (Nieuw op Bingr, Home-indeling, Mijn lijst, Verder kijken, achtergrondwerk)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/AllServersLogic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build140Logic.kt \
-              app/src/main/java/nl/lrvdlinden/bingr/features/Build141Feedback.kt \
-              tools/test/Build141FeedbackTest.kt -include-runtime -d "$RUNNER_TEMP/b141f-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b141f-test.jar" | tee "$RUNNER_TEMP/b141f-test.txt"; rc5=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 141 feedback::$(tail -1 "$RUNNER_TEMP/b141f-test.txt")"
-            # build 144: Verder kijken (postervolgorde: bibliotheek/catalogmeta, TMDB, bewaard beeld) en verversen na het openen
-            # (sinds build 153 met Build149Logic.kt en Build150Logic.kt: TitleCleaner gebruikt Build150Logic.Pipes)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/meta/TitleCleaner.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build144Logic.kt \
-              app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
-              tools/test/Build144LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b144-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b144-test.jar" | tee "$RUNNER_TEMP/b144-test.txt"; rc6=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 144::$(tail -1 "$RUNNER_TEMP/b144-test.txt")"
-            # build 145: servers laden bij openen (Vragen / Altijd / Nooit), de vraag en de volgorde van het bijwerken
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build145Logic.kt \
-              tools/test/Build145LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b145-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b145-test.jar" | tee "$RUNNER_TEMP/b145-test.txt"; rc7=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 145::$(tail -1 "$RUNNER_TEMP/b145-test.txt")"
-            # build 146: pincode als hash (testvectoren uit docs/ACCOUNT.md), welke pincode geldt, profielen samenvoegen,
-            # support (groepen, deeplink, formulier) en de startdiagnose
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build146Logic.kt \
-              tools/test/Build146LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b146-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b146-test.jar" | tee "$RUNNER_TEMP/b146-test.txt"; rc8=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 146::$(tail -1 "$RUNNER_TEMP/b146-test.txt")"
-            # build 147: starttijden (app-tijd los van wachten), goed/traag/vastgelopen, hang-detectie (2 s, taak, stack),
-            # vorige start, ophalen per soort, opslag, verbinding, en 10.000 films + 1.000 zenders: hoofdthread ≤ 250 ms vast
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build146Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build147Logic.kt \
-              tools/test/Build147LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b147-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b147-test.jar" | tee "$RUNNER_TEMP/b147-test.txt"; rc9=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 147::$(tail -1 "$RUNNER_TEMP/b147-test.txt")"
-            # build 148: codes, bijwerken in fasen, geleverd/zichtbaar, haperingen en 37.000 films + 12.000 zenders + 9.000
-            # series: inlezen per soort (geheugen vóór/na), Compose-state referentieel (vóór/na), hoofdthread ≤ 250 ms vast
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build147Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build148Logic.kt \
-              tools/test/Build148LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b148-test.jar" 2>&1 | grep -v '^warning' || true
-            java -Xmx512m -jar "$RUNNER_TEMP/b148-test.jar" | tee "$RUNNER_TEMP/b148-test.txt"; rc10=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 148::$(grep -E '^(geheugen|toewijzen|37k)' "$RUNNER_TEMP/b148-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b148-test.txt")"
-            # build 149: datums zonder opmaker per item, streamend inlezen, verborgen categorieën alleen tellen, Ontdek
-            # categorieën, zoeken op woorden; belastingtest 123k films + 30k series + 12k zenders met 80% verborgen (vóór/na)
-            # (sinds build 150 met Build150Logic.kt: het zoeken gebruikt de opschoning van de categorienamen)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
-              tools/test/Build149LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b149-test.jar" 2>&1 | grep -v '^warning' || true
-            java -Xmx1500m -jar "$RUNNER_TEMP/b149-test.jar" | tee "$RUNNER_TEMP/b149-test.txt"; rc11=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 149::$(grep -E '^(geheugen|datums|zoeken)' "$RUNNER_TEMP/b149-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b149-test.txt")"
-            # build 150: categorienamen opschonen (taal/land/kwaliteit in elke vorm), samenvoegen en ontdubbelen, logo's
-            # (gedeelde gevallen in tools/test/build150_cases.json)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
-              tools/test/Build150LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b150-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b150-test.jar" tools/test/build150_cases.json | tee "$RUNNER_TEMP/b150-test.txt"; rc12=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 150::$(grep -E '^opschonen' "$RUNNER_TEMP/b150-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b150-test.txt")"
-            # build 151: rij "Zenders" op Home (recent/favorieten eerst, aangevuld uit de grootste categorieën, ontdubbeld)
-            # (gedeelde gevallen in tools/test/build151_cases.json)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
-              app/src/main/java/nl/lrvdlinden/bingr/features/Build151Logic.kt \
-              tools/test/Build151LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b151-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b151-test.jar" tools/test/build151_cases.json | tee "$RUNNER_TEMP/b151-test.txt"; rc13=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 151::$(grep -E '^kiezen' "$RUNNER_TEMP/b151-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b151-test.txt")"
-            # build 152: verborgen categorieën (samengevoegd verbergen/tonen met de ruwe sleutels, sync Apple/Android/web, oude
-            # sleutels, overslaan en terugkomen ook op andere servers, verborgen ≠ weg, eerst gezien) en Nu in de bioscoop
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/AllServersLogic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build140Logic.kt \
-              app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
-              app/src/main/java/nl/lrvdlinden/bingr/features/Build152Logic.kt \
-              tools/test/Build152LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b152-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b152-test.jar" | tee "$RUNNER_TEMP/b152-test.txt"; rc14=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 152::$(tail -1 "$RUNNER_TEMP/b152-test.txt")"
-            # build 154: inhoudssleutels voor "gezien" (alle servers), titelopschoning, Trakt-token, wachtrij, migratie, uitvinken
-            # (gedeelde gevallen: docs/watched_keys_cases.json uit LRvdLinden/iptv-ios-appletv, openbaar, ongewijzigd opgehaald)
-            curl -fsSL --retry 3 -o "$RUNNER_TEMP/watched_keys_cases.json" \
-              https://raw.githubusercontent.com/LRvdLinden/iptv-ios-appletv/main/docs/watched_keys_cases.json
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/meta/TitleCleaner.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt \
-              app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build154Logic.kt \
-              tools/test/Build154LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b154-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b154-test.jar" "$RUNNER_TEMP/watched_keys_cases.json" | tee "$RUNNER_TEMP/b154-test.txt"; rc15=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 154::$(grep -E '^gedeelde' "$RUNNER_TEMP/b154-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b154-test.txt")"
-            # build 157: Gratis en Lifetime aangepast (vlaggen continue_watching / kids_profiles / opensubtitles, oude server
-            # zonder vlag = volgt het abonnement, vergelijking Gratis 1/2/1, bestaand kinderprofiel blijft gefilterd)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build157Logic.kt \
-              tools/test/Build157LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b157-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b157-test.jar" | tee "$RUNNER_TEMP/b157-test.txt"; rc16=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 157::$(tail -1 "$RUNNER_TEMP/b157-test.txt")"
-            # build 158: grote Prefs-waarden naar bestanden (cacheDir/filesDir) met migratie, grens van 1 MB voor profile.<id>
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build158Logic.kt \
-              tools/test/Build158LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b158-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b158-test.jar" | tee "$RUNNER_TEMP/b158-test.txt"; rc17=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 158::$(grep -E '^(groottes|section)' "$RUNNER_TEMP/b158-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b158-test.txt")"
-            # build 164: nieuwe tv-gids (dagbalk, NU-index, venster per dag, tv-kolom, stilstaand beeld, live voorbeeld)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build164Logic.kt \
-              tools/test/Build164LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b164-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b164-test.jar" | tee "$RUNNER_TEMP/b164-test.txt"; rc18=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 164::$(grep -E '^kolommen' "$RUNNER_TEMP/b164-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b164-test.txt")"
-            # build 166: dagbalk van de tv-gids alleen met dagen waarvoor er gids-info is
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build164Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build166Logic.kt \
-              tools/test/Build166LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b166-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b166-test.jar" | tee "$RUNNER_TEMP/b166-test.txt"; rc19=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 166::$(grep -E '^dagbalk' "$RUNNER_TEMP/b166-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b166-test.txt")"
-            # build 167: alleen Lifetime (access, lifetime_only, aankondigingskaart, link met ?code=, datums, knoppen)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
-              app/src/main/java/nl/lrvdlinden/bingr/features/Build167Logic.kt \
-              tools/test/Build167LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b167-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b167-test.jar" | tee "$RUNNER_TEMP/b167-test.txt"; rc20=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 167::$(grep -E '^lifetime' "$RUNNER_TEMP/b167-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b167-test.txt")"
-            # build 169: doorspoelen via de tijdbalk op Android TV (stappen, versnelling, begrenzen, verschiltekst, vervallen)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build169Logic.kt \
-              tools/test/Build169LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b169-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b169-test.jar" | tee "$RUNNER_TEMP/b169-test.txt"; rc21=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 169::$(grep -E '^scrub' "$RUNNER_TEMP/b169-test.txt" | tr '\n' ' ') · $(tail -1 "$RUNNER_TEMP/b169-test.txt")"
-            # build 171: Kijk je nog?, verborgen zenders/geblokkeerde titels, landen, radio, apparatenlijst, crashrapporten
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build149Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/Build150Logic.kt \
-              app/src/main/java/nl/lrvdlinden/bingr/features/Build171Logic.kt \
-              tools/test/Build171LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b171-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b171-test.jar" | tee "$RUNNER_TEMP/b171-test.txt"; rc22=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 171::$(tail -1 "$RUNNER_TEMP/b171-test.txt")"
-            # build 172: categorieën opschonen (gedeelde gevallen in tools/test/merge_cases.json = docs/merge_cases.json van iptv-ios-appletv)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build172Logic.kt \
-              tools/test/Build172LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b172-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b172-test.jar" tools/test/merge_cases.json | tee "$RUNNER_TEMP/b172-test.txt"; rc23=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 172::$(tail -1 "$RUNNER_TEMP/b172-test.txt")"
-            # build 172 (Sport): wedstrijden herkennen, teams, ontdubbelen, automatische belletjes (gedeelde gevallen in
-            # tools/test/sport_cases.json = docs/sport_cases.json van iptv-ios-appletv)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build173Logic.kt \
-              tools/test/Build173LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b173-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b173-test.jar" tools/test/sport_cases.json | tee "$RUNNER_TEMP/b173-test.txt"; rc24=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 172 (Sport)::$(tail -1 "$RUNNER_TEMP/b173-test.txt")"
-            # build 173: bediening in de speler, Trakt (verversen, waarschuwen) en OpenSubtitles (stil opnieuw inloggen)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build173PlayerLogic.kt \
-              tools/test/Build173PlayerLogicTest.kt -include-runtime -d "$RUNNER_TEMP/b173p-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b173p-test.jar" | tee "$RUNNER_TEMP/b173p-test.txt"; rc25=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 173::$(tail -1 "$RUNNER_TEMP/b173p-test.txt")"
-            # build 174: knoppen onder Afspelen op de telefoon, de beste trailer uit alle bronnen, Bingr Radio-widget
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build174Logic.kt \
-              tools/test/Build174LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b174-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b174-test.jar" | tee "$RUNNER_TEMP/b174-test.txt"; rc26=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 174::$(tail -1 "$RUNNER_TEMP/b174-test.txt")"
-            # build 175: downloaden vanuit Meer, ook bij series
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build175Logic.kt \
-              tools/test/Build175LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b175-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b175-test.jar" | tee "$RUNNER_TEMP/b175-test.txt"; rc27=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 175::$(tail -1 "$RUNNER_TEMP/b175-test.txt")"
-            # build 176 (techniek): Watch Next, preview-kanaal, Cronet-keuze, versleutelde opslag (migratie), audio-uitvoer
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build176TechLogic.kt \
-              tools/test/Build176TechLogicTest.kt -include-runtime -d "$RUNNER_TEMP/b176t-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b176t-test.jar" | tee "$RUNNER_TEMP/b176t-test.txt"; rcTech176=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 176 techniek::$(tail -1 "$RUNNER_TEMP/b176t-test.txt")"
-            # build 176: autoplay, vergrendelen, data besparen, zoeken in de gids, momenten, herinneringen (docs/build176_cases.json)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build176Logic.kt \
-              tools/test/Build176LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b176-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b176-test.jar" tools/test/build176_cases.json | tee "$RUNNER_TEMP/b176-test.txt"; rc28=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 176::$(tail -1 "$RUNNER_TEMP/b176-test.txt")"
-            # build 177: tv-gids per zender: hele dag, volgorde en dubbelen (docs/build177_cases.json)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build177Logic.kt \
-              tools/test/Build177LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b177-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b177-test.jar" tools/test/build177_cases.json | tee "$RUNNER_TEMP/b177-test.txt"; rc29=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 177::$(tail -1 "$RUNNER_TEMP/b177-test.txt")"
-            # build 178: terugkijken in de tv-gids: herkennen, URL's, archief, dagbalk (docs/build178_cases.json)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build178Logic.kt \
-              tools/test/Build178LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b178-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b178-test.jar" tools/test/build178_cases.json | tee "$RUNNER_TEMP/b178-test.txt"; rc30=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 178::$(tail -1 "$RUNNER_TEMP/b178-test.txt")"
-            # build 178: sport-logo's (docs/sportlogos_cases.json)
-            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build173Logic.kt app/src/main/java/nl/lrvdlinden/bingr/features/SportLogos178Logic.kt \
-              tools/test/SportLogos178LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b178l-test.jar" 2>&1 | grep -v '^warning' || true
-            java -jar "$RUNNER_TEMP/b178l-test.jar" tools/test/sportlogos_cases.json | tee "$RUNNER_TEMP/b178l-test.txt"; rcLogos178=${PIPESTATUS[0]}
-            echo "::notice title=Unit-tests build 178 (logo's)::$(tail -1 "$RUNNER_TEMP/b178l-test.txt")"
-            [ $rcLogos178 -eq 0 ] && [ $rc30 -eq 0 ] && [ $rc29 -eq 0 ] && [ $rc28 -eq 0 ] && [ $rcTech176 -eq 0 ] && [ $rc27 -eq 0 ] && [ $rc26 -eq 0 ] && [ $rc25 -eq 0 ] && [ $rc24 -eq 0 ] && [ $rc23 -eq 0 ] && [ $rc22 -eq 0 ] && [ $rc21 -eq 0 ] && [ $rc20 -eq 0 ] && [ $rc19 -eq 0 ] && [ $rc18 -eq 0 ] && [ $rc17 -eq 0 ] && [ $rc16 -eq 0 ] && [ $rc15 -eq 0 ] && [ $rc14 -eq 0 ] && [ $rc13 -eq 0 ] && [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
-          else
-            echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
-          fi
-
-      # build 141 (M4): welke app-sleutels worden in de APK ingebouwd? Alleen namen (ja/nee), nooit waarden.
-      # De apps halen ze sinds build 41 ook bij de server op (device-auth config); een ingebouwde sleutel is uit de
-      # openbare APK te halen.
-      - name: Ingebouwde app-sleutels (alleen namen)
-        env:
-          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
-          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
-          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-          TMDB_ACCESS_TOKEN: ${{ secrets.TMDB_ACCESS_TOKEN }}
-          OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
-          OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
-        run: |
-          out=""
-          for n in TRAKT_CLIENT_ID TRAKT_CLIENT_SECRET TMDB_API_KEY TMDB_ACCESS_TOKEN OMDB_API_KEY OPENSUBTITLES_API_KEY; do
-            if [ -n "${!n}" ]; then out="$out $n=ingebouwd"; else out="$out $n=leeg"; fi
-          done
-          echo "::notice title=Ingebouwde app-sleutels::$out"
-
       - name: APK bouwen
         env:
           BINGR_KEYSTORE_PASSWORD: ${{ secrets.BINGR_KEYSTORE_PASSWORD }}
@@ -294,330 +85,68 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: gradle --no-daemon --stacktrace assembleRelease 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
-
-      # build 120: SHA-256-vingerafdruk van het ondertekencertificaat voor assetlinks.json op bingr.online (app links
-      # https://bingr.online/titel/…). De vingerafdruk is openbaar (staat in elke APK); de keystore en wachtwoorden
-      # worden hier niet gebruikt en nooit gelogd.
-      - name: Vingerafdruk ondertekencertificaat
-        if: success()
-        run: |
-          set +e
-          APK=$(ls app/build/outputs/apk/release/*.apk 2>/dev/null | head -1)
-          [ -n "$APK" ] || { echo "::warning::Geen APK gevonden voor de vingerafdruk."; exit 0; }
-          SIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/ 2>/dev/null | sort -V | tail -1)apksigner
-          FP=""
-          if [ -x "$SIGNER" ]; then
-            FP=$("$SIGNER" verify --print-certs "$APK" 2>/dev/null | grep -m1 'certificate SHA-256 digest:' | awk '{print $NF}')
-          fi
-          if [ -z "$FP" ]; then
-            FP=$(keytool -printcert -jarfile "$APK" 2>/dev/null | grep -m1 'SHA256:' | awk '{print $NF}' | tr -d ':')
-          fi
-          [ -n "$FP" ] || { echo "::warning::Vingerafdruk van het ondertekencertificaat niet te bepalen."; exit 0; }
-          FP=$(printf '%s' "$FP" | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
-          if [ -n "${BINGR_KEYSTORE:-}" ]; then
-            echo "::notice title=assetlinks.json::SHA-256 ondertekencertificaat (vaste Bingr-sleutel): $FP"
-          else
-            echo "::warning::APK met een tijdelijke sleutel getekend (BINGR_KEYSTORE_BASE64 ontbreekt); deze vingerafdruk hoort NIET in assetlinks.json: $FP"
-          fi
-
-      # build 141: geen voorgronddienst van het type dataSync (Google Play vraagt per type een verklaring); downloads op
-      # Android 14+ zijn een door de gebruiker gestarte gegevensoverdracht. Controle op het samengevoegde manifest in de APK.
-      - name: Voorgronddiensten controleren (geen dataSync)
-        if: success()
-        run: |
-          set -euo pipefail
-          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
-          AAPT2=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
-          "$AAPT2" dump xmltree --file AndroidManifest.xml "$APK" > "$RUNNER_TEMP/manifest.txt"
-          # build 171: alleen mediaPlayback (radio, RadioService) mag; dataSync (0x1) nooit
-          bad=$(grep -iE 'foregroundServiceType' "$RUNNER_TEMP/manifest.txt" | grep -viE 'mediaPlayback|=0x0*2$|=2$' || true)
-          if grep -qiE 'FOREGROUND_SERVICE_DATA_SYNC' "$RUNNER_TEMP/manifest.txt" || [ -n "$bad" ]; then
-            grep -iE -B3 'FOREGROUND_SERVICE_|foregroundServiceType' "$RUNNER_TEMP/manifest.txt" | head -40
-            echo "::error::Het manifest vraagt nog FOREGROUND_SERVICE_DATA_SYNC of een dataSync-voorgronddienst."
-            exit 1
-          fi
-          perms=$(grep -oE '"android.permission.(FOREGROUND_SERVICE[A-Z_]*|RUN_USER_INITIATED_JOBS)"' "$RUNNER_TEMP/manifest.txt" | sort -u | tr '\n' ' ')
-          echo "::notice title=Voorgronddiensten::geen dataSync; permissies: $perms"
-
-      # build 142: rooktest van de ECHTE release-APK (R8, release-sleutel), vóór het aanleveren. Eerst zonder apparaat:
-      # geldige handtekening met de Bingr-releasesleutel, versionCode = BINGR_BUILD. Dan in de emulator (telefoon API 34 en
-      # Android TV API 33): als update over de openbare testversie (dl.php?app=android, zelfde sleutel) en vers installeren,
-      # starten, en de app moet na 30 s nog draaien zonder crash. Mislukt dit, dan wordt er niets aangeleverd. De APK gaat
-      # nergens naartoe (geen artefact); alleen logboeken en de gedeobfusceerde stacktrace (mapping.txt) komen op ci-logs.
-      - name: Release-APK controleren (handtekening, versie)
-        if: success()
+      - name: Stack vertalen (R8 retrace, build 178)
         run: |
           set -uo pipefail
-          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
-          bash tools/smoke/apk_info.sh release "$APK" "$BINGR_CERT_SHA256" || exit 1
-          BT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
-          B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
-          VC=$("$BT/aapt2" dump badging "$APK" | grep -m1 '^package:' | grep -oE "versionCode='[0-9]+'" | grep -oE '[0-9]+')
-          [ "$VC" = "$B" ] || { echo "::error::versionCode $VC is niet BINGR_BUILD $B"; exit 1; }
-          echo "RELEASE_APK=$APK" >> "$GITHUB_ENV"
-
-      - name: Vorige APK ophalen (openbare testversie, voor de update-test)
-        if: success()
-        run: |
-          set +e
-          curl -fsS --max-time 300 -o "$RUNNER_TEMP/prev.apk" "https://beheer.bingr.online/dl.php?app=android"
-          if bash tools/smoke/apk_info.sh openbaar "$RUNNER_TEMP/prev.apk" "$BINGR_CERT_SHA256"; then
-            echo "PREV_APK=$RUNNER_TEMP/prev.apk" >> "$GITHUB_ENV"
-          else
-            rm -f "$RUNNER_TEMP/prev.apk"; echo "::warning::Geen bruikbare openbare APK: alleen de verse installatie wordt getest."
+          MAP=app/build/outputs/mapping/release/mapping.txt
+          [ -s "$MAP" ] || { echo "::error::geen mapping.txt"; exit 1; }
+          cat > stack.txt <<'EOT'
+          java.lang.NullPointerException
+          	at p6.Io.k(SourceFile:3)
+          	at F3.H.g(SourceFile:46)
+          	at F3.H.e(SourceFile:178)
+          	at a0.a.d(SourceFile:44)
+          	at a0.a.e(SourceFile:9)
+          	at A.o.k(SourceFile:62)
+          	at a0.a.g(SourceFile:44)
+          	at a0.a.k(SourceFile:9)
+          	at A.q.f(SourceFile:64)
+          	at a0.a.f(SourceFile:52)
+          	at S.d.a(SourceFile:227)
+          	at z3.f.a(SourceFile:248)
+          	at z.i.e(SourceFile:106)
+          	at B.C.f(SourceFile:361)
+          	at a0.a.f(SourceFile:52)
+          	at S.d.a(SourceFile:227)
+          	at b0.h.a(SourceFile:149)
+          	at B.d0.a(SourceFile:84)
+          	at v0.c.G(SourceFile:106)
+          	at B.z.f(SourceFile:1413)
+          	at a0.a.f(SourceFile:52)
+          	at B.z.f(SourceFile:1154)
+          	at a0.a.f(SourceFile:52)
+          	at S.d.J(SourceFile:15)
+          	at S.q.o(SourceFile:197)
+          	at S.u.i(SourceFile:34)
+          	at S.u0.a(SourceFile:45)
+          	at S.o.a(SourceFile:5)
+          	at S.o.a(SourceFile:5)
+          	at S.u.j(SourceFile:7)
+          	at B0.E.i(SourceFile:35)
+          	at B0.E.h(SourceFile:120)
+          	at B0.E.f(SourceFile:116)
+          	at B.j0.d(SourceFile:51)
+          	at B.j0.b(SourceFile:91)
+          	at B.b.run(SourceFile:65)
+          EOT
+          sed -i 's/^          //' stack.txt
+          mkdir -p /tmp/rt
+          rt=$(ls -d "${ANDROID_HOME:-/nonexistent}"/cmdline-tools/*/bin/retrace 2>/dev/null | sort -V | tail -1)
+          if [ -n "$rt" ]; then "$rt" "$MAP" stack.txt > /tmp/rt/retrace.txt 2>/tmp/rt/retrace.err; else
+            r8=$(find ~/.gradle -name 'r8-*.jar' 2>/dev/null | sort -V | tail -1)
+            java -cp "$r8" com.android.tools.r8.retrace.Retrace "$MAP" stack.txt > /tmp/rt/retrace.txt 2>/tmp/rt/retrace.err
           fi
-          exit 0
-
-      - name: KVM aan (emulator)
-        if: success()
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Rooktest release-APK (telefoon, API 34)
-        if: success()
-        timeout-minutes: 20
-        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
-        with:
-          api-level: 34
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          ram-size: 3072M
-          disk-size: 6000M
-          force-avd-creation: true
-          disable-animations: true
-          emulator-boot-timeout: 600
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
-          script: bash tools/smoke/release.sh phone smoke-release/phone "$RELEASE_APK" app/build/outputs/mapping/release/mapping.txt "${PREV_APK:-}"
-
-      - name: Rooktest release-APK (Android TV, API 33)
-        if: success()
-        timeout-minutes: 20
-        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
-        with:
-          api-level: 33
-          target: android-tv
-          arch: x86
-          profile: tv_1080p
-          ram-size: 2048M
-          disk-size: 6000M
-          force-avd-creation: true
-          disable-animations: true
-          emulator-boot-timeout: 600
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
-          script: bash tools/smoke/release.sh tv smoke-release/tv "$RELEASE_APK" app/build/outputs/mapping/release/mapping.txt "${PREV_APK:-}"
-
-      - name: Rooktest release-APK samenvatten
-        if: always()
-        run: |
-          set +e
-          for f in smoke-release/*/_log.txt; do [ -f "$f" ] || continue; echo "== $f"; cat "$f"; done
-          for f in smoke-release/*/trace-*.txt; do [ -s "$f" ] || continue; { echo "### Crash ($f)"; echo '```'; head -60 "$f"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"; done
-          exit 0
-
-      # build 141: belastingtest zonder emulator: profiel openen met 3 servers × (30.000 films, 20.000 series, 5.000 zenders
-      # met gids), oud tegen nieuw (cacheformaat, gedeelde filterlijsten, Nieuw op Bingr), met tijd en geheugen; de JVM krijgt
-      # een heap zoals een tv (zie tools/test/ProfileOpenStressTest.kt). Na het bouwen: kotlinx-serialization uit de Gradle-cache.
-      - name: Belastingtest (grote nepcatalogus, oud tegen nieuw)
-        if: success()
-        run: |
-          # geen -e: "oud" mag (en zal) mislukken; het resultaat van "nieuw" bepaalt de stap
-          set +e -uo pipefail
-          # vaste compiler (Kotlin 2.1.0, gelijk aan de app; sha256 gecontroleerd) en kotlinx-serialization 1.7.3 uit de Gradle-cache
-          curl -fsSL -o "$RUNNER_TEMP/kotlinc.zip" https://github.com/JetBrains/kotlin/releases/download/v2.1.0/kotlin-compiler-2.1.0.zip
-          echo "b6698d5728ad8f9edcdd01617d638073191d8a03139cc538a391b4e3759ad297  $RUNNER_TEMP/kotlinc.zip" | sha256sum -c - >/dev/null \
-            || { echo "::error::kotlin-compiler-2.1.0.zip: sha256 klopt niet"; exit 1; }
-          unzip -q -o "$RUNNER_TEMP/kotlinc.zip" -d "$RUNNER_TEMP"
-          KH="$RUNNER_TEMP/kotlinc"
-          C=$(find ~/.gradle/caches -name 'kotlinx-serialization-core-jvm-1.7.3.jar' | head -1)
-          J=$(find ~/.gradle/caches -name 'kotlinx-serialization-json-jvm-1.7.3.jar' | head -1)
-          if [ -z "$C" ] || [ -z "$J" ]; then echo "::error::kotlinx-serialization 1.7.3 niet in de Gradle-cache"; exit 1; fi
-          "$KH/bin/kotlinc" -Xplugin="$KH/lib/kotlinx-serialization-compiler-plugin.jar" -cp "$C:$J" app/src/main/java/nl/lrvdlinden/bingr/core/Models.kt \
-            app/src/main/java/nl/lrvdlinden/bingr/features/CatalogFiles.kt \
-            app/src/main/java/nl/lrvdlinden/bingr/features/Build141Feedback.kt tools/test/StressStubs.kt tools/test/ProfileOpenStressTest.kt \
-            -d "$RUNNER_TEMP/stress-classes" 2>&1 | grep -v '^warning' || true
-          CP="$RUNNER_TEMP/stress-classes:$C:$J:$KH/lib/kotlin-stdlib.jar"
-          M=nl.lrvdlinden.bingr.ProfileOpenStressTestKt
-          java -Xmx2g -cp "$CP" $M prepare "$RUNNER_TEMP/stress" || { echo "::error::nepgegevens voor de belastingtest niet te maken"; exit 1; }
-          # nieuw: moet slagen met een tv-heap (256 MB); oud: ter vergelijking met dezelfde heap (mag mislukken)
-          java -Xmx256m -cp "$CP" $M new "$RUNNER_TEMP/stress" | tee "$RUNNER_TEMP/stress-new.txt"; rcn=${PIPESTATUS[0]}
-          java -Xmx256m -cp "$CP" $M old "$RUNNER_TEMP/stress" | tee "$RUNNER_TEMP/stress-old.txt"; rco=${PIPESTATUS[0]}
-          { echo '### Belastingtest (heap 256 MB)'; echo '```'; tail -12 "$RUNNER_TEMP/stress-new.txt"; echo '---'; tail -12 "$RUNNER_TEMP/stress-old.txt"; echo "oud: exit $rco"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          echo "::notice title=Belastingtest::$(tail -1 "$RUNNER_TEMP/stress-new.txt") · oud: $(tail -1 "$RUNNER_TEMP/stress-old.txt")"
-          rm -rf "$RUNNER_TEMP/stress" "$RUNNER_TEMP/stress-classes"
-          [ $rcn -eq 0 ]
-
-      - name: Foutmeldingen samenvatten
-        if: failure()
-        run: |
-          grep -E "^e: |error:|What went wrong|Could not resolve|> " -A3 build.log | head -300 > errors.txt || true
-          cat errors.txt
-          grep -E "^e: " build.log | head -40 | while IFS= read -r l; do echo "::error::${l:0:400}"; done || true
-          echo '```' >> $GITHUB_STEP_SUMMARY; head -150 errors.txt >> $GITHUB_STEP_SUMMARY; echo '```' >> $GITHUB_STEP_SUMMARY
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: build-log
-          path: build.log
-
-      # Pakketten staan nooit (onversleuteld) op GitHub: geen artefact, geen release, niet in een openbare repo. Ze gaan
-      # versleuteld naar de PRIVÉ repo LRvdLinden/bingr-inbox (tools/seal_build.sh van bingr-beheer, branch inbox-<platform>);
-      # de workflow Builds van bingr-beheer haalt ze daar op en zet ze in de afgesloten map builds/ op de server van
-      # beheer.bingr.online. Nodig: secret BINGR_INBOX_TOKEN (fine-grained, alleen Contents: Read and write op bingr-inbox).
-      # H3: géén token voor bingr-beheer meer; die openbare repo wordt anoniem gekloond, het token gaat nooit in een URL.
-      - name: APK versleuteld aanleveren voor beheer.bingr.online
-        if: success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        env:
-          TOKEN: ${{ secrets.BINGR_INBOX_TOKEN }}
-          BINGR_INBOX_REPO: LRvdLinden/bingr-inbox
-        run: |
-          set -euo pipefail
-          # build 97: nooit een APK met de tijdelijke debug-sleutel aanleveren (die installeert niet over de echte heen)
-          if [ -z "${BINGR_KEYSTORE:-}" ]; then
-            echo "::error::Secret BINGR_KEYSTORE_BASE64 ontbreekt: APK is met de debug-sleutel getekend en wordt niet aangeleverd."
-            exit 1
-          fi
-          V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
-          mkdir -p "$RUNNER_TEMP/pkg"; cp app/build/outputs/apk/release/*.apk "$RUNNER_TEMP/pkg/Bingr-$V-build$B.apk"
-          # notities uit CHANGELOG.md (sectie van dit buildnummer)
-          awk -v b="Build $B" '/^## /{f=($0 ~ (b "$"))?1:0; next} f && !/^_.*_$/' CHANGELOG.md > "$RUNNER_TEMP/pkg/notes.md"
-          [ -s "$RUNNER_TEMP/pkg/notes.md" ] || echo "Bingr $V, build $B." > "$RUNNER_TEMP/pkg/notes.md"
-          TOKEN=$(printf '%s' "$TOKEN" | tr -d '[:space:]')
-          # bewust geen terugval op een ander token: zonder BINGR_INBOX_TOKEN wordt er niets aangeleverd
-          [ -n "$TOKEN" ] || { echo "::warning::Secret BINGR_INBOX_TOKEN ontbreekt: APK niet aangeleverd (zie README.md van bingr-beheer, H3)."; exit 0; }
-          GIT_TERMINAL_PROMPT=0 git clone -q --depth 1 https://github.com/LRvdLinden/bingr-beheer.git "$RUNNER_TEMP/beheer" 2>/dev/null \
-            || { echo "::error::bingr-beheer niet op te halen."; exit 1; }
-          TOKEN="$TOKEN" "$RUNNER_TEMP/beheer/tools/seal_build.sh" android "$RUNNER_TEMP/pkg/Bingr-$V-build$B.apk" "$V" "$B" "$RUNNER_TEMP/pkg/notes.md"
-          rm -rf "$RUNNER_TEMP/pkg"
-
-      # Android App Bundle (.aab) voor Google Play: zelfde versionCode/versionName en dezelfde release-sleutel als de APK
-      # (bij Play App Signing is dit de upload key; Google tekent de APK's voor de gebruikers met de app-signing key).
-      # Eén bundle voor telefoon, tablet en Android TV / Google TV (leanback required=false + banner, gecontroleerd).
-      # Aparte stappen met continue-on-error: faalt het bundelen, dan blijft de APK-levering (hierboven) staan; de fout
-      # staat als ::error:: bij de run en in aab.log op de branch ci-logs.
-      - name: App Bundle (.aab) bouwen
-        id: aab
-        if: success() && env.BINGR_KEYSTORE != ''
-        continue-on-error: true
-        env:
-          BINGR_KEYSTORE_PASSWORD: ${{ secrets.BINGR_KEYSTORE_PASSWORD }}
-          BINGR_KEY_ALIAS: bingr
-          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
-          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
-          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-          TMDB_ACCESS_TOKEN: ${{ secrets.TMDB_ACCESS_TOKEN }}
-          OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
-          OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: |
-          set -o pipefail
-          if ! gradle --no-daemon --stacktrace bundleRelease 2>&1 | tee aab.log; then
-            grep -E "^e: |error:|What went wrong" -A3 aab.log | head -20 | while IFS= read -r l; do echo "::error title=App Bundle::${l:0:400}"; done || true
-            echo "::error title=App Bundle::bundleRelease mislukt (de APK is wel aangeleverd); zie aab.log op de branch ci-logs."
-            exit 1
-          fi
-          AAB=$(ls app/build/outputs/bundle/release/*.aab 2>/dev/null | head -1)
-          [ -s "$AAB" ] || { echo "::error title=App Bundle::geen .aab gevonden na bundleRelease"; exit 1; }
-          echo "AAB=$AAB" >> "$GITHUB_ENV"
-
-      - name: App Bundle controleren (ondertekening, versie, Android TV)
-        id: aabcheck
-        if: steps.aab.outcome == 'success'
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          exec > >(tee -a aab.log) 2>&1
-          # ondertekend (JAR-handtekening) met de vaste Bingr-sleutel, niet met de debug-sleutel
-          jarsigner -verify "$AAB" > "$RUNNER_TEMP/jv.txt" 2>&1 || { tail -5 "$RUNNER_TEMP/jv.txt"; echo "::error title=App Bundle::.aab is niet (geldig) ondertekend"; exit 1; }
-          grep -q "jar verified" "$RUNNER_TEMP/jv.txt" || { cat "$RUNNER_TEMP/jv.txt"; echo "::error title=App Bundle::jarsigner meldt geen 'jar verified'"; exit 1; }
-          FP=$(keytool -printcert -jarfile "$AAB" 2>/dev/null | grep -m1 'SHA256:' | awk '{print $NF}') || FP=""
-          APKFP=$(keytool -printcert -jarfile app/build/outputs/apk/release/*.apk 2>/dev/null | grep -m1 'SHA256:' | awk '{print $NF}') || APKFP=""
-          [[ "$APKFP" =~ ^([0-9A-F]{2}:){31}[0-9A-F]{2}$ ]] || APKFP=""
-          if [ -z "$APKFP" ]; then
-            SIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/ 2>/dev/null | sort -V | tail -1)apksigner
-            [ -x "$SIGNER" ] && APKFP=$("$SIGNER" verify --print-certs app/build/outputs/apk/release/*.apk 2>/dev/null | grep -m1 'certificate SHA-256 digest:' | awk '{print $NF}' | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//') || true
-          fi
-          [ -n "$FP" ] || { echo "::error title=App Bundle::certificaat van de .aab niet te lezen"; exit 1; }
-          if [ -n "$APKFP" ] && [ "$FP" != "$APKFP" ]; then echo "::error title=App Bundle::.aab is met een andere sleutel getekend dan de APK"; exit 1; fi
-          echo "::notice title=App Bundle::ondertekend (upload key = Bingr-releasesleutel), SHA-256 $FP"
-          # bundletool (vaste versie, checksum) voor het manifest in de bundle
-          curl -fsSL --retry 2 -o "$RUNNER_TEMP/bundletool.jar" https://github.com/google/bundletool/releases/download/1.17.2/bundletool-all-1.17.2.jar
-          echo "2d4ad908faea64047c1cc9cb747e6aa667c6ab192e09607bd16b67246a8cd6ae  $RUNNER_TEMP/bundletool.jar" | sha256sum -c --quiet
-          java -jar "$RUNNER_TEMP/bundletool.jar" validate --bundle="$AAB" > "$RUNNER_TEMP/validate.txt"
-          java -jar "$RUNNER_TEMP/bundletool.jar" dump manifest --bundle="$AAB" > "$RUNNER_TEMP/manifest.xml"
-          V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
-          python3 - "$RUNNER_TEMP/manifest.xml" "$V" "$B" <<'PY'
-          import sys, xml.etree.ElementTree as ET
-          A = "{http://schemas.android.com/apk/res/android}"
-          path, ver, build = sys.argv[1:4]
-          m = ET.parse(path).getroot()
-          err = []
-          if m.get(A + "versionCode") != build: err.append(f"versionCode {m.get(A + 'versionCode')} != {build}")
-          if m.get(A + "versionName") != ver: err.append(f"versionName {m.get(A + 'versionName')} != {ver}")
-          feats = {f.get(A + "name"): f.get(A + "required") for f in m.iter("uses-feature")}
-          if feats.get("android.software.leanback") != "false": err.append("uses-feature android.software.leanback required=false ontbreekt")
-          if feats.get("android.hardware.touchscreen") != "false": err.append("uses-feature android.hardware.touchscreen required=false ontbreekt")
-          app = m.find("application")
-          if app is None or not app.get(A + "banner"): err.append("android:banner ontbreekt (Android TV)")
-          cats = {c.get(A + "name") for c in m.iter("category")}
-          if "android.intent.category.LEANBACK_LAUNCHER" not in cats: err.append("LEANBACK_LAUNCHER ontbreekt")
-          if "android.intent.category.LAUNCHER" not in cats: err.append("LAUNCHER (telefoon/tablet) ontbreekt")
-          sdk = m.find("uses-sdk")
-          tgt = sdk.get(A + "targetSdkVersion") if sdk is not None else "?"
-          # Google Play: nieuwe apps en updates vanaf 31 aug. 2026 minimaal targetSdk 36 (Android TV-only: 34)
-          if not (tgt or "").isdigit() or int(tgt) < 36: print(f"::warning title=App Bundle::targetSdk {tgt}: Google Play eist targetSdk 36 voor nieuwe apps en updates")
-          for e in err: print(f"::error title=App Bundle::{e}")
-          if err: sys.exit(1)
-          print(f"::notice title=App Bundle::versie {ver} (versionCode {build}), targetSdk {tgt}; telefoon, tablet en Android TV (leanback niet verplicht, banner, LEANBACK_LAUNCHER)")
-          PY
-          SIZE=$(stat -c %s "$AAB")
-          # de inbox is een git-repo: GitHub weigert bestanden boven 100 MB
-          [ "$SIZE" -lt 99000000 ] || { echo "::error title=App Bundle::.aab is $SIZE bytes (te groot voor de inbox, max. ~99 MB)"; exit 1; }
-          echo "::notice title=App Bundle::$(basename "$AAB"): $SIZE bytes"
-
-      # zoals de APK: versleuteld naar de privé inbox-repo (branch inbox-android-aab); nooit als artefact of release
-      - name: App Bundle versleuteld aanleveren voor beheer.bingr.online
-        id: aabdeliver
-        if: steps.aabcheck.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        continue-on-error: true
-        env:
-          TOKEN: ${{ secrets.BINGR_INBOX_TOKEN }}
-          BINGR_INBOX_REPO: LRvdLinden/bingr-inbox
-        run: |
-          set -euo pipefail
-          V=$(grep '^BINGR_VERSION=' gradle.properties | cut -d= -f2); B=$(grep '^BINGR_BUILD=' gradle.properties | cut -d= -f2)
-          mkdir -p "$RUNNER_TEMP/aabpkg"; cp "$AAB" "$RUNNER_TEMP/aabpkg/Bingr-$V-build$B.aab"
-          awk -v b="Build $B" '/^## /{f=($0 ~ (b "$"))?1:0; next} f && !/^_.*_$/' CHANGELOG.md > "$RUNNER_TEMP/aabpkg/notes.md"
-          [ -s "$RUNNER_TEMP/aabpkg/notes.md" ] || echo "Bingr $V, build $B." > "$RUNNER_TEMP/aabpkg/notes.md"
-          TOKEN=$(printf '%s' "$TOKEN" | tr -d '[:space:]')
-          [ -n "$TOKEN" ] || { echo "::warning::Secret BINGR_INBOX_TOKEN ontbreekt: .aab niet aangeleverd."; exit 0; }
-          rm -rf "$RUNNER_TEMP/beheer"
-          GIT_TERMINAL_PROMPT=0 git clone -q --depth 1 https://github.com/LRvdLinden/bingr-beheer.git "$RUNNER_TEMP/beheer" 2>/dev/null \
-            || { echo "::error title=App Bundle::bingr-beheer niet op te halen."; exit 1; }
-          TOKEN="$TOKEN" "$RUNNER_TEMP/beheer/tools/seal_build.sh" android-aab "$RUNNER_TEMP/aabpkg/Bingr-$V-build$B.aab" "$V" "$B" "$RUNNER_TEMP/aabpkg/notes.md"
-          rm -rf "$RUNNER_TEMP/aabpkg"
-
-      - name: App Bundle-status
-        if: always() && steps.aab.outcome != 'skipped'
-        run: |
-          if [ "${{ steps.aab.outcome }}" = success ] && [ "${{ steps.aabcheck.outcome }}" = success ] && [ "${{ steps.aabdeliver.outcome }}" != failure ]; then
-            echo "::notice title=App Bundle::.aab gebouwd, gecontroleerd en (behalve bij pull requests) versleuteld aangeleverd."
-          else
-            echo "::error title=App Bundle::.aab mislukt (bouwen: ${{ steps.aab.outcome }}, controle: ${{ steps.aabcheck.outcome }}, aanleveren: ${{ steps.aabdeliver.outcome }}); de APK is hier niet door geraakt."
-          fi
-
-      # build 97: niet bij pull requests (die mogen de branch ci-logs niet overschrijven)
-      - name: Log op branch ci-logs zetten
-        if: always() && github.event_name != 'pull_request'
-        run: |
-          set +e
-          mkdir -p /tmp/logs; cp build.log /tmp/logs/ 2>/dev/null; cp aab.log /tmp/logs/ 2>/dev/null; cp errors.txt /tmp/logs/ 2>/dev/null
-          [ -d smoke-release ] && { mkdir -p /tmp/logs/smoke; for d in smoke-release/*/; do n=$(basename "$d"); mkdir -p /tmp/logs/smoke/$n; cp "$d"_log.txt "$d"trace-*.txt "$d"install-*.txt "$d"screen-vers.png /tmp/logs/smoke/$n/ 2>/dev/null; done; }
-          echo "${{ job.status }} $(git rev-parse --short HEAD)" > /tmp/logs/status.txt
-          cd /tmp/logs && git init -q -b ci-logs && git add -A
-          git -c user.name=github-actions -c user.email=actions@github.com commit -qm "CI-log $(cat status.txt)"
-          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs
+          # welke klassen zitten achter de korte namen (alleen klasse-regels, geen mapping zelf)
+          { for c in p6.Io F3.H a0.a A.o A.q S.d z3.f z.i B.C b0.h B.d0 v0.c B.z B0.E B.j0 B.b; do grep -E " -> ${c//./\\.}:\$" "$MAP" || echo "GEEN $c"; done; } > /tmp/rt/classes.txt
+          # de leden van de twee bovenste klassen (uit de mapping, alleen deze twee blokken)
+          for c in p6.Io F3.H; do awk -v pat=" -> $c:" 'index($0,pat){p=1;print;next} p&&/^[^ ]/{p=0} p' "$MAP" > "/tmp/rt/members-$c.txt"; done
+          cat /tmp/rt/retrace.txt
+          cat /tmp/rt/classes.txt
+          msg=$(head -c 3500 /tmp/rt/retrace.txt | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::notice title=Retrace::$msg"
+          msg=$(sed ':a;N;$!ba;s/\n/%0A/g' /tmp/rt/classes.txt)
+          echo "::notice title=Klassen::$msg"
+          echo "$(git rev-parse --short HEAD)" > /tmp/rt/status.txt
+          cd /tmp/rt && git init -q -b ci-logs-retrace && git add -A
+          git -c user.name=github-actions -c user.email=actions@github.com commit -qm "Retrace $(cat status.txt)"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs-retrace
