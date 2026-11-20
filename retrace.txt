@@ -1,0 +1,5 @@
+java.lang.NullPointerException
+	at nl.lrvdlinden.bingr.PlayerOverlays173Kt.k(PlayerOverlays173.kt:3)
+	at nl.lrvdlinden.bingr.PlayerPanelsKt$OptionsPanel$1$1$7.invoke(PlayerPanels.kt:413)
+	at nl.lrvdlinden.bingr.PlayerPanelsKt$OptionsPanel$1$1$7.invoke(PlayerPanels.kt:412)
+	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.jvm.kt:118)
