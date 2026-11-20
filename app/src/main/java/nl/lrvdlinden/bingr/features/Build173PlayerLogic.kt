@@ -123,7 +123,14 @@ object Build173PlayerLogic {
         object Off : Sleep("off")
         object EndOfEpisode : Sleep("episode")
         data class Minutes(val m: Int) : Sleep("m$m")
-        companion object { val choices: List<Sleep> = listOf(EndOfEpisode, Minutes(30), Minutes(60), Minutes(90), Off) }
+        companion object {
+            /**
+             * Build 179 (X1): een getter, geen vaste lijst. Als vaste lijst werd hij gevuld tijdens het initialiseren van
+             * Sleep; raakte de app eerst [Off] aan (PlayerController begint met Sleep.Off), dan was Off op dat moment nog
+             * null en stond er null in de lijst: het Opties-paneel van de speler crashte (NullPointerException in sleepTitle173).
+             */
+            val choices: List<Sleep> get() = listOf(EndOfEpisode, Minutes(30), Minutes(60), Minutes(90), Off)
+        }
     }
 
     fun sleepDeadline(s: Sleep, now: Long): Long? = if (s is Sleep.Minutes && s.m > 0) now + s.m * 60_000L else null

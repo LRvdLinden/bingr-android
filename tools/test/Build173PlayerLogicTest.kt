@@ -20,6 +20,12 @@ private fun ok(name: String, v: Boolean) = eq(name, v, true)
 private fun no(name: String, v: Boolean) = eq(name, v, false)
 
 fun main() {
+    // build 179 (X1): eerst Sleep.Off aanraken (zoals PlayerController), daarna mag er geen null in de keuzes staan
+    val off: S = S.Off
+    eq("slaaptimer Off eerst", off.code, "off")
+    no("slaaptimer keuzes zonder null", (S.choices as List<Any?>).contains(null))
+    ok("slaaptimer keuzes met Off", S.choices.contains(S.Off))
+    eq("slaaptimer keuzes", S.choices.map { it.code }, listOf("episode", "m30", "m60", "m90", "off"))
     val L = Build173PlayerLogic
     val now = 1_800_000_000_000L
     eq("primair intro", L.primary(true, true, false, false, 0.0), P.SKIP_INTRO)
