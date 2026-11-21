@@ -118,6 +118,19 @@ fun main(args: Array<String>) {
     eq("reason ended", B.Stream.reason(false, true, true, 0.0), "serverClosed")
     eq("reason timeout", B.Stream.reason(false, false, true, 16.0), "timeout")
 
+    // build 186: introdb-verzoek zonder TMDB-id (serietitel, jaar, imdb) en markeren verbergen
+    eq("introdb tmdb", B.Intro.request(1396, "tt0903747", "Breaking Bad", 2008, 1, 2),
+        "1396-1-2" to linkedMapOf<String, Any>("tmdb" to 1396, "imdb" to "tt0903747", "season" to 1, "episode" to 2))
+    eq("introdb titel", B.Intro.request(null, null, " NL | Dark (2017) ", 2017, 1, 1),
+        "t:nl | dark (2017):2017-1-1" to linkedMapOf<String, Any>("title" to "NL | Dark (2017)", "year" to 2017, "season" to 1, "episode" to 1))
+    eq("introdb imdb", B.Intro.request(0, "tt5753856", "Dark", 1800, 2, 3),
+        "tt5753856-2-3" to linkedMapOf<String, Any>("title" to "Dark", "imdb" to "tt5753856", "season" to 2, "episode" to 3))
+    eq("introdb niets", B.Intro.request(null, "x", " ", null, 1, 1), null)
+    eq("introdb geen aflevering", B.Intro.request(1396, null, null, null, 1, null), null)
+    eq("known intro", B.Intro.known(B.Intro.Range(10.0, 70.0), null), true)
+    eq("known recap", B.Intro.known(null, B.Intro.Range(0.0, 40.0)), true)
+    eq("known niets", B.Intro.known(null, null), false)
+
     println("Build179LogicTest: $checks controles, $failures fouten")
     if (failures > 0) kotlin.system.exitProcess(1)
 }

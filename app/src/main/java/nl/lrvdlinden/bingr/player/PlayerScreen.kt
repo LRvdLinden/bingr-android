@@ -928,7 +928,9 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
                     onZap = { zap(it) },
                     onPanel = { panel = it },
                     onMultiview = { openMultiview() },
-                    canMarkIntro = player.item.type == MediaType.EPISODE && markerKey != null,
+                    // build 186: niet markeren als IntroDB al tijden heeft voor de intro of de samenvatting
+                    canMarkIntro = player.item.type == MediaType.EPISODE && markerKey != null &&
+                        !Build179Logic.Intro.known(seg179?.intro, seg179?.recap),
                     primary = primary,
                     onPrimary = { runPrimary(it) },
                     currentProgram = currentProgram,

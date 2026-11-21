@@ -82,16 +82,13 @@ object IntroDB179 {
 
     private fun keyOf(item: PlayableItem): Pair<String, JsonObject>? {
         if (item.type != MediaType.EPISODE) return null
-        val s = item.season ?: return null
-        val e = item.episode ?: return null
-        val tmdb = item.tmdbID?.toIntOrNull()
-        val imdb = item.imdbID?.takeIf { it.startsWith("tt") }
-        if (tmdb == null && imdb == null) return null
-        val k = "${tmdb ?: imdb}-$s-$e"
+        // build 186: zonder TMDB-id de serietitel (uit de bibliotheek via seriesID), het jaar en het imdb-id meesturen
+        val series = item.seriesID?.let { sid -> runCatching { Playlists.library.series.firstOrNull { it.id == sid } }.getOrNull() }
+        val tmdb = item.tmdbID?.toIntOrNull() ?: series?.tmdbID?.toIntOrNull()
+        val (k, fields) = Build179Logic.Intro.request(tmdb, series?.imdbID ?: item.imdbID, series?.title,
+            series?.year ?: item.year, item.season, item.episode) ?: return null
         return k to buildJsonObject {
-            tmdb?.let { put("tmdb", it) }
-            imdb?.let { put("imdb", it) }
-            put("season", s); put("episode", e)
+            for ((f, v) in fields) when (v) { is Int -> put(f, v); else -> put(f, v.toString()) }
         }
     }
 

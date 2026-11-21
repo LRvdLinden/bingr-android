@@ -356,6 +356,32 @@ object Build179Logic {
 
         fun fresh(cachedAtMs: Long, nowMs: Long, miss: Boolean): Boolean =
             nowMs >= cachedAtMs && nowMs - cachedAtMs < (if (miss) MISS_DAYS else CACHE_DAYS) * 86_400_000L
+
+        /** Build 186: verzoek aan `introdb` → (cachesleutel, velden). Zonder TMDB-id de serietitel, het jaar en het
+         *  imdb-id (de server zoekt dan zelf het TMDB-id). null = niets op te vragen. */
+        fun request(tmdb: Int?, imdb: String?, title: String?, year: Int?, season: Int?, episode: Int?): Pair<String, Map<String, Any>>? {
+            if (season == null || episode == null || season < 0 || episode < 0) return null
+            val id = tmdb?.takeIf { it > 0 }
+            val tt = imdb?.trim()?.takeIf { Regex("^tt\\d{5,10}$").matches(it) }
+            val name = title?.trim()?.takeIf { it.isNotEmpty() }?.take(200)
+            val y = year?.takeIf { it in 1900..2100 }
+            val f = LinkedHashMap<String, Any>()
+            val key = when {
+                id != null -> { f["tmdb"] = id; "$id" }
+                tt != null || name != null -> {
+                    name?.let { f["title"] = it }
+                    y?.let { f["year"] = it }
+                    tt ?: "t:${name!!.lowercase()}:${y ?: ""}"
+                }
+                else -> return null
+            }
+            tt?.let { f["imdb"] = it }
+            f["season"] = season; f["episode"] = episode
+            return "$key-$season-$episode" to f
+        }
+
+        /** Build 186: heeft IntroDB tijden voor de intro of de samenvatting, dan geen "Intro hier markeren". */
+        fun known(intro: Range?, recap: Range?): Boolean = intro != null || recap != null
     }
 
     // MARK: 11. Voor jou (`forYou`)
