@@ -4,6 +4,25 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.1.0 · Build 181
+_21 november 2026_
+
+### iOS, iPadOS, tvOS, macOS, Android, Android TV, Website en Server
+
+**Nieuw**
+
+- Bingr Premium: kies maandelijks, halfjaarlijks of jaarlijks, of één keer Lifetime. Nieuwe accounts proberen Premium 3 dagen gratis
+
+**Verbeterd**
+
+- Wie Lifetime al heeft, houdt altijd volledige toegang. Je servers, profielen en instellingen blijven altijd bewaard
+
+### Android, Android TV en Website
+
+**Nieuw**
+
+- Kies je plan en betaal veilig via Stripe; op Android TV met een QR-code. Abonnement beheren of opzeggen kan in Instellingen
+
 ## Versie 1.0.8 · Build 180
 _20 november 2026_
 
