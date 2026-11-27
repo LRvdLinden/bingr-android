@@ -262,7 +262,7 @@ fun PlaylistPickerScreen() {
     }
 
     pinFor?.let { p ->
-        PinPad(L("PIN for %@", p.name), onDismiss = { pinFor = null }) { pin ->
+        PinPad(L("PIN for %@", p.name), onDismiss = { pinFor = null }, profile = p) { pin ->
             if (ParentalControl.verify(pin, p)) {
                 StartDiagnostics.mark("pin_ok")
                 scope.launch { delay(80); AppState.open(p) }
@@ -604,7 +604,7 @@ fun AddPlaylistScreen(existing: PlaylistSource?, onClose: () -> Unit) {
                             Text(L("Live TV as HLS (.m3u8) instead of .ts"), color = Color.White, fontSize = tsp(14), modifier = Modifier.weight(1f))
                             Switch(
                                 checked = preferHLS, onCheckedChange = { preferHLS = it },
-                                colors = SwitchDefaults.colors(checkedTrackColor = Theme.red, checkedThumbColor = Color.White)
+                                colors = SwitchDefaults.colors(checkedTrackColor = Theme.green, checkedThumbColor = Color.White)
                             )
                         }
                     }

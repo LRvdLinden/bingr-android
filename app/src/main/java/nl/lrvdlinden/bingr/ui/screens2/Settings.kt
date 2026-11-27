@@ -1089,10 +1089,10 @@ fun SettingsScreen() {
     val prof = Store.activeProfile
     when (pinMode) {
         S2PinMode.SET -> PinChangeScreen(profileID = prof?.id) { pinMode = null }
-        S2PinMode.UNLOCK -> PinPad(L("Enter PIN"), onDismiss = { pinMode = null }) { pin ->
+        S2PinMode.UNLOCK -> PinPad(L("Enter PIN"), onDismiss = { pinMode = null }, profile = prof) { pin ->
             if (prof != null) ParentalControl.verify(pin, prof) else ParentalControl.verify(pin)
         }
-        S2PinMode.DISABLE -> PinPad(L("Enter PIN to turn off"), onDismiss = { pinMode = null }) { pin ->
+        S2PinMode.DISABLE -> PinPad(L("Enter PIN to turn off"), onDismiss = { pinMode = null }, profile = prof) { pin ->
             if (prof == null) {
                 if (ParentalControl.verify(pin)) { ParentalControl.setPIN(null); Store.updateParental { it.copy(enabled = false) }; true } else false
             } else if (ParentalControl.verify(pin, prof)) {

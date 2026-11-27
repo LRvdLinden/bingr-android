@@ -201,7 +201,8 @@ fun TracksPanel(
             item { PlayerSheetRow(lang?.let { TrackPreferences.label(it) } ?: audio.firstOrNull()?.let { flaggedTrackName(it) } ?: L("Audio"), selected = true) {} }
             item { PlayerSheetNote(L("This stream has one audio language")) }
         } else {
-            for (t in audio) item { PlayerSheetRow(flaggedTrackName(t), selected = t.id == curAudio) { player.selectAudio(t) } }
+            val audioNames = Build189Logic.Tracks.numberDuplicates(audio.map { flaggedTrackName(it) })   // build 189: gelijke namen genummerd
+            audio.forEachIndexed { i, t -> item { PlayerSheetRow(audioNames[i], selected = t.id == curAudio) { player.selectAudio(t) } } }
         }
         if (versions.isNotEmpty()) {
             item { PlayerSheetHeader(L("Other language")) }
@@ -217,7 +218,8 @@ fun TracksPanel(
         item { PlayerSheetHeader(L("Subtitles")) }
         item { PlayerSheetRow(L("Off"), selected = curSub == null) { player.selectSubtitle(null) } }
         if (ext != null && player.hasExternalSubtitle) item { PlayerSheetRow("OpenSubtitles · $ext", selected = true) {} }
-        for (t in subs) item { PlayerSheetRow(flaggedTrackName(t), selected = t.id == curSub) { player.selectSubtitle(t) } }
+        val subNames = Build189Logic.Tracks.numberDuplicates(subs.map { flaggedTrackName(it) })
+        subs.forEachIndexed { i, t -> item { PlayerSheetRow(subNames[i], selected = t.id == curSub) { player.selectSubtitle(t) } } }
 
         item { PlayerSheetHeader(L("Subtitle timing")) }
         item {

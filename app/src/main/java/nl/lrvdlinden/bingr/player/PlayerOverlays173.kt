@@ -203,9 +203,10 @@ fun AudioSubsPanel173(
             }
             item { PlayerSheetNote(L("This stream has one audio language")) }
         } else {
+            val audioNames = Build189Logic.Tracks.numberDuplicates(audio.map { flaggedTrackName(it) })   // build 189: gelijke namen genummerd
             audio.forEachIndexed { i, t ->
                 item {
-                    PlayerSheetRow(flaggedTrackName(t), selected = t.id == curAudio,
+                    PlayerSheetRow(audioNames[i], selected = t.id == curAudio,
                         modifier = if (t.id == curAudio || (curAudio == null && i == 0)) Modifier.focusRequester(first) else Modifier) {
                         player.selectAudio(t)
                     }
@@ -223,7 +224,8 @@ fun AudioSubsPanel173(
         item { PlayerSheetHeader(L("Subtitles")) }
         item { PlayerSheetRow(L("Off"), selected = curSub == null) { player.selectSubtitle(null) } }
         if (ext != null && player.hasExternalSubtitle) item { PlayerSheetRow("OpenSubtitles · $ext", selected = true) {} }
-        for (t in subs) item { PlayerSheetRow(flaggedTrackName(t), selected = t.id == curSub) { player.selectSubtitle(t) } }
+        val subNames = Build189Logic.Tracks.numberDuplicates(subs.map { flaggedTrackName(it) })
+        subs.forEachIndexed { i, t -> item { PlayerSheetRow(subNames[i], selected = t.id == curSub) { player.selectSubtitle(t) } } }
         if (onOpenSubtitles != null) item { PlayerSheetRow(L("Search OpenSubtitles…"), icon = Icons.Filled.Search) { onOpenSubtitles() } }
 
         item { PlayerSheetHeader(L("Subtitle display")) }

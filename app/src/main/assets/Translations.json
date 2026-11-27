@@ -1,5 +1,7 @@
 {
  "ar": {
+  "Forgot PIN?": "نسيت رمز PIN؟",
+  "Enter your Bingr password to remove the PIN. You can choose a new one afterwards in Settings.": "أدخل كلمة مرور Bingr لإزالة رمز PIN. بعد ذلك يمكنك اختيار رمز جديد من الإعدادات.",
   "%@ is now signed in.": "تم تسجيل دخول %@ الآن.",
   "%@ · %d channels · %d movies · %d series": "%@ · %d قناة · %d فيلم · %d مسلسل",
   "%d WATCHED": "تمت مشاهدة %d",
@@ -1369,6 +1371,8 @@
   "per year": "سنويًا"
  },
  "de": {
+  "Forgot PIN?": "PIN vergessen?",
+  "Enter your Bingr password to remove the PIN. You can choose a new one afterwards in Settings.": "Gib dein Bingr-Passwort ein, um die PIN zu entfernen. Danach kannst du in den Einstellungen eine neue wählen.",
   "%@ is now signed in.": "%@ ist jetzt angemeldet.",
   "%@ · %d channels · %d movies · %d series": "%@ · %d Sender · %d Filme · %d Serien",
   "%d WATCHED": "%d GESEHEN",
@@ -2738,6 +2742,8 @@
   "per year": "pro Jahr"
  },
  "es": {
+  "Forgot PIN?": "¿Olvidaste el PIN?",
+  "Enter your Bingr password to remove the PIN. You can choose a new one afterwards in Settings.": "Introduce tu contraseña de Bingr para quitar el PIN. Después podrás elegir uno nuevo en Ajustes.",
   "%@ is now signed in.": "%@ ya ha iniciado sesión.",
   "%@ · %d channels · %d movies · %d series": "%@ · %d canales · %d películas · %d series",
   "%d WATCHED": "%d VISTOS",
@@ -4107,6 +4113,8 @@
   "per year": "al año"
  },
  "fr": {
+  "Forgot PIN?": "Code PIN oublié ?",
+  "Enter your Bingr password to remove the PIN. You can choose a new one afterwards in Settings.": "Saisis ton mot de passe Bingr pour supprimer le code PIN. Tu pourras ensuite en choisir un nouveau dans les réglages.",
   "%@ is now signed in.": "%@ est maintenant connecté.",
   "%@ · %d channels · %d movies · %d series": "%@ · %d chaînes · %d films · %d séries",
   "%d WATCHED": "%d VUS",
@@ -5476,6 +5484,8 @@
   "per year": "par an"
  },
  "it": {
+  "Forgot PIN?": "PIN dimenticato?",
+  "Enter your Bingr password to remove the PIN. You can choose a new one afterwards in Settings.": "Inserisci la tua password Bingr per rimuovere il PIN. Dopo potrai sceglierne uno nuovo nelle Impostazioni.",
   "%@ is now signed in.": "%@ ha effettuato l’accesso.",
   "%@ · %d channels · %d movies · %d series": "%@ · %d canali · %d film · %d serie",
   "%d WATCHED": "%d VISTI",
@@ -6845,6 +6855,8 @@
   "per year": "all’anno"
  },
  "nl": {
+  "Forgot PIN?": "Pincode vergeten?",
+  "Enter your Bingr password to remove the PIN. You can choose a new one afterwards in Settings.": "Voer je Bingr-wachtwoord in om de pincode te verwijderen. Daarna kies je in Instellingen een nieuwe.",
   "%@ is now signed in.": "%@ is nu ingelogd.",
   "%@ · %d channels · %d movies · %d series": "%@ · %d zenders · %d films · %d series",
   "%d WATCHED": "%d BEKEKEN",
@@ -8228,6 +8240,8 @@
   "per year": "per jaar"
  },
  "pl": {
+  "Forgot PIN?": "Nie pamiętasz kodu PIN?",
+  "Enter your Bingr password to remove the PIN. You can choose a new one afterwards in Settings.": "Wpisz hasło do Bingr, aby usunąć kod PIN. Potem w Ustawieniach wybierzesz nowy.",
   "%@ is now signed in.": "%@ jest teraz zalogowany.",
   "%@ · %d channels · %d movies · %d series": "%@ · kanały: %d · filmy: %d · seriale: %d",
   "%d WATCHED": "OBEJRZANE: %d",
@@ -9597,6 +9611,8 @@
   "per year": "rocznie"
  },
  "pt": {
+  "Forgot PIN?": "Esqueceu o PIN?",
+  "Enter your Bingr password to remove the PIN. You can choose a new one afterwards in Settings.": "Introduz a tua palavra-passe do Bingr para remover o PIN. Depois podes escolher um novo nas Definições.",
   "%@ is now signed in.": "%@ já tem sessão iniciada.",
   "%@ · %d channels · %d movies · %d series": "%@ · %d canais · %d filmes · %d séries",
   "%d WATCHED": "%d VISTOS",
@@ -10966,6 +10982,8 @@
   "per year": "por ano"
  },
  "tr": {
+  "Forgot PIN?": "PIN'i mi unuttun?",
+  "Enter your Bingr password to remove the PIN. You can choose a new one afterwards in Settings.": "PIN'i kaldırmak için Bingr şifreni gir. Ardından Ayarlar'dan yeni bir PIN seçebilirsin.",
   "%@ is now signed in.": "%@ artık oturum açtı.",
   "%@ · %d channels · %d movies · %d series": "%@ · %d kanal · %d film · %d dizi",
   "%d WATCHED": "%d İZLENDİ",
@@ -12335,6 +12353,8 @@
   "per year": "yıllık"
  },
  "zh-Hans": {
+  "Forgot PIN?": "忘记 PIN 码？",
+  "Enter your Bingr password to remove the PIN. You can choose a new one afterwards in Settings.": "输入你的 Bingr 密码以移除 PIN 码。之后可在“设置”中选择新的 PIN 码。",
   "%@ is now signed in.": "%@ 现已登录。",
   "%@ · %d channels · %d movies · %d series": "%@ · %d 个频道 · %d 部电影 · %d 部剧集",
   "%d WATCHED": "已看 %d",
