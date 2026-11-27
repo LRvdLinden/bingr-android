@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -95,6 +96,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
@@ -181,6 +183,14 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
     // seizoenstrailer (build 53): trailer van het gekozen seizoen, anders die van de serie
     val seasonTrailer: String? = if (target is DetailTarget.SeriesT) seasonTrailers[season] else null
     val trailerToPlay = seasonTrailer ?: trailerID
+    // build 191: tabbladen onder de knoppen: Afleveringen / Meer zoals dit / Trailers (alleen met inhoud)
+    var tabWanted191 by remember(target.id) { mutableStateOf<Build191Logic.Tab?>(null) }
+    val recs191 = details?.recommendations.orEmpty().let { all ->
+        if (Store.activeProfile?.effectiveAgeLimit != null) all.filter { recMatches[it.id] != null } else all
+    }
+    val trailers191 = listOfNotNull(trailerID, seasonTrailer).distinct()
+    val tabs191 = Build191Logic.tabs(target is DetailTarget.SeriesT, recs191.size, trailers191.size)
+    val tab191 = Build191Logic.selected(tabs191, tabWanted191)
     // build 82: trailer automatisch in de kop; series: die van het nieuwste seizoen, anders die van de serie
     val newestSeason: Int? = if (target is DetailTarget.SeriesT) episodes.maxOfOrNull { it.season } else null
     val autoplayTrailer: String? = when {
@@ -674,7 +684,8 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                     }
                     // build 190: telefoon: donkergrijze pil Downloaden onder Afspelen; de keuzes
                     // (hele serie, pauzeren, verwijderen) blijven dezelfde als onder Meer
-                    if (compact && Downloads.supported) {
+                    // build 191: ook op tablet; bij een serie met "N afleveringen" erbij
+                    if (!tv && Downloads.supported) {
                         val movieDl = (target as? DetailTarget.MovieT)?.let { Playables.movie(it.movie, imdb) }
                         val dlState = movieDl?.let { Build175Logic.movieMenu(Downloads.canDownload(it), Build175Logic.state(Downloads.find(pid, it.id)?.status)) }
                         val seriesMenu = if (target is DetailTarget.SeriesT) seriesDownloadModel()?.third else null
@@ -683,7 +694,11 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                             movieDl != null && dlState == Build175Logic.MovieMenu.DOWNLOADED -> L("Downloaded") to { moreMenu = true }
                             movieDl != null && dlState == Build175Logic.MovieMenu.ACTIVE -> L("Downloading…") to { moreMenu = true }
                             movieDl != null && dlState == Build175Logic.MovieMenu.RESUME -> L("Resume download") to { moreMenu = true }
-                            seriesMenu != null && seriesMenu.available -> (if (seriesMenu.complete) L("Downloaded") else L("Download")) to { seriesDownloads = true }
+                            seriesMenu != null && seriesMenu.available -> (
+                                if (seriesMenu.complete) L("Downloaded")
+                                else if (Build191Logic.showEpisodeCount(seriesMenu.season, false)) L("Download %d episodes", seriesMenu.season)
+                                else L("Download")
+                            ) to { seriesDownloads = true }
                             else -> null to {}
                         }
                         val dlText = dlPair.first
@@ -751,7 +766,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                         }
                         // downloaden (build 52): niet op TV
                         val movieItem = (target as? DetailTarget.MovieT)?.let { Playables.movie(it.movie, imdb) }
-                        if (movieItem != null && Downloads.canDownload(movieItem)) {
+                        if (tv && movieItem != null && Downloads.canDownload(movieItem)) {
                             val dl = Downloads.find(pid, movieItem.id)
                             DetailCircleButton(
                                 when { dl?.isDone == true -> Icons.Default.DownloadDone; dl != null && dl.status != Downloads.FAILED -> Icons.Default.Downloading; else -> Icons.Default.Download },
@@ -759,7 +774,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                             ) { download(movieItem, null) }
                         }
                         // build 175: tablet: serie downloaden (seizoen, volgende 3, hele serie)
-                        if (target is DetailTarget.SeriesT && Downloads.supported && episodes.isNotEmpty()) {
+                        if (tv && target is DetailTarget.SeriesT && Downloads.supported && episodes.isNotEmpty()) {
                             val m = seriesDownloadModel()?.third
                             if (m != null && m.available) DetailCircleButton(
                                 if (m.complete) Icons.Default.DownloadDone else Icons.Default.Download,
@@ -840,12 +855,28 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                 }
             }
 
+            // build 191: tabbalk (rode lijn boven het gekozen tabblad, grijs de rest) met daaronder de inhoud
+            if (tabs191.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = Theme.edge),
+                    horizontalArrangement = Arrangement.spacedBy(tvs(26))
+                ) {
+                    tabs191.forEach { tb ->
+                        val label = when (tb) {
+                            Build191Logic.Tab.EPISODES -> L("Episodes")
+                            Build191Logic.Tab.MORE_LIKE_THIS -> L("More like this")
+                            Build191Logic.Tab.TRAILERS -> L("Trailers")
+                        }
+                        DetailTab(label, tb == tab191) { tabWanted191 = tb }
+                    }
+                }
+            }
+
             // MARK: afleveringen
-            if (target is DetailTarget.SeriesT) {
+            if (target is DetailTarget.SeriesT && tab191 == Build191Logic.Tab.EPISODES) {
                 val s = target.series
                 val list = episodes.filter { it.season == season }
                 Column(verticalArrangement = Arrangement.spacedBy(tvs(14))) {
-                    DetailSectionTitle(L("Episodes"))
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = Theme.edge),
                         verticalAlignment = Alignment.CenterVertically
@@ -976,6 +1007,81 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                 }
             }
 
+            // MARK: aanbevelingen
+            // profielen met een leeftijdsgrens zien alleen aanbevelingen die (gefilterd) in hun lijst staan
+            // build 191: onder het tabblad Meer zoals dit (recs191 staat bovenaan, met dezelfde leeftijdsfilter)
+            val recs = recs191
+            if (recs.isNotEmpty() && tab191 == Build191Logic.Tab.MORE_LIKE_THIS) {
+                Column(verticalArrangement = Arrangement.spacedBy(tvs(12))) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = Theme.edge, vertical = if (tv) 14.dp else 0.dp),
+                        horizontalArrangement = Arrangement.spacedBy(tvs(14))
+                    ) {
+                        items(recs) { r ->
+                            val match = recMatches[r.id]
+                            Column(
+                                Modifier.width(tvs(140)).focusLift {
+                                    if (match != null) {
+                                        ScreensNav.detail(match)
+                                    } else {
+                                        // niet in deze afspeellijst: toon de details (afspelen zoekt in andere bronnen / Stremio)
+                                        val y = r.year
+                                        val poster = screensText(r.poster)
+                                        val rid = screensText(r.imdbID)
+                                        // build 141: met een TMDB-id als TMDB-titel ("tmdb-movie-123"): die kan in Mijn lijst
+                                        // (ook op je andere apparaten); een "rec-…"-id kon niemand terugvinden
+                                        val tid = r.tmdbID?.takeIf { it > 0 }
+                                        val id = Build141Feedback.MyListKeys.storableID("rec-${r.id}", tid, r.isShow) ?: "rec-${r.id}"
+                                        if (tid != null) DiscoverKnown.remember(listOf(DiscoverItem(tmdbID = tid, isShow = r.isShow, title = r.title,
+                                            posterPath = r.posterPath, kind = DiscoverKind.STREAMING.key)))
+                                        ScreensNav.detail(
+                                            if (r.isShow) DetailTarget.SeriesT(Series(id = id, title = r.title, year = y, poster = poster, imdbID = rid))
+                                            else DetailTarget.MovieT(Movie(id = id, title = r.title, year = y, poster = poster, imdbID = rid))
+                                        )
+                                    }
+                                },
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(tvs(12)))) {
+                                    RemoteImage(screensText(r.poster), Modifier.matchParentSize(), placeholder = r.title)
+                                    if (match != null) {
+                                        Box(
+                                            Modifier.align(Alignment.TopEnd).padding(6.dp).size(tvs(22)).clip(CircleShape).background(Theme.red),
+                                            contentAlignment = Alignment.Center
+                                        ) { Icon(Icons.Default.PlayArrow, null, tint = Theme.onAccent, modifier = Modifier.size(tvs(15))) }
+                                    }
+                                }
+                                Text(r.title, color = Color.White, fontSize = tsp(14), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+            // build 191: tabblad Trailers: die van de titel en die van het gekozen seizoen
+            if (tab191 == Build191Logic.Tab.TRAILERS) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = Theme.edge, vertical = if (tv) 14.dp else 0.dp),
+                    horizontalArrangement = Arrangement.spacedBy(tvs(14))
+                ) {
+                    items(trailers191) { t ->
+                        val isSeasonTrailer = t == seasonTrailer && t != trailerID
+                        Row(
+                            Modifier.focusLift(1.05f) { heroTrailer.stop(); trailerOpen = t }
+                                .clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.12f))
+                                .padding(horizontal = 18.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Theaters, null, tint = Color.White, modifier = Modifier.size(tvs(18)))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                if (isSeasonTrailer) L("Trailer season %d", season) else L("Trailer"),
+                                color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.Medium, maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+
             // MARK: beoordelingen
             // build 179: één rij met korte namen + score (IMDb · RT · Publiek · MC · Letterboxd · Trakt · TMDB)
             if (ratings179.isNotEmpty()) {
@@ -1053,57 +1159,6 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                 }
             }
 
-            // MARK: aanbevelingen
-            // profielen met een leeftijdsgrens zien alleen aanbevelingen die (gefilterd) in hun lijst staan
-            val allRecs = details?.recommendations.orEmpty()
-            val recs = if (Store.activeProfile?.effectiveAgeLimit != null) allRecs.filter { recMatches[it.id] != null } else allRecs
-            if (recs.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(tvs(12))) {
-                    DetailSectionTitle(L("Recommendations"))
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = Theme.edge, vertical = if (tv) 14.dp else 0.dp),
-                        horizontalArrangement = Arrangement.spacedBy(tvs(14))
-                    ) {
-                        items(recs) { r ->
-                            val match = recMatches[r.id]
-                            Column(
-                                Modifier.width(tvs(140)).focusLift {
-                                    if (match != null) {
-                                        ScreensNav.detail(match)
-                                    } else {
-                                        // niet in deze afspeellijst: toon de details (afspelen zoekt in andere bronnen / Stremio)
-                                        val y = r.year
-                                        val poster = screensText(r.poster)
-                                        val rid = screensText(r.imdbID)
-                                        // build 141: met een TMDB-id als TMDB-titel ("tmdb-movie-123"): die kan in Mijn lijst
-                                        // (ook op je andere apparaten); een "rec-…"-id kon niemand terugvinden
-                                        val tid = r.tmdbID?.takeIf { it > 0 }
-                                        val id = Build141Feedback.MyListKeys.storableID("rec-${r.id}", tid, r.isShow) ?: "rec-${r.id}"
-                                        if (tid != null) DiscoverKnown.remember(listOf(DiscoverItem(tmdbID = tid, isShow = r.isShow, title = r.title,
-                                            posterPath = r.posterPath, kind = DiscoverKind.STREAMING.key)))
-                                        ScreensNav.detail(
-                                            if (r.isShow) DetailTarget.SeriesT(Series(id = id, title = r.title, year = y, poster = poster, imdbID = rid))
-                                            else DetailTarget.MovieT(Movie(id = id, title = r.title, year = y, poster = poster, imdbID = rid))
-                                        )
-                                    }
-                                },
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(tvs(12)))) {
-                                    RemoteImage(screensText(r.poster), Modifier.matchParentSize(), placeholder = r.title)
-                                    if (match != null) {
-                                        Box(
-                                            Modifier.align(Alignment.TopEnd).padding(6.dp).size(tvs(22)).clip(CircleShape).background(Theme.red),
-                                            contentAlignment = Alignment.Center
-                                        ) { Icon(Icons.Default.PlayArrow, null, tint = Theme.onAccent, modifier = Modifier.size(tvs(15))) }
-                                    }
-                                }
-                                Text(r.title, color = Color.White, fontSize = tsp(14), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
-                }
-            }
             Spacer(Modifier.navigationBarsPadding().height(40.dp))
         }
         }
@@ -1306,6 +1361,29 @@ private fun ThinProgress(share: Double) {
 @OptIn(ExperimentalComposeUiApi::class)
 private fun Modifier.episodeEntry(tv: Boolean, target: () -> FocusRequester?): Modifier =
     if (!tv) this else this.focusProperties { enter = { target() ?: FocusRequester.Default } }.focusGroup()
+
+/** Build 191: tabblad op de detailpagina: rode lijn erboven als het gekozen is, anders grijs; op TV wit bij focus. */
+@Composable
+private fun DetailTab(text: String, selected: Boolean, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val lit = AppState.isTV && focused
+    Column(
+        Modifier.width(IntrinsicSize.Max).onFocusChanged { focused = it.isFocused }
+            .focusLift(1.05f, onClick = onClick)
+            .semantics { role = Role.Tab; this.selected = selected }
+            .then(if (lit) Modifier.border(2.dp, Color.White, RoundedCornerShape(6.dp)) else Modifier)
+            .padding(horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(Modifier.fillMaxWidth().height(3.dp).background(if (selected) Theme.red else Color.Transparent))
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text, color = if (selected || lit) Color.White else Theme.secondary, fontSize = tsp(16),
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1
+        )
+        Spacer(Modifier.height(6.dp))
+    }
+}
 
 @Composable
 private fun DetailSectionTitle(t: String) {

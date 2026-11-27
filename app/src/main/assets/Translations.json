@@ -1368,7 +1368,9 @@
   "every 6 months": "كل 6 أشهر",
   "one-time": "مرة واحدة",
   "per month": "شهريًا",
-  "per year": "سنويًا"
+  "per year": "سنويًا",
+  "More like this": "المزيد مثل هذا",
+  "Download %d episodes": "تنزيل %d حلقة"
  },
  "de": {
   "Forgot PIN?": "PIN vergessen?",
@@ -2739,7 +2741,9 @@
   "every 6 months": "alle 6 Monate",
   "one-time": "einmalig",
   "per month": "pro Monat",
-  "per year": "pro Jahr"
+  "per year": "pro Jahr",
+  "More like this": "Ähnliche Titel",
+  "Download %d episodes": "%d Folgen herunterladen"
  },
  "es": {
   "Forgot PIN?": "¿Olvidaste el PIN?",
@@ -4110,7 +4114,9 @@
   "every 6 months": "cada 6 meses",
   "one-time": "pago único",
   "per month": "al mes",
-  "per year": "al año"
+  "per year": "al año",
+  "More like this": "Más como esto",
+  "Download %d episodes": "Descargar %d episodios"
  },
  "fr": {
   "Forgot PIN?": "Code PIN oublié ?",
@@ -5481,7 +5487,9 @@
   "every 6 months": "tous les 6 mois",
   "one-time": "paiement unique",
   "per month": "par mois",
-  "per year": "par an"
+  "per year": "par an",
+  "More like this": "Titres similaires",
+  "Download %d episodes": "Télécharger %d épisodes"
  },
  "it": {
   "Forgot PIN?": "PIN dimenticato?",
@@ -6852,7 +6860,9 @@
   "every 6 months": "ogni 6 mesi",
   "one-time": "una tantum",
   "per month": "al mese",
-  "per year": "all’anno"
+  "per year": "all’anno",
+  "More like this": "Simili a questo",
+  "Download %d episodes": "Scarica %d episodi"
  },
  "nl": {
   "Forgot PIN?": "Pincode vergeten?",
@@ -8237,7 +8247,9 @@
   "every 6 months": "per 6 maanden",
   "one-time": "eenmalig",
   "per month": "per maand",
-  "per year": "per jaar"
+  "per year": "per jaar",
+  "More like this": "Meer zoals dit",
+  "Download %d episodes": "%d afleveringen downloaden"
  },
  "pl": {
   "Forgot PIN?": "Nie pamiętasz kodu PIN?",
@@ -9608,7 +9620,9 @@
   "every 6 months": "co 6 miesięcy",
   "one-time": "jednorazowo",
   "per month": "miesięcznie",
-  "per year": "rocznie"
+  "per year": "rocznie",
+  "More like this": "Podobne tytuły",
+  "Download %d episodes": "Pobierz odcinki: %d"
  },
  "pt": {
   "Forgot PIN?": "Esqueceu o PIN?",
@@ -10979,7 +10993,9 @@
   "every 6 months": "a cada 6 meses",
   "one-time": "pagamento único",
   "per month": "por mês",
-  "per year": "por ano"
+  "per year": "por ano",
+  "More like this": "Mais títulos como este",
+  "Download %d episodes": "Transferir %d episódios"
  },
  "tr": {
   "Forgot PIN?": "PIN'i mi unuttun?",
@@ -12350,7 +12366,9 @@
   "every 6 months": "6 ayda bir",
   "one-time": "tek seferlik",
   "per month": "aylık",
-  "per year": "yıllık"
+  "per year": "yıllık",
+  "More like this": "Benzer yapımlar",
+  "Download %d episodes": "%d bölümü indir"
  },
  "zh-Hans": {
   "Forgot PIN?": "忘记 PIN 码？",
@@ -13721,6 +13739,8 @@
   "every 6 months": "每 6 个月",
   "one-time": "一次性",
   "per month": "每月",
-  "per year": "每年"
+  "per year": "每年",
+  "More like this": "更多类似内容",
+  "Download %d episodes": "下载 %d 集"
  }
 }

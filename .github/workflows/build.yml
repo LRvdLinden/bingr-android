@@ -275,7 +275,12 @@ jobs:
               tools/test/Build189LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b189-test.jar" 2>&1 | grep -v '^warning' || true
             java -jar "$RUNNER_TEMP/b189-test.jar" | tee "$RUNNER_TEMP/b189-test.txt"; rc189=${PIPESTATUS[0]}
             echo "::notice title=Unit-tests build 189::$(tail -1 "$RUNNER_TEMP/b189-test.txt")"
-            [ $rc189 -eq 0 ] && [ $rc181 -eq 0 ] && [ $rc179 -eq 0 ] && [ $rcLogos178 -eq 0 ] && [ $rc30 -eq 0 ] && [ $rc29 -eq 0 ] && [ $rc28 -eq 0 ] && [ $rcTech176 -eq 0 ] && [ $rc27 -eq 0 ] && [ $rc26 -eq 0 ] && [ $rc25 -eq 0 ] && [ $rc24 -eq 0 ] && [ $rc23 -eq 0 ] && [ $rc22 -eq 0 ] && [ $rc21 -eq 0 ] && [ $rc20 -eq 0 ] && [ $rc19 -eq 0 ] && [ $rc18 -eq 0 ] && [ $rc17 -eq 0 ] && [ $rc16 -eq 0 ] && [ $rc15 -eq 0 ] && [ $rc14 -eq 0 ] && [ $rc13 -eq 0 ] && [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
+            # build 191: tabbladen op de detailpagina
+            kotlinc app/src/main/java/nl/lrvdlinden/bingr/features/Build191Logic.kt \
+              tools/test/Build191LogicTest.kt -include-runtime -d "$RUNNER_TEMP/b191-test.jar" 2>&1 | grep -v '^warning' || true
+            java -jar "$RUNNER_TEMP/b191-test.jar" | tee "$RUNNER_TEMP/b191-test.txt"; rc191=${PIPESTATUS[0]}
+            echo "::notice title=Unit-tests build 191::$(tail -1 "$RUNNER_TEMP/b191-test.txt")"
+            [ $rc191 -eq 0 ] && [ $rc189 -eq 0 ] && [ $rc181 -eq 0 ] && [ $rc179 -eq 0 ] && [ $rcLogos178 -eq 0 ] && [ $rc30 -eq 0 ] && [ $rc29 -eq 0 ] && [ $rc28 -eq 0 ] && [ $rcTech176 -eq 0 ] && [ $rc27 -eq 0 ] && [ $rc26 -eq 0 ] && [ $rc25 -eq 0 ] && [ $rc24 -eq 0 ] && [ $rc23 -eq 0 ] && [ $rc22 -eq 0 ] && [ $rc21 -eq 0 ] && [ $rc20 -eq 0 ] && [ $rc19 -eq 0 ] && [ $rc18 -eq 0 ] && [ $rc17 -eq 0 ] && [ $rc16 -eq 0 ] && [ $rc15 -eq 0 ] && [ $rc14 -eq 0 ] && [ $rc13 -eq 0 ] && [ $rc12 -eq 0 ] && [ $rc -eq 0 ] && [ $rc2 -eq 0 ] && [ $rc3 -eq 0 ] && [ $rc4 -eq 0 ] && [ $rc5 -eq 0 ] && [ $rc6 -eq 0 ] && [ $rc7 -eq 0 ] && [ $rc8 -eq 0 ] && [ $rc9 -eq 0 ] && [ $rc10 -eq 0 ] && [ $rc11 -eq 0 ]
           else
             echo "::warning::kotlinc ontbreekt op de runner: unit-tests van AllServersLogic en TitleShare overgeslagen."
           fi

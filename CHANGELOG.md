@@ -4,6 +4,25 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.1.2 · Build 191
+_27 november 2026_
+
+### Android
+
+**Verbeterd**
+
+- Detailpagina: de donkergrijze knop Downloaden onder Afspelen staat nu ook op tablets, bij een serie met het aantal afleveringen erbij
+
+### Android en Android TV
+
+**Nieuw**
+
+- Detailpagina van een film of serie: tabbladen Afleveringen, Meer zoals dit en Trailers (alleen als er iets in staat), met een rode lijn boven het gekozen tabblad
+
+**Verbeterd**
+
+- Kijk je nog?: je hebt nu 30 seconden om te antwoorden (was 60) voordat het afspelen stopt
+
 ## Versie 1.1.2 · Build 190
 _27 november 2026_
 

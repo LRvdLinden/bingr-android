@@ -7,7 +7,7 @@ import java.util.Locale
  * als `Shared/Build171.swift` (Apple) en de webspeler.
  *
  * - [StillWatching]: "Kijk je nog?" (3 afleveringen achter elkaar automatisch gestart, of 2/3/4 uur live of film zonder
- *   bediening; 60 s om te antwoorden).
+ *   bediening; 30 s om te antwoorden).
  * - [ProfileSets]: verborgen zenders (`hiddenChannels`), geblokkeerde titels (`blockedTitles`) en vastgepinde
  *   categorieën (`pinnedCategories`) per profiel: sleutels en filteren.
  * - [Countries]: land of regio uit het voorvoegsel van een categorie of zender (de pipe-tags van build 153).
@@ -23,7 +23,7 @@ object Build171Logic {
         /** Na zoveel automatisch gestarte afleveringen achter elkaar (zonder bediening) de vraag stellen. */
         const val EPISODES = 3
         /** Zo lang (ms) om te antwoorden; daarna pauzeren en `stream_stop`. */
-        const val ANSWER_MS = 60_000L
+        const val ANSWER_MS = 30_000L
         /** Keuzes voor de tijd (uren) bij live en films; standaard 3. */
         val HOURS = listOf(2, 3, 4)
         const val DEFAULT_HOURS = 3
