@@ -665,7 +665,7 @@ private fun SportSwitchRow(title: String, checked: Boolean, onChange: (Boolean) 
     ) {
         Text(title, color = Color.White, fontSize = tsp(14), modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = null,
-            colors = SwitchDefaults.colors(checkedTrackColor = Theme.green, checkedThumbColor = Color.White))
+            colors = SwitchDefaults.colors(checkedTrackColor = Theme.red, checkedThumbColor = Color.White))
     }
 }
 
@@ -713,7 +713,7 @@ fun SportFavoritesDialog(onDismiss: () -> Unit) {
                     S2Row(c.name, leading = { SportLogo(SportArt.Competition(c.id, true), c.name, 22) },
                         onClick = { SportCenter.setFavoriteCompetition(c.id, !checked) }, trailing = {
                             Switch(checked = checked, onCheckedChange = null,
-                                colors = SwitchDefaults.colors(checkedTrackColor = Theme.green, checkedThumbColor = Color.White,
+                                colors = SwitchDefaults.colors(checkedTrackColor = Theme.red, checkedThumbColor = Color.White,
                                     uncheckedTrackColor = Theme.elevated, uncheckedBorderColor = Theme.elevated, uncheckedThumbColor = Theme.secondary))
                         })
                 }

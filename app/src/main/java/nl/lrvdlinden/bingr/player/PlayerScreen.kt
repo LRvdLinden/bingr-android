@@ -1232,6 +1232,12 @@ private fun PlayerControls(
                 if (!isTV) {
                     if (live) LiveInfo173(currentProgram) else PlayerTimeline(player, false, scrubbing, onScrub, onScrubEnd, onScrubCancel)
                 }
+                // build 190: ook op de tv staat de tijdbalk boven de knoppenrij (de knoppen eronder, zoals op de telefoon)
+                if (isTV) {
+                    if (live) LiveInfo173(currentProgram)
+                    else PlayerTimeline(player, true, scrubbing, onScrub, onScrubEnd, onScrubCancel,
+                        barModifier = if (tvTimelineFirst) Modifier.focusRequester(firstButton) else Modifier)
+                }
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = if (isTV) 12.dp else 0.dp),
                     horizontalArrangement = Arrangement.spacedBy(tvs(if (isTV) 12 else 22)),
@@ -1275,11 +1281,6 @@ private fun PlayerControls(
                             }
                         }
                     }
-                }
-                if (isTV) {
-                    if (live) LiveInfo173(currentProgram)
-                    else PlayerTimeline(player, true, scrubbing, onScrub, onScrubEnd, onScrubCancel,
-                        barModifier = if (tvTimelineFirst) Modifier.focusRequester(firstButton) else Modifier)
                 }
             }
         }
@@ -1477,25 +1478,39 @@ private fun PlayerRoundIcon(icon: ImageVector, description: String, size: Int, o
     }
 }
 
-/** Knop in de onderbalk: op TV icoon + tekst (wit bij focus), op de telefoon alleen het icoon. */
+/** Knop in de onderbalk: op TV icoon + tekst naast elkaar (wit bij focus), op de telefoon icoon met tekst eronder (build 190). */
 @Composable
 private fun PlayerBarButton(icon: ImageVector, label: String, isTV: Boolean, modifier: Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val fg = if (focused && isTV) Color.Black else Color.White
+    if (!isTV) {
+        // build 190: op de telefoon symbool met de tekst eronder (rij onder de tijdbalk, geen gekleurde vlakken)
+        Column(
+            modifier
+                .onFocusChanged { focused = it.isFocused }
+                .focusLift(1.06f, onClick = onClick)
+                .clip(RoundedCornerShape(8.dp))
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(icon, label, tint = fg, modifier = Modifier.size(24.dp))
+            Text(label, color = fg, fontSize = tsp(11), fontWeight = FontWeight.SemiBold, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 84.dp))
+        }
+        return
+    }
     Row(
         modifier
             .onFocusChanged { focused = it.isFocused }
             .focusLift(1.06f, onClick = onClick)
             .clip(RoundedCornerShape(8.dp))
-            .background(if (focused && isTV) Color.White else Color.Transparent)
-            .padding(horizontal = if (isTV) 14.dp else 6.dp, vertical = if (isTV) 8.dp else 6.dp),
+            .background(if (focused) Color.White else Color.Transparent)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, label, tint = fg, modifier = Modifier.size(if (isTV) tvs(22) else 24.dp))
-        if (isTV) {
-            Spacer(Modifier.width(8.dp))
-            Text(label, color = fg, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1)
-        }
+        Icon(icon, label, tint = fg, modifier = Modifier.size(tvs(22)))
+        Spacer(Modifier.width(8.dp))
+        Text(label, color = fg, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 

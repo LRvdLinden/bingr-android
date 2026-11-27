@@ -604,7 +604,7 @@ fun AddPlaylistScreen(existing: PlaylistSource?, onClose: () -> Unit) {
                             Text(L("Live TV as HLS (.m3u8) instead of .ts"), color = Color.White, fontSize = tsp(14), modifier = Modifier.weight(1f))
                             Switch(
                                 checked = preferHLS, onCheckedChange = { preferHLS = it },
-                                colors = SwitchDefaults.colors(checkedTrackColor = Theme.green, checkedThumbColor = Color.White)
+                                colors = SwitchDefaults.colors(checkedTrackColor = Theme.red, checkedThumbColor = Color.White)
                             )
                         }
                     }
