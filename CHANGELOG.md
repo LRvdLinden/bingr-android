@@ -4,6 +4,22 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.1.2 · Build 190
+_27 november 2026_
+
+### Android
+
+**Verbeterd**
+
+- Detailpagina op de telefoon: onder de rode afspeelknop staat een donkergrijze knop Downloaden voor een film of serie, met dezelfde keuzes als onder Meer
+
+### Android en Android TV
+
+**Verbeterd**
+
+- Schakelaars in de instellingen hebben weer de accentkleur (rood) in plaats van groen
+- Speler: op Android TV staat de tijdbalk nu boven de knoppenrij, dus de knoppen staan eronder; op de telefoon staat onder elk symbool in de knoppenrij nu ook de tekst
+
 ## Versie 1.1.2 · Build 189
 _27 november 2026_
 

@@ -275,7 +275,7 @@ fun S2Toggle(title: String, checked: Boolean, icon: ImageVector? = null, subtitl
              onChange: (Boolean) -> Unit) {
     S2Row(title, icon = icon, subtitle = subtitle, enabled = enabled, onClick = { onChange(!checked) }, trailing = {
         Switch(checked = checked, onCheckedChange = null, enabled = enabled,
-            colors = SwitchDefaults.colors(checkedTrackColor = Theme.green, checkedThumbColor = Color.White,
+            colors = SwitchDefaults.colors(checkedTrackColor = Theme.red, checkedThumbColor = Color.White,
                 uncheckedTrackColor = Theme.elevated, uncheckedBorderColor = Theme.elevated, uncheckedThumbColor = Theme.secondary))
     })
 }

@@ -672,6 +672,34 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                             }
                         }
                     }
+                    // build 190: telefoon: donkergrijze pil Downloaden onder Afspelen (zoals de tweede knop bij Netflix); de keuzes
+                    // (hele serie, pauzeren, verwijderen) blijven dezelfde als onder Meer
+                    if (compact && Downloads.supported) {
+                        val movieDl = (target as? DetailTarget.MovieT)?.let { Playables.movie(it.movie, imdb) }
+                        val dlState = movieDl?.let { Build175Logic.movieMenu(Downloads.canDownload(it), Build175Logic.state(Downloads.find(pid, it.id)?.status)) }
+                        val seriesMenu = if (target is DetailTarget.SeriesT) seriesDownloadModel()?.third else null
+                        val dlPair: Pair<String?, () -> Unit> = when {
+                            movieDl != null && dlState == Build175Logic.MovieMenu.DOWNLOAD -> L("Download") to { download(movieDl, null) }
+                            movieDl != null && dlState == Build175Logic.MovieMenu.DOWNLOADED -> L("Downloaded") to { moreMenu = true }
+                            movieDl != null && dlState == Build175Logic.MovieMenu.ACTIVE -> L("Downloading…") to { moreMenu = true }
+                            movieDl != null && dlState == Build175Logic.MovieMenu.RESUME -> L("Resume download") to { moreMenu = true }
+                            seriesMenu != null && seriesMenu.available -> (if (seriesMenu.complete) L("Downloaded") else L("Download")) to { seriesDownloads = true }
+                            else -> null to {}
+                        }
+                        val dlText = dlPair.first
+                        val dlTap = dlPair.second
+                        if (dlText != null) {
+                            Row(
+                                Modifier.fillMaxWidth().height(tvs(46)).focusLift(1.04f) { dlTap() }
+                                    .clip(RoundedCornerShape(50)).background(Color(0xFF2B2B2B)),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(Icons.Default.Download, null, tint = Color.White, modifier = Modifier.size(tvs(20)))
+                                Spacer(Modifier.width(8.dp))
+                                Text(dlText, color = Color.White, fontSize = tsp(15), fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            }
+                        }
+                    }
                     // build 174: telefoon: Mijn lijst · Trailer · Bronnen · Gezien · Meer (de rest onder Meer), gelijk verdeeld
                     if (compact) {
                         val other = prefetchedSources?.size ?: 0
