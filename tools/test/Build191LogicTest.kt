@@ -13,17 +13,17 @@ private fun eq(name: String, got: Any?, want: Any?) {
 
 fun main() {
     val L = Build191Logic
-    val T = Build191Logic.Tab
-    eq("serie met alles", L.tabs(true, 5, 1), listOf(T.EPISODES, T.MORE_LIKE_THIS, T.TRAILERS))
-    eq("film zonder afleveringen", L.tabs(false, 5, 1), listOf(T.MORE_LIKE_THIS, T.TRAILERS))
-    eq("film alleen trailer", L.tabs(false, 0, 1), listOf(T.TRAILERS))
-    eq("serie zonder rest", L.tabs(true, 0, 0), listOf(T.EPISODES))
+
+    eq("serie met alles", L.tabs(true, 5, 1), listOf(Build191Logic.Tab.EPISODES, Build191Logic.Tab.MORE_LIKE_THIS, Build191Logic.Tab.TRAILERS))
+    eq("film zonder afleveringen", L.tabs(false, 5, 1), listOf(Build191Logic.Tab.MORE_LIKE_THIS, Build191Logic.Tab.TRAILERS))
+    eq("film alleen trailer", L.tabs(false, 0, 1), listOf(Build191Logic.Tab.TRAILERS))
+    eq("serie zonder rest", L.tabs(true, 0, 0), listOf(Build191Logic.Tab.EPISODES))
     eq("film zonder inhoud", L.tabs(false, 0, 0), emptyList<Build191Logic.Tab>())
     val s = L.tabs(true, 3, 2)
-    eq("gekozen blijft", L.selected(s, T.TRAILERS), T.TRAILERS)
-    eq("onbekende keuze valt terug", L.selected(listOf(T.MORE_LIKE_THIS), T.EPISODES), T.MORE_LIKE_THIS)
-    eq("geen keuze: eerste", L.selected(s, null), T.EPISODES)
-    eq("geen tabbladen", L.selected(emptyList(), T.EPISODES), null)
+    eq("gekozen blijft", L.selected(s, Build191Logic.Tab.TRAILERS), Build191Logic.Tab.TRAILERS)
+    eq("onbekende keuze valt terug", L.selected(listOf(Build191Logic.Tab.MORE_LIKE_THIS), Build191Logic.Tab.EPISODES), Build191Logic.Tab.MORE_LIKE_THIS)
+    eq("geen keuze: eerste", L.selected(s, null), Build191Logic.Tab.EPISODES)
+    eq("geen tabbladen", L.selected(emptyList(), Build191Logic.Tab.EPISODES), null)
     eq("twee trailers", L.trailerCount("a", "b"), 2)
     eq("zelfde trailer", L.trailerCount("a", "a"), 1)
     eq("alleen seizoen", L.trailerCount(null, "b"), 1)
