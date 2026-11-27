@@ -32,10 +32,10 @@ fun main() {
     eq("aflevering niet op tijd", W.ask(live, 10_000L + 5 * 3_600_000L, true, 3, Build171Logic.StillWatching.Kind.EPISODE), null)
     eq("ongeldige uren = 3", W.hours(7), 3)
     eq("4 uur", W.hours(4), 4)
-    eq("60 s over", W.secondsLeft(0L, 0L), 60)
-    eq("1 s over", W.secondsLeft(0L, 59_500L), 1)
-    eq("verlopen", W.expired(0L, 60_000L), true)
-    eq("niet verlopen", W.expired(0L, 59_999L), false)
+    eq("30 s over", W.secondsLeft(0L, 0L), 30)
+    eq("1 s over", W.secondsLeft(0L, 29_500L), 1)
+    eq("verlopen", W.expired(0L, 30_000L), true)
+    eq("niet verlopen", W.expired(0L, 29_999L), false)
 
     // 15/20. sets per profiel
     val P = Build171Logic.ProfileSets

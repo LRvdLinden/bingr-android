@@ -33,7 +33,7 @@ import kotlinx.coroutines.delay
 /**
  * Build 171: "Kijk je nog?" (Instellingen > Afspelen, per apparaat; regels in [Build171Logic.StillWatching]).
  * Na 3 automatisch gestarte afleveringen, of na 2/3/4 uur live of film zonder bediening: het beeld wordt gedimd met
- * Verder kijken / Stoppen. Geen antwoord binnen 60 s: pauzeren én `stream_stop` (plek in de streamlimiet en de
+ * Verder kijken / Stoppen. Geen antwoord binnen 30 s: pauzeren én `stream_stop` (plek in de streamlimiet en de
  * providerverbinding vrij), dan "Gepauzeerd: druk op Afspelen om verder te gaan" (hervatten op dezelfde plek, live: live).
  */
 object StillWatchingPrefs {
@@ -52,7 +52,7 @@ class StillWatchingState {
         private set
     /** Niet-null: de vraag staat open (sinds). */
     var askedAt by mutableStateOf<Long?>(null)
-    /** Na 60 s zonder antwoord gepauzeerd (stream gestopt). */
+    /** Na 30 s zonder antwoord gepauzeerd (stream gestopt). */
     var paused by mutableStateOf(false)
     private var autoBeforeTouch = 0
     private var touchedAt = 0L
@@ -89,7 +89,7 @@ fun Modifier.stillWatchingTouches(st: StillWatchingState): Modifier = this.point
     }
 }
 
-/** Tijdklok: vraag stellen en na 60 s [onTimeout] (pauzeren + stream_stop). */
+/** Tijdklok: vraag stellen en na 30 s [onTimeout] (pauzeren + stream_stop). */
 @Composable
 fun StillWatchingDriver(st: StillWatchingState, kind: Build171Logic.StillWatching.Kind, playing: Boolean, onTimeout: () -> Unit) {
     val k by rememberUpdatedState(kind)
@@ -118,7 +118,7 @@ fun StillWatchingOverlay(st: StillWatchingState, onStop: () -> Unit, onResume: (
     val asked = st.askedAt
     if (asked == null && !st.paused) return
     val focus = remember { FocusRequester() }
-    var left by remember(asked) { mutableIntStateOf(60) }
+    var left by remember(asked) { mutableIntStateOf(Build171Logic.StillWatching.ANSWER_MS.div(1000L).toInt()) }
     LaunchedEffect(asked) {
         if (asked == null) return@LaunchedEffect
         while (true) { left = Build171Logic.StillWatching.secondsLeft(asked, System.currentTimeMillis()); delay(250) }
