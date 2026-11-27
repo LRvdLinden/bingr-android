@@ -4,6 +4,17 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.1.2 · Build 189
+_27 november 2026_
+
+### Android en Android TV
+
+**Verbeterd**
+
+- Nieuw pincodescherm: je ziet de ronde profielfoto bovenaan, de pincode vul je in vier losse vakjes in (het laatste cijfer is even zichtbaar) en er is een link Pincode vergeten? voor wie is ingelogd: met het wachtwoord van je Bingr-account verwijder je de pincode en kies je daarna zelf een nieuwe. Op de telefoon zijn de cijfertoetsen rustiger; op Android TV heeft de toets waar je op staat een duidelijke witte markering
+- Audio en ondertitels in de speler: sporen met dezelfde naam krijgen een nummer, zodat je ze uit elkaar houdt
+- Schakelaars die aan staan zijn nu groen in plaats van rood. Rood blijft voor afspelen en waarschuwingen
+
 ## Versie 1.1.1 · Build 186
 _21 november 2026_
 

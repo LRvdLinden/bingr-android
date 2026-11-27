@@ -191,7 +191,7 @@ fun ProfileMenu(expanded: Boolean, onDismiss: () -> Unit) {
     }
 
     pinFor?.let { p ->
-        PinPad(L("PIN for %@", p.name), onDismiss = { pinFor = null }) { pin ->
+        PinPad(L("PIN for %@", p.name), onDismiss = { pinFor = null }, profile = p) { pin ->
             if (ParentalControl.verify(pin, p)) {
                 scope.launch { delay(80); switchTo(p) }
                 true
