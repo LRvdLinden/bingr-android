@@ -672,7 +672,7 @@ fun DetailScreen(target: DetailTarget, onClose: () -> Unit, isTop: Boolean? = nu
                             }
                         }
                     }
-                    // build 190: telefoon: donkergrijze pil Downloaden onder Afspelen (zoals de tweede knop bij Netflix); de keuzes
+                    // build 190: telefoon: donkergrijze pil Downloaden onder Afspelen; de keuzes
                     // (hele serie, pauzeren, verwijderen) blijven dezelfde als onder Meer
                     if (compact && Downloads.supported) {
                         val movieDl = (target as? DetailTarget.MovieT)?.let { Playables.movie(it.movie, imdb) }
