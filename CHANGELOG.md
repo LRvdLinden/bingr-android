@@ -9,6 +9,10 @@ _28 november 2026_
 
 ### Alle apps en de website
 
+**Nieuw**
+
+- Een rode banner "Nieuwe aflevering(en)" op de cover in Verder kijken en Mijn lijst.
+
 **Verbeterd**
 
 - Verder kijken: de tegel Nieuwe aflevering werkt nu voor alle series in je lijst op al je servers, ook als je een eerdere aflevering hebt overgeslagen, en wordt elke 2 uur ververst.

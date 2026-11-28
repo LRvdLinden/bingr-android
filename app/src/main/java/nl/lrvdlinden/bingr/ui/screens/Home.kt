@@ -590,7 +590,8 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
     }
     // build 128: hetzelfde werk op twee servers = één tegel (de nieuwste)
     val seen = HashMap<String, String?>()
-    return out.sortedByDescending { it.updated }.filter { c ->
+    // build 196: eerst voortgang (nieuwste eerst), daarna de nieuwe-aflevering-tegels; nooit een nieuwe tegel voor voortgang
+    return Build195Logic.order(out, { it.isNewEpisode }, { it.updated }).filter { c ->
         val k = (if (c.isMovie) "m:" else "s:") + AllServersLogic.normTitle(c.title)
         val prev = seen[k]
         if (k !in seen) { seen[k] = c.sourceID; true } else AllServersLogic.sameServer(prev ?: pid, c.sourceID ?: pid)

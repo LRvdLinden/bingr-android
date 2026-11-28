@@ -66,6 +66,16 @@ fun main() {
     eq("telling: dubbelen", L.newCount(s1b + e(1, 4), all), 1)
     eq("telling gelijk aan tegel", L.newCount(season(1, 5), seen("1-2")) > 0 && L.nextNew(season(1, 5), seen("1-2"), null) == e(1, 3), true)
 
+    // build 196: voortgang altijd vóór nieuwe-aflevering-tegels (item = naam, nieuw?, tijd)
+    data class It(val n: String, val new: Boolean, val t: Long)
+    val mixed = listOf(It("nieuw-recent", true, 900), It("voortgang-oud", false, 100), It("nieuw-oud", true, 50), It("voortgang-nieuw", false, 500))
+    eq("volgorde: voortgang eerst, dan nieuw", L.order(mixed, { it.new }, { it.t }).map { it.n },
+        listOf("voortgang-nieuw", "voortgang-oud", "nieuw-recent", "nieuw-oud"))
+    eq("volgorde: nieuwe tegel met nieuwere datum nooit ervoor", L.order(listOf(It("n", true, 9_999), It("v", false, 1)), { it.new }, { it.t }).first().n, "v")
+    eq("volgorde: alleen nieuw", L.order(listOf(It("a", true, 1), It("b", true, 2)), { it.new }, { it.t }).map { it.n }, listOf("b", "a"))
+    eq("volgorde: leeg", L.order(emptyList<It>(), { it.new }, { it.t }), emptyList<It>())
+    eq("volgorde: gelijk blijft stabiel", L.order(listOf(It("a", false, 5), It("b", false, 5)), { it.new }, { it.t }).map { it.n }, listOf("a", "b"))
+
     // lopende aflevering: geen Nieuwe-aflevering-tegel, voortgang blijft zoals hij was
     val ids = s1b.map { "id${it.number}" to it }
     val running = mapOf("id3" to 0.5)

@@ -78,6 +78,16 @@ object Build195Logic {
         return nextNew(eps.map { it.second }, watched, hidden)
     }
 
+    /**
+     * Build 196: volgorde in Verder kijken. Eerst alles waar je midden in zit (voortgang), nieuwste eerst; daarna de
+     * "Nieuwe aflevering"-tegels, nieuwste eerst. Een nieuwe-aflevering-tegel komt nooit voor een voortgangsitem, ook niet met een
+     * nieuwere datum. Stabiel bij gelijke tijden.
+     */
+    fun <T> order(items: List<T>, isNew: (T) -> Boolean, updated: (T) -> Long): List<T> {
+        val (fresh, progress) = items.partition(isNew)
+        return progress.sortedByDescending(updated) + fresh.sortedByDescending(updated)
+    }
+
     /** Wat te onthouden als de tegel wordt weggehaald: de aflevering van de tegel. */
     fun hiddenValue(e: Ep): String = e.key
 
