@@ -4,6 +4,19 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.1.3 · Build 196
+_28 november 2026_
+
+### Alle apps en de website
+
+**Nieuw**
+
+- Een rode banner "Nieuwe aflevering(en)" op de cover in Verder kijken en Mijn lijst.
+
+**Verbeterd**
+
+- Verder kijken: de tegel Nieuwe aflevering werkt nu voor alle series in je lijst op al je servers, ook als je een eerdere aflevering hebt overgeslagen, en wordt elke 2 uur ververst.
+
 ## Versie 1.1.3 · Build 195
 _28 november 2026_
 

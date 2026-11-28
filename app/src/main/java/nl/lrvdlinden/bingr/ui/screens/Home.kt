@@ -494,6 +494,8 @@ class ContinueItem(
     val coverLookup: Build144Logic.ContinueCover.Want? = null,
     /** Build 195: "Nieuwe aflevering"-tegel (afgeleid uit Mijn lijst); de waarde = wat bij weghalen wordt onthouden */
     val newEpisodeHide: String? = null,
+    /** Build 196: aantal ongeziene afleveringen na de laatst gekeken (voor de rode banner op de "Nieuwe aflevering"-tegel) */
+    val newEpisodeCount: Int = 0,
 ) {
     val isNewEpisode: Boolean get() = newEpisodeHide != null
 }
@@ -588,7 +590,8 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
     }
     // build 128: hetzelfde werk op twee servers = één tegel (de nieuwste)
     val seen = HashMap<String, String?>()
-    return out.sortedByDescending { it.updated }.filter { c ->
+    // build 196: eerst voortgang (nieuwste eerst), daarna de nieuwe-aflevering-tegels; nooit een nieuwe tegel voor voortgang
+    return Build195Logic.order(out, { it.isNewEpisode }, { it.updated }).filter { c ->
         val k = (if (c.isMovie) "m:" else "s:") + AllServersLogic.normTitle(c.title)
         val prev = seen[k]
         if (k !in seen) { seen[k] = c.sourceID; true } else AllServersLogic.sameServer(prev ?: pid, c.sourceID ?: pid)
@@ -641,7 +644,7 @@ fun removeFromContinue(c: ContinueItem) {
  * niet een still van de scène.
  */
 @Composable
-fun ContinueCard(title: String, poster: String?, fraction: Double, caption: String?, modifier: Modifier = Modifier) {
+fun ContinueCard(title: String, poster: String?, fraction: Double, caption: String?, modifier: Modifier = Modifier, newEpisodes: Int = 0) {
     Column(modifier.width(Theme.posterWidth), verticalArrangement = Arrangement.spacedBy(tvs(5))) {
         Box(contentAlignment = Alignment.Center) {
             PosterCard(title, poster)
@@ -650,6 +653,8 @@ fun ContinueCard(title: String, poster: String?, fraction: Double, caption: Stri
                     .border(1.5.dp, Color.White.copy(alpha = 0.9f), CircleShape),
                 contentAlignment = Alignment.Center
             ) { Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(tvs(20))) }
+            // build 196: rode banner "Nieuwe aflevering(en)" midden onderaan, boven de voortgangsband
+            if (newEpisodes > 0) NewEpisodesBanner(newEpisodes, Modifier.align(Alignment.BottomCenter).padding(bottom = tvs(20)))
             // voortgang over de onderkant van de poster, op een donkere band zodat hij op elke cover te zien is
             Box(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
@@ -705,7 +710,8 @@ fun ContinueRow(items: List<ContinueItem>, index: HomeIndex) {
         keyedItems(items, keys) { c ->
             ContinueCard(
                 c.title, c.artwork, c.fraction, c.subtitle,
-                Modifier.focusLift(onLongClick = { removing = c }) {
+                newEpisodes = c.newEpisodeCount,
+                modifier = Modifier.focusLift(onLongClick = { removing = c }) {
                     // build 195: een nieuwe aflevering start meteen (geen 0% gekeken-dialoog)
                     if (c.isNewEpisode) AppScope.launch { ResumePlayer.play(c.id, c.title, restart = true, sourceID = c.sourceID)?.let { ScreensNav.detail(it) } }
                     else choice = c.choice(index)
@@ -943,10 +949,10 @@ fun HomeScreen(filter: Filter) {
                         when (filter) {
                             Filter.ALL -> {
                                 val mine = allMine
-                                if (mine.isNotEmpty()) TargetRow(L("My List"), rememberDeduped(mine, HomeDedupe::targets), pid)
+                                if (mine.isNotEmpty()) TargetRow(L("My List"), rememberDeduped(mine, HomeDedupe::targets), pid, myList = true)
                             }
                             Filter.MOVIES -> if (myMovies.isNotEmpty()) MovieRow(L("My List"), myMovies, myMovies, pid)
-                            Filter.SERIES -> if (mySeries.isNotEmpty()) SeriesRow(L("My List"), mySeries, mySeries)
+                            Filter.SERIES -> if (mySeries.isNotEmpty()) SeriesRow(L("My List"), mySeries, mySeries, myList = true)
                         }
                     }.also {
                         shown(myMovies.isNotEmpty() || mySeries.isNotEmpty())
@@ -1114,15 +1120,15 @@ private fun MovieRow(title: String, items: List<Movie>, all: List<Movie>?, pid: 
 }
 
 @Composable
-private fun SeriesRow(title: String, items: List<Series>, all: List<Series>?) {
+private fun SeriesRow(title: String, items: List<Series>, all: List<Series>?, myList: Boolean = false) {
     val keys = rememberKeys(items) { it.id }
     MediaRow(title, onSeeAll = all?.let { list -> { openCategory(title, list.map { DetailTarget.SeriesT(it) }) } }) {
-        keyedItems(items, keys) { s -> SeriesPoster(s) }
+        keyedItems(items, keys) { s -> SeriesPoster(s, myList) }
     }
 }
 
 @Composable
-private fun SeriesPoster(s: Series) {
+private fun SeriesPoster(s: Series, myList: Boolean = false) {
     var collect by remember { mutableStateOf(false) }
     PosterCard(
         s.title, s.poster,
@@ -1131,19 +1137,20 @@ private fun SeriesPoster(s: Series) {
         watchedEpisodes = Playables.seriesCardCount(s),
         locked = Store.isTitleLocked(s.sourceID, true, s.id),
         preview = { CardPreviewSlot(DetailTarget.SeriesT(s)) },
+        newEpisodes = if (myList) NewEpisodes.count(s) else 0,   // build 196
     )
     if (collect) AddToCollectionDialog(Collections.ref(DetailTarget.SeriesT(s)), s.title, s.poster) { collect = false }
 }
 
 /** Films én series in één rij (Mijn lijst op Home). */
 @Composable
-private fun TargetRow(title: String, items: List<DetailTarget>, pid: String?) {
+private fun TargetRow(title: String, items: List<DetailTarget>, pid: String?, myList: Boolean = false) {
     val keys = rememberKeys(items) { (if (it.isSeries) "s:" else "m:") + it.id }
     MediaRow(title, onSeeAll = { openCategory(title, items) }) {
         keyedItems(items, keys) { t ->
             when (t) {
                 is DetailTarget.MovieT -> MoviePoster(t.movie, pid)
-                is DetailTarget.SeriesT -> SeriesPoster(t.series)
+                is DetailTarget.SeriesT -> SeriesPoster(t.series, myList)
             }
         }
     }

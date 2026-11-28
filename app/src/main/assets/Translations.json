@@ -1372,7 +1372,8 @@
   "More like this": "المزيد مثل هذا",
   "Download %d episodes": "تنزيل %d حلقة",
   "Catch-up via twin channel": "إعادة المشاهدة عبر قناة مطابقة",
-  "New episode": "حلقة جديدة"
+  "New episode": "حلقة جديدة",
+  "New episodes": "حلقات جديدة"
  },
  "de": {
   "Forgot PIN?": "PIN vergessen?",
@@ -2747,7 +2748,8 @@
   "More like this": "Ähnliche Titel",
   "Download %d episodes": "%d Folgen herunterladen",
   "Catch-up via twin channel": "Nachträglich ansehen über Zwillingssender",
-  "New episode": "Neue Folge"
+  "New episode": "Neue Folge",
+  "New episodes": "Neue Folgen"
  },
  "es": {
   "Forgot PIN?": "¿Olvidaste el PIN?",
@@ -4122,7 +4124,8 @@
   "More like this": "Más como esto",
   "Download %d episodes": "Descargar %d episodios",
   "Catch-up via twin channel": "Ver de nuevo mediante un canal gemelo",
-  "New episode": "Nuevo episodio"
+  "New episode": "Nuevo episodio",
+  "New episodes": "Nuevos episodios"
  },
  "fr": {
   "Forgot PIN?": "Code PIN oublié ?",
@@ -5497,7 +5500,8 @@
   "More like this": "Titres similaires",
   "Download %d episodes": "Télécharger %d épisodes",
   "Catch-up via twin channel": "Replay via une chaîne jumelle",
-  "New episode": "Nouvel épisode"
+  "New episode": "Nouvel épisode",
+  "New episodes": "Nouveaux épisodes"
  },
  "it": {
   "Forgot PIN?": "PIN dimenticato?",
@@ -6872,7 +6876,8 @@
   "More like this": "Simili a questo",
   "Download %d episodes": "Scarica %d episodi",
   "Catch-up via twin channel": "Rivedi tramite canale gemello",
-  "New episode": "Nuovo episodio"
+  "New episode": "Nuovo episodio",
+  "New episodes": "Nuovi episodi"
  },
  "nl": {
   "Forgot PIN?": "Pincode vergeten?",
@@ -8261,7 +8266,8 @@
   "More like this": "Meer zoals dit",
   "Download %d episodes": "%d afleveringen downloaden",
   "Catch-up via twin channel": "Terugkijken via tweelingzender",
-  "New episode": "Nieuwe aflevering"
+  "New episode": "Nieuwe aflevering",
+  "New episodes": "Nieuwe afleveringen"
  },
  "pl": {
   "Forgot PIN?": "Nie pamiętasz kodu PIN?",
@@ -9636,7 +9642,8 @@
   "More like this": "Podobne tytuły",
   "Download %d episodes": "Pobierz odcinki: %d",
   "Catch-up via twin channel": "Oglądaj ponownie przez kanał bliźniaczy",
-  "New episode": "Nowy odcinek"
+  "New episode": "Nowy odcinek",
+  "New episodes": "Nowe odcinki"
  },
  "pt": {
   "Forgot PIN?": "Esqueceu o PIN?",
@@ -11011,7 +11018,8 @@
   "More like this": "Mais títulos como este",
   "Download %d episodes": "Transferir %d episódios",
   "Catch-up via twin channel": "Rever através de um canal gémeo",
-  "New episode": "Novo episódio"
+  "New episode": "Novo episódio",
+  "New episodes": "Novos episódios"
  },
  "tr": {
   "Forgot PIN?": "PIN'i mi unuttun?",
@@ -12386,7 +12394,8 @@
   "More like this": "Benzer yapımlar",
   "Download %d episodes": "%d bölümü indir",
   "Catch-up via twin channel": "İkiz kanal üzerinden tekrar izle",
-  "New episode": "Yeni bölüm"
+  "New episode": "Yeni bölüm",
+  "New episodes": "Yeni bölümler"
  },
  "zh-Hans": {
   "Forgot PIN?": "忘记 PIN 码？",
@@ -13761,6 +13770,7 @@
   "More like this": "更多类似内容",
   "Download %d episodes": "下载 %d 集",
   "Catch-up via twin channel": "通过孪生频道回看",
-  "New episode": "新一集"
+  "New episode": "新一集",
+  "New episodes": "新剧集"
  }
 }
