@@ -41,7 +41,7 @@ object Build194Logic {
         class Item(val key: String, val epg: String?, val name: String, val days: Int)
 
         private val tagInner = Regex("catch[- ]?up|terugkijken|replay|timeshift")
-        private val brackets = Regex("\\[[^\\]]*]|\\([^)]*\\)|\\{[^}]*}")
+        private val brackets = Regex("\\[[^\\]]*\\]|\\([^)]*\\)|\\{[^}]*\\}")
         private val words = Regex("\\b(?:hd|uhd|fhd|sd|4k|hevc|h265|raw|catch[- ]?up|terugkijken|replay|timeshift)\\b")
 
         /** Naam voor het vergelijken: kleine letters, zonder accenten, zonder catch-up-tags en HD/UHD/FHD/SD/4K/HEVC/H265/RAW, alleen letters en cijfers. */
