@@ -135,9 +135,11 @@ object Premium {
         val r = runCatching { Account.billingCheckout(plan, lang, waiver = true) }.getOrElse { Account.BillingLink(null, "error") }
         val url = r.url ?: run {
             if (Build181Logic.Errors.kind(r.error) == Build181Logic.Errors.Kind.ALREADY) refresh()
+            else Funnel.failed(plan, r.error)   // build 193: betaaltrechter
             return errorText(r.error)
         }
-        if (!openTab(ctx, url)) noBrowser()
+        if (openTab(ctx, url)) Funnel.started(plan)
+        else { Funnel.failed(plan, "no_browser"); noBrowser() }
         return null
     }
 
@@ -159,7 +161,8 @@ object Premium {
     fun resumed() {
         if (!pending) return
         pending = false
-        AppScope.launch { refresh() }
+        // build 193: terug van de betaalpagina: gelukt of afgebroken melden (betaaltrechter)
+        AppScope.launch { refresh(); Funnel.checked(returned = true) }
     }
 }
 
@@ -194,6 +197,8 @@ fun PremiumOffer(p: Build181Logic.Premium, modifier: Modifier = Modifier, firstF
     var error by remember { mutableStateOf<String?>(null) }
     val qr = tv || noBrowser
     RefreshOnReturn()
+    // build 193: betaaltrechter, één melding per keer dat de plannen in beeld komen
+    LaunchedEffect(Unit) { Funnel.paywallShown() }
 
     fun pay(plan: String) {
         choice = plan
@@ -247,7 +252,7 @@ fun PremiumOffer(p: Build181Logic.Premium, modifier: Modifier = Modifier, firstF
         val per = when (period) { Build181Logic.MONTH -> L("per month"); Build181Logic.HALF -> L("every 6 months"); else -> L("per year") }
         val cards: @Composable (Modifier) -> Unit = { m ->
             Column(m, verticalArrangement = Arrangement.spacedBy(tvs(10))) {
-                card(highlight = period == Build181Logic.YEAR, selected = choice != Build181Logic.LIFETIME, onClick = { choice = period }) {
+                card(highlight = period == Build181Logic.YEAR, selected = choice != Build181Logic.LIFETIME, onClick = { choice = period; Funnel.started(period) }) {
                     if (period == Build181Logic.YEAR) Tag(L("Most popular · save %d%%", save), Theme.brandRed)
                     else if (save > 0) Tag(L("Save %d%%", save), Theme.card)
                     Text("Premium", color = Color.White, fontSize = tsp(18), fontWeight = FontWeight.Bold)
@@ -265,7 +270,7 @@ fun PremiumOffer(p: Build181Logic.Premium, modifier: Modifier = Modifier, firstF
                             kind = NetflixKind.ACCENT, modifier = Modifier.fillMaxWidth()) { pay(period) }
                     }
                 }
-                card(highlight = false, selected = choice == Build181Logic.LIFETIME, onClick = { choice = Build181Logic.LIFETIME }) {
+                card(highlight = false, selected = choice == Build181Logic.LIFETIME, onClick = { choice = Build181Logic.LIFETIME; Funnel.started(Build181Logic.LIFETIME) }) {
                     Text("Lifetime", color = Color.White, fontSize = tsp(18), fontWeight = FontWeight.Bold)
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(Premium.euro(pr.lifetime), color = Color.White, fontSize = tsp(22), fontWeight = FontWeight.Bold)

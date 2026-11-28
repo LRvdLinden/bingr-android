@@ -95,7 +95,8 @@ object Activation {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
             .addCategory(Intent.CATEGORY_BROWSABLE)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        return runCatching { ctx.startActivity(intent) }.isSuccess
+        // build 193: betaaltrechter, de betaalpagina is geopend
+        return runCatching { ctx.startActivity(intent) }.isSuccess.also { if (it) Funnel.started(Build181Logic.LIFETIME) }
     }
 
     // MARK: aankondigingskaart wegklikken (per account)
@@ -188,6 +189,7 @@ fun ActivateLifetimeScreen() {
 
     // betalen gebeurt op een ander apparaat of in de browser: zolang dit scherm openstaat af en toe opnieuw ophalen
     LaunchedEffect(Unit) {
+        Funnel.paywallShown()   // build 193: betaaltrechter
         Entitlements.launchFetch(force = true)
         while (true) {
             delay(Build167Logic.Screen.REFRESH_MS)
@@ -387,7 +389,8 @@ object LifetimeWelcome {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(Build167Logic.Welcome.GUEST_URL))
             .addCategory(Intent.CATEGORY_BROWSABLE)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        return runCatching { ctx.startActivity(intent) }.isSuccess
+        // build 193: betaaltrechter, de betaalpagina is geopend
+        return runCatching { ctx.startActivity(intent) }.isSuccess.also { if (it) Funnel.started(Build181Logic.LIFETIME) }
     }
 }
 
@@ -403,6 +406,7 @@ fun LifetimeWelcomeScreen(onSignIn: () -> Unit) {
     var noBrowser by remember { mutableStateOf(false) }
     val showQR = Build167Logic.Welcome.showQR(tv, noBrowser)
     val first = rememberInitialFocus(key = "welcome")
+    LaunchedEffect(Unit) { Funnel.paywallShown() }   // build 193: betaaltrechter (koop eerst, vóór het account)
     Column(
         Modifier.fillMaxSize().systemBarsPadding().verticalScroll(rememberScrollState()).padding(vertical = tvs(28)),
         horizontalAlignment = Alignment.CenterHorizontally,

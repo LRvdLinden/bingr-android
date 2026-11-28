@@ -250,6 +250,7 @@ object Entitlements {
         if (wasFree == true && !info.isFree) Upgrade.upgraded()
         // build 167: de server geeft weer volledige toegang (gekocht, proefperiode) → het blok van stream_start vervalt
         if (Build167Logic.Access.parse(info.access) == Build167Logic.FULL) Activation.cleared()
+        Funnel.checked(returned = false)   // build 193: een gestarte aankoop is gelukt zodra het account Premium of Lifetime heeft
         return true
     }
 
