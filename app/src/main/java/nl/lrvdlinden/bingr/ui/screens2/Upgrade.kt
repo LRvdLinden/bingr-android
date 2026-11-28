@@ -88,6 +88,7 @@ object Upgrade {
             .addCategory(Intent.CATEGORY_BROWSABLE)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (runCatching { ctx.startActivity(intent) }.isFailure) forceQR = true
+        else Funnel.started(Build181Logic.LIFETIME)   // build 193: betaaltrechter
     }
 
     fun reason(f: Entitlements.Feature?): String = when (f) {
