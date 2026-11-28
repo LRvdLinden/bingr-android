@@ -54,6 +54,18 @@ fun main() {
     eq("weggehaald: terug na kijken", L.nextNew(season(1, 5), seen("1-1", "1-2", "1-3", "1-4"), "1-4"), e(1, 5))
     eq("weggehaald: oudere weggehaald, nu nieuwere", L.nextNew(season(1, 5), all, "1-3"), e(1, 4))
 
+    // build 196: telling voor de banner (zelfde regel als de tegel)
+    eq("telling: een nieuwe", L.newCount(s1b, all), 1)
+    eq("telling: meer nieuwe", L.newCount(season(1, 6), all), 3)
+    eq("telling: niets nieuws", L.newCount(s1, all), 0)
+    eq("telling: niets gekeken", L.newCount(s1b, seen()), 0)
+    eq("telling: specials niet", L.newCount(s1b + e(0, 1) + e(0, 2), all), 1)
+    eq("telling: special gekeken telt niet als gekeken", L.newCount(s1, seen("0-1")), 0)
+    eq("telling: overgeslagen ervoor telt niet mee", L.newCount(season(1, 6), seen("1-1", "1-4")), 2)
+    eq("telling: over seizoenen", L.newCount(season(1, 3) + season(2, 3), seen("1-3")), 3)
+    eq("telling: dubbelen", L.newCount(s1b + e(1, 4), all), 1)
+    eq("telling gelijk aan tegel", L.newCount(season(1, 5), seen("1-2")) > 0 && L.nextNew(season(1, 5), seen("1-2"), null) == e(1, 3), true)
+
     // lopende aflevering: geen Nieuwe-aflevering-tegel, voortgang blijft zoals hij was
     val ids = s1b.map { "id${it.number}" to it }
     val running = mapOf("id3" to 0.5)

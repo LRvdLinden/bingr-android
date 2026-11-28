@@ -9,12 +9,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -36,7 +38,7 @@ object NewEpisodes {
     private const val WATCHED_FRACTION = 0.85
 
     /** Sleutel per server én serie: dezelfde id op twee servers is niet dezelfde serie. */
-    private fun skey(s: Series) = "${(s.sourceID ?: "").lowercase()}|${s.id}"
+    private fun skey(s: Series) = "${(s.sourceID ?: Playlists.source?.id ?: "").lowercase()}|${s.id}"
 
     /** Afleveringen van de eigen server van de serie; de cache van de actieve server alleen voor series van die server (id's kunnen botsen). */
     private fun epsOf(s: Series, pid: String?): List<Episode> {
@@ -44,6 +46,39 @@ object NewEpisodes {
         fresh[skey(s)]?.let { return it }
         val foreign = s.sourceID != null && !AllServersLogic.sameServer(s.sourceID, pid)
         return if (foreign) emptyList() else Playlists.episodeCache[s.id] ?: emptyList()
+    }
+
+    /**
+     * Build 196: aantal ongeziene afleveringen na de laatst gekeken per serie (sleutel [skey]), voor de rode banner op de cover
+     * in Verder kijken en Mijn lijst. Afgeleid van dezelfde afleveringen en regels als de tegel; gevuld op de achtergrond
+     * ([rememberNewEpisodes]) zodat het tekenen van de rijen er niet op wacht (geen haperingen); een serie zonder bekende
+     * afleveringen heeft 0 (geen banner).
+     */
+    var counts by mutableStateOf(mapOf<String, Int>()); private set
+    fun count(s: Series): Int = counts[skey(s)] ?: 0
+
+    /** Telt voor alle series (op een achtergrondthread aan te roepen). */
+    fun computeCounts(series: List<Series>, progress: Map<String, ProgressEntry>, pid: String?): Map<String, Int> {
+        val byServer = fractionsByServer(progress, pid)
+        val out = HashMap<String, Int>()
+        for (s in series) {
+            val eps = epsOf(s, pid); if (eps.isEmpty()) continue
+            val fractions = byServer[(s.sourceID ?: pid ?: "").lowercase()] ?: emptyMap()
+            val n = Build195Logic.newCount(eps.map(::ep), watchedFn(s, eps, fractions))
+            if (n > 0) out[skey(s)] = n
+        }
+        return out
+    }
+
+    fun publishCounts(c: Map<String, Int>) { if (c != counts) counts = c }
+
+    private fun fractionsByServer(progress: Map<String, ProgressEntry>, pid: String?): Map<String, Map<String, Double>> {
+        val byServer = HashMap<String, HashMap<String, Double>>()
+        for ((k, e) in progress) {
+            if (!Store.belongsToActive(e.profileID)) continue
+            byServer.getOrPut((e.playlistID ?: pid ?: "").lowercase()) { HashMap() }[k] = e.fraction
+        }
+        return byServer
     }
 
     private fun ep(e: Episode) = Build195Logic.Ep(e.season, e.number)
@@ -105,11 +140,7 @@ object NewEpisodes {
         val profile = Store.activeProfileID
         val out = ArrayList<ContinueItem>()
         // voortgang per server (aflevering-id's kunnen op twee servers hetzelfde zijn): null = de actieve server
-        val byServer = HashMap<String, HashMap<String, Double>>()
-        for ((k, e) in progress) {
-            if (!Store.belongsToActive(e.profileID)) continue
-            byServer.getOrPut((e.playlistID ?: pid ?: "").lowercase()) { HashMap() }[k] = e.fraction
-        }
+        val byServer = fractionsByServer(progress, pid)
         for (s in series) {
             if (Store.blockedTitles.isNotEmpty() && Store.isTitleBlocked(s.sourceID ?: pid, true, s.id)) continue
             if (AllServersLogic.normTitle(s.title) in existing) continue
@@ -117,7 +148,8 @@ object NewEpisodes {
             // nooit naast of in plaats van een lopende aflevering: de voortgang (alleen gelezen, alleen van de eigen server van
             // de serie) gaat voor
             val fractions = byServer[(s.sourceID ?: pid ?: "").lowercase()] ?: emptyMap()
-            val next = Build195Logic.tile(eps.map { it.id to ep(it) }, fractions, watchedFn(s, eps, fractions),
+            val watched = watchedFn(s, eps, fractions)
+            val next = Build195Logic.tile(eps.map { it.id to ep(it) }, fractions, watched,
                 Prefs.string(Build195Logic.prefKey("hid", profile, s.title))) ?: continue
             val e = eps.firstOrNull { it.season == next.season && it.number == next.number } ?: continue
             val atKey = Build195Logic.prefKey("at", profile, s.title)
@@ -128,7 +160,8 @@ object NewEpisodes {
             val foreign = s.sourceID != null && !s.sourceID.equals(pid, ignoreCase = true)
             out.add(ContinueItem(e.id, s.title, L("New episode") + " " + next.label, art, 0.0, at, false,
                 sourceID = if (foreign) s.sourceID else null, coverLookup = lookup,
-                newEpisodeHide = Build195Logic.hiddenValue(next)))
+                newEpisodeHide = Build195Logic.hiddenValue(next),
+                newEpisodeCount = Build195Logic.newCount(eps.map(::ep), watched).coerceAtLeast(1)))
         }
         return out
     }
@@ -167,6 +200,11 @@ fun rememberNewEpisodes(index: HomeIndex, pid: String?, filter: Filter, progress
             NewEpisodes.refresh(mySeries)
             delay(NewEpisodes.nextDelay(mySeries) ?: break)
         }
+    }
+    // build 196: de tellingen voor de banners (ook voor Mijn lijst), op de achtergrond en alleen bij een verandering
+    LaunchedEffect(mySeries, progress, NewEpisodes.version, Store.localWatched, Store.activeProfileID, pid) {
+        val c = withContext(Dispatchers.Default) { NewEpisodes.computeCounts(mySeries, progress, pid) }
+        NewEpisodes.publishCounts(c)
     }
     return remember(mySeries, progress, filter, pid, existing, NewEpisodes.version, Store.localWatched, Store.activeProfileID, Store.blockedTitles) {
         NewEpisodes.items(mySeries, progress, filter, pid, existing)

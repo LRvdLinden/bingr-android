@@ -67,6 +67,8 @@ fun PosterCard(
     locked: Boolean = false,
     /** Build 176: voorvertoning (trailer zonder geluid) over de poster, zie [PosterPreviewOverlay] */
     preview: (@Composable BoxScope.() -> Unit)? = null,
+    /** Build 196: aantal ongeziene afleveringen na de laatst gekeken (Mijn lijst) → rode banner midden onderaan, 0 = niets */
+    newEpisodes: Int = 0,
 ) {
     Box(modifier.width(width).height(width * 1.5f).clip(RoundedCornerShape(4.dp))) {
         // build 97: TalkBack leest de titel van de poster
@@ -112,6 +114,28 @@ fun PosterCard(
                     .clip(RoundedCornerShape(2.dp)).background(Theme.red).padding(horizontal = 5.dp, vertical = 2.dp))
         }
         if (progress != null && progress > 0) ProgressBar(progress, Modifier.align(Alignment.BottomCenter))
+        // build 196: boven de taalstrook, de voortgangsbalk en het label (midden onderaan)
+        if (newEpisodes > 0) {
+            NewEpisodesBanner(newEpisodes, Modifier.align(Alignment.BottomCenter).padding(bottom =
+                (if (progress == null) 8.dp else 12.dp) + (if (language != null) tvs(16) else 0.dp) +
+                    (if (badge != null && !badgeTopStart) tvs(20) else 0.dp)))
+        }
+    }
+}
+
+/**
+ * Build 196: rode banner midden onderaan een cover: "Nieuwe aflevering" (één ongeziene) of "Nieuwe afleveringen" (meer).
+ * Effen rood met witte tekst en een fijne donkere rand, dus leesbaar op elke cover; alleen tekenwerk (niet focusbaar).
+ */
+@Composable
+fun NewEpisodesBanner(count: Int, modifier: Modifier = Modifier) {
+    if (count <= 0) return
+    val shape = RoundedCornerShape(3.dp)
+    Box(modifier.fillMaxWidth().padding(horizontal = 6.dp), contentAlignment = Alignment.Center) {
+        Text(if (count == 1) L("New episode") else L("New episodes"), color = Theme.onAccent, fontSize = tsp(9),
+            fontWeight = FontWeight.Black, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.clip(shape).background(Theme.red).border(0.75.dp, Color.Black.copy(alpha = 0.4f), shape)
+                .padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }
 

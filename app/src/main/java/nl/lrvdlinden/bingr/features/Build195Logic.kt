@@ -50,6 +50,17 @@ object Build195Logic {
     }
 
     /**
+     * Build 196: aantal ongeziene gewone afleveringen NA de laatst gekeken gewone aflevering (specials, seizoen 0, tellen niet;
+     * 0 zonder gekeken aflevering of zonder nieuws). Zelfde regel als [nextNew] (de tegel is de eerste daarvan); voor de rode
+     * banner "Nieuwe aflevering(en)" op de cover in Verder kijken en Mijn lijst. Eén = enkelvoud, meer = meervoud.
+     */
+    fun newCount(eps: List<Ep>, watched: (Ep) -> Boolean): Int {
+        val o = ordered(eps)
+        val lastSeen = o.indexOfLast(watched)
+        return if (lastSeen < 0) 0 else o.size - lastSeen - 1
+    }
+
+    /**
      * Loopt er een aflevering (meer dan niets, minder dan 85% gekeken)? Dan houdt de serie alleen die tegel. Build 196:
      * 85% zoals Apple en de gekeken-drempel van de speler (Build154Logic.Threshold); tot build 195 was dit 95%, waardoor een
      * aflevering van 85-95% al als gezien gold maar de serie toch geen nieuwe tegel kreeg.
