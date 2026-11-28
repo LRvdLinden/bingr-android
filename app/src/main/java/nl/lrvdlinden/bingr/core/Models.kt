@@ -130,7 +130,14 @@ data class Channel(
     /** Build 178: M3U-terugkijken: catchup-type (kleine letters) en catchup-source (sjabloon); null = niet opgegeven */
     val catchupType: String? = null,
     val catchupSource: String? = null,
+    /** Build 194: terugkijken via een tweeling (zelfde zender met catch-up op dezelfde server, zie Build194Logic.Twin): id, stream en commando van de tweeling. Live blijft deze zender. */
+    val replayID: String? = null,
+    val replayStreamURL: String? = null,
+    val replayCmd: String? = null,
 ) {
+    /** Build 194: de zender waarmee terugkijken gebouwd wordt: de tweeling als die er is, anders deze zelf. */
+    val replayView: Channel get() = if (replayID == null) this else copy(id = replayID, streamURL = replayStreamURL, stalkerCmd = replayCmd, replayID = null)
+
     /** Build 153: naam zoals de app hem toont ("┃NL┃ NPO 1 HD" → "NPO 1"); [name] blijft voor sleutels, id's en afspelen. */
     val displayName: String get() = ContentLanguage.channelTitle(name)
 }
@@ -286,6 +293,9 @@ data class PlayableItem(
     /** Build 154: TMDB-id (film of serie) en jaar, voor de inhoudssleutels van "gezien" en `ids` naar Trakt */
     val tmdbID: String? = null,
     val year: Int? = null,
+    /** Build 194: terugkijken uit de gids: begin en einde van het programma (epoch-ms), voor spoelen met de lengte uit de gids */
+    val replayStart: Long? = null,
+    val replayEnd: Long? = null,
 ) {
     /** Build 153: titel zoals de app hem toont (zender: opgeschoonde zendernaam); [title] blijft voor sleutels. */
     val displayTitle: String get() = if (type == MediaType.LIVE) ContentLanguage.channelTitle(title) else ContentLanguage.displayTitle(title)

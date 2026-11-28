@@ -81,6 +81,7 @@ private const val S2_COLLECTION_PREFIX = "▣"
 private fun s2LiveGroupTitle(g: String): String = when {
     g == S2_FAV_KEY -> "★ " + L("Favorites")
     g == S2_RECENT_KEY -> "◷ " + L("Recent")
+    g == Build194Logic.GROUP_KEY -> "\u27F2 " + L("Catch-up")
     g == S2_ALL_KEY -> L("All channels")
     g == S2_EVENTS_KEY -> "⚑ " + L("Events")
     g == S2_RADIO_KEY -> "♫ " + L("Radio")
@@ -137,8 +138,14 @@ fun LiveTVScreen() {
     // build 171: radio als eigen groep (mini-speler onderaan, speelt door op de achtergrond)
     val hasRadio = remember(libKey) { lib.channels.any { Radio.isRadio(it) } }
     val pinnedCats = Store.pinnedCategories
-    val groups = remember(libKey, events.isNotEmpty(), channelCollections, hasRadio, pinnedCats) {
-        listOf(S2_ALL_KEY, S2_FAV_KEY, S2_RECENT_KEY) + (if (hasRadio) listOf(S2_RADIO_KEY) else emptyList()) +
+    // build 194: Terugkijken als eigen groep: zenders met catch-up van deze server plus die van andere servers uit Favorieten/Recent
+    val catchupChannels: List<Channel> = remember(libKey, Store.favorites, Store.recentChannels, pid, AllServers.version) {
+        val others = (Store.favorites + Store.recentChannels).filterNot { AllServersLogic.sameServer(AllServersLogic.serverOf(it), pid) }.distinct()
+        Build194Logic.channels(lib.channels, AllServers.channels(others, pid) { null }, { (it.sourceID ?: pid) + "|" + it.id }, { it.catchupDays })
+    }
+    val groups = remember(libKey, events.isNotEmpty(), channelCollections, hasRadio, pinnedCats, catchupChannels.isNotEmpty()) {
+        listOf(S2_ALL_KEY, S2_FAV_KEY, S2_RECENT_KEY) + (if (Build194Logic.showGroup(catchupChannels.size)) listOf(Build194Logic.GROUP_KEY) else emptyList()) +
+            (if (hasRadio) listOf(S2_RADIO_KEY) else emptyList()) +
             (if (events.isNotEmpty()) listOf(S2_EVENTS_KEY) else emptyList()) +
             channelCollections.map { S2_COLLECTION_PREFIX + it.id } +
             // build 171: vastgepinde categorieën bovenaan
@@ -158,8 +165,9 @@ fun LiveTVScreen() {
                 .filterIsInstance<CollectionEntry.C>().map { it.channel }
         }
     }
-    val channels: List<Channel> = remember(libKey, current, favorites, recents, pid, events, collectionChannels, AllServers.version) {
+    val channels: List<Channel> = remember(libKey, current, favorites, recents, pid, events, collectionChannels, AllServers.version, catchupChannels) {
         when {
+            current == Build194Logic.GROUP_KEY -> catchupChannels
             // build 128: favorieten en recente zenders van alle servers (andere servers spelen daar, zonder te wisselen)
             current == S2_FAV_KEY -> lib.channels.filter { Store.isFavorite(pid, it.id) } +   // server-id hoofdletterongevoelig
                 AllServers.channels(favorites.filterNot { AllServersLogic.sameServer(AllServersLogic.serverOf(it), pid) }, pid) { null }

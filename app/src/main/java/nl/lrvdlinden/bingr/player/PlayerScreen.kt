@@ -280,7 +280,7 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
      * zonder antwoord na 12 s blijft het live). Zonder terugkijken geen vraag.
      */
     fun askStartOverIfRunning() {
-        if (!player.isLive || !catchupOK) return
+        if (!player.isLive || player.isReplay || !catchupOK) return
         val p = currentProgram173(player) ?: return
         if (!Build173PlayerLogic.askStartOver(true, p.start, p.end, System.currentTimeMillis())) return
         startOverPrompt = p
@@ -324,7 +324,10 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         }
         player.catchupProvider =
             // build 128: zender van een andere server: terugkijken via die server
-            if (itm.type == MediaType.LIVE && cid != null) ({ from: Long, to: Long -> Playlists.catchupURL(cid, from, to, itm.sourceID) }) else null
+            // build 194: ook bij terugkijken uit de gids (zender uit het id), om te kunnen spoelen
+            (cid ?: itm.id.substringBefore("-cu-").takeIf { Build194Logic.Replay.valid(itm.replayStart, itm.replayEnd) && itm.id.contains("-cu-") })
+                .takeIf { itm.type == MediaType.LIVE && it != null }
+                ?.let { rc -> { from: Long, to: Long -> Playlists.catchupURL(rc, from, to, itm.sourceID) } }
         if (itm.stremio != null) {
             val found = runCatching { Playlists.stremioStreams(itm) }.getOrDefault(emptyList())
             // intussen gesloten of al naar een andere zender/aflevering → niet meer starten
@@ -656,10 +659,10 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
 
     // build 173: wat er nu op is (live), Vanaf het begin, en de belangrijkste knop van dit moment
     val currentProgram = currentProgram173(player)
-    val canStartOver = player.errorText == null &&
+    val canStartOver = player.errorText == null && !player.isReplay &&
         Build173PlayerLogic.canStartOver(catchupOK, currentProgram?.start, System.currentTimeMillis(), player.behindLive)
     val primary = if (player.errorText != null) null else
-        Build173PlayerLogic.primary(inIntro = showSkip, nextEpisode = showNext || showCredits, isLive = player.isLive,
+        Build173PlayerLogic.primary(inIntro = showSkip, nextEpisode = showNext || showCredits, isLive = player.isLive && !player.isReplay,
             canStartOver = canStartOver, behindLiveSec = player.behindLive)
     fun runPrimary(p: Build173PlayerLogic.Primary) {
         when (p) {
@@ -757,12 +760,12 @@ fun PlayerScreen(item: PlayableItem, onClose: () -> Unit) {
         // bediening verborgen: OK = tonen · ←/→ = 10 s spoelen · ↑/↓ = zappen (live) of tonen
         when (code) {
             // build 179: live en niet achter live (geen timeshift/pauze): links opent de zaplijst; anders −10 s
-            AndroidKeyEvent.KEYCODE_DPAD_LEFT -> if (isTV && player.isLive && player.behindLive < 1.0 && player.isPlaying) {
+            AndroidKeyEvent.KEYCODE_DPAD_LEFT -> if (isTV && player.isLive && !player.isReplay && player.behindLive < 1.0 && player.isPlaying) {
                 if (repeat == 0) panel = PlayerPanel.ZAP
             } else seekBy(-10.0)
             AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> seekBy(10.0)
-            AndroidKeyEvent.KEYCODE_DPAD_UP -> if (repeat == 0) { if (player.isLive) zap(-1) else poke() }
-            AndroidKeyEvent.KEYCODE_DPAD_DOWN -> if (repeat == 0) { if (player.isLive) zap(1) else poke() }
+            AndroidKeyEvent.KEYCODE_DPAD_UP -> if (repeat == 0) { if (player.isLive && !player.isReplay) zap(-1) else poke() }
+            AndroidKeyEvent.KEYCODE_DPAD_DOWN -> if (repeat == 0) { if (player.isLive && !player.isReplay) zap(1) else poke() }
             AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> poke()
             else -> return false
         }
@@ -1135,7 +1138,7 @@ private fun PlayerControls(
     onPreviousChannel: (() -> Unit)? = null,
     onEpisodes: (() -> Unit)? = null,
 ) {
-    val live = player.isLive
+    val live = player.isLive && !player.isReplay   // build 194: terugkijken heeft een eigen tijdbalk
     val sleepCountdown = sleepCountdown173(player)
     val sleepEpisode = player.sleep == Build173PlayerLogic.Sleep.EndOfEpisode
     // build 173: tv: de belangrijkste knop krijgt de eerste focus, anders de tijdbalk, anders de eerste knop

@@ -4,6 +4,19 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.1.3 · Build 194
+_28 november 2026_
+
+### Alle apps en de website
+
+**Nieuw**
+
+- Live TV heeft nu een eigen categorie Terugkijken met alle zenders waarvan je kunt terugkijken. Heeft een zender zelf geen terugkijken, maar een gelijke zender op dezelfde server wel, dan kijk je via die zender terug (klokje en Vanaf het begin kijken in alle categorieën).
+
+**Opgelost**
+
+- Terugkijken uit de gids: je kunt nu spoelen (balk slepen, 10 seconden terug of vooruit, naar een tijdstip), ook bij zenders waarvan de server geen duur meegeeft
+
 ## Versie 1.1.2 · Build 193
 _28 november 2026_
 
@@ -12,6 +25,17 @@ _28 november 2026_
 **Verbeterd**
 
 - Betalen: de app meldt anoniem of het betaalscherm is getoond en of een aankoop is gestart, gelukt, mislukt of afgebroken. Zo zien we sneller waar het betalen misgaat. Er gaan geen account- of betaalgegevens mee.
+
+### Server
+
+**Nieuw**
+
+- Betaalstappen worden anoniem geteld: betaalscherm getoond, aankoop gestart, gelukt, mislukt of afgebroken, en herstellen. Alleen aantallen per dag en platform, zonder account, apparaat of IP-adres.
+
+**Opgelost**
+
+- Een testaankoop van Lifetime in de Apple-testomgeving (TestFlight) geeft geen blijvend Lifetime meer. Zo'n aankoop geeft nog eenmalig 3 dagen toegang; alleen aangewezen testaccounts houden volledige toegang. Echte aankopen veranderen niet.
+- Na het afsluiten van een abonnement zonder account vult de pagina bingr.online/upgrade/klaar het e-mailadres weer vooraf in.
 
 ## Versie 1.1.2 · Build 191
 _27 november 2026_

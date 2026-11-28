@@ -178,7 +178,7 @@ private fun guideOpen(c: Channel, p: EPGProgram, sheet: () -> Unit) {
     if (u == null) { sheet(); return }
     ChannelPreview.stop()
     AppState.play(PlayableItem(id = "${c.id}-cu-${p.start / 1000}", title = p.title, subtitle = c.name, url = u,
-        type = MediaType.LIVE, artwork = c.logo, sourceID = c.sourceID))
+        type = MediaType.LIVE, artwork = c.logo, sourceID = c.sourceID, replayStart = p.start, replayEnd = p.end))
 }
 
 /** Zenderlogo van de server op een donker vlak met een dunne rand; zonder (werkend) logo de opgeschoonde zendernaam. */

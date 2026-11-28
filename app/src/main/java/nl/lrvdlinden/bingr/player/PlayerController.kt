@@ -152,6 +152,32 @@ class PlayerController(item: PlayableItem) {
     var streamLimit by mutableStateOf<Account.StreamList?>(null); private set
 
     val isLive: Boolean get() = item.type == MediaType.LIVE
+    /** Build 194: terugkijken uit de gids (programma met bekend begin en einde): eigen tijdbalk en spoelen. */
+    val isReplay: Boolean
+        get() = isLive && item.id.contains("-cu-") && Build194Logic.Replay.valid(item.replayStart, item.replayEnd)
+    private val replayDuration: Double get() = Build194Logic.Replay.duration(item.replayStart ?: 0L, item.replayEnd ?: 0L)
+    /** Streams van de provider zonder (passende) duur: spoelen door de URL opnieuw op te bouwen; anders spoelt de speler zelf. */
+    private val replayRebuild: Boolean
+        get() = isReplay && !(timeshiftStart == null && Build194Logic.Replay.nativeSeekable(engine.duration, replayDuration))
+    private fun replayLimit(): Double =
+        Build194Logic.Replay.limit(item.replayStart ?: 0L, item.replayEnd ?: 0L, System.currentTimeMillis())
+    private fun replayOffset(): Double {
+        val s = item.replayStart ?: return 0.0
+        return Build194Logic.Replay.offset(s, timeshiftStart ?: s, engine.time, replayDuration)
+    }
+    /** Naar een positie in het programma (seconden vanaf het begin): de replay-URL opnieuw vanaf daar. */
+    private fun replayRebuildAt(offset: Double) {
+        val s = item.replayStart ?: return
+        val e = item.replayEnd ?: return
+        val provider = catchupProvider ?: return
+        val from = Build194Logic.Replay.streamStart(s, offset)
+        val u = provider(from, e) ?: return
+        timeshiftStart = from
+        behindLive = 0.0
+        pausedAt = null
+        start(u)
+    }
+
     val canTimeshift: Boolean
         get() = isLive && (catchupProvider != null || ((engine as? ExoEngine)?.liveWindow ?: 0.0) > 30)
 
@@ -343,6 +369,11 @@ class PlayerController(item: PlayableItem) {
         duration = engine.duration
         currentTime = engine.time
         position = engine.position
+        if (replayRebuild) {   // build 194: lengte en positie uit de gids; de stream zelf heeft geen (bruikbare) duur
+            val d = replayDuration
+            val off = replayOffset()
+            duration = d; currentTime = off; position = Build194Logic.Replay.fraction(off, d)
+        }
         val exo = engine as? ExoEngine
         if (exo != null && isLive && timeshiftStart == null) behindLive = if (exo.behindLive > 8) exo.behindLive else 0.0
 
@@ -588,7 +619,7 @@ class PlayerController(item: PlayableItem) {
         val p = pausedAt
         val provider = catchupProvider
         val now = System.currentTimeMillis()
-        if (isLive && p != null && now - p > 10_000 && provider != null && !(engine is ExoEngine && (engine as ExoEngine).liveWindow > 30)) {
+        if (isLive && !isReplay && p != null && now - p > 10_000 && provider != null && !(engine is ExoEngine && (engine as ExoEngine).liveWindow > 30)) {
             val from = timeshiftStart?.let { it + (currentTime * 1000).toLong() } ?: p
             val u = provider(from, now + 3 * 3600_000L)
             if (u != null) {
@@ -610,6 +641,11 @@ class PlayerController(item: PlayableItem) {
             val before = currentTime
             engine.jump(seconds)
             if (seconds < 0) rewindSubtitles(seconds, before)   // build 173
+            return
+        }
+        if (isReplay) {   // build 194
+            if (replayRebuild) replayRebuildAt(Build194Logic.Replay.target(replayOffset(), seconds, replayLimit()))
+            else engine.jump(seconds)
             return
         }
         val exo = engine as? ExoEngine
@@ -634,7 +670,14 @@ class PlayerController(item: PlayableItem) {
         start(u)
     }
 
-    fun seekTo(fraction: Double) { if (!isLive) engine.seekToFraction(fraction) }
+    fun seekTo(fraction: Double) {
+        if (isReplay) {   // build 194
+            if (replayRebuild) replayRebuildAt(Build194Logic.Replay.fromFraction(fraction, replayDuration, replayLimit()))
+            else engine.seekToFraction(fraction)
+            return
+        }
+        if (!isLive) engine.seekToFraction(fraction)
+    }
 
     /** Positie om na de achtergrond te hervatten (null = niet op de achtergrond gestopt). */
     private var backgroundResume: Double? = null

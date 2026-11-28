@@ -1370,7 +1370,8 @@
   "per month": "شهريًا",
   "per year": "سنويًا",
   "More like this": "المزيد مثل هذا",
-  "Download %d episodes": "تنزيل %d حلقة"
+  "Download %d episodes": "تنزيل %d حلقة",
+  "Catch-up via twin channel": "إعادة المشاهدة عبر قناة مطابقة"
  },
  "de": {
   "Forgot PIN?": "PIN vergessen?",
@@ -2743,7 +2744,8 @@
   "per month": "pro Monat",
   "per year": "pro Jahr",
   "More like this": "Ähnliche Titel",
-  "Download %d episodes": "%d Folgen herunterladen"
+  "Download %d episodes": "%d Folgen herunterladen",
+  "Catch-up via twin channel": "Nachträglich ansehen über Zwillingssender"
  },
  "es": {
   "Forgot PIN?": "¿Olvidaste el PIN?",
@@ -4116,7 +4118,8 @@
   "per month": "al mes",
   "per year": "al año",
   "More like this": "Más como esto",
-  "Download %d episodes": "Descargar %d episodios"
+  "Download %d episodes": "Descargar %d episodios",
+  "Catch-up via twin channel": "Ver de nuevo mediante un canal gemelo"
  },
  "fr": {
   "Forgot PIN?": "Code PIN oublié ?",
@@ -5489,7 +5492,8 @@
   "per month": "par mois",
   "per year": "par an",
   "More like this": "Titres similaires",
-  "Download %d episodes": "Télécharger %d épisodes"
+  "Download %d episodes": "Télécharger %d épisodes",
+  "Catch-up via twin channel": "Replay via une chaîne jumelle"
  },
  "it": {
   "Forgot PIN?": "PIN dimenticato?",
@@ -6862,7 +6866,8 @@
   "per month": "al mese",
   "per year": "all’anno",
   "More like this": "Simili a questo",
-  "Download %d episodes": "Scarica %d episodi"
+  "Download %d episodes": "Scarica %d episodi",
+  "Catch-up via twin channel": "Rivedi tramite canale gemello"
  },
  "nl": {
   "Forgot PIN?": "Pincode vergeten?",
@@ -8249,7 +8254,8 @@
   "per month": "per maand",
   "per year": "per jaar",
   "More like this": "Meer zoals dit",
-  "Download %d episodes": "%d afleveringen downloaden"
+  "Download %d episodes": "%d afleveringen downloaden",
+  "Catch-up via twin channel": "Terugkijken via tweelingzender"
  },
  "pl": {
   "Forgot PIN?": "Nie pamiętasz kodu PIN?",
@@ -9622,7 +9628,8 @@
   "per month": "miesięcznie",
   "per year": "rocznie",
   "More like this": "Podobne tytuły",
-  "Download %d episodes": "Pobierz odcinki: %d"
+  "Download %d episodes": "Pobierz odcinki: %d",
+  "Catch-up via twin channel": "Oglądaj ponownie przez kanał bliźniaczy"
  },
  "pt": {
   "Forgot PIN?": "Esqueceu o PIN?",
@@ -10995,7 +11002,8 @@
   "per month": "por mês",
   "per year": "por ano",
   "More like this": "Mais títulos como este",
-  "Download %d episodes": "Transferir %d episódios"
+  "Download %d episodes": "Transferir %d episódios",
+  "Catch-up via twin channel": "Rever através de um canal gémeo"
  },
  "tr": {
   "Forgot PIN?": "PIN'i mi unuttun?",
@@ -12368,7 +12376,8 @@
   "per month": "aylık",
   "per year": "yıllık",
   "More like this": "Benzer yapımlar",
-  "Download %d episodes": "%d bölümü indir"
+  "Download %d episodes": "%d bölümü indir",
+  "Catch-up via twin channel": "İkiz kanal üzerinden tekrar izle"
  },
  "zh-Hans": {
   "Forgot PIN?": "忘记 PIN 码？",
@@ -13741,6 +13750,7 @@
   "per month": "每月",
   "per year": "每年",
   "More like this": "更多类似内容",
-  "Download %d episodes": "下载 %d 集"
+  "Download %d episodes": "下载 %d 集",
+  "Catch-up via twin channel": "通过孪生频道回看"
  }
 }
