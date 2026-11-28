@@ -43,6 +43,22 @@ object Build195Logic {
         return next
     }
 
+    /** Loopt er een aflevering (meer dan niets, minder dan 95% gekeken)? Dan houdt de serie alleen die tegel. */
+    fun hasRunning(fractions: Collection<Double>): Boolean = fractions.any { it > 0.0 && it < RUNNING_MAX }
+    const val RUNNING_MAX = 0.95
+
+    /**
+     * Zoals [nextNew], maar nooit voor een serie met een lopende aflevering: die houdt zijn eigen tegel uit de voortgang
+     * (zonder tweede of andere tegel). [progress] = aflevering-id naar fractie; wordt alleen gelezen, nooit geschreven.
+     */
+    fun tile(eps: List<Pair<String, Ep>>, progress: Map<String, Double>, watched: (Ep) -> Boolean, hidden: String?): Ep? {
+        if (hasRunning(eps.mapNotNull { progress[it.first] })) return null
+        return nextNew(eps.map { it.second }, watched, hidden)
+    }
+
+    /** Wat te onthouden als de tegel wordt weggehaald: de aflevering van de tegel. */
+    fun hiddenValue(e: Ep): String = e.key
+
     /** Titelsleutel zoals Mijn lijst en Verder kijken titels vergelijken (hoofdletters, leestekens). */
     fun titleKey(title: String): String = title.lowercase().filter { it.isLetterOrDigit() }
 
