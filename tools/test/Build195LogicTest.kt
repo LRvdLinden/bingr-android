@@ -45,6 +45,19 @@ fun main() {
     eq("weggehaald: terug na kijken", L.nextNew(season(1, 5), seen("1-1", "1-2", "1-3", "1-4"), "1-4"), e(1, 5))
     eq("weggehaald: oudere weggehaald, nu nieuwere", L.nextNew(season(1, 5), all, "1-3"), e(1, 4))
 
+    // lopende aflevering: geen Nieuwe-aflevering-tegel, voortgang blijft zoals hij was
+    val ids = s1b.map { "id${it.number}" to it }
+    val running = mapOf("id3" to 0.5)
+    val before = running.toMap()
+    eq("lopend: geen tegel", L.tile(ids, running, all, null), null)
+    eq("lopend: voortgang onveranderd", running, before)
+    eq("lopend (3 van 4 half): geen tegel ook zonder gezien", L.tile(ids, mapOf("id2" to 0.01), seen("1-1"), null), null)
+    eq("bijna klaar telt niet als lopend", L.tile(ids, mapOf("id3" to 0.97), all, null), e(1, 4))
+    eq("geen voortgang: tegel", L.tile(ids, emptyMap(), all, null), e(1, 4))
+    eq("nul voortgang telt niet", L.tile(ids, mapOf("id4" to 0.0), all, null), e(1, 4))
+    eq("lopende aflevering van een andere serie niet in lijst", L.tile(ids, mapOf("x" to 0.5), all, null), e(1, 4))
+    eq("hasRunning", L.hasRunning(listOf(0.0, 0.5)), true)
+
     eq("titel normaal", L.titleKey("The Last of Us!"), "thelastofus")
     eq("prefkey profiel", L.prefKey("hid", "p1", "A B"), "ne195.hid.p1.ab")
     eq("prefkey main", L.prefKey("hid", null, "A"), "ne195.hid.main.a")

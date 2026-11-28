@@ -11,7 +11,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Build 195: "Nieuwe aflevering" in Verder kijken (regels in [Build195Logic]). Alleen series in Mijn lijst van het actieve
- * profiel. De tegels worden afgeleid (niet opgeslagen): uit Mijn lijst, de gezien-sleutels en de afleveringen van de
+ * profiel. Schrijft NOOIT naar de voortgang of de sync (Store.progress / StateSync worden alleen gelezen); alleen lokale Prefs
+ * "hid" en "at". De tegels worden afgeleid (niet opgeslagen): uit Mijn lijst, de gezien-sleutels en de afleveringen van de
  * server. Lokaal bewaard (per profiel en serie): [Build195Logic.prefKey] "hid" (weggehaald: de aflevering van de tegel) en "at" (wanneer de tegel voor het eerst verscheen, voor de volgorde).
  */
 object NewEpisodes {
@@ -61,7 +62,9 @@ object NewEpisodes {
             if (AllServersLogic.normTitle(s.title) in existing) continue
             val eps = epsOf(s); if (eps.isEmpty()) continue
             val list = eps.map(::ep)
-            val next = Build195Logic.nextNew(list, watchedFn(s, eps, progress),
+            // nooit naast of in plaats van een lopende aflevering: de voortgang (alleen gelezen) gaat voor
+            val fractions = progress.filter { Store.belongsToActive(it.value.profileID) }.mapValues { it.value.fraction }
+            val next = Build195Logic.tile(eps.map { it.id to ep(it) }, fractions, watchedFn(s, eps, progress),
                 Prefs.string(Build195Logic.prefKey("hid", profile, s.title))) ?: continue
             val e = eps.firstOrNull { it.season == next.season && it.number == next.number } ?: continue
             val atKey = Build195Logic.prefKey("at", profile, s.title)
