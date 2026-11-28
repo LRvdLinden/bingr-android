@@ -731,6 +731,30 @@ object Playlists {
             ParentalControl.isUnlocked, Store.hiddenCategoryNames(playlist), kids = Store.activeProfile?.kids == true))
     }
 
+    /** Build 194: de tweeling (zelfde zender met catch-up) per zender zonder eigen catch-up; per ruwe lijst één keer berekend. */
+    @Volatile private var twinCache: Pair<List<Channel>, Map<String, Channel>>? = null
+    private fun twinsOf(pool: List<Channel>): Map<String, Channel> {
+        if (pool.isEmpty()) return emptyMap()
+        twinCache?.let { if (it.first === pool) return it.second }
+        val byKey = HashMap<String, Channel>()
+        val items = pool.map { c -> byKey[c.id] = c; Build194Logic.Twin.Item(c.id, c.epgID, c.name, c.catchupDays) }
+        val links = Build194Logic.Twin.link(items)
+        val out = links.mapNotNull { (k, t) -> byKey[t]?.let { k to it } }.toMap()
+        twinCache = pool to out
+        return out
+    }
+
+    /** Build 194: zenders zonder eigen catch-up met een ondubbelzinnige tweeling krijgen diens dagen en gegevens voor terugkijken. */
+    private fun withReplayTwins(pool: List<Channel>, channels: List<Channel>): List<Channel> {
+        val twins = twinsOf(pool)
+        if (twins.isEmpty()) return channels
+        return channels.map { c ->
+            val t = if (c.catchupDays <= 0) twins[c.id] else null
+            if (t == null) c else c.copy(catchupDays = t.catchupDays, catchupType = t.catchupType, catchupSource = t.catchupSource,
+                replayID = t.id, replayStreamURL = t.streamURL, replayCmd = t.stalkerCmd)
+        }
+    }
+
     /** Pure filterfunctie (veilig op de achtergrond; leest alleen de thread-veilige Metadata-cache). */
     fun apply(raw: Library, ctx: FilterContext): Library {
         val c = ctx.custom
@@ -812,6 +836,8 @@ object Playlists {
                 else (cIndex[a.id] ?: original[a.id] ?: 0).compareTo(cIndex[b.id] ?: original[b.id] ?: 0)
             })
         }
+        // build 194: terugkijken via een tweeling (zelfde zender met catch-up op deze server), voor élke groep, Favorieten, Recent, zoeken en gids
+        channels = withReplayTwins(raw.channels, channels)
         return raw.copy(channels = channels, movies = movies, series = series)
     }
 
@@ -917,11 +943,12 @@ object Playlists {
     fun catchupURL(channelID: String, start: Long, end: Long, sourceID: String?): String? {
         if (!foreign(sourceID)) return catchupURL(channelID, start, end)
         val s = sourceFor(sourceID) ?: return null
-        val ch = (AllServers.item("${s.id}|$channelID") as? Channel) ?: return null
-        if (ch.catchupDays <= 0) return null
+        val orig = (AllServers.item("${s.id}|$channelID") as? Channel) ?: return null
+        if (orig.catchupDays <= 0) return null
+        val ch = orig.replayView   // build 194: tweeling als die er is
         val shift = (s.catchupOffsets[channelID] ?: 0) * 60_000L
         // build 129: MAC-portal: de link komt pas bij het afspelen ([resolveArchive]), met een eigen portalverbinding
-        if (s.kind == PlaylistKind.STALKER) return AllServersLogic.archiveURL(s.id, channelID, start + shift, end + shift)
+        if (s.kind == PlaylistKind.STALKER) return AllServersLogic.archiveURL(s.id, ch.id, start + shift, end + shift)
         if (s.kind == PlaylistKind.M3U) return m3uCatchupURL(ch, start + shift, end + shift)   // build 178
         if (s.kind != PlaylistKind.XTREAM) return null
         return XtreamClient(s, Store.secret(s.passwordKey) ?: "").catchupURL(ch, start + shift, end + shift)
@@ -951,7 +978,8 @@ object Playlists {
         val key = "${s.id}|${c.id}"
         archiveCache[key]?.let { if (System.currentTimeMillis() - it.first < 1_200_000) return it.second }
         val list = try {
-            XtreamClient(s, Store.secret(s.passwordKey) ?: "").archiveEPG(c)
+            // build 194: archief van de tweeling, maar met de gids-sleutel van deze zender
+            XtreamClient(s, Store.secret(s.passwordKey) ?: "").archiveEPG(c.replayView.copy(epgID = c.epgID ?: c.id))
         } catch (e: CancellationException) { throw e } catch (_: Exception) { emptyList() }
         if (archiveCache.size > 300) archiveCache.clear()
         archiveCache[key] = System.currentTimeMillis() to list
@@ -989,11 +1017,12 @@ object Playlists {
     fun catchupURL(channelID: String, start: Long, end: Long): String? {
         val s = source ?: return null
         if (s.kind != PlaylistKind.XTREAM && s.kind != PlaylistKind.STALKER && s.kind != PlaylistKind.M3U) return null
-        val ch = rawLibrary.channels.firstOrNull { it.id == channelID } ?: return null
-        if (ch.catchupDays <= 0) return null
+        val raw = rawLibrary.channels.firstOrNull { it.id == channelID } ?: return null
+        // build 194: geen eigen catch-up = de tweeling (zelfde zender met catch-up op deze server), anders niets
+        val ch = if (raw.catchupDays > 0) raw else twinsOf(rawLibrary.channels)[raw.id] ?: return null
         val shift = (Store.playlists.firstOrNull { it.id == s.id }?.catchupOffsets?.get(channelID) ?: 0) * 60_000L
         // build 129: MAC-portal (ook de actieve server): de link komt pas bij het afspelen ([resolveArchive])
-        if (s.kind == PlaylistKind.STALKER) return AllServersLogic.archiveURL(s.id, channelID, start + shift, end + shift)
+        if (s.kind == PlaylistKind.STALKER) return AllServersLogic.archiveURL(s.id, ch.id, start + shift, end + shift)
         if (s.kind == PlaylistKind.M3U) return m3uCatchupURL(ch, start + shift, end + shift)   // build 178
         return XtreamClient(s, Store.secret(s.passwordKey) ?: "").catchupURL(ch, start + shift, end + shift)
     }
@@ -1363,7 +1392,13 @@ object CatchupLog178 {
         val v = "$n,$d"
         val p = prefs ?: return
         if (p.getString(server.lowercase(), null) != v) p.edit().putString(server.lowercase(), v).apply()
+        // build 194: zenders zonder eigen catch-up die via een tweeling terugkijken krijgen
+        val t = Build194Logic.Twin.link(channels.map { Build194Logic.Twin.Item(it.id, it.epgID, it.name, it.catchupDays) }).size.toString()
+        if (p.getString(server.lowercase() + ".twin", null) != t) p.edit().putString(server.lowercase() + ".twin", t).apply()
     }
+
+    /** Build 194: aantal zenders met terugkijken via een tweeling (null = onbekend) */
+    fun twins(server: String): Int? = prefs?.getString(server.lowercase() + ".twin", null)?.toIntOrNull()
 
     fun get(server: String): Pair<Int, Int>? {
         val v = prefs?.getString(server.lowercase(), null)?.split(',') ?: return null

@@ -424,6 +424,10 @@ fun LazyListScope.diagnoseTabItems() {
                         S2Row(L("Catch-up"), value = if (n == 0) L("No channels with catch-up") else L("%d channels, up to %d days", n, days),
                             tint = Theme.secondary)
                     }
+                    // build 194: zenders zonder eigen catch-up die terugkijken via een tweeling krijgen
+                    Store.playlists.getOrNull(i)?.let { pl -> CatchupLog178.twins(pl.id) }?.takeIf { it > 0 }?.let { t ->
+                        S2Row(L("Catch-up via twin channel"), value = L("%d channels", t), tint = Theme.secondary)
+                    }
                     val sn = Build147Logic.Fetch.serverName(i)
                     // build 148: geleverd naast zichtbaar (open server), anders zoals in build 147
                     val fx = d.jList("fetch").filter { it.jS("server") == sn && it.jObj?.get("visible") != null }
