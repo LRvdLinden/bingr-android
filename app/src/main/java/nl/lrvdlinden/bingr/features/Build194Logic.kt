@@ -40,14 +40,16 @@ object Build194Logic {
     object Twin {
         class Item(val key: String, val epg: String?, val name: String, val days: Int)
 
-        private val tagInner = Regex("catch-?up|terugkijken|replay|timeshift")
+        private val tagInner = Regex("catch[- ]?up|terugkijken|replay|timeshift")
         private val brackets = Regex("\\[[^\\]]*]|\\([^)]*\\)|\\{[^}]*}")
-        private val words = Regex("\\b(?:hd|uhd|fhd|sd|4k|hevc|h265|raw|catch-?up|terugkijken|replay|timeshift)\\b")
+        private val words = Regex("\\b(?:hd|uhd|fhd|sd|4k|hevc|h265|raw|catch[- ]?up|terugkijken|replay|timeshift)\\b")
 
         /** Naam voor het vergelijken: kleine letters, zonder accenten, zonder catch-up-tags en HD/UHD/FHD/SD/4K/HEVC/H265/RAW, alleen letters en cijfers. */
         fun normalize(name: String): String {
             var n = java.text.Normalizer.normalize(name.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
             n = brackets.replace(n) { if (tagInner.containsMatchIn(it.value)) " " else it.value }
+            // delen tussen | of ┃ die een catch-up-aanduiding zijn ("RTL 4 | Catch-up") vallen weg
+            if ('|' in n || '\u2503' in n) n = n.split('|', '\u2503').filterNot { tagInner.containsMatchIn(it) }.joinToString(" ")
             n = words.replace(n, " ")
             return n.filter { it.isLetterOrDigit() }
         }

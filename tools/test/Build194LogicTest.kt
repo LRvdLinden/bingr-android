@@ -42,6 +42,9 @@ fun main() {
     eq("normaliseren catch-up tag", T.normalize("RTL 4 [Catch-up]"), "rtl4")
     eq("normaliseren haakjes terugkijken", T.normalize("RTL 4 (Terugkijken) HD"), "rtl4")
     eq("normaliseren andere haakjes blijven", T.normalize("Eurosport 2 (NL)"), "eurosport2nl")
+    eq("normaliseren catch up met spatie", T.normalize("RTL 4 [Catch up]"), "rtl4")
+    eq("normaliseren pipe-deel catch-up", T.normalize("RTL 4 | Catch-up"), "rtl4")
+    eq("normaliseren pipe-deel blijft", T.normalize("NL | RTL 4"), "nlrtl4")
     eq("normaliseren accenten", T.normalize("Café TV"), "cafetv")
     eq("normaliseren hoofdletters", T.normalize("NPO 1"), "npo1")
 
