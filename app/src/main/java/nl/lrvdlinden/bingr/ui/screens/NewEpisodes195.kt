@@ -12,8 +12,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * Build 195: "Nieuwe aflevering" in Verder kijken (regels in [Build195Logic]). Alleen series in Mijn lijst van het actieve
  * profiel. De tegels worden afgeleid (niet opgeslagen): uit Mijn lijst, de gezien-sleutels en de afleveringen van de
- * server. Lokaal bewaard (per profiel en serie): [Build195Logic.prefKey] "mark" (laatste aflevering toen je bij was),
- * "hid" (weggehaald: laatste aflevering van dat moment) en "at" (wanneer de tegel voor het eerst verscheen, voor de volgorde).
+ * server. Lokaal bewaard (per profiel en serie): [Build195Logic.prefKey] "hid" (weggehaald: de aflevering van de tegel) en "at" (wanneer de tegel voor het eerst verscheen, voor de volgorde).
  */
 object NewEpisodes {
     var version by mutableIntStateOf(0); private set
@@ -51,21 +50,6 @@ object NewEpisodes {
         if (changed) version++
     }
 
-    /** Onthoud per serie de laatste aflevering zodra je helemaal bij bent (zo is "nieuw" te herkennen zonder uitzenddatum). */
-    fun updateMarks(series: List<Series>) {
-        val profile = Store.activeProfileID
-        val progress = Store.progress
-        var changed = false
-        for (s in series.take(MAX_SERIES)) {
-            val eps = epsOf(s); if (eps.isEmpty()) continue
-            val key = Build195Logic.prefKey("mark", profile, s.title)
-            val old = Prefs.string(key)
-            val new = Build195Logic.nextMark(eps.map(::ep), watchedFn(s, eps, progress), old)
-            if (new != old && new != null) { Prefs.put(key, new); changed = true }
-        }
-        if (changed) version++
-    }
-
     /** De tegels. [existing] = genormaliseerde titels die al een gewone tegel hebben (geen dubbele items). */
     fun items(series: List<Series>, progress: Map<String, ProgressEntry>, filter: Filter, pid: String?,
               existing: Set<String>): List<ContinueItem> {
@@ -78,7 +62,6 @@ object NewEpisodes {
             val eps = epsOf(s); if (eps.isEmpty()) continue
             val list = eps.map(::ep)
             val next = Build195Logic.nextNew(list, watchedFn(s, eps, progress),
-                Prefs.string(Build195Logic.prefKey("mark", profile, s.title)),
                 Prefs.string(Build195Logic.prefKey("hid", profile, s.title))) ?: continue
             val e = eps.firstOrNull { it.season == next.season && it.number == next.number } ?: continue
             val atKey = Build195Logic.prefKey("at", profile, s.title)
@@ -89,7 +72,7 @@ object NewEpisodes {
             val foreign = s.sourceID != null && !s.sourceID.equals(pid, ignoreCase = true)
             out.add(ContinueItem(e.id, s.title, L("New episode") + " " + next.label, art, 0.0, at, false,
                 sourceID = if (foreign) s.sourceID else null, coverLookup = lookup,
-                newEpisodeHide = Build195Logic.hiddenValue(list)))
+                newEpisodeHide = Build195Logic.hiddenValue(next)))
         }
         return out
     }
@@ -115,7 +98,6 @@ fun rememberNewEpisodes(index: HomeIndex, pid: String?, filter: Filter, progress
         }.mapNotNull { (it as? DetailTarget.SeriesT)?.series }
     }
     LaunchedEffect(mySeries, Store.activeProfileID) { NewEpisodes.refresh(mySeries) }
-    LaunchedEffect(mySeries, Store.localWatched, progress, NewEpisodes.version) { NewEpisodes.updateMarks(mySeries) }
     return remember(mySeries, progress, filter, pid, existing, NewEpisodes.version, Store.localWatched, Store.activeProfileID, Store.blockedTitles) {
         NewEpisodes.items(mySeries, progress, filter, pid, existing)
     }

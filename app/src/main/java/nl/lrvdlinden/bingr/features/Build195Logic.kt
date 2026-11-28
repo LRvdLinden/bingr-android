@@ -5,10 +5,8 @@ package nl.lrvdlinden.bingr
  * aflevering gekeken, ben je bij en staat er in de bibliotheek een aflevering die je nog niet zag, dan komt die als
  * volgende in Verder kijken. Pure logica zonder Android, met unittests (tools/test/Build195LogicTest.kt).
  *
- * "Bij zijn": alle afleveringen vóór de eerste ongeziene zijn gezien (seizoenen eerder en het laatst gekeken seizoen).
- * Specials (seizoen 0) tellen niet mee. Een aflevering is "nieuw" als hij na de laatste aflevering komt die de app kende
- * toen je helemaal bij was ([mark], de bibliotheek heeft geen uitzenddatum). Handmatig verwijderd = per serie de laatste
- * aflevering onthouden ([hidden]): de tegel komt pas terug bij een nog nieuwere aflevering.
+ * Specials (seizoen 0) tellen niet mee. Handmatig weggehaald = per serie de weggehaalde aflevering onthouden: de tegel komt
+ * pas terug bij een nieuwere aflevering. Regels gelijk aan Apple (Build195.swift) en de webspeler.
  */
 object Build195Logic {
     data class Ep(val season: Int, val number: Int) : Comparable<Ep> {
@@ -29,39 +27,21 @@ object Build195Logic {
     /** Afleveringen op volgorde seizoen/aflevering, zonder specials en dubbelen. */
     fun ordered(eps: List<Ep>): List<Ep> = eps.filter { it.season > 0 }.distinct().sorted()
 
-    /** Is iedere aflevering gezien (en is er minstens één)? */
-    fun caughtUp(eps: List<Ep>, watched: (Ep) -> Boolean): Boolean {
-        val o = ordered(eps)
-        return o.isNotEmpty() && o.all(watched)
-    }
-
-    /** Nieuwe waarde van [mark]: de laatste aflevering als je helemaal bij bent, anders de oude (nooit terug). */
-    fun nextMark(eps: List<Ep>, watched: (Ep) -> Boolean, mark: String?): String? {
-        if (!caughtUp(eps, watched)) return mark
-        val last = ordered(eps).last()
-        val old = parse(mark)
-        return if (old == null || last > old) last.key else mark
-    }
-
     /**
-     * De nieuwe aflevering of null. Voorwaarden: minstens één aflevering gezien; alles vóór de eerste ongeziene na de
-     * laatst geziene is gezien; die aflevering komt na [mark]; en de laatste aflevering is nieuwer dan [hidden].
+     * De nieuwe aflevering of null (zelfde regels als Apple en web): minstens één gewone aflevering gezien; alles vóór de
+     * laatst geziene is gezien (ook eerdere seizoenen); de tegel is de eerste ongeziene daarna; niet als die al is
+     * weggehaald ([hidden] = sleutel van de weggehaalde aflevering; pas een nieuwere aflevering brengt de tegel terug).
      */
-    fun nextNew(eps: List<Ep>, watched: (Ep) -> Boolean, mark: String?, hidden: String?): Ep? {
+    fun nextNew(eps: List<Ep>, watched: (Ep) -> Boolean, hidden: String?): Ep? {
         val o = ordered(eps)
-        val markEp = parse(mark) ?: return null
         val lastSeen = o.indexOfLast(watched)
         if (lastSeen < 0) return null
         if (!o.take(lastSeen + 1).all(watched)) return null          // gaten: niet bij
         val next = o.getOrNull(lastSeen + 1) ?: return null          // niets nieuws
-        if (next <= markEp) return null                              // oude, nog niet gekeken aflevering: geen nieuwe
         val hid = parse(hidden)
-        if (hid != null && o.last() <= hid) return null              // weggehaald en niets nieuwers
+        if (hid != null && next <= hid) return null
         return next
     }
-
-    /** Wat te onthouden als de tegel wordt weggehaald: de laatste aflevering van dat moment. */
-    fun hiddenValue(eps: List<Ep>): String? = ordered(eps).lastOrNull()?.key
 
     /** Titelsleutel zoals Mijn lijst en Verder kijken titels vergelijken (hoofdletters, leestekens). */
     fun titleKey(title: String): String = title.lowercase().filter { it.isLetterOrDigit() }

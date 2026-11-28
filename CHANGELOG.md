@@ -4,6 +4,15 @@ Alle versies van Bingr voor Android-telefoon en -tablet, Android TV, Google TV e
 
 Per build, ingedeeld per apparaatsoort: **Nieuw**, **Verbeterd** en **Opgelost**.
 
+## Versie 1.1.3 · Build 195
+_28 november 2026_
+
+### iOS, iPadOS, tvOS, macOS, Android en Android TV
+
+**Nieuw**
+
+- Verder kijken: staat een serie in je lijst, heb je hem bij en is er een nieuwe aflevering die je nog niet zag, dan staat die erin als volgende.
+
 ## Versie 1.1.3 · Build 194
 _28 november 2026_
 
