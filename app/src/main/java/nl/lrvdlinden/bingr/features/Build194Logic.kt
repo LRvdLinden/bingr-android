@@ -76,4 +76,56 @@ object Build194Logic {
             return out
         }
     }
+
+    /**
+     * Terugkijken vanuit de gids met spoelen. Een replay-stream (timeshift van de provider) heeft vaak geen bekende duur,
+     * dus de lengte van het programma uit de gids is de duur en elke spoelactie bouwt de replay-URL opnieuw op vanaf
+     * programmabegin + positie (het einde blijft het programma-einde). Posities zijn seconden vanaf programmabegin.
+     */
+    object Replay {
+        /** Veiligheidsmarge aan het eind: nooit tot op de laatste seconde spoelen (de stream zou meteen eindigen). */
+        const val END_MARGIN = 5.0
+
+        /** Duur van het programma in seconden (0 bij een ongeldig of leeg bereik). */
+        fun duration(startMs: Long, endMs: Long): Double = if (endMs > startMs) (endMs - startMs) / 1000.0 else 0.0
+
+        /** Is dit een terugkijk-item met bruikbaar bereik? */
+        fun valid(startMs: Long?, endMs: Long?): Boolean = startMs != null && endMs != null && endMs - startMs >= 10_000L
+
+        /** Positie in het programma: stream-begin (ms) minus programmabegin, plus de afgespeelde seconden, binnen 0...duur. */
+        fun offset(startMs: Long, streamStartMs: Long, playedSec: Double, durationSec: Double): Double =
+            (((streamStartMs - startMs) / 1000.0) + playedSec.coerceAtLeast(0.0)).coerceIn(0.0, durationSec.coerceAtLeast(0.0))
+
+        /**
+         * Tot waar je mag spoelen (zoals Apple `Replay194.limit`): niet voorbij het programma (min. de marge) en niet in de
+         * toekomst bij een programma dat nog loopt (nu - begin - 3 s).
+         */
+        fun limit(startMs: Long, endMs: Long, nowMs: Long): Double {
+            val d = duration(startMs, endMs)
+            return Math.max(0.0, Math.min(Math.max(0.0, d - END_MARGIN), (nowMs - startMs) / 1000.0 - 3.0))
+        }
+
+        /** Nieuwe positie na [deltaSec] spoelen vanaf [offsetSec], binnen 0...[limitSec]. */
+        fun target(offsetSec: Double, deltaSec: Double, limitSec: Double): Double =
+            (offsetSec + deltaSec).coerceIn(0.0, limitSec.coerceAtLeast(0.0))
+
+        /** Positie bij een sleepstand (0...1 van de tijdbalk), binnen 0...[limitSec]. */
+        fun fromFraction(fraction: Double, durationSec: Double, limitSec: Double): Double =
+            (fraction.coerceIn(0.0, 1.0) * durationSec).coerceIn(0.0, limitSec.coerceAtLeast(0.0))
+
+        /** Begin (epoch-ms) van de stream die bij [offsetSec] hoort. */
+        fun streamStart(startMs: Long, offsetSec: Double): Long = startMs + Math.round(offsetSec * 1000.0)
+
+        /** Voortgang 0...1 voor de tijdbalk. */
+        fun fraction(offsetSec: Double, durationSec: Double): Double =
+            if (durationSec <= 0.0) 0.0 else (offsetSec / durationSec).coerceIn(0.0, 1.0)
+
+        /**
+         * Kan de speler zelf spoelen? Alleen als de stream een bekende duur heeft die bij het programma past (tot 10%, min.
+         * 2 minuten, verschil door voor- en nablijf van de provider); een groeiende of onbekende duur is dat niet.
+         */
+        fun nativeSeekable(engineDurationSec: Double, programDurationSec: Double): Boolean =
+            engineDurationSec > 60.0 && programDurationSec > 0.0 &&
+                Math.abs(engineDurationSec - programDurationSec) <= Math.max(120.0, programDurationSec * 0.1)
+    }
 }

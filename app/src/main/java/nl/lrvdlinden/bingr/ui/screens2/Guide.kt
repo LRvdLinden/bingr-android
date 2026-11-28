@@ -305,7 +305,8 @@ private fun S2ProgramSheetImpl(channel: Channel, program: EPGProgram, onDismiss:
     fun playCatchup(u: String) {
         onPlayed()
         AppState.play(PlayableItem(id = "${channel.id}-cu-${program.start / 1000}", title = program.title,
-            subtitle = channel.name, url = u, type = MediaType.LIVE, artwork = channel.logo, sourceID = channel.sourceID))
+            subtitle = channel.name, url = u, type = MediaType.LIVE, artwork = channel.logo, sourceID = channel.sourceID,
+            replayStart = program.start, replayEnd = program.end))
     }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         val tv = AppState.isTV
