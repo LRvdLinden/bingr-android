@@ -492,14 +492,18 @@ class ContinueItem(
     val sourceID: String? = null,
     /** Build 144: geen poster in de bibliotheek of de catalogmeta: deze titel bij TMDB opzoeken (zie [ContinueCovers]) */
     val coverLookup: Build144Logic.ContinueCover.Want? = null,
-)
+    /** Build 195: "Nieuwe aflevering"-tegel (afgeleid uit Mijn lijst); de waarde = wat bij weghalen wordt onthouden */
+    val newEpisodeHide: String? = null,
+) {
+    val isNewEpisode: Boolean get() = newEpisodeHide != null
+}
 
 /**
  * Build 144: afbeelding van een tegel in Verder kijken: de poster uit de bibliotheek of de catalogmeta, anders de
  * TMDB-poster (bewaard op het apparaat), pas daarna het bewaarde beeld (vaak de scène). Ook voor oude voortgang en voortgang
  * van andere apparaten. Geeft de afbeelding en (als die ontbreekt) de titel om op te zoeken.
  */
-private fun continueCover(title: String, year: Int?, isShow: Boolean, library: String?, meta: String?,
+internal fun continueCover(title: String, year: Int?, isShow: Boolean, library: String?, meta: String?,
                           stored: String?): Pair<String?, Build144Logic.ContinueCover.Want?> {
     val C = Build144Logic.ContinueCover
     val need = C.needsLookup(library, meta, stored)
@@ -512,7 +516,7 @@ private fun continueCover(title: String, year: Int?, isShow: Boolean, library: S
  * zichtbaar is voor dit profiel. [trakt] = films die je in een andere app (via Trakt) half keek.
  */
 fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<String, ProgressEntry>,
-                  trakt: List<ContinueItem> = emptyList()): List<ContinueItem> {
+                  trakt: List<ContinueItem> = emptyList(), newEpisodes: List<ContinueItem> = emptyList()): List<ContinueItem> {
     val out = ArrayList<ContinueItem>()
     for ((key, e) in progress) {
         if (!Store.belongsToActive(e.profileID)) continue                    // alleen van dit profiel
@@ -577,6 +581,11 @@ fun continueItems(filter: Filter, index: HomeIndex, pid: String?, progress: Map<
         val known = out.mapTo(HashSet()) { it.id }
         out.addAll(trakt.filter { it.id !in known })
     }
+    // build 195: nieuwe aflevering van een serie in Mijn lijst (alleen als de serie nog geen gewone tegel heeft)
+    if (newEpisodes.isNotEmpty()) {
+        val have = out.filter { !it.isMovie }.mapTo(HashSet()) { AllServersLogic.normTitle(it.title) }
+        out.addAll(newEpisodes.filter { AllServersLogic.normTitle(it.title) !in have })
+    }
     // build 128: hetzelfde werk op twee servers = één tegel (de nieuwste)
     val seen = HashMap<String, String?>()
     return out.sortedByDescending { it.updated }.filter { c ->
@@ -621,6 +630,7 @@ fun ContinueItem.choice(index: HomeIndex): ResumeChoice {
 }
 
 fun removeFromContinue(c: ContinueItem) {
+    if (c.isNewEpisode) { NewEpisodes.hide(c); return }   // build 195
     Store.clearProgress(c.id)
     c.traktPlaybackID?.let { id -> AppScope.launch { screensSafe { Trakt.removePlayback(id) } } }
 }
@@ -695,7 +705,11 @@ fun ContinueRow(items: List<ContinueItem>, index: HomeIndex) {
         keyedItems(items, keys) { c ->
             ContinueCard(
                 c.title, c.artwork, c.fraction, c.subtitle,
-                Modifier.focusLift(onLongClick = { removing = c }) { choice = c.choice(index) }
+                Modifier.focusLift(onLongClick = { removing = c }) {
+                    // build 195: een nieuwe aflevering start meteen (geen 0% gekeken-dialoog)
+                    if (c.isNewEpisode) AppScope.launch { ResumePlayer.play(c.id, c.title, restart = true, sourceID = c.sourceID)?.let { ScreensNav.detail(it) } }
+                    else choice = c.choice(index)
+                }
             )
         }
     }
@@ -768,8 +782,13 @@ fun HomeScreen(filter: Filter) {
     val traktContinue = rememberTraktContinue(index)
     val allV = AllServers.version + CatalogMeta.version
     // build 144: ContinueCovers.version = TMDB-posters binnen
-    val continueList = remember(progress, index, pid, filter, traktContinue, Store.activeProfileID, allV, ContinueCovers.version, Store.blockedTitles) {
-        continueItems(filter, index, pid, progress, traktContinue)
+    // build 195: gewone tegels eerst (een serie met een half gekeken aflevering krijgt geen tweede tegel)
+    val plainTitles = remember(progress, index, pid, filter, Store.activeProfileID) {
+        continueItems(filter, index, pid, progress).filter { !it.isMovie }.mapTo(HashSet()) { AllServersLogic.normTitle(it.title) }
+    }
+    val newEpisodes = rememberNewEpisodes(index, pid, filter, progress, plainTitles)
+    val continueList = remember(progress, index, pid, filter, traktContinue, Store.activeProfileID, allV, ContinueCovers.version, Store.blockedTitles, newEpisodes) {
+        continueItems(filter, index, pid, progress, traktContinue, newEpisodes)
     }
     ResolveContinueCovers(continueList)
     // build 176: Android TV / Google TV: Verder kijken ook in de Watch Next-rij van het systeem (alleen filter Alles)

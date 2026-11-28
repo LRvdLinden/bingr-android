@@ -864,6 +864,17 @@ object Playlists {
         return eps
     }
 
+    /** Build 195: afleveringen opnieuw bij de server halen (negeert de cache; bij een fout blijft de oude lijst). */
+    suspend fun freshEpisodes(s: Series): List<Episode> {
+        if (s.episodes.isNotEmpty()) return s.episodes
+        val foreign = s.sourceID != null && !s.sourceID.equals(source?.id, ignoreCase = true)
+        val old = if (foreign) null else episodeCache[s.id]
+        if (old != null) episodeCache = episodeCache - s.id
+        val eps = episodes(s)
+        if (eps.isEmpty() && old != null) { episodeCache = episodeCache + (s.id to old); return old }
+        return eps
+    }
+
     /** Ruwe Xtream get_series_info (detailpagina). */
     suspend fun xtreamSeriesInfo(series: Series): JsonObject? {
         val s = sourceFor(series.sourceID) ?: return null
