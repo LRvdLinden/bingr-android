@@ -1,7 +1,7 @@
 package nl.lrvdlinden.bingr
 
 /**
- * Build 194 (versie 1.1.2): Live TV krijgt een ingebouwde groep "Terugkijken" (catch-up) naast Alle zenders, Favorieten en
+ * Build 194 (versie 1.1.3): Live TV krijgt een ingebouwde groep "Terugkijken" (catch-up) naast Alle zenders, Favorieten en
  * Recent: alle zenders waarvan de server terugkijken doorgeeft (catch-up-dagen > 0), van de gekozen server plus de
  * zenders van andere servers die al in Favorieten of Recent staan. Zo hoeft niemand de categorie van de provider te zoeken.
  * Pure logica zonder Android, met unittests (tools/test/Build194LogicTest.kt).
